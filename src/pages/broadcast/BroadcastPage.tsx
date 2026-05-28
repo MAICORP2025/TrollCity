@@ -678,7 +678,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   // INSTANT JOIN: Track if initial stream fetch is complete but don't block UI
   const [streamLoaded, setStreamLoaded] = useState(false)
   const [isCurrentUserBroadofficer, setIsCurrentUserBroadofficer] = useState(false)
-  const canInteractWithSeats = isHost || isCurrentUserBroadofficer
+  const canInteractWithSeats = isHost || isOfficer || isCurrentUserBroadofficer
   // Track battle start time to show accurate timer
   const [battleStartTime, setBattleStartTime] = useState<Date | null>(null)
   

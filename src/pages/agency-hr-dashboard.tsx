@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/lib/store'
 import { getRoleDisplayName, supabase } from '@/lib/supabase'
+import { isAgencyHRProfile } from '@/lib/staff'
 import { RTCAdminMonitor } from '@/components/admin'
 import {
   Activity,
@@ -340,10 +341,7 @@ export default function AgencyHRDashboard() {
 
   const roleLabel = useMemo(() => getRoleDisplayName(profile?.role, profile?.is_admin), [profile?.is_admin, profile?.role])
 
-  const normalizedRole = String(profile?.role || '').trim().toLowerCase()
-  const canManageAgencyHR =
-    Boolean(profile?.is_admin) ||
-    ['admin', 'agency hr', 'agency_hr', 'agency hr manager', 'agency_hr_manager'].includes(normalizedRole)
+  const canManageAgencyHR = Boolean(profile?.is_admin) || isAgencyHRProfile(profile)
 
   const selectedAgency = useMemo(
     () => agencies.find((agency) => agency.id === selectedAgencyId || agency.id === feeForm.agency_id || agency.id === contractForm.agency_id),

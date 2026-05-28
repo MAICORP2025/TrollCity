@@ -10,10 +10,27 @@ const STAFF_ROLES = new Set([
   'prosecutor',
   'attorney',
   'agency_hr_manager',
+  'agency_hr',
   'hr_admin',
   'marketing_readonly',
   'empire_partner',
 ]);
+
+const AGENCY_HR_ROLES = new Set([
+  'agency_hr',
+  'agency_hr_manager',
+  'agency hr',
+  'agency hr manager',
+]);
+
+export function isAgencyHRProfile(profile: any): boolean {
+  if (!profile) return false;
+
+  const role = String(profile.role || '').toLowerCase();
+  const trollRole = String(profile.troll_role || '').toLowerCase();
+
+  return AGENCY_HR_ROLES.has(role) || AGENCY_HR_ROLES.has(trollRole);
+}
 
 export function isStaffProfile(profile: any): boolean {
   if (!profile) return false;

@@ -1,599 +1,1118 @@
-import React, { useState, useEffect } from 'react';
-import { useSecurityEvents } from '../../hooks/useSecurityEvents';
-import { logSecurityEvent } from '../../lib/securityLogger';
-import { Tabs, TabsList, TabsContent, Tab } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableHeader, TableBody, TableRow, TableCell, TableHead, TableCaption } from '@/components/ui/table';
-import { AlertTriangle, Shield, Zap, DollarSign, User, ClipboardList, List, Megaphone, Settings } from 'lucide-react';
-import { useRouter } from 'next/router';
-import { supabase } from '../../lib/supabase';
-import { Toaster, toast } from 'sonner';
+import React, { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  BadgeAlert,
+  Bug,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+  Copy,
+  DollarSign,
+  Eye,
+  FileWarning,
+  Filter,
+  Gauge,
+  Globe2,
+  Lock,
+  Megaphone,
+  RefreshCw,
+  Search,
+  Settings,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  User,
+  Users,
+  X,
+  XCircle,
+  Zap,
+} from 'lucide-react'
+import { toast, Toaster } from 'sonner'
 
-const SecurityCommandCenter: React.FC = () => {
-  const router = useRouter();
-  const { events, riskScores, loading, error, filters, setFilters, refresh, resolveEvent, markFalsePositive, ignoreEvent } = useSecurityEvents();
-  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+import { Button } from '@/components/ui/button'
+import { useSecurityEvents } from '../../hooks/useSecurityEvents'
+import { logSecurityEvent } from '../../lib/securityLogger'
 
-  useEffect(() => {
-    // Initial load
-    refresh();
-  }, [refresh]);
+type SecurityTab =
+  | 'overview'
+  | 'threat-feed'
+  | 'risk-users'
+  | 'rate-limits'
+  | 'cashout-risk'
+  | 'admin-audit'
+  | 'incident-reports'
+  | 'settings'
 
-  if (loading) {
-    return <div className="flex items-center justify-center py-8">Loading...</div>;
+type SecurityEvent = {
+  id: string
+  event_type?: string | null
+  severity?: string | null
+  status?: string | null
+  user_id?: string | null
+  actor_id?: string | null
+  target_user_id?: string | null
+  stream_id?: string | null
+  agency_id?: string | null
+  cashout_id?: string | null
+  ip_address?: string | null
+  user_agent?: string | null
+  device_fingerprint?: string | null
+  route?: string | null
+  url?: string | null
+  source?: string | null
+  title?: string | null
+  description?: string | null
+  metadata?: any
+  risk_score?: number | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+type RiskScore = {
+  id?: string
+  user_id?: string | null
+  risk_score?: number | null
+  risk_level?: string | null
+  failed_login_count?: number | null
+  suspicious_action_count?: number | null
+  last_event_at?: string | null
+  last_ip_address?: string | null
+  notes?: string | null
+  metadata?: any
+}
+
+const shellClass =
+  'min-h-screen overflow-y-auto bg-[#040611] text-white'
+
+const glassPanel =
+  'rounded-[2rem] border border-cyan-300/15 bg-slate-950/70 shadow-2xl shadow-cyan-950/25 backdrop-blur-xl'
+
+const softPanel =
+  'rounded-3xl border border-white/10 bg-white/[0.045] shadow-xl shadow-black/25 backdrop-blur-xl'
+
+const inputClass =
+  'h-11 w-full rounded-2xl border border-cyan-300/15 bg-black/35 px-4 text-sm text-white outline-none placeholder:text-slate-500 transition focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/15'
+
+const tabButtonBase =
+  'group relative flex min-w-max items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black transition'
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return 'Not available'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleString()
+}
+
+const shortId = (value?: string | null) => {
+  if (!value) return '—'
+  return value.length > 12 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value
+}
+
+const normalize = (value?: string | null, fallback = 'unknown') =>
+  String(value || fallback).trim().toLowerCase()
+
+const titleCase = (value?: string | null) =>
+  String(value || 'unknown')
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+
+const getSeverityClasses = (severity?: string | null) => {
+  const normalized = normalize(severity, 'low')
+
+  if (normalized === 'critical') {
+    return 'border-pink-300/40 bg-pink-500/15 text-pink-100 shadow-[0_0_22px_rgba(236,72,153,0.18)]'
   }
 
-  if (error) {
-    return <div className="p-4 bg-red-50 text-red-500">Error: {error.message}</div>;
+  if (normalized === 'high') {
+    return 'border-red-300/40 bg-red-500/15 text-red-100'
   }
 
-  const handleResolve = (eventId: uuid, status: 'resolved' | 'ignored' | 'false_positive') => {
-    resolveEvent(eventId, status, 'Resolved via Security Command Center');
-  };
+  if (normalized === 'medium') {
+    return 'border-amber-300/40 bg-amber-500/15 text-amber-100'
+  }
+
+  return 'border-cyan-300/30 bg-cyan-500/10 text-cyan-100'
+}
+
+const getStatusClasses = (status?: string | null) => {
+  const normalized = normalize(status, 'open')
+
+  if (normalized === 'resolved') {
+    return 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+  }
+
+  if (normalized === 'investigating') {
+    return 'border-blue-300/35 bg-blue-500/12 text-blue-100'
+  }
+
+  if (normalized === 'ignored' || normalized === 'false_positive') {
+    return 'border-slate-300/25 bg-slate-500/10 text-slate-200'
+  }
+
+  return 'border-amber-300/35 bg-amber-500/12 text-amber-100'
+}
+
+const getRiskClasses = (level?: string | null) => {
+  const normalized = normalize(level, 'low')
+
+  if (normalized === 'critical') return 'border-pink-300/40 bg-pink-500/15 text-pink-100'
+  if (normalized === 'high') return 'border-red-300/40 bg-red-500/15 text-red-100'
+  if (normalized === 'medium') return 'border-amber-300/40 bg-amber-500/15 text-amber-100'
+  return 'border-cyan-300/30 bg-cyan-500/10 text-cyan-100'
+}
+
+const Pill = ({
+  children,
+  className = '',
+}: {
+  children: React.ReactNode
+  className?: string
+}) => (
+  <span
+    className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] ${className}`}
+  >
+    {children}
+  </span>
+)
+
+const EmptyState = ({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ElementType
+  title: string
+  description: string
+}) => (
+  <div className={`${softPanel} flex min-h-[16rem] flex-col items-center justify-center px-6 py-10 text-center`}>
+    <div className="grid h-16 w-16 place-items-center rounded-3xl border border-cyan-300/20 bg-cyan-500/10 text-cyan-100">
+      <Icon className="h-7 w-7" />
+    </div>
+    <h3 className="mt-5 text-xl font-black text-white">{title}</h3>
+    <p className="mt-2 max-w-xl text-sm leading-7 text-slate-300">{description}</p>
+  </div>
+)
+
+const MetricCard = ({
+  label,
+  value,
+  helper,
+  icon: Icon,
+  tone = 'cyan',
+}: {
+  label: string
+  value: string | number
+  helper: string
+  icon: React.ElementType
+  tone?: 'cyan' | 'purple' | 'amber' | 'red' | 'emerald' | 'pink'
+}) => {
+  const toneMap: Record<string, string> = {
+    cyan: 'border-cyan-300/20 bg-cyan-500/10 text-cyan-200 shadow-cyan-950/30',
+    purple: 'border-purple-300/20 bg-purple-500/10 text-purple-200 shadow-purple-950/30',
+    amber: 'border-amber-300/20 bg-amber-500/10 text-amber-200 shadow-amber-950/20',
+    red: 'border-red-300/20 bg-red-500/10 text-red-200 shadow-red-950/20',
+    emerald: 'border-emerald-300/20 bg-emerald-500/10 text-emerald-200 shadow-emerald-950/20',
+    pink: 'border-pink-300/20 bg-pink-500/10 text-pink-200 shadow-pink-950/20',
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Security Command Center</h1>
-        <div className="flex items-center space-x-4 mt-4 sm:mt-0">
-          <Button variant="outline" onClick={refresh}>
-            Refresh
-          </Button>
-          <Button onClick={() => {
-            // Example: log a test event
-            logSecurityEvent({
-              event_type: 'test_event',
-              title: 'Test Event',
-              description: 'This is a test event from the Security Command Center',
-              risk_score: 10,
-              severity: 'low'
-            });
-          }}>
-            Log Test Event
-          </Button>
+    <div className={`${softPanel} overflow-hidden p-5`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
+          <p className="mt-4 text-3xl font-black tracking-tight text-white">{value}</p>
+        </div>
+        <div className={`grid h-12 w-12 place-items-center rounded-2xl border shadow-xl ${toneMap[tone]}`}>
+          <Icon className="h-5 w-5" />
         </div>
       </div>
+      <p className="mt-4 text-sm leading-6 text-slate-300">{helper}</p>
+    </div>
+  )
+}
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-[200px_1fr]">
-          <Tab value="overview">Overview</Tab>
-          <Tab value="threat-feed">Threat Feed</Tab>
-          <Tab value="risk-users">Risk Users</Tab>
-          <Tab value="rate-limits">Rate Limits</Tab>
-          <Tab value="cashout-risk">Cashout Risk</Tab>
-          <Tab value="admin-audit">Admin Audit</Tab>
-          <Tab value="incident-reports">Incident Reports</Tab>
-          <Tab value="settings">Settings</Tab>
-        </TabsList>
+const DetailRow = ({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string
+  value: React.ReactNode
+  mono?: boolean
+}) => (
+  <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</p>
+    <div className={`mt-2 break-words text-sm text-slate-100 ${mono ? 'font-mono' : ''}`}>{value || '—'}</div>
+  </div>
+)
 
-        <TabsContent value="overview">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Overview Cards */}
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">Open Threats</span>
-                <h2 className="text-xl font-bold text-white">{events.filter(e => e.status === 'open').length}</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Events requiring immediate attention
-              </CardContent>
-            </Card>
+const safeJson = (value: any) => {
+  if (!value) return '{}'
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
 
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">Critical Threats</span>
-                <h2 className="text-xl font-bold text-white">{events.filter(e => e.severity === 'critical').length}</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Highest severity threats
-              </CardContent>
-            </Card>
+const tabItems: Array<{ id: SecurityTab; label: string; icon: React.ElementType }> = [
+  { id: 'overview', label: 'Overview', icon: Gauge },
+  { id: 'threat-feed', label: 'Threat Feed', icon: ShieldAlert },
+  { id: 'risk-users', label: 'Risk Users', icon: Users },
+  { id: 'rate-limits', label: 'Rate Limits', icon: Zap },
+  { id: 'cashout-risk', label: 'Cashout Risk', icon: DollarSign },
+  { id: 'admin-audit', label: 'Admin Audit', icon: ClipboardList },
+  { id: 'incident-reports', label: 'Incidents', icon: FileWarning },
+  { id: 'settings', label: 'Settings', icon: Settings },
+]
 
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">High Risk Users</span>
-                <h2 className="text-xl font-bold text-white">{riskScores.filter(r => r.risk_level === 'high' || r.risk_level === 'critical').length}</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Users with elevated risk scores
-              </CardContent>
-            </Card>
+export default function SecurityCommandCenter() {
+  const navigate = useNavigate()
+  const securityHook = useSecurityEvents() as any
 
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">Failed Login Spikes</span>
-                <h2 className="text-xl font-bold text-white">{events.filter(e => e.event_type === 'failed_login' && e.created_at > new Date(Date.now() - 24 * 60 * 60 * 1000)).length}</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Failed login attempts in last 24h
-              </CardContent>
-            </Card>
+  const {
+    events = [],
+    riskScores = [],
+    loading,
+    error,
+    refresh,
+    resolveEvent,
+    markFalsePositive,
+    ignoreEvent,
+  } = securityHook
 
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">Cashout Risk Flags</span>
-                <h2 className="text-xl font-bold text-white">{events.filter(e => e.event_type.includes('cashout') && e.severity === 'high').length}</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Suspicious cashout activities
-              </CardContent>
-            </Card>
+  const [activeTab, setActiveTab] = useState<SecurityTab>('overview')
+  const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null)
+  const [search, setSearch] = useState('')
+  const [severityFilter, setSeverityFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [savingEventId, setSavingEventId] = useState<string | null>(null)
 
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">Admin Actions Today</span>
-                <h2 className="text-xl font-bold text-white">0</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Security-related admin actions
-              </CardContent>
-            </Card>
+  useEffect(() => {
+    void refresh?.()
+  }, [refresh])
 
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">Broadcast Abuse Events</span>
-                <h2 className="text-xl font-bold text-white">{events.filter(e => e.event_type.includes('broadcast') && e.severity === 'high').length}</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Suspicious broadcast activities
-              </CardContent>
-            </Card>
+  const typedEvents = (events || []) as SecurityEvent[]
+  const typedRiskScores = (riskScores || []) as RiskScore[]
 
-            <Card className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20">
-              <CardHeader className="flex flex-col space-y-2">
-                <span className="text-xs font-medium text-cyan-400">RLS/API Security Errors</span>
-                <h2 className="text-xl font-bold text-white">{events.filter(e => e.source === 'backend' && (e.metadata?.error_code === '401' || e.metadata?.error_code === '403' || e.metadata?.error_code === '42501' || e.metadata?.error_code === '23514' || e.metadata?.error_code === 'PGRST301')).length}</h2>
-              </CardHeader>
-              <CardContent className="text-sm text-cyan-300">
-                Authentication and authorization errors
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+  const filteredEvents = useMemo(() => {
+    const term = search.trim().toLowerCase()
 
-        <TabsContent value="threat-feed">
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-bold">Threat Feed</h2>
-              <div className="flex items-center space-x-3 mt-2 sm:mt-0">
-                <input
-                  type="text"
-                  placeholder="Search events..."
-                  className="input input-sm w-full max-w-xs"
-                />
-                <Button variant="outline" size="sm">
-                  Filter
+    return typedEvents.filter((event) => {
+      const severityMatch = severityFilter === 'all' || normalize(event.severity) === severityFilter
+      const statusMatch = statusFilter === 'all' || normalize(event.status) === statusFilter
+
+      if (!severityMatch || !statusMatch) return false
+      if (!term) return true
+
+      const haystack = [
+        event.id,
+        event.event_type,
+        event.title,
+        event.description,
+        event.user_id,
+        event.actor_id,
+        event.target_user_id,
+        event.route,
+        event.url,
+        event.source,
+        event.ip_address,
+        safeJson(event.metadata),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return haystack.includes(term)
+    })
+  }, [typedEvents, search, severityFilter, statusFilter])
+
+  const cashoutEvents = useMemo(
+    () =>
+      typedEvents.filter((event) => {
+        const text = `${event.event_type || ''} ${event.title || ''} ${event.description || ''}`.toLowerCase()
+        return text.includes('cashout') || text.includes('payout') || text.includes('wallet') || text.includes('coin')
+      }),
+    [typedEvents],
+  )
+
+  const apiSecurityEvents = useMemo(
+    () =>
+      typedEvents.filter((event) => {
+        const code = String(event.metadata?.error_code || event.metadata?.code || '').toLowerCase()
+        return ['401', '403', '42501', '23514', 'pgrst301'].includes(code)
+      }),
+    [typedEvents],
+  )
+
+  const adminActionEvents = useMemo(
+    () =>
+      typedEvents.filter((event) => {
+        const type = normalize(event.event_type)
+        const source = normalize(event.source)
+        return type.includes('admin') || source.includes('admin') || event.actor_id
+      }),
+    [typedEvents],
+  )
+
+  const incidentEvents = useMemo(
+    () =>
+      typedEvents.filter((event) => {
+        return ['critical', 'high'].includes(normalize(event.severity)) || normalize(event.status) === 'investigating'
+      }),
+    [typedEvents],
+  )
+
+  const stats = useMemo(() => {
+    const openThreats = typedEvents.filter((event) => normalize(event.status) === 'open').length
+    const criticalThreats = typedEvents.filter((event) => normalize(event.severity) === 'critical').length
+    const highRiskUsers = typedRiskScores.filter((score) => ['high', 'critical'].includes(normalize(score.risk_level))).length
+    const failedLogins24h = typedEvents.filter((event) => {
+      if (normalize(event.event_type) !== 'failed_login') return false
+      const created = event.created_at ? new Date(event.created_at).getTime() : 0
+      return created > Date.now() - 24 * 60 * 60 * 1000
+    }).length
+
+    return {
+      openThreats,
+      criticalThreats,
+      highRiskUsers,
+      failedLogins24h,
+      cashoutFlags: cashoutEvents.filter((event) => ['high', 'critical'].includes(normalize(event.severity))).length,
+      adminActions: adminActionEvents.length,
+      broadcastAbuse: typedEvents.filter((event) => normalize(event.event_type).includes('broadcast')).length,
+      apiSecurityErrors: apiSecurityEvents.length,
+    }
+  }, [typedEvents, typedRiskScores, cashoutEvents, adminActionEvents, apiSecurityEvents])
+
+  const updateEventStatus = async (event: SecurityEvent, status: 'investigating' | 'resolved' | 'ignored' | 'false_positive') => {
+    if (!event?.id) return
+
+    try {
+      setSavingEventId(event.id)
+
+      if (status === 'false_positive' && typeof markFalsePositive === 'function') {
+        await markFalsePositive(event.id)
+      } else if (status === 'ignored' && typeof ignoreEvent === 'function') {
+        await ignoreEvent(event.id)
+      } else if (typeof resolveEvent === 'function') {
+        await resolveEvent(event.id, status, `Marked ${status} from Security Command Center`)
+      } else {
+        throw new Error('Security event action handler is not available.')
+      }
+
+      toast.success(`Event marked ${status.replaceAll('_', ' ')}`)
+      await refresh?.()
+    } catch (err: any) {
+      console.error('[SecurityCommandCenter] Failed to update event status', err)
+      toast.error(err?.message || 'Could not update event status.')
+    } finally {
+      setSavingEventId(null)
+    }
+  }
+
+  const logTestEvent = async () => {
+    try {
+      await logSecurityEvent({
+        event_type: 'test_event',
+        title: 'Security Command Center test event',
+        description: 'This is a test event from the redesigned Security Command Center.',
+        severity: 'low',
+        risk_score: 10,
+        metadata: {
+          source_component: 'SecurityCommandCenter',
+          route: window.location.pathname,
+          tested_at: new Date().toISOString(),
+        },
+      } as any)
+
+      toast.success('Test security event logged.')
+      await refresh?.()
+    } catch (err: any) {
+      console.error('[SecurityCommandCenter] Test event failed', err)
+      toast.error(err?.message || 'Test event failed.')
+    }
+  }
+
+  const copyEventId = async (eventId?: string | null) => {
+    if (!eventId) return
+    try {
+      await navigator.clipboard.writeText(eventId)
+      toast.success('Event ID copied.')
+    } catch {
+      toast.error('Could not copy event ID.')
+    }
+  }
+
+  const isLoading = Boolean(loading)
+
+  return (
+    <div className={shellClass}>
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-[-10%] top-[-10%] h-[30rem] w-[30rem] rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute right-[-12%] top-[10%] h-[34rem] w-[34rem] rounded-full bg-purple-500/10 blur-3xl" />
+        <div className="absolute bottom-[-16%] left-[20%] h-[34rem] w-[34rem] rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.045)_1px,transparent_1px)] bg-[size:42px_42px]" />
+      </div>
+
+      <main className="relative mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+        <section className={`${glassPanel} overflow-hidden`}>
+          <div className="relative p-6 sm:p-8">
+            <div className="absolute right-8 top-8 hidden rounded-full border border-cyan-300/20 bg-cyan-500/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100 lg:block">
+              Defensive Monitoring Only
+            </div>
+
+            <div className="max-w-4xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-500/10 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-100">
+                <Shield className="h-4 w-4" />
+                Troll City Security Command
+              </div>
+
+              <h1 className="mt-5 text-3xl font-black tracking-tight text-white sm:text-5xl">
+                Security Command Center
+              </h1>
+
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300 sm:text-base">
+                Review platform threats, risky accounts, cashout flags, API/RLS issues, and admin actions from one clean Troll City control room.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void refresh?.()}
+                  disabled={isLoading}
+                  className="rounded-2xl border border-cyan-300/30 bg-cyan-500/15 px-4 py-3 font-black text-cyan-50 hover:bg-cyan-500/25"
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh Security Data
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={() => void logTestEvent()}
+                  className="rounded-2xl border border-purple-300/30 bg-purple-500/15 px-4 py-3 font-black text-purple-50 hover:bg-purple-500/25"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Log Test Event
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={() => navigate('/admin/payouts')}
+                  className="rounded-2xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-3 font-black text-emerald-50 hover:bg-emerald-500/20"
+                >
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  Open Payouts
                 </Button>
               </div>
             </div>
-
-            {events.length > 0 ? (
-              <Table className="table-sm">
-                <TableCaption className="text-left text-sm font-medium text-white mb-2">
-                  Security Events
-                </TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-20">Severity</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="w-40">Title</TableHead>
-                    <TableHead className="w-16">User</TableHead>
-                    <TableHead className="w-16">Route</TableHead>
-                    <TableHead className="w-12">Score</TableHead>
-                    <TableHead className="w-16">Source</TableHead>
-                    <TableHead className="w-16">Time</TableHead>
-                    <TableHead className="w-12">Status</TableHead>
-                    <TableHead className="w-16">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {events.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell>
-                        <Badge variant={getSeverityVariant(event.severity)}>{event.severity}</Badge>
-                      </TableCell>
-                      <TableCell>{event.event_type}</TableCell>
-                      <TableCell className="max-w-40 truncate" title={event.title}>
-                        {event.title}
-                      </TableCell>
-                      <TableCell>
-                        {event.user_id ? (
-                          <Button variant="link" size="xs" onClick={() => {
-                            // Navigate to user profile
-                            router.push(`/profile/${event.user_id}`);
-                          }}>
-                            {event.user_id}
-                          </Button>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell className="truncate" title={event.route || '-'}>
-                        {event.route || '-'}
-                      </TableCell>
-                      <TableCell>{event.risk_score}</TableCell>
-                      <TableCell>{event.source}</TableCell>
-                      <TableCell className="text-xs">
-                        {new Date(event.created_at).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(event.status)}>{event.status}</Badge>
-                      </TableCell>
-                      <TableCell className="flex space-x-2">
-                        <Button variant="ghost" size="xs" onClick={() => handleResolve(event.id, 'investigating')}>
-                          Investigate
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => handleResolve(event.id, 'resolved')}>
-                          Resolve
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => handleResolve(event.id, 'ignored')}>
-                          Ignore
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => handleResolve(event.id, 'false_positive')}>
-                          False Positive
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => {
-                          setSelectedEvent(event);
-                        }}>
-                          Details
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-center py-8">No security events found.</p>
-            )}
           </div>
-        </TabsContent>
+        </section>
 
-        {/* We'll create the other tabs similarly, but for brevity, we'll outline them */}
-        <TabsContent value="risk-users">
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">Risk Users</h2>
-            <div className="overflow-x-auto">
-              <Table className="table-sm">
-                <TableCaption className="text-left text-sm font-medium text-white mb-2">
-                  User Risk Scores
-                </TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User ID</TableHead>
-                    <TableHead className="w-20">Risk Score</TableHead>
-                    <TableHead className="w-20">Risk Level</TableHead>
-                    <TableHead className="w-20">Failed Logins</TableHead>
-                    <TableHead className="w-20">Suspicious Actions</TableHead>
-                    <TableHead className="w-20">Last Event</TableHead>
-                    <TableHead className="w-20">Last IP</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {riskScores.map((score) => (
-                    <TableRow key={score.id}>
-                      <TableCell>
-                        <Button variant="link" size="xs" onClick={() => {
-                          router.push(`/profile/${score.user_id}`);
-                        }}>
-                          {score.user_id}
-                        </Button>
-                      </TableCell>
-                      <TableCell>{score.risk_score}</TableCell>
-                      <TableCell>
-                        <Badge variant={getRiskLevelVariant(score.risk_level)}>{score.risk_level}</Badge>
-                      </TableCell>
-                      <TableCell>{score.failed_login_count}</TableCell>
-                      <TableCell>{score.suspicious_action_count}</TableCell>
-                      <TableCell className="text-xs">
-                        {score.last_event_at ? new Date(score.last_event_at).toLocaleString() : '-'}
-                      </TableCell>
-                      <TableCell>{score.last_ip_address || '-'}</TableCell>
-                      <TableCell className="flex space-x-2">
-                        <Button variant="ghost" size="xs" onClick={() => {
-                          // Open user profile
-                          router.push(`/profile/${score.user_id}`);
-                        }}>
-                          Profile
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => {
-                          // Add admin note (placeholder)
-                          toast.info('Add admin note functionality coming soon');
-                        }}>
-                          Note
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => {
-                          // Reset risk score (placeholder)
-                          toast.warning('Risk score reset functionality coming soon');
-                        }}>
-                          Reset
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => {
-                          // Create incident report (placeholder)
-                          toast.info('Create incident report functionality coming soon');
-                        }}>
-                          Report
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        {error && (
+          <section className="rounded-3xl border border-red-300/30 bg-red-500/10 p-5 text-red-100">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-none" />
+              <div>
+                <p className="font-black">Security dashboard load error</p>
+                <p className="mt-1 text-sm leading-6 text-red-100/80">{error?.message || String(error)}</p>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </section>
+        )}
 
-        <TabsContent value="rate-limits">
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">Rate Limits</h2>
-            <p className="text-sm text-muted-foreground">
-              Note: Cloudflare should handle edge blocking while app-level rate limits protect Supabase actions.
-            </p>
-            {/* We would fetch rate limits from security_rate_limits table */}
-            <div className="text-center py-8">
-              <p>Rate limit data would be displayed here.</p>
+        <section className={`${softPanel} p-2`}>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {tabItems.map((tab) => {
+              const Icon = tab.icon
+              const active = activeTab === tab.id
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${tabButtonBase} ${
+                    active
+                      ? 'border-cyan-300/40 bg-cyan-500/20 text-cyan-50 shadow-lg shadow-cyan-950/30'
+                      : 'border-white/10 bg-black/20 text-slate-300 hover:border-cyan-300/25 hover:bg-cyan-500/10 hover:text-white'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        {activeTab === 'overview' && (
+          <section className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard label="Open Threats" value={stats.openThreats} helper="Events waiting for admin review." icon={ShieldAlert} tone="amber" />
+              <MetricCard label="Critical Threats" value={stats.criticalThreats} helper="Highest priority events across the app." icon={BadgeAlert} tone="pink" />
+              <MetricCard label="High Risk Users" value={stats.highRiskUsers} helper="Users with elevated risk scores." icon={Users} tone="red" />
+              <MetricCard label="Failed Logins" value={stats.failedLogins24h} helper="Failed login events in the last 24 hours." icon={Lock} tone="purple" />
+              <MetricCard label="Cashout Flags" value={stats.cashoutFlags} helper="Wallet, payout, or cashout related warnings." icon={DollarSign} tone="emerald" />
+              <MetricCard label="Admin Actions" value={stats.adminActions} helper="Events with admin or actor activity." icon={ClipboardList} tone="cyan" />
+              <MetricCard label="Broadcast Abuse" value={stats.broadcastAbuse} helper="Stream and broadcast security signals." icon={Megaphone} tone="purple" />
+              <MetricCard label="RLS/API Errors" value={stats.apiSecurityErrors} helper="Auth, RLS, and API security codes." icon={Bug} tone="red" />
             </div>
-          </div>
-        </TabsContent>
 
-        <TabsContent value="cashout-risk">
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">Cashout Risk</h2>
-            <div className="flex items-center space-x-3 mt-2 sm:mt-0">
-              <Button variant="default" onClick={() => {
-                router.push('/admin/payouts');
-              }}>
-                Go to Payout Dashboard
+            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className={glassPanel}>
+                <SectionHeader
+                  icon={ShieldAlert}
+                  eyebrow="Live threat feed"
+                  title="Newest security events"
+                  actionLabel="Open Feed"
+                  onAction={() => setActiveTab('threat-feed')}
+                />
+
+                <div className="space-y-3 p-5 pt-0">
+                  {typedEvents.slice(0, 6).length === 0 ? (
+                    <EmptyState icon={ShieldCheck} title="No security events yet" description="When events are logged, the newest threats will appear here." />
+                  ) : (
+                    typedEvents.slice(0, 6).map((event) => (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        onOpen={() => setSelectedEvent(event)}
+                        onCopy={() => void copyEventId(event.id)}
+                        onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className={glassPanel}>
+                <SectionHeader
+                  icon={Users}
+                  eyebrow="Risk board"
+                  title="Highest risk users"
+                  actionLabel="Risk Users"
+                  onAction={() => setActiveTab('risk-users')}
+                />
+
+                <div className="space-y-3 p-5 pt-0">
+                  {typedRiskScores.slice(0, 6).length === 0 ? (
+                    <EmptyState icon={User} title="No risk users yet" description="User risk scores will appear after events are logged." />
+                  ) : (
+                    typedRiskScores
+                      .slice()
+                      .sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0))
+                      .slice(0, 6)
+                      .map((score) => <RiskUserCard key={score.id || score.user_id || Math.random()} score={score} onProfile={() => score.user_id && navigate(`/profile/${score.user_id}`)} />)
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'threat-feed' && (
+          <section className={glassPanel}>
+            <SectionHeader icon={ShieldAlert} eyebrow="Security results" title="Threat Feed" />
+
+            <div className="grid gap-3 border-y border-white/10 bg-black/20 p-5 lg:grid-cols-[1fr_180px_180px_auto]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search by title, user, route, event type, source, metadata..."
+                  className={`${inputClass} pl-11`}
+                />
+              </div>
+
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className={inputClass}>
+                <option value="all">All severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={inputClass}>
+                <option value="all">All statuses</option>
+                <option value="open">Open</option>
+                <option value="investigating">Investigating</option>
+                <option value="resolved">Resolved</option>
+                <option value="ignored">Ignored</option>
+                <option value="false_positive">False Positive</option>
+              </select>
+
+              <Button type="button" onClick={() => { setSearch(''); setSeverityFilter('all'); setStatusFilter('all') }} className="rounded-2xl border border-white/10 bg-white/5 text-white hover:bg-white/10">
+                <Filter className="mr-2 h-4 w-4" />
+                Clear
               </Button>
             </div>
-            {/* We would filter events by cashout-related types */}
-            <div className="text-center py-8">
-              <p>Cashout-related security events would be displayed here.</p>
-            </div>
-          </div>
-        </TabsContent>
 
-        <TabsContent value="admin-audit">
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">Admin Audit Log</h2>
-            {/* We would fetch from security_admin_audit_log table */}
-            <div className="text-center py-8">
-              <p>Admin audit log would be displayed here.</p>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="incident-reports">
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">Incident Reports</h2>
-            {/* We would fetch from security_incident_reports table */}
-            <div class="flex items-center space-x-3 mt-2 sm:mt-0">
-              <Button variant="default" onClick={() => {
-                // Open modal to create incident report
-                toast.info('Create incident report modal coming soon');
-              }}>
-                New Incident Report
-              </Button>
-            </div>
-            <div className="text-center py-8">
-              <p>Incident reports would be displayed here.</p>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="settings">
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold">Settings</h2>
-            <div className="space-y-6">
-              <div className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20 rounded-lg p-6">
-                <h3 className="font-bold mb-4">Recommended External Tools</h3>
-                <div className="space-y-4">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0 h-8 w-8 text-cyan-400">
-                      <Shield className="h-5 w-5" />
-                    </div>
-                    <div className="ml-4">
-                      <h4 className="font-medium">Cloudflare WAF + Turnstile</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Edge-level protection against bots and automated threats.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0 h-8 w-8 text-cyan-400">
-                      <Zap className="h-5 w-5" />
-                    </div>
-                    <div className="ml-4">
-                      <h4 className="font-medium">Supabase RLS and Audit Tables</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Row-level security and comprehensive audit logging.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0 h-8 w-8 text-cyan-400">
-                      <Megaphone className="h-5 w-5" />
-                    </div>
-                    <div className="ml-4">
-                      <h4 className="font-medium">Sentry/Better Stack</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Application monitoring and error tracking.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0 h-8 w-8 text-cyan-400">
-                      <Settings className="h-5 w-5" />
-                    </div>
-                    <div className="ml-4">
-                      <h4 className="font-medium">GitHub Security Tools</h4>
-                      <p className="text-sm text-muted-foreground">
-                        CodeQL, Dependabot, and Snyk for vulnerability scanning.
-                      </p>
-                    </div>
-                  </div>
+            <div className="p-5">
+              {filteredEvents.length === 0 ? (
+                <EmptyState icon={ShieldCheck} title="No matching events" description="Change filters or log a test event to verify the feed." />
+              ) : (
+                <div className="space-y-3">
+                  {filteredEvents.map((event) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      detailed
+                      saving={savingEventId === event.id}
+                      onOpen={() => setSelectedEvent(event)}
+                      onCopy={() => void copyEventId(event.id)}
+                      onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)}
+                      onInvestigate={() => void updateEventStatus(event, 'investigating')}
+                      onResolve={() => void updateEventStatus(event, 'resolved')}
+                      onIgnore={() => void updateEventStatus(event, 'ignored')}
+                      onFalsePositive={() => void updateEventStatus(event, 'false_positive')}
+                    />
+                  ))}
                 </div>
-              </div>
+              )}
+            </div>
+          </section>
+        )}
 
-              <div className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20 rounded-lg p-6">
-                <h3 className="font-bold mb-4">Environment Variables</h3>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="font-medium mb-1">VITE_TURNSTILE_SITE_KEY</p>
-                      <p className="text-sm text-muted-foreground">
-                        Can be exposed in frontend for Turnstile widget.
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium mb-1">CLOUDFLARE_API_TOKEN</p>
-                      <p className="text-sm text-muted-foreground">
-                        Must be backend only - never expose in frontend.
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium mb-1">SENTRY_DSN</p>
-                      <p className="text-sm text-muted-foreground">
-                        Can be frontend if using Sentry client-side monitoring.
-                      </p>
-                    </div>
-                  </div>
+        {activeTab === 'risk-users' && (
+          <section className={glassPanel}>
+            <SectionHeader icon={Users} eyebrow="Risk results" title="Risk Users" />
+
+            <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
+              {typedRiskScores.length === 0 ? (
+                <div className="md:col-span-2 xl:col-span-3">
+                  <EmptyState icon={User} title="No risk score rows found" description="Risk users will appear when security events update security_user_risk_scores." />
                 </div>
-              </div>
+              ) : (
+                typedRiskScores
+                  .slice()
+                  .sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0))
+                  .map((score) => <RiskUserCard key={score.id || score.user_id || Math.random()} score={score} onProfile={() => score.user_id && navigate(`/profile/${score.user_id}`)} detailed />)
+              )}
+            </div>
+          </section>
+        )}
 
-              <div className="bg-[#0A0814/50] backdrop-blur border border-cyan-500/20 rounded-lg p-6">
-                <h3 className="font-bold mb-4">Coming Soon</h3>
-                <div className="space-y-4">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0 h-8 w-8 text-cyan-400">
-                      <AlertTriangle className="h-5 w-5" />
-                    </div>
-                    <div className="ml-4">
-                      <h4 className="font-medium">Cloudflare Integration</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Direct integration with Cloudflare API for automated threat response.
-                      </p>
-                    </div>
-                  </div>
+        {activeTab === 'rate-limits' && (
+          <InfoTab
+            icon={Zap}
+            title="Rate Limits"
+            eyebrow="App protection"
+            description="This tab is prepared for security_rate_limits rows. Cloudflare should block at the edge while app-level rate limits protect Supabase actions like cashouts, reports, chat bursts, and login retries."
+            cards={[
+              ['Edge Defense', 'Use Cloudflare WAF, Turnstile, and rate limiting before traffic reaches the app.'],
+              ['App Defense', 'Track high-risk identifiers, action buckets, hit counts, and blocked_until windows.'],
+              ['Recommended', 'Start with login, signup, cashout, agency application, reports, chat, and grant-coins actions.'],
+            ]}
+          />
+        )}
+
+        {activeTab === 'cashout-risk' && (
+          <section className={glassPanel}>
+            <SectionHeader
+              icon={DollarSign}
+              eyebrow="Money movement"
+              title="Cashout Risk"
+              actionLabel="Open Payouts"
+              onAction={() => navigate('/admin/payouts')}
+            />
+
+            <div className="p-5">
+              {cashoutEvents.length === 0 ? (
+                <EmptyState icon={DollarSign} title="No cashout risk flags" description="Wallet, coin, payout, and cashout related events will appear here." />
+              ) : (
+                <div className="space-y-3">
+                  {cashoutEvents.map((event) => (
+                    <EventCard key={event.id} event={event} detailed onOpen={() => setSelectedEvent(event)} onCopy={() => void copyEventId(event.id)} onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)} />
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+          </section>
+        )}
 
-      {/* Modal for event details */}
-      <div className={`fixed inset-0 z-50 flex items-center justify-center ${selectedEvent ? 'block' : 'hidden'}`}>
-        <div className="fixed inset-0 bg-black/50 backdrop-blur"></div>
-        <div className="bg-[#0A0814] border border-cyan-500/20 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-start mb-4">
-            <h2 className="text-xl font-bold">Event Details</h2>
-            <Button variant="ghost" size="xs" onClick={() => setSelectedEvent(null)}>
-              <AlertTriangle className="h-4 w-4" /> Close
-            </Button>
-          </div>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">ID</p>
-                <p className="text-white">{selectedEvent?.id}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Event Type</p>
-                <p className="text-white">{selectedEvent?.event_type}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Severity</p>
-                <Badge variant={getSeverityVariant(selectedEvent?.severity)}>{selectedEvent?.severity}</Badge>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Status</p>
-                <Badge variant={getStatusVariant(selectedEvent?.status)}>{selectedEvent?.status}</Badge>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Risk Score</p>
-                <p className="text-white">{selectedEvent?.risk_score}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">User ID</p>
-                <p className="text-white">{selectedEvent?.user_id || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Route</p>
-                <p className="text-white">{selectedEvent?.route || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Source</p>
-                <p className="text-white">{selectedEvent?.source}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Timestamp</p>
-                <p className="text-white">{new Date(selectedEvent?.created_at).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">IP Address</p>
-                <p className="text-white">{selectedEvent?.ip_address || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">User Agent</p>
-                <p className="text-white break-all">{selectedEvent?.user_agent || '-'}</p>
-              </div>
+        {activeTab === 'admin-audit' && (
+          <section className={glassPanel}>
+            <SectionHeader icon={ClipboardList} eyebrow="Audit visibility" title="Admin Audit" />
+
+            <div className="p-5">
+              {adminActionEvents.length === 0 ? (
+                <EmptyState icon={ClipboardList} title="No admin audit events yet" description="Admin role changes, coin grants, dashboard actions, and review events will show here once logged." />
+              ) : (
+                <div className="space-y-3">
+                  {adminActionEvents.map((event) => (
+                    <EventCard key={event.id} event={event} detailed onOpen={() => setSelectedEvent(event)} onCopy={() => void copyEventId(event.id)} onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)} />
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="mt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-2">Title</p>
-              <p className="text-white">{selectedEvent?.title}</p>
+          </section>
+        )}
+
+        {activeTab === 'incident-reports' && (
+          <section className={glassPanel}>
+            <SectionHeader icon={FileWarning} eyebrow="Incident queue" title="Incident Reports" />
+
+            <div className="p-5">
+              {incidentEvents.length === 0 ? (
+                <EmptyState icon={FileWarning} title="No high-priority incidents" description="High, critical, and investigating events will appear here as incident candidates." />
+              ) : (
+                <div className="space-y-3">
+                  {incidentEvents.map((event) => (
+                    <EventCard key={event.id} event={event} detailed onOpen={() => setSelectedEvent(event)} onCopy={() => void copyEventId(event.id)} onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)} />
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="mt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-2">Description</p>
-              <p className="text-white whitespace-pre-wrap">{selectedEvent?.description}</p>
-            </div>
-            <div className="mt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-2">Metadata</p>
-              <pre className="bg-[#121212] p-3 rounded text-xs overflow-auto whitespace-pre-wrap">
-{selectedEvent?.metadata ? JSON.stringify(selectedEvent?.metadata, null, 2) : '{}'}
-              </pre>
-            </div>
-          </div>
+          </section>
+        )}
+
+        {activeTab === 'settings' && (
+          <InfoTab
+            icon={Settings}
+            title="Security Settings"
+            eyebrow="Recommended stack"
+            description="This page is defensive monitoring only. Keep third-party secrets out of the frontend and use backend Edge Functions for API-token integrations."
+            cards={[
+              ['Cloudflare WAF + Turnstile', 'Use WAF rules, bot protection, rate limits, and Turnstile on login, signup, cashout, and agency applications.'],
+              ['Supabase RLS + Audit Tables', 'Keep RLS tight and write important platform events into security_events.'],
+              ['Sentry / Better Stack', 'Use monitoring for app errors, abnormal spikes, and production incident grouping.'],
+              ['GitHub CodeQL / Dependabot / Snyk', 'Scan dependencies and code paths before deployment.'],
+              ['Frontend-safe env', 'VITE_TURNSTILE_SITE_KEY can be public. Cloudflare API tokens must be backend-only.'],
+              ['BugCenter hygiene', 'Ignore analytics.google.com and /g/collect noise; dedupe identical errors within 30 seconds.'],
+            ]}
+          />
+        )}
+      </main>
+
+      <EventDetailsModal
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        onCopy={() => selectedEvent?.id && void copyEventId(selectedEvent.id)}
+        onUser={() => selectedEvent?.user_id && navigate(`/profile/${selectedEvent.user_id}`)}
+      />
+
+      <Toaster position="top-right" />
+    </div>
+  )
+}
+
+function SectionHeader({
+  icon: Icon,
+  eyebrow,
+  title,
+  actionLabel,
+  onAction,
+}: {
+  icon: React.ElementType
+  eyebrow: string
+  title: string
+  actionLabel?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-4">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-500/10 text-cyan-100">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">{eyebrow}</p>
+          <h2 className="mt-1 text-2xl font-black text-white">{title}</h2>
         </div>
       </div>
 
-      <Toaster />
+      {actionLabel && onAction && (
+        <Button type="button" onClick={onAction} className="rounded-2xl border border-cyan-300/25 bg-cyan-500/10 font-black text-cyan-50 hover:bg-cyan-500/20">
+          {actionLabel}
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      )}
     </div>
-  );
-};
-
-// Helper functions for badge variants
-function getSeverityVariant(severity: string) {
-  switch (severity) {
-    case 'low': return 'secondary';
-    case 'medium': return 'warning';
-    case 'high': return 'destructive';
-    case 'critical': return 'destructive';
-    default: return 'secondary';
-  }
+  )
 }
 
-function getStatusVariant(status: string) {
-  switch (status) {
-    case 'open': return 'secondary';
-    case 'investigating': return 'warning';
-    case 'resolved': return 'success';
-    case 'ignored': return 'ghost';
-    case 'false_positive': return 'ghost';
-    default: return 'secondary';
-  }
+function EventCard({
+  event,
+  detailed = false,
+  saving = false,
+  onOpen,
+  onCopy,
+  onUser,
+  onInvestigate,
+  onResolve,
+  onIgnore,
+  onFalsePositive,
+}: {
+  event: SecurityEvent
+  detailed?: boolean
+  saving?: boolean
+  onOpen: () => void
+  onCopy: () => void
+  onUser?: () => void
+  onInvestigate?: () => void
+  onResolve?: () => void
+  onIgnore?: () => void
+  onFalsePositive?: () => void
+}) {
+  return (
+    <article className="rounded-3xl border border-white/10 bg-black/25 p-4 transition hover:border-cyan-300/25 hover:bg-cyan-500/[0.045]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill className={getSeverityClasses(event.severity)}>{normalize(event.severity, 'low')}</Pill>
+            <Pill className={getStatusClasses(event.status)}>{normalize(event.status, 'open')}</Pill>
+            <Pill className="border-slate-300/20 bg-slate-500/10 text-slate-200">
+              {titleCase(event.event_type)}
+            </Pill>
+          </div>
+
+          <h3 className="mt-3 break-words text-lg font-black text-white">{event.title || 'Security event'}</h3>
+
+          {event.description && (
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300">{event.description}</p>
+          )}
+
+          <div className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2 xl:grid-cols-4">
+            <span className="rounded-xl bg-white/[0.035] px-3 py-2">
+              User: <span className="font-mono text-cyan-100">{shortId(event.user_id)}</span>
+            </span>
+            <span className="rounded-xl bg-white/[0.035] px-3 py-2">
+              Route: <span className="text-slate-200">{event.route || event.url || '—'}</span>
+            </span>
+            <span className="rounded-xl bg-white/[0.035] px-3 py-2">
+              Score: <span className="font-black text-white">{Number(event.risk_score || 0)}</span>
+            </span>
+            <span className="rounded-xl bg-white/[0.035] px-3 py-2">
+              Time: <span className="text-slate-200">{formatDateTime(event.created_at)}</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 lg:max-w-[28rem] lg:justify-end">
+          <Button type="button" onClick={onOpen} className="rounded-xl border border-cyan-300/25 bg-cyan-500/10 text-cyan-50 hover:bg-cyan-500/20">
+            <Eye className="mr-2 h-4 w-4" />
+            Details
+          </Button>
+          <Button type="button" onClick={onCopy} className="rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10">
+            <Copy className="mr-2 h-4 w-4" />
+            Copy
+          </Button>
+          {event.user_id && onUser && (
+            <Button type="button" onClick={onUser} className="rounded-xl border border-purple-300/25 bg-purple-500/10 text-purple-50 hover:bg-purple-500/20">
+              <User className="mr-2 h-4 w-4" />
+              Profile
+            </Button>
+          )}
+
+          {detailed && (
+            <>
+              {onInvestigate && (
+                <Button type="button" disabled={saving} onClick={onInvestigate} className="rounded-xl border border-blue-300/25 bg-blue-500/10 text-blue-50 hover:bg-blue-500/20">
+                  Investigate
+                </Button>
+              )}
+              {onResolve && (
+                <Button type="button" disabled={saving} onClick={onResolve} className="rounded-xl border border-emerald-300/25 bg-emerald-500/10 text-emerald-50 hover:bg-emerald-500/20">
+                  Resolve
+                </Button>
+              )}
+              {onIgnore && (
+                <Button type="button" disabled={saving} onClick={onIgnore} className="rounded-xl border border-slate-300/20 bg-slate-500/10 text-slate-100 hover:bg-slate-500/20">
+                  Ignore
+                </Button>
+              )}
+              {onFalsePositive && (
+                <Button type="button" disabled={saving} onClick={onFalsePositive} className="rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10">
+                  False Positive
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </article>
+  )
 }
 
-function getRiskLevelVariant(riskLevel: string) {
-  switch (riskLevel) {
-    case 'low': return 'secondary';
-    case 'medium': return 'warning';
-    case 'high': return 'destructive';
-    case 'critical': return 'destructive';
-    default: return 'secondary';
-  }
+function RiskUserCard({
+  score,
+  onProfile,
+  detailed = false,
+}: {
+  score: RiskScore
+  onProfile?: () => void
+  detailed?: boolean
+}) {
+  return (
+    <article className="rounded-3xl border border-white/10 bg-black/25 p-5 transition hover:border-cyan-300/25">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <Pill className={getRiskClasses(score.risk_level)}>{normalize(score.risk_level, 'low')}</Pill>
+          <h3 className="mt-3 break-all font-mono text-sm font-black text-white">{score.user_id || 'Unknown user'}</h3>
+        </div>
+
+        <div className="grid h-14 w-14 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-500/10 text-2xl font-black text-cyan-100">
+          {Number(score.risk_score || 0)}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <DetailMini label="Failed logins" value={Number(score.failed_login_count || 0)} />
+        <DetailMini label="Suspicious actions" value={Number(score.suspicious_action_count || 0)} />
+        <DetailMini label="Last event" value={formatDateTime(score.last_event_at)} />
+        <DetailMini label="Last IP" value={score.last_ip_address || '—'} />
+      </div>
+
+      {detailed && score.notes && (
+        <p className="mt-4 rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-sm leading-6 text-slate-300">
+          {score.notes}
+        </p>
+      )}
+
+      <Button type="button" onClick={onProfile} disabled={!score.user_id} className="mt-5 w-full rounded-2xl border border-purple-300/25 bg-purple-500/10 font-black text-purple-50 hover:bg-purple-500/20">
+        Open Profile
+        <ChevronRight className="ml-2 h-4 w-4" />
+      </Button>
+    </article>
+  )
 }
 
-export default SecurityCommandCenter;
+function DetailMini({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-bold text-slate-100">{value}</p>
+    </div>
+  )
+}
+
+function InfoTab({
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+  cards,
+}: {
+  icon: React.ElementType
+  eyebrow: string
+  title: string
+  description: string
+  cards: Array<[string, string]>
+}) {
+  return (
+    <section className={glassPanel}>
+      <SectionHeader icon={Icon} eyebrow={eyebrow} title={title} />
+
+      <div className="px-5 pb-5">
+        <p className="max-w-4xl text-sm leading-7 text-slate-300">{description}</p>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {cards.map(([cardTitle, cardDescription]) => (
+            <div key={cardTitle} className={`${softPanel} p-5`}>
+              <h3 className="text-lg font-black text-white">{cardTitle}</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-300">{cardDescription}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function EventDetailsModal({
+  event,
+  onClose,
+  onCopy,
+  onUser,
+}: {
+  event: SecurityEvent | null
+  onClose: () => void
+  onCopy: () => void
+  onUser: () => void
+}) {
+  if (!event) return null
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Close event details"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/75 backdrop-blur-md"
+      />
+
+      <section className="relative max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[2rem] border border-cyan-300/25 bg-[#050714] shadow-2xl shadow-cyan-950/40">
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+          <div>
+            <div className="flex flex-wrap gap-2">
+              <Pill className={getSeverityClasses(event.severity)}>{normalize(event.severity, 'low')}</Pill>
+              <Pill className={getStatusClasses(event.status)}>{normalize(event.status, 'open')}</Pill>
+            </div>
+            <h2 className="mt-3 text-2xl font-black text-white">{event.title || 'Security event'}</h2>
+            <p className="mt-1 font-mono text-xs text-slate-500">{event.id}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white transition hover:bg-white/10"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="max-h-[calc(92vh-7rem)] overflow-y-auto p-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <DetailRow label="Event type" value={titleCase(event.event_type)} />
+            <DetailRow label="Source" value={event.source || '—'} />
+            <DetailRow label="Risk score" value={Number(event.risk_score || 0)} />
+            <DetailRow label="User ID" value={event.user_id || '—'} mono />
+            <DetailRow label="Actor ID" value={event.actor_id || '—'} mono />
+            <DetailRow label="Target User ID" value={event.target_user_id || '—'} mono />
+            <DetailRow label="Route / URL" value={event.route || event.url || '—'} />
+            <DetailRow label="IP address" value={event.ip_address || '—'} mono />
+            <DetailRow label="Created" value={formatDateTime(event.created_at)} />
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+            <div className="space-y-4">
+              <DetailRow label="Description" value={<p className="whitespace-pre-wrap leading-7">{event.description || 'No description provided.'}</p>} />
+              <DetailRow label="User agent" value={event.user_agent || '—'} />
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Metadata</p>
+              <pre className="mt-3 max-h-[26rem] overflow-auto whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/50 p-4 text-xs leading-6 text-cyan-100">
+                {safeJson(event.metadata)}
+              </pre>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button type="button" onClick={onCopy} className="rounded-2xl border border-cyan-300/25 bg-cyan-500/10 font-black text-cyan-50 hover:bg-cyan-500/20">
+              <Copy className="mr-2 h-4 w-4" />
+              Copy Event ID
+            </Button>
+
+            {event.user_id && (
+              <Button type="button" onClick={onUser} className="rounded-2xl border border-purple-300/25 bg-purple-500/10 font-black text-purple-50 hover:bg-purple-500/20">
+                <User className="mr-2 h-4 w-4" />
+                Open User Profile
+              </Button>
+            )}
+
+            <Button type="button" onClick={onClose} className="rounded-2xl border border-white/10 bg-white/5 font-black text-white hover:bg-white/10">
+              <XCircle className="mr-2 h-4 w-4" />
+              Close
+            </Button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}

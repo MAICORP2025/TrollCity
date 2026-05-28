@@ -26,6 +26,39 @@ const APP_VERSION =
   (env.VITE_PUBLIC_APP_VERSION as string | undefined) ||
   '1.0.0'
 
+const BUG_CENTER_DEDUPE_WINDOW_MS = 30_000
+const reportedBugHashes = new Map<string, number>()
+
+const getBugCenterErrorKey = (errorLike: unknown) => {
+  const message = String((errorLike as any)?.message || errorLike || '').trim()
+  const stack = String((errorLike as any)?.stack || '').trim()
+  const route = typeof window !== 'undefined' ? window.location.pathname : ''
+  const userId = String(((supabase.auth as any)?.user?.id) || '')
+  return [message, stack, route, userId].join('|')
+}
+
+const shouldReportBugCenterError = (errorLike: unknown) => {
+  const key = getBugCenterErrorKey(errorLike)
+  const now = Date.now()
+  const previous = reportedBugHashes.get(key)
+  if (previous && now - previous < BUG_CENTER_DEDUPE_WINDOW_MS) {
+    return false
+  }
+  reportedBugHashes.set(key, now)
+  return true
+}
+
+const shouldIgnoreBugCenterError = (errorLike: unknown) => {
+  const text = String((errorLike as any)?.message || errorLike || '').toLowerCase()
+  return (
+    text.includes('analytics.google.com') ||
+    text.includes('googletagmanager.com') ||
+    text.includes('google-analytics.com') ||
+    text.includes('/g/collect') ||
+    text.includes('/collect?v=2')
+  )
+}
+
 // Initialize mobile platform features (Capacitor)
 if (isMobilePlatform) {
   console.log('[Main] Running on native mobile platform');
@@ -125,10 +158,11 @@ const isExpectedDevNoise = (errorLike: unknown) => {
 
    window.addEventListener('error', (event: ErrorEvent) => {
      const error = event.error || event.message;
-     if (isExpectedDevNoise(error)) {
+     if (isExpectedDevNoise(error) || shouldIgnoreBugCenterError(error)) {
        if (env.DEV) console.debug('[BugCenter] ignored expected dev/browser error', error)
        return
      }
+     if (!shouldReportBugCenterError(error)) return
      reportBug(error, {
        source: 'frontend',
        severity: 'high',
@@ -139,10 +173,11 @@ const isExpectedDevNoise = (errorLike: unknown) => {
    // Catch unhandled promise rejections
    window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
      const error = event.reason;
-     if (isExpectedDevNoise(error)) {
+     if (isExpectedDevNoise(error) || shouldIgnoreBugCenterError(error)) {
        if (env.DEV) console.debug('[BugCenter] ignored expected rejection', error)
        return
      }
+     if (!shouldReportBugCenterError(error)) return
      reportBug(error, {
        source: 'frontend',
        severity: 'high',
@@ -242,6 +277,7 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
         }
 
         if (!isSupabaseFunction && !isExpectedDevNoise(error)) {
+          if (!shouldReportBugCenterError(error)) throw error
           // Add more context to network errors
           const errorContext: any = {
             source: 'frontend',

@@ -3,6 +3,19 @@ import { initAuthAndData, useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { useBackgroundSessionRefresh } from '../hooks/useBackgroundSessionRefresh'
 
+const isNoOpProfilePatch = (current: any, next: any) => {
+  if (!current || !next) return false
+  return (
+    current.troll_coins === next.troll_coins &&
+    current.paid_coin_balance === next.paid_coin_balance &&
+    current.free_coin_balance === next.free_coin_balance &&
+    current.credit_score === next.credit_score &&
+    current.role === next.role &&
+    current.is_admin === next.is_admin &&
+    current.updated_at === next.updated_at
+  )
+}
+
 // Placeholder auth provider to match desired provider stack.
 // Auth state is managed via zustand in useAuthStore; this wrapper keeps provider structure consistent.
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -41,6 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
 
                 const current = useAuthStore.getState().profile
+                if (isNoOpProfilePatch(current, next)) {
+                  console.debug('[ProfileRealtime] Ignoring duplicate/no-op profile patch')
+                  return
+                }
+
                 // Merge realtime payload into store without a refetch to avoid loops/churn
                 useAuthStore.getState().setProfile({ ...(current as any), ...(next as any) })
               } catch {

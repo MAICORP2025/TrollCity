@@ -152,5 +152,3 @@ export const logAdminAction = async (action: string, metadata: Record<string, an
     },
   });
 };
-
-export { safeGetClientContext };

@@ -6,6 +6,7 @@ import { EffectsProvider } from "./contexts/BroadcastEffectsContext";
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
 import { GlobalEventProvider } from "./contexts/GlobalEventContext";
+import { BatterySaverProvider } from "./contexts/BatterySaverContext";
 
 import { useEligibilityStore } from "./lib/eligibilityStore";
 import { useJailMode } from "./hooks/useJailMode";
@@ -2032,15 +2033,17 @@ function App() {
   return (
     <PageVisibilityProvider>
       <GlobalEventProvider>
-        <EffectsProvider>
-         <TrollProvider>
+        <BatterySaverProvider>
+          <EffectsProvider>
+            <TrollProvider>
               <TabSwitchHandler>
                 <AppContent />
               </TabSwitchHandler>
               {/* TM Family Invite Handler - shows pending invites as notifications */}
               <TMFamilyInviteHandler />
-         </TrollProvider>
-        </EffectsProvider>
+            </TrollProvider>
+          </EffectsProvider>
+        </BatterySaverProvider>
       </GlobalEventProvider>
     </PageVisibilityProvider>
   );

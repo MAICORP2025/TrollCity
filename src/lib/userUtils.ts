@@ -39,6 +39,11 @@ export function isStaffUser(profile: UserProfile | null | undefined): boolean {
     return true;
   }
 
+  // Treat standard agency HR as staff as well
+  if (String(profile.role || '').toLowerCase() === 'agency_hr') {
+    return true;
+  }
+
   // Check is_admin flag
   if (profile.is_admin === true) {
     return true;

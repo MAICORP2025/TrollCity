@@ -41,20 +41,22 @@ export function TabSwitchHandler({
       }
     },
     onReturn: (timeHidden) => {
-      // User returned to tab after it was hidden
-      if (showWelcomeBack && timeHidden > 30000 && !hasShownWelcomeBack.current) {
-        // Only show if hidden for more than 30 seconds
-        toast.success('Welcome back to TrollCity!', {
-          duration: 3000,
-          description: 'Your session has been maintained.'
-        });
-        hasShownWelcomeBack.current = true;
+        // User returned to tab after it was hidden
+        if (showWelcomeBack && timeHidden > 30000 && !hasShownWelcomeBack.current) {
+          // Only show if hidden for more than 30 seconds
+          requestAnimationFrame(() => {
+            toast.success('Welcome back to TrollCity!', {
+              duration: 3000,
+              description: 'Your session has been maintained.'
+            });
+          });
+          hasShownWelcomeBack.current = true;
 
-        // Reset after showing once
-        setTimeout(() => {
-          hasShownWelcomeBack.current = false;
-        }, 60000); // Don't show again for 1 minute
-      }
+          // Reset after showing once
+          setTimeout(() => {
+            hasShownWelcomeBack.current = false;
+          }, 60000); // Don't show again for 1 minute
+        }
     }
   });
 
