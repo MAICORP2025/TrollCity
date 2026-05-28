@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { cn } from '../../lib/utils'
+import { useAuthStore } from '../../lib/store'
+import { isStaffProfile } from '../../lib/staff'
+import ModActionsPopup from './ModActionsPopup'
 
 export interface StreamAudienceMember {
   id: string
@@ -11,8 +15,10 @@ export interface StreamAudienceMember {
   left_at: string | null
   is_active: boolean
   gift_total: number
+  gift_score?: number
   seat_id: string | null
-  role: 'audience' | 'seat' | 'broadcaster'
+  seat_status?: 'audience' | 'seated'
+  role: 'viewer' | 'audience' | 'seat' | 'broadcaster'
   last_seen_at: string
 }
 
@@ -20,6 +26,7 @@ interface AudienceBubbleTickerProps {
   streamId: string
   audience: StreamAudienceMember[]
   currentUserId?: string
+  hostUserId?: string
   maxVisible?: number
   className?: string
 }
@@ -30,12 +37,15 @@ export function AudienceBubbleTicker({
   streamId,
   audience,
   currentUserId,
+  hostUserId,
   maxVisible = 10,
   className = '',
 }: AudienceBubbleTickerProps) {
+  const { profile: currentProfile } = useAuthStore()
   const [leavingAudience, setLeavingAudience] = useState<
     Record<string, StreamAudienceMember & { expireAt: number }>
   >({})
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
 
   const previousActiveIdsRef = useRef<string[]>([])
 
@@ -45,8 +55,10 @@ export function AudienceBubbleTicker({
 
   const sortedAudience = useMemo(() => {
     return [...activeAudience].sort((a, b) => {
-      if (b.gift_total !== a.gift_total) {
-        return b.gift_total - a.gift_total
+      const aGift = a.gift_score ?? a.gift_total ?? 0
+      const bGift = b.gift_score ?? b.gift_total ?? 0
+      if (bGift !== aGift) {
+        return bGift - aGift
       }
 
       return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime()
@@ -125,6 +137,21 @@ export function AudienceBubbleTicker({
 
   const overflowCount = Math.max(0, activeAudience.length - maxVisible)
 
+  const selectedMember = useMemo(
+    () => displayAudience.find((member) => member.user_id === selectedMemberId) ?? null,
+    [displayAudience, selectedMemberId]
+  )
+
+  const canModerateMember = (member: StreamAudienceMember) => {
+    if (!currentProfile) return false
+    if (member.user_id === currentUserId) return false
+
+    return Boolean(
+      currentProfile.id === hostUserId ||
+      isStaffProfile(currentProfile)
+    )
+  }
+
   if (!streamId) {
     return null
   }
@@ -136,7 +163,7 @@ export function AudienceBubbleTicker({
   return (
     <div
       className={cn(
-        'flex w-full items-center gap-2 overflow-x-auto py-1 scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent',
+        'pointer-events-none relative z-0 flex w-full items-start gap-2 overflow-x-auto py-1 px-1 scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent',
         className
       )}
     >
@@ -146,64 +173,100 @@ export function AudienceBubbleTicker({
         const firstLetter = member.username?.charAt(0)?.toUpperCase() || '?'
 
         return (
-          <div
-            key={`${member.id}-${isLeaving ? 'leaving' : 'active'}`}
+          <motion.button
+            type="button"
+            key={`${member.id}-${isLeaving ? 'leaving' : 'active'}-${member.user_id}`}
+            initial={{ x: -18, opacity: 0 }}
+            animate={{ x: isLeaving ? 24 : 0, opacity: isLeaving ? 0 : 1 }}
+            transition={{ duration: isLeaving ? 0.35 : 0.28, ease: 'easeOut' }}
             className={cn(
-              'flex-shrink-0 flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-2 text-white shadow-lg backdrop-blur transition-all duration-300',
-              isCurrentUser && 'ring-2 ring-cyan-400/50 animate-pulse',
-              isLeaving && 'scale-95 opacity-60'
+              'pointer-events-auto flex w-12 flex-shrink-0 flex-col items-center justify-start gap-1 rounded-xl border border-transparent bg-transparent text-white transition-all duration-300',
+              isLeaving && 'scale-95',
+              canModerateMember(member) && 'cursor-pointer hover:translate-y-[-1px] hover:bg-white/8 focus:outline-none focus-visible:ring-0'
             )}
             title={isLeaving ? `${member.username} left the stream` : member.username}
+            onClick={() => {
+              if (!canModerateMember(member)) return
+              setSelectedMemberId(member.user_id)
+            }}
+            aria-label={canModerateMember(member) ? `Moderation actions for ${member.username}` : member.username}
           >
-            {member.avatar_url ? (
-              <img
-                src={member.avatar_url}
-                alt={`${member.username}'s avatar`}
-                className="h-8 w-8 rounded-full border-2 border-white/20 object-cover"
-              />
-            ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-300/30 bg-cyan-500/20 text-sm font-black text-cyan-200">
-                {firstLetter}
-              </div>
-            )}
-
-            <div className="flex min-w-0 items-center gap-1 text-xs font-bold text-cyan-100">
-              <span className="max-w-[90px] truncate">
-                {member.username}
-              </span>
-
-              {member.gift_total > 0 && (
-                <span className="rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-black text-cyan-100">
-                  {member.gift_total}💎
-                </span>
+            <div
+              className={cn(
+                'relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-cyan-400/35 bg-white/10 shadow-[0_0_10px_rgba(34,211,238,0.18)] backdrop-blur-sm',
+                isCurrentUser && 'ring-2 ring-cyan-400/60'
+              )}
+            >
+              {member.avatar_url ? (
+                <img
+                  src={member.avatar_url}
+                  alt={`${member.username}'s avatar`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-[11px] font-black text-cyan-100">
+                  {firstLetter}
+                </div>
               )}
 
-              {member.role === 'seat' && (
-                <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-purple-100">
-                  Seat
+              {(member.role === 'seat' || member.seat_status === 'seated') && (
+                <span className="absolute -bottom-0.5 -right-0.5 rounded-full border border-purple-300/30 bg-purple-500 px-1 text-[7px] font-black uppercase leading-3 text-white shadow">
+                  S
                 </span>
               )}
 
               {member.role === 'broadcaster' && (
-                <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-yellow-100">
-                  Host
-                </span>
-              )}
-
-              {isLeaving && (
-                <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-100">
-                  Left
+                <span className="absolute -bottom-0.5 -right-0.5 rounded-full border border-yellow-300/30 bg-yellow-500 px-1 text-[7px] font-black uppercase leading-3 text-white shadow">
+                  H
                 </span>
               )}
             </div>
-          </div>
+
+            <div className="w-full text-center">
+              <div className="truncate text-[9px] font-bold leading-none text-cyan-100">
+                {member.username}
+              </div>
+
+              {(member.gift_score ?? member.gift_total ?? 0) > 0 && (
+                <div className="mt-0.5 text-[8px] font-black leading-none text-cyan-300">
+                  {(member.gift_score ?? member.gift_total ?? 0)}💎
+                </div>
+              )}
+
+              {isLeaving && (
+                <div className="mt-0.5 text-[8px] font-black leading-none text-red-300">
+                  Left
+                </div>
+              )}
+            </div>
+          </motion.button>
         )
       })}
 
       {overflowCount > 0 && (
-        <div className="flex-shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/80">
+        <div className="pointer-events-none flex-shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/80">
           +{overflowCount} more
         </div>
+      )}
+
+      {selectedMember && (
+        <ModActionsPopup
+          isOpen={Boolean(selectedMember)}
+          onClose={() => setSelectedMemberId(null)}
+          targetUser={{
+            id: selectedMember.user_id,
+            username: selectedMember.username,
+            avatar_url: selectedMember.avatar_url || '',
+            role: selectedMember.role,
+            troll_role: selectedMember.role,
+            is_troll_officer: selectedMember.role === 'seat' || selectedMember.role === 'broadcaster',
+          }}
+          targetUsername={selectedMember.username}
+          targetUserId={selectedMember.user_id}
+          streamId={streamId}
+          hostId={hostUserId || ''}
+          currentUserId={currentUserId}
+        />
       )}
     </div>
   )

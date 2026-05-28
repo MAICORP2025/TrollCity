@@ -345,5 +345,18 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-blue-500/10',
     tileBorderColor: 'border-blue-500/30',
     category: 'economy'
+  },
+  {
+    id: 'security-command-center',
+    title: 'Security Command',
+    path: '/admin/security-command-center',
+    component: lazy(() => import('./SecurityCommandCenter')),
+    roles: [UserRole.ADMIN],
+    description: 'Monitor and manage security threats, risks, and incidents',
+    icon: <Shield className="w-5 h-5 text-cyan-200" />,
+    tileColor: 'text-cyan-200',
+    tileBgColor: 'bg-cyan-500/10',
+    tileBorderColor: 'border-cyan-500/30',
+    category: 'system'
   }
 ]

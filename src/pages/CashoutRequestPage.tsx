@@ -293,7 +293,7 @@ export default function CashoutRequestPage() {
               <div>
                 <h4 className="font-bold text-red-400">Cashouts Are Closed</h4>
                 <p className="text-sm text-red-300/80">
-                  Cashout requests are only accepted on Fridays between 2:00 PM - 3:00 PM Mountain Time.
+                  Cashout requests are only accepted on Fridays between 1:00 AM - 3:00 PM Mountain Time.
                   Please come back during that window to submit your request.
                 </p>
               </div>

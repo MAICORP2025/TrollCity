@@ -448,7 +448,7 @@ export default function TrollFamilyHome() {
       <NotInFamilyPrompt 
         userCoins={userCoins} 
         onBrowse={() => navigate('/family/browse')}
-        onCreate={() => navigate('/apply/family')}
+        onCreate={() => navigate('/family/create')}
       />
     );
   }

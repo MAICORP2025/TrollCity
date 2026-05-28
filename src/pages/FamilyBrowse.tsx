@@ -278,16 +278,16 @@ export default function FamilyBrowse() {
             <p className="text-sm text-gray-400">Find your perfect family community in Troll City</p>
           </div>
           
-         {/* Action Buttons */}
-         <div className="flex gap-4 mb-6">
-           <button
-             onClick={() => navigate('/apply/family')}
-             className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-semibold py-3 px-6 rounded-xl transition-all"
-           >
-             <Users className="w-5 h-5" />
-             <span>Create Family</span>
-           </button>
-         </div>
+          {/* Action Buttons */}
+          <div className="flex gap-4 mb-6">
+            <button
+              onClick={() => navigate('/family/create')}
+              className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-semibold py-3 px-6 rounded-xl transition-all"
+            >
+              <Users className="w-5 h-5" />
+              <span>Create Family</span>
+            </button>
+          </div>
 
          {/* Search & Sort Controls */}
          <div className="flex items-center gap-3">
@@ -397,7 +397,7 @@ export default function FamilyBrowse() {
               </p>
               {!query && (
                 <button
-                  onClick={() => navigate('/apply/family')}
+                  onClick={() => navigate('/family/create')}
                   className="mt-4 px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
                 >
                   Create Family

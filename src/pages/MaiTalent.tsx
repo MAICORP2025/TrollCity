@@ -15,6 +15,7 @@ const COLORS = {
   red: '#FF2D2D',
   orange: '#FF7A00',
   purple: '#9333ea',
+  pink: '#ec4899',
 }
 
 interface Season {
@@ -59,8 +60,8 @@ function MaiTalentLayout({ children }: { children: React.ReactNode }) {
   const [mtSidebarCollapsed, setMtSidebarCollapsed] = useState(false)
   
   const isAdmin = profile?.role === 'admin' || profile?.is_admin || profile?.role === 'lead_troll_officer' || profile?.is_lead_officer
-  const isHost = profile?.role === 'broadcaster' || profile?.is_broadcaster
-  const isModerator = profile?.role === 'moderator' || MT_ADMIN_ROLES.includes(profile?.role || '')
+  const isHost = (profile as any)?.role === 'broadcaster' || (profile as any)?.is_broadcaster
+  const isModerator = profile?.role === 'moderator' || MT_ADMIN_ROLES.includes((profile as any)?.role || '')
   
   useEffect(() => {
     setCollapsed(true)
@@ -88,7 +89,7 @@ return (
                  Mai Talent
                </span>
              </Link>
-           }
+           )}
            <button
              onClick={() => setMtSidebarCollapsed(!mtSidebarCollapsed)}
              className={`p-2 hover:bg-white/[0.06] rounded-lg text-pink-300 hover:text-white transition-all duration-200 ${mtSidebarCollapsed ? 'mx-auto' : ''}`}
@@ -166,7 +167,7 @@ return (
                 </Link>
               </div>
             </div>
-          )}
+           )}
         </div>
         
         <div className="p-3 border-t border-pink-500/20">
@@ -177,7 +178,7 @@ return (
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium truncate">{profile?.username || 'User'}</p>
-                <p className="text-pink-300 text-xs">{balances?.trollCoins?.toLocaleString() || 0} Coins</p>
+                <p className="text-pink-300 text-xs">{balances?.troll_coins?.toLocaleString() || 0} Coins</p>
               </div>
             </div>
           )}
@@ -363,7 +364,7 @@ export default function MaiTalent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="p-6 rounded-xl" style={{ backgroundColor: COLORS.darkBlack }}>
               <p className="text-gray-400 mb-1">Available Coins</p>
-              <p className="text-3xl font-bold text-yellow-400">{balances?.trollCoins?.toLocaleString() || 0}</p>
+              <p className="text-3xl font-bold text-yellow-400">{balances?.troll_coins?.toLocaleString() || 0}</p>
             </div>
             <div className="p-6 rounded-xl" style={{ backgroundColor: COLORS.darkBlack }}>
               <p className="text-gray-400 mb-1">Paid Coins</p>
@@ -430,7 +431,7 @@ export default function MaiTalent() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="p-4 rounded-xl" style={{ backgroundColor: COLORS.darkBlack }}>
               <p className="text-gray-400 text-sm">Coins</p>
-              <p className="text-xl font-bold text-yellow-400">{balances?.trollCoins?.toLocaleString() || 0}</p>
+              <p className="text-xl font-bold text-yellow-400">{balances?.troll_coins?.toLocaleString() || 0}</p>
             </div>
             <div className="p-4 rounded-xl" style={{ backgroundColor: COLORS.darkBlack }}>
               <p className="text-gray-400 text-sm">XP</p>
@@ -524,7 +525,7 @@ export default function MaiTalent() {
         <div className="flex items-center justify-center gap-4 text-lg mb-6">
           <div className="flex items-center gap-2">
             <Star className="w-5 h-5" style={{ color: COLORS.gold }} fill={COLORS.gold} />
-            <span style={{ color: COLORS.gold }} className="font-bold">{balances?.trollCoins?.toLocaleString() || 0}</span>
+            <span style={{ color: COLORS.gold }} className="font-bold">{balances?.troll_coins?.toLocaleString() || 0}</span>
             <span className="text-gray-400">Coins</span>
           </div>
         </div>

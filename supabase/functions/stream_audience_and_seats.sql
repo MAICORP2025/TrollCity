@@ -97,14 +97,12 @@ CREATE OR REPLACE FUNCTION public.mark_stream_seat_live(
 )
 RETURNS VOID AS $$
 BEGIN
-  UPDATE public.stream_seats
+  UPDATE public.stream_seat_sessions
   SET 
-    status = 'live',
-    livekit_participant_identity = COALESCE(p_livekit_participant_identity, livekit_participant_identity),
-    updated_at = NOW()
+    livekit_participant_identity = COALESCE(p_livekit_participant_identity, livekit_participant_identity)
   WHERE stream_id = p_stream_id
     AND seat_index = p_seat_index
-    AND status = 'camera_starting';
+    AND status = 'active';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -112,14 +110,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.leave_stream_seat(p_session_id UUID)
 RETURNS VOID AS $$
 BEGIN
-  UPDATE public.stream_seats
+  UPDATE public.stream_seat_sessions
   SET 
-    user_id = NULL,
-    status = 'empty',
-    left_at = NOW(),
-    updated_at = NOW()
+    status = 'left',
+    left_at = NOW()
   WHERE id = p_session_id
-    AND (status = 'live' OR status = 'camera_starting');
+    AND status = 'active';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

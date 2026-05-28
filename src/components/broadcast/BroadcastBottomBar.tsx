@@ -118,11 +118,12 @@ export function StagePassSummaryCard({
  * Handlers wired from BroadcastPage.tsx business logic.
  */
 export interface BroadcastBottomBarProps {
-  /* ─── data ─── */
   openPassCount: number;
   isMicOn: boolean;
   isCamOn: boolean;
   isLive: boolean;
+  liveViewerCount: number;
+  liveTimer: string;
   isGiftTrayOpen: boolean;
   isOfficerModalOpen: boolean;
   onToggleMic?: () => void;
@@ -144,6 +145,8 @@ export default function BroadcastBottomBar({
   isMicOn,
   isCamOn,
   isLive,
+  liveViewerCount,
+  liveTimer,
   isGiftTrayOpen,
   isOfficerModalOpen,
   onToggleMic,
@@ -171,50 +174,66 @@ export default function BroadcastBottomBar({
           onManage={onManageStagePass}
         />
 
-        {/* Center: host action buttons */}
-        <div className={hostActionButtonCenter}>
-          <HostActionButton
-            active={isMicOn}
-            onClick={onToggleMic}
-            icon={isMicOn ? Mic : MicOff}
-            label={isMicOn ? 'Mute' : 'Unmute'}
-          />
-          <HostActionButton
-            active={isCamOn}
-            onClick={onToggleCam}
-            icon={isCamOn ? Video : VideoOff}
-            label={isCamOn ? 'Turn Off' : 'Camera'}
-          />
-          <HostActionButton
-            active={false}
-            onClick={onShare}
-            icon={Share2}
-            label="Share"
-          />
-          <HostActionButton
-            active={false}
-            onClick={onOpenMoreMenu}
-            icon={MoreHorizontal}
-            label="More"
-          />
-          {!isHost && (
+        {/* Center: host action buttons + live info */}
+        <div className={cn(hostActionButtonCenter, 'relative flex flex-col items-center justify-center gap-1')}>
+          {/* Live info row */}
+          <div className="flex items-center justify-center gap-4 mb-1">
+            {isLive && (
+              <span className="flex items-center gap-2 text-xs font-black text-red-400">
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" /> LIVE
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 text-xs font-bold text-white/80">
+              <span className="inline-block h-4 w-4 rounded-full bg-gradient-to-br from-purple-400 via-cyan-400 to-pink-400 shadow-md mr-1" />
+              {liveViewerCount >= 1000 ? `${(liveViewerCount / 1000).toFixed(1)}K` : liveViewerCount}
+            </span>
+            <span className="text-xs font-bold tabular-nums text-white/70">⏱ {liveTimer}</span>
+          </div>
+          {/* Host action buttons row */}
+          <div className="flex items-center gap-2">
+            <HostActionButton
+              active={isMicOn}
+              onClick={onToggleMic}
+              icon={isMicOn ? Mic : MicOff}
+              label={isMicOn ? 'Mute' : 'Unmute'}
+            />
+            <HostActionButton
+              active={isCamOn}
+              onClick={onToggleCam}
+              icon={isCamOn ? Video : VideoOff}
+              label={isCamOn ? 'Turn Off' : 'Camera'}
+            />
             <HostActionButton
               active={false}
-              onClick={onTroll}
-              icon={Skull}
-              label="Troll"
-              variant="danger"
-              disabled={!onTroll}
+              onClick={onShare}
+              icon={Share2}
+              label="Share"
             />
-          )}
-          {/* End Stream — red variant */}
-          <button
-            onClick={onEndStream}
-            className={cn('flex h-[70px] min-w-[150px] flex-col items-center justify-center gap-2 rounded-xl transition-all', theme.danger)}
-          >
-            <Radio className="h-7 w-7" />
-            <span className="text-sm font-black">End Stream</span>
-          </button>
+            <HostActionButton
+              active={false}
+              onClick={onOpenMoreMenu}
+              icon={MoreHorizontal}
+              label="More"
+            />
+            {!isHost && (
+              <HostActionButton
+                active={false}
+                onClick={onTroll}
+                icon={Skull}
+                label="Troll"
+                variant="danger"
+                disabled={!onTroll}
+              />
+            )}
+            {/* End Stream — red variant */}
+            <button
+              onClick={onEndStream}
+              className={cn('flex h-[70px] min-w-[150px] flex-col items-center justify-center gap-2 rounded-xl transition-all', theme.danger)}
+            >
+              <Radio className="h-7 w-7" />
+              <span className="text-sm font-black">End Stream</span>
+            </button>
+          </div>
         </div>
 
         {/* Right: large Seats action button */}

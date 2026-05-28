@@ -277,7 +277,7 @@ export default function BottomNavigation() {
   }, [navigate, showHighlight])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || isMobile) return
 
     let isMounted = true
     let lastFetchTime = 0
@@ -392,7 +392,7 @@ export default function BottomNavigation() {
   }, [user?.id])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || isMobile) return
 
     const subscribeToMessages = async () => {
       const { data: memberships } = await supabase

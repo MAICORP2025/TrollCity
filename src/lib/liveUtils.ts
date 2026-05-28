@@ -1,5 +1,12 @@
 import { supabase } from './supabase';
 
+export const getLiveKitRoomName = (
+  stream?: { livekit_room_name?: string | null; id?: string | null },
+  streamId?: string,
+) => {
+  return stream?.livekit_room_name || stream?.id || streamId;
+};
+
 /**
  * Check if a user is currently live by their user ID
  * @param userId - The user's ID to check

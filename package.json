@@ -14,6 +14,7 @@
     "build:web": "npm run build",
     "lint": "eslint .",
     "run:migrations": "node ./scripts/run_migrations.js",
+    "run:migration:file": "node ./scripts/run_migrations.js",
     "check:sounds": "node ./scripts/check_sounds.js",
     "convert:gifts:alpha": "node ./scripts/convert-gifts-alpha.js",
     "convert:gifts:greenscreen": "node ./scripts/convert-gifts-greenscreen.js",

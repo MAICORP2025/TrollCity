@@ -13,6 +13,7 @@ import { supabase, UserProfile } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { useStreamStore } from '../../lib/streamStore'
 import { cn } from '../../lib/utils'
+import { getLiveKitRoomName } from '../../lib/liveUtils'
 import {
   getAnonymousDisplayName,
   isAnonymousDisplayName,
@@ -306,19 +307,29 @@ function findSeatRemoteParticipant(
       ? Array.from(participants.values())
       : []
 
-  const exact = list.find((participant: any) => participantMatchesSeat(participant, seatUserId, seatIdentity))
+  const exact = list.find((participant: any) =>
+    participantMatchesSeat(participant, seatUserId, seatIdentity)
+  )
+
   if (exact) return exact as RemoteParticipant
 
   const userToken = normalizeIdentityToken(seatUserId)
   const identityToken = normalizeIdentityToken(seatIdentity)
 
-  return (list.find((participant: any) => {
-    const participantToken = normalizeIdentityToken(getRemoteParticipantIdentity(participant))
-    return (
-      (userToken && participantToken.includes(userToken)) ||
-      (identityToken && participantToken.includes(identityToken))
-    )
-  }) as RemoteParticipant) || null
+  return (
+    (list.find((participant: any) => {
+      const participantToken = normalizeIdentityToken(getRemoteParticipantIdentity(participant))
+
+      return (
+        (userToken && participantToken.includes(userToken)) ||
+        (identityToken && participantToken.includes(identityToken))
+      )
+    }) as RemoteParticipant) || null
+  )
+}
+
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
 function getParticipantLabel(participant: any, fallback = 'Viewer') {
@@ -326,15 +337,29 @@ function getParticipantLabel(participant: any, fallback = 'Viewer') {
 
   const metadata = getRemoteParticipantMetadata(participant)
   const identity = getRemoteParticipantIdentity(participant)
+  const normalizedIdentity = normalizeIdentityToken(identity)
 
-  return (
+  const resolvedName =
     metadata.display_name ||
     metadata.displayName ||
     metadata.username ||
     participant?.name ||
-    identity?.replace(/^viewer-[^-]+-/, '') ||
-    fallback
-  )
+    ''
+
+  if (resolvedName) {
+    return String(resolvedName)
+  }
+
+  const strippedIdentity = identity?.replace(/^viewer-[^-]+-/, '') || ''
+  if (strippedIdentity && !isUuidLike(strippedIdentity)) {
+    return strippedIdentity
+  }
+
+  if (normalizedIdentity && !isUuidLike(normalizedIdentity) && !normalizedIdentity.startsWith('viewer-')) {
+    return normalizedIdentity
+  }
+
+  return fallback
 }
 
 function getParticipantList(
@@ -545,7 +570,6 @@ export function BroadcastPage() {
   ))
   
    const isOfficer = isStaffProfile(profile)
-   const isModerator = isStaffProfile(profile) // Treat all staff as moderators
 
    const videoPreset = isStreamAdmin ? VideoPresets.h1080 : VideoPresets.h720
 
@@ -582,8 +606,16 @@ export function BroadcastPage() {
    const isHost = stream?.user_id === user?.id
    const isBroadcaster = isHost;
 
-   const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
-   const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
+const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+    const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
+
+  const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
+  const isSeatActiveStatus = (status?: string | null) => {
+    const normalized = normalizeSeatStatus(status)
+
+    return ['active', 'live', 'reserved', 'camera_starting'].includes(normalized)
+  }
+
   const configuredViewerSeatCount = useMemo(() => {
     const derivedFromPrices = Array.isArray(stream?.seat_prices)
       ? Math.max(0, stream.seat_prices.length - 1)
@@ -605,14 +637,14 @@ export function BroadcastPage() {
       const seatIndex = offset + 1
       const seat = seats?.[seatIndex]
       const seatUserId = seat?.user_id || seat?.guest_id || null
+      const seatIdentity = seat?.livekit_participant_identity || seatUserId || null
       const seatPrice = Array.isArray(stream?.seat_prices)
         ? Number(stream.seat_prices[seatIndex] ?? stream?.seat_price ?? 0)
         : Number(stream?.seat_price ?? 0)
-      const seatStatus = String(seat?.status || '').toLowerCase()
-      const seatIdentity = seat?.livekit_participant_identity || seatUserId
+      const seatStatus = normalizeSeatStatus(seat?.status)
       const isOccupied = Boolean(
-        ['active', 'live', 'reserved', 'camera_starting'].includes(seatStatus) &&
-          (seat?.user_id || seat?.guest_id)
+        isSeatActiveStatus(seatStatus) &&
+          (seat?.user_id || seat?.guest_id || seatUserId),
       )
       const displayName =
         seat?.user_profile?.display_name ||
@@ -633,13 +665,8 @@ export function BroadcastPage() {
   }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices])
 
   const roomName = useMemo(() => {
-  return (
-    stream?.livekit_room_name ||
-    stream?.room_name ||
-    streamId ||
-    ''
-  );
-}, [stream?.livekit_room_name, stream?.room_name, streamId]);
+    return getLiveKitRoomName(stream as Stream | null, streamId) || ''
+  }, [stream?.livekit_room_name, stream?.id, streamId]);
 
   const hasValidStreamId = !!streamId && typeof streamId === 'string' && streamId.trim() !== '';
   const sessionReady = !!user && !!profile && hasValidStreamId && !!roomName;
@@ -651,6 +678,7 @@ export function BroadcastPage() {
   // INSTANT JOIN: Track if initial stream fetch is complete but don't block UI
   const [streamLoaded, setStreamLoaded] = useState(false)
   const [isCurrentUserBroadofficer, setIsCurrentUserBroadofficer] = useState(false)
+  const canInteractWithSeats = isHost || isCurrentUserBroadofficer
   // Track battle start time to show accurate timer
   const [battleStartTime, setBattleStartTime] = useState<Date | null>(null)
   
@@ -2752,13 +2780,16 @@ useEffect(() => {
   }, [stream?.user_id]);
 
   const handleLiveKitParticipantConnected = useCallback((participant: RemoteParticipant) => {
-    console.log('[BroadcastPage] Participant connected:', participant.identity)
-    setRemoteParticipants(prev => new Map(prev).set(participant.identity, participant))
+    setRemoteParticipants(prev => {
+      const next = new Map(prev)
+      if (next.get(participant.identity) === participant) return prev
+      next.set(participant.identity, participant)
+      return next
+    })
   }, [])
 
   const handleLiveKitParticipantDisconnected = useCallback((participant: RemoteParticipant) => {
     const identity = participant.identity
-    console.log('[BroadcastPage] Participant disconnected:', identity)
     setRemoteParticipants(prev => {
       const next = new Map(prev)
       next.delete(identity)
@@ -2767,20 +2798,20 @@ useEffect(() => {
   }, [])
 
   const handleLiveKitTrackSubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
-    console.log('[BroadcastPage] Track subscribed:', track.kind, 'from', participant.identity)
     DEBUG_COUNTERS.trackSubscribedCount++
     setRemoteParticipants(prev => {
       const next = new Map(prev)
+      if (next.get(participant.identity) === participant) return prev
       next.set(participant.identity, participant)
       return next
     })
 
-    // LiveKit mutates the participant/publication object in place. Bump the Map again
-    // on the next frame so seat surfaces re-run track resolution after the SDK attaches
-    // the subscribed camera/mic track.
+    // LiveKit mutates the participant/publication object in place. Refresh the same
+    // entry once on the next frame only when the participant object changed.
     window.requestAnimationFrame(() => {
       setRemoteParticipants(prev => {
         const next = new Map(prev)
+        if (next.get(participant.identity) === participant) return prev
         next.set(participant.identity, participant)
         return next
       })
@@ -2788,7 +2819,6 @@ useEffect(() => {
   }, [])
 
   const handleLiveKitTrackUnsubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
-    console.log('[BroadcastPage] Track unsubscribed:', track.kind, 'from', participant.identity)
     DEBUG_COUNTERS.trackUnsubscribedCount++
     const remainingVideo = Array.from((participant.videoTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
     const remainingAudio = Array.from((participant.audioTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
@@ -2918,7 +2948,8 @@ useEffect(() => {
           
           const { data, error } = await supabase.functions.invoke('livekit-token', {
             body: {
-              room: stream.id,
+              room: roomName,
+              roomName,
               identity: viewerIdentity,
               name: profile?.username || user?.email || 'Guest Viewer',
               role: 'audience',
@@ -2993,7 +3024,8 @@ useEffect(() => {
 
         const { data, error } = await supabase.functions.invoke('livekit-token', {
           body: {
-            room: stream.id,
+            room: roomName,
+            roomName,
             identity: hostIdentity, // Use hostIdentity for publisher
             name: profile?.username || user?.email || 'Guest',
             role: 'publisher',
@@ -3121,24 +3153,34 @@ useEffect(() => {
           if (existingCameraPublication?.track) {
             try {
               await roomToUse.localParticipant.unpublishTrack(existingCameraPublication.track)
-              const cameraTrack = existingCameraPublication.track as any
-              if (typeof cameraTrack.stop === 'function') {
-                cameraTrack.stop()
+              const oldVideoTrack = existingCameraPublication.track as any
+              if (oldVideoTrack && typeof oldVideoTrack.stop === 'function') {
+                oldVideoTrack.stop()
+              } else if (
+                oldVideoTrack?.mediaStreamTrack &&
+                typeof oldVideoTrack.mediaStreamTrack.stop === 'function'
+              ) {
+                oldVideoTrack.mediaStreamTrack.stop()
               }
             } catch (err) {
-              console.warn('[BroadcastPage] Failed to replace stale host camera track', err)
+              console.warn('[BroadcastPage] Could not stop old video track safely:', err)
             }
           }
 
           if (existingMicPublication?.track) {
             try {
               await roomToUse.localParticipant.unpublishTrack(existingMicPublication.track)
-              const audioTrack = existingMicPublication.track as any
-              if (typeof audioTrack.stop === 'function') {
-                audioTrack.stop()
+              const oldAudioTrack = existingMicPublication.track as any
+              if (oldAudioTrack && typeof oldAudioTrack.stop === 'function') {
+                oldAudioTrack.stop()
+              } else if (
+                oldAudioTrack?.mediaStreamTrack &&
+                typeof oldAudioTrack.mediaStreamTrack.stop === 'function'
+              ) {
+                oldAudioTrack.mediaStreamTrack.stop()
               }
             } catch (err) {
-              console.warn('[BroadcastPage] Failed to replace stale host audio track', err)
+              console.warn('[BroadcastPage] Could not stop old audio track safely:', err)
             }
           }
 
@@ -4506,35 +4548,37 @@ const handleLike = useCallback(async () => {
             <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-300/65 to-transparent" />
 
 {/* TOP HEADER */}
-              {!isMobileViewer && (
-                <>
-                  <BroadcastNeonHeader
-                    stream={stream}
-                    broadcasterProfile={broadcasterProfile}
-                    isHost={isHost}
-                    liveViewerCount={liveViewerCount}
-                    handleLike={handleLike}
-                    onGift={handleGiftHost}
-                    onShare={handleOpenShareModal}
-                    onEndStream={handleStreamEnd}
-                    coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
-                    onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
-                    isLive={stream.status === 'live'}
-                    streamStartedAt={stream.started_at}
-                  />
-                  {activeAudience.length > 0 && (
-                    <div className="mx-4 mt-2 rounded-2xl border border-cyan-300/15 bg-black/25 px-3 py-1 backdrop-blur-md">
-                      <AudienceBubbleTicker
-                        streamId={streamId || ''}
-                        audience={activeAudience}
-                        currentUserId={user?.id}
-                        maxVisible={8}
-                        className="h-10"
-                      />
-                    </div>
-                  )}
-                </>
-              )}
+
+            {/* --- HEADER --- */}
+            {!isMobileViewer && (
+              <BroadcastNeonHeader
+                stream={stream}
+                broadcasterProfile={broadcasterProfile}
+                isHost={isHost}
+                handleLike={handleLike}
+                onGift={handleGiftHost}
+                onShare={handleOpenShareModal}
+                onEndStream={handleStreamEnd}
+                coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+                onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
+                isLive={stream.status === 'live'}
+                streamStartedAt={stream.started_at}
+              />
+            )}
+
+             {/* --- AUDIENCE TICKER: full-width, neon style, always visible --- */}
+             <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
+               <div className="w-full max-w-7xl mx-auto">
+                 <AudienceBubbleTicker
+                   streamId={streamId || ''}
+                   audience={audience}
+                   currentUserId={user?.id}
+                   hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
+                   maxVisible={8}
+                   className="relative z-0 hidden sm:flex pointer-events-none"
+                 />
+               </div>
+             </div>
 
             {/* ── MAIN CONTENT GRID (3-column) ── */}
             <main
@@ -4680,7 +4724,6 @@ const handleLike = useCallback(async () => {
                   <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.25em] text-cyan-200/80">Seats</p>
                     <p className="mt-2 text-sm text-slate-300">
-                      Same viewer layout: clean boxes beside the broadcaster, never layered over the host camera.
                     </p>
                   </div>
                   <div className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-sm font-bold text-cyan-100">
@@ -4694,13 +4737,26 @@ const handleLike = useCallback(async () => {
                       .filter((candidate) => candidate.seatUserId || candidate.seatIdentity)
                       .flatMap((candidate) => [candidate.seatUserId, candidate.seatIdentity])
 
-                    const matchedParticipant = seat.isOccupied
-  ? findSeatRemoteParticipant(remoteParticipants, seat.seatUserId, seat.seatIdentity)
-  : null
+                    const exactParticipant = findSeatRemoteParticipant(
+                      remoteParticipants,
+                      seat.seatUserId,
+                      seat.seatIdentity,
+                    )
 
-const participantDisplayName = matchedParticipant
-  ? getParticipantLabel(matchedParticipant, seat.displayName)
-  : seat.displayName
+                    const fallbackParticipant =
+                      !exactParticipant && remoteParticipants.size > 0
+                        ? getFallbackSeatParticipant(
+                            remoteParticipants,
+                            seat.seatIndex,
+                            occupiedSeatIdentities,
+                          )
+                        : null
+
+                    const matchedParticipant = exactParticipant || fallbackParticipant
+
+                    const participantDisplayName = matchedParticipant
+                      ? getParticipantLabel(matchedParticipant, seat.displayName)
+                      : seat.displayName
 
                     if (import.meta.env.DEV) {
                       console.log('[BroadcastSeatRenderDebug]', {
@@ -4714,6 +4770,38 @@ const participantDisplayName = matchedParticipant
                       })
                     }
 
+                    const seatParticipantMetadata = matchedParticipant ? getRemoteParticipantMetadata(matchedParticipant) : {}
+                    const seatActionUserId =
+                      seat.seatUserId ||
+                      seatParticipantMetadata.user_id ||
+                      seatParticipantMetadata.userId ||
+                      (seatParticipantMetadata as any)?.user_id ||
+                      (seatParticipantMetadata as any)?.userId ||
+                      null
+                    const seatActionUsername =
+                      seat.displayName ||
+                      getParticipantLabel(matchedParticipant, 'Viewer')
+                    const seatActionRole =
+                      seat?.avatarUrl ? seatParticipantMetadata.role || seatParticipantMetadata.troll_role || seat?.seatStatus : undefined
+                    const seatActionInfo =
+                      canInteractWithSeats && seat.isOccupied && seatActionUserId
+                        ? { userId: String(seatActionUserId), username: seatActionUsername, role: seatActionRole }
+                        : null
+
+                    const clickProps = seatActionInfo
+                      ? {
+                          role: 'button' as const,
+                          tabIndex: 0,
+                          onClick: () => handleOpenUserAction(seatActionInfo),
+                          onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              handleOpenUserAction(seatActionInfo)
+                            }
+                          },
+                        }
+                      : undefined
+
                     return (
                     <div
                       key={seat.seatIndex}
@@ -4721,8 +4809,10 @@ const participantDisplayName = matchedParticipant
                         'relative min-h-[155px] overflow-hidden rounded-2xl border bg-black/30 shadow-[0_0_20px_rgba(15,23,42,0.45)] transition-all',
                         seat.isOccupied
                           ? 'border-emerald-400/45 shadow-[0_0_24px_rgba(16,185,129,0.16)]'
-                          : 'border-cyan-400/45 shadow-[0_0_24px_rgba(34,211,238,0.12)]'
+                          : 'border-cyan-400/45 shadow-[0_0_24px_rgba(34,211,238,0.12)]',
+                        seatActionInfo ? 'cursor-pointer hover:-translate-y-0.5' : ''
                       )}
+                      {...clickProps}
                     >
                       {matchedParticipant ? (
                         <RemoteSeatSurface
@@ -5013,19 +5103,7 @@ const participantDisplayName = matchedParticipant
                 isHost={isHost}
               />
 
-            {/* ── FOOTER STATUS STRIP ── */}
-            <div className={theme.footerStrip}>
-              <span className="flex items-center gap-2 text-slate-400">
-                <Sparkles className="h-4 w-4 text-purple-400" />
-                Your stream is protected
-              </span>
-              <span className="text-white/15">•</span>
-              <span>Troll City Guidelines</span>
-              <span className="text-white/15">•</span>
-              <span className="text-emerald-400 font-bold">Secure Stream</span>
-              <span className="text-white/15">•</span>
-              <span className="text-emerald-400">Excellent Connection</span>
-            </div>
+          
 
             {/* View mode toggle — desktop */}
             {!isMobileViewer && (
@@ -5268,8 +5346,8 @@ const participantDisplayName = matchedParticipant
                   role={userActionTarget.role}
                   createdAt={userActionTarget.createdAt}
                   isHost={isHost}
-                  isModerator={isModerator || isCurrentUserBroadofficer}
-                  isOfficer={isOfficer}
+                  isModerator={false}
+                  isOfficer={isOfficer || isCurrentUserBroadofficer}
                   onGift={() => onGift(userActionTarget.userId)}
                   onKickStage={() => handleGeneralKick()}
                 />

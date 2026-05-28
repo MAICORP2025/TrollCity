@@ -16,6 +16,8 @@ async function run() {
   const databaseUrl = process.env.DATABASE_URL
   if (!databaseUrl) {
     console.error('DATABASE_URL not set. Aborting.')
+    console.error('Use a DATABASE_URL prefix when running a single migration, for example:')
+    console.error('  DATABASE_URL="postgres://..." npm run run:migration:file -- 20270801000001_guest_seats.sql')
     process.exit(1)
   }
 

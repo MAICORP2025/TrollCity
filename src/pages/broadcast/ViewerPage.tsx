@@ -24,6 +24,8 @@ import type { BroadcastGift } from '../../hooks/useBroadcastRealtime'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
+import { getLiveKitRoomName } from '../../lib/liveUtils'
+import { isStaffProfile } from '../../lib/staff'
 import {
   getAnonymousDisplayName,
   isAnonymousDisplayName,
@@ -711,7 +713,6 @@ function ViewerPage() {
   const lastHypeRewardAttemptRef = useRef<number>(0)
   const clickTimesRef = useRef<number[]>([])
   const blockedUntilRef = useRef<number | null>(null)
-  const manualStageLeaveRef = useRef(false)
 
   const defaultSeatCount = Array.isArray((stream as any)?.seat_prices)
     ? (stream as any).seat_prices.length
@@ -729,11 +730,11 @@ function ViewerPage() {
       : 0
 
     if (seatCountFromPrices > 0) {
-      return Math.max(1, Math.min(seatCountFromPrices, 6))
+      return Math.max(1, seatCountFromPrices)
     }
 
     const rawBoxCount = Number((stream as any)?.box_count ?? hookBoxCount ?? 1)
-    return Math.max(1, Math.min(rawBoxCount || 1, 6))
+    return Math.max(1, rawBoxCount || 1)
   }, [stream, hookBoxCount])
 
    const {
@@ -747,9 +748,19 @@ function ViewerPage() {
    } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
    const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
 
+   const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
+   const isSeatActiveStatus = (status?: string | null) => {
+     const normalized = normalizeSeatStatus(status)
+     return ['reserved', 'camera_starting', 'active', 'live'].includes(normalized)
+   }
+   const isSeatOpenStatus = (status?: string | null) => {
+     const normalized = normalizeSeatStatus(status)
+     return ['empty', 'failed', 'left', 'cancelled', 'expired'].includes(normalized)
+   }
+
    const isUserOnStage = Boolean(
      mySeat &&
-       ['reserved', 'camera_starting', 'active', 'live'].includes(String(mySeat.status || '')) &&
+       isSeatActiveStatus(mySeat.status) &&
        (mySeat.user_id === user?.id || mySeat.guest_id === user?.id),
    )
 
@@ -758,7 +769,7 @@ function ViewerPage() {
 
     for (let seatIndex = 1; seatIndex < effectiveBoxCount; seatIndex += 1) {
       const seat = seats?.[seatIndex]
-      if (!seat || !['empty', 'failed'].includes(String(seat.status || ''))) {
+      if (!seat || !isSeatOpenStatus(seat.status)) {
         continue
       }
       return seatIndex
@@ -806,8 +817,8 @@ const isActive = isStreamActive(stream)
    const { subscriberUsernames } = useSubscriberUsernames(hostId)
 
    const roomId = useMemo(() => {
-    return String((stream as any)?.livekit_room_name || `stream-${streamId}` || '')
-  }, [stream, streamId])
+    return String(getLiveKitRoomName(stream as Stream | null, streamId) || '')
+  }, [stream?.livekit_room_name, stream?.id, streamId])
 
    useEffect(() => {
      if (!streamId || !user?.id) return;
@@ -872,10 +883,18 @@ const isActive = isStreamActive(stream)
       (profile as any)?.is_lead_officer,
   )
 
+  const isModerator = Boolean(
+    isStaffProfile(profile) ||
+      profile?.role === 'moderator' ||
+      profile?.troll_role === 'moderator' ||
+      profile?.role === 'admin' ||
+      profile?.troll_role === 'admin'
+  )
+
    const activeSeats = useMemo(() => {
      return Object.values(seats || {}).filter(
        (seat: any) =>
-         ['active', 'camera_starting', 'reserved', 'live'].includes(String(seat?.status || '')) &&
+         isSeatActiveStatus(seat?.status) &&
          (seat?.user_id || seat?.guest_id),
      )
    }, [seats])
@@ -1004,12 +1023,9 @@ const isActive = isStreamActive(stream)
     setViewerCount(Number((data as any).current_viewers || 0))
   }, [streamId, navigate])
 
-  const handleLeaveSeat = useCallback(async () => {
-    manualStageLeaveRef.current = true
-    await leaveLiveKitRoom().catch(() => {})
-    await leaveSeat()
-    navigate(location.pathname, { replace: true })
-  }, [leaveLiveKitRoom, leaveSeat, navigate, location.pathname])
+const handleLeaveSeat = useCallback(async () => {
+  await leaveSeat()
+}, [leaveSeat])
 
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
 
@@ -1064,12 +1080,21 @@ const isActive = isStreamActive(stream)
   }, [streamId, user?.id, stream])
 
   const handleLeave = useCallback(async () => {
+    try {
+      if (mySeat) {
+        await leaveSeat()
+      }
+      await leaveAudience()
+    } catch (err) {
+      console.warn('[ViewerPage] leave cleanup failed:', err)
+    }
+
     await leaveLiveKitRoom().catch(() => {})
     hasJoinedAudienceRef.current = false
     joiningAudienceRef.current = false
     currentRoomKeyRef.current = null
     navigate('/')
-  }, [leaveLiveKitRoom, navigate])
+  }, [leaveAudience, leaveLiveKitRoom, leaveSeat, mySeat, navigate])
 
   const handleShare = useCallback(async () => {
     const shareUrl = `${window.location.origin}/broadcast/${streamId}`
@@ -1380,12 +1405,27 @@ useStreamRealtime(
   useEffect(() => {
     return () => {
       console.log('[ViewerPage] unmount cleanup: leaving LiveKit audience')
+      void leaveAudience()
       leaveLiveKitRoom().catch(() => {})
     }
-  }, [leaveLiveKitRoom])
+  }, [leaveAudience, leaveLiveKitRoom])
 
    useEffect(() => {
-     if (!streamId || !roomId || !isActive) return
+    if (!streamId || !user?.id) return
+
+    void joinAudience()
+
+    const heartbeat = window.setInterval(() => {
+      void heartbeatAudience()
+    }, 30_000)
+
+    return () => {
+      window.clearInterval(heartbeat)
+      void leaveAudience()
+    }
+  }, [streamId, user?.id, joinAudience, heartbeatAudience, leaveAudience])
+
+  useEffect(() => {
 
      if (user?.id) {
        const kickKey = getKickStorageKey(streamId, user.id)
@@ -1548,12 +1588,12 @@ useStreamRealtime(
     return Array.from({ length: effectiveBoxCount - 1 }, (_, offset) => {
       const seatIndex = offset + 1
       const seat = seats?.[seatIndex]
-      const seatStatus = String(seat?.status || '').toLowerCase()
+      const seatStatus = normalizeSeatStatus(seat?.status)
       const isMine = Boolean(user?.id && (seat?.user_id === user.id || seat?.guest_id === user.id))
       const isOccupied = Boolean(
         seat &&
           (seat?.user_id || seat?.guest_id) &&
-          ['active', 'reserved', 'camera_starting', 'live'].includes(seatStatus),
+          isSeatActiveStatus(seatStatus),
       )
       const isLocked = Boolean((stream as any)?.are_seats_locked)
       const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
@@ -1636,8 +1676,9 @@ useStreamRealtime(
                     streamId={streamId}
                     audience={audience}
                     currentUserId={user?.id}
+                    hostUserId={hostId || undefined}
                     maxVisible={8}
-                    className="hidden sm:flex"
+                    className="relative z-0 hidden sm:flex pointer-events-none"
                   />
                   {hostId && (
                     <TopSubscribersBar broadcasterId={hostId} />
@@ -1841,17 +1882,6 @@ useStreamRealtime(
                           )
                         })
                       : null
-
-                    console.log('[SeatRenderDebug]', {
-                      page: 'ViewerPage',
-                      seatIndex: seat.seatIndex,
-                      isMine,
-                      seatStatus,
-                      seatUserId,
-                      seatIdentity,
-                      remoteIdentities: remoteParticipants.map((p: any) => p.identity),
-                      matchedIdentity: seatParticipant?.identity || null,
-                    })
 
                     const statusLabel = isMine
                       ? 'You'
@@ -2239,18 +2269,7 @@ useStreamRealtime(
       : undefined
   }
 >
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_100%,rgba(168,85,247,0.12),transparent)]" />
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-            <div className="hidden items-center gap-5 text-sm font-semibold text-slate-400 md:flex">
-              <span className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-400" />
-                Viewer mode
-              </span>
-              <span className="text-white/15">•</span>
-              <span>{viewerCount.toLocaleString()} watching</span>
-              <span className="text-white/15">•</span>
-              <span className="font-bold text-emerald-400">{Number(hypeCoins || 0).toLocaleString()} Hype Coins</span>
-            </div>
+          <div className={cn('flex items-center justify-between', isMobileViewer ? 'mx-3' : 'mx-auto max-w-7xl')}>
 
             <div className="flex w-full items-center justify-end gap-2 md:w-auto">
               <button
@@ -2316,7 +2335,7 @@ useStreamRealtime(
                 role={userActionTarget.role}
                 createdAt={userActionTarget.createdAt}
                 isHost={false}
-                isModerator={false}
+                isModerator={isModerator}
                 isOfficer={isOfficer}
                 onGift={() => onGift(userActionTarget.userId)}
               />

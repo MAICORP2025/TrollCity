@@ -3,26 +3,45 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Shield, Users, Skull, Crown, Store, CheckCircle, XCircle, BookOpen, Newspaper, Mic, Radio, Gavel } from 'lucide-react'
+import { Shield, XCircle, Gavel, Briefcase, Video, Sparkles, Newspaper, Mic, Radio, Users, Crown } from 'lucide-react'
 
-type ApplicationType = 'troll_officer' | 'troll_family' | 'troller' | 'lead_officer' | 'seller' | 'pastor' | 'journalist' | 'news_caster' | 'chief_news_caster' | 'troll_station_dj' | 'troll_station_manager' | 'attorney' | 'prosecutor' | null
+interface JobPosition {
+  id: string
+  title: string
+  department: string
+  description: string | null
+  max_applications: number
+  is_open: boolean
+}
 
-const positionToApplicationType: Record<string, ApplicationType> = {
-  auctioneer: 'troll_officer',
-  prosecutor: 'prosecutor',
-  attorney: 'attorney',
-  tcnn_news_caster: 'news_caster',
-  secretary: 'troll_officer',
-  tcnn_chief_news_caster: 'chief_news_caster',
-  troll_officer: 'troll_officer',
-  journalist: 'journalist',
-  lead_troll_officer: 'lead_officer',
-  troller: 'troller',
-  agency_hr_manager: 'troll_officer',
-  agency_hr: 'troll_officer',
-  agency_leader: 'troll_officer',
-  ceo_assistant: 'troll_officer',
-  noah_assistant: 'troll_officer',
+const positionToJobPosition: Record<string, { title: string; icon: any; description: string }> = {
+  auctioneer: { title: 'Auctioneer', icon: Sparkles, description: 'Host live auction shows where users bid with Troll Coins and build a trusted auctioneer reputation.' },
+  prosecutor: { title: 'Prosecutor', icon: Gavel, description: 'Represents Troll City in court cases, reviews evidence, presents charges, and supports city justice.' },
+  attorney: { title: 'Attorney', icon: Shield, description: 'Defense attorney representing defendants in Troll Court cases, appeals, hearings, and disputes.' },
+  tcnn_news_caster: { title: 'TCNN News Caster', icon: Mic, description: 'On-air TCNN personality delivering breaking news, live reports, and official city broadcasts.' },
+  secretary: { title: 'Secretary', icon: Briefcase, description: 'Official city support role for admin operations, reports, meetings, and city coordination.' },
+  tcnn_chief_news_caster: { title: 'TCNN Chief News Caster', icon: Radio, description: 'Lead the TCNN team, manage journalists and news casters, and maintain editorial standards.' },
+  troll_officer: { title: 'Troll Officer', icon: Shield, description: 'Official city enforcer responsible for reports, moderation, investigations, arrests, and safety response.' },
+  journalist: { title: 'Journalist', icon: Newspaper, description: 'Write articles, conduct investigations, and keep the city informed through Troll City News Network.' },
+  lead_troll_officer: { title: 'Lead Troll Officer', icon: Crown, description: 'Senior enforcement role overseeing Troll Officers, cases, escalation, and city safety consistency.' },
+  troller: { title: 'Troller', icon: Video, description: 'Entertainer role focused on playful chaos, satire, comedy, and broadcast engagement within city rules.' },
+  agency_hr_manager: { title: 'Agency HR Manager', icon: Briefcase, description: 'Manage, approve, review, and settle issues for Troll City agencies.' },
+  agency_hr: { title: 'Agency HR', icon: Shield, description: 'Support agency applications, reports, fee reviews, and HR operations.' },
+  agency_leader: { title: 'Agency Leader', icon: Users, description: 'Lead a Troll City agency, recruit members, manage applications, and grow creator talent.' },
+  ceo_assistant: { title: 'CEO Assistant', icon: Crown, description: 'Assist the CEO with reports, coordination, admin follow-up, and platform operations.' },
+  noah_assistant: { title: 'Noah Assistant', icon: Briefcase, description: 'Assist Noah Admin with reports, support tasks, and city operation follow-up.' },
+}
+
+const positionToRoleCheck: Record<string, { field: string; message: string }> = {
+  troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
+  lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
+  lead_officer: { field: 'is_lead_officer', message: 'You are already a Lead Officer' },
+  troller: { field: 'is_troller', message: 'You are already a Troller' },
+  journalist: { field: 'is_journalist', message: 'You are already a Journalist' },
+  news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
+  chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
+  prosecutor: { field: 'is_prosecutor', message: 'You are already a Prosecutor' },
+  attorney: { field: 'is_attorney', message: 'You are already an Attorney' },
 }
 
 export default function Application() {
@@ -32,85 +51,47 @@ export default function Application() {
   const positionId = searchParams.get('position')
   const [loading, setLoading] = useState(false)
 
-  const handleApplication = useCallback(async (type: ApplicationType) => {
-    if (!user || !type) return
+  const checkRoleEligibility = (positionId: string): { eligible: boolean; message?: string } => {
+    const check = positionToRoleCheck[positionId]
+    if (!check) return { eligible: true }
+    
+    const roleValue = (profile as any)?.[check.field]
+    if (roleValue) {
+      return { eligible: false, message: check.message }
+    }
+    return { eligible: true }
+  }
+
+  const handleSubmitApplication = useCallback(async (positionId: string) => {
+    if (!user) {
+      toast.error('Please sign in to apply')
+      navigate('/auth')
+      return
+    }
+
+    const eligibility = checkRoleEligibility(positionId)
+    if (!eligibility.eligible) {
+      toast.error(eligibility.message)
+      return
+    }
 
     setLoading(true)
     try {
-      // Check if user already has this role
-      if (type === 'troll_officer' && (profile?.is_troll_officer || profile?.role === 'troll_officer')) {
-        toast.error('You are already a Troll Officer')
-        return
-      }
+      const { error } = await supabase
+        .from('job_applications')
+        .insert({
+          user_id: user.id,
+          position_id: positionId,
+          status: 'pending'
+        })
 
-      if (type === 'lead_officer' && profile?.is_lead_officer) {
-        toast.error('You are already a Lead Officer')
-        return
-      }
+      if (error) throw error
 
-      // Navigate to specific application page
-      if (type === 'troll_officer') {
-        navigate('/apply/officer')
-      } else if (type === 'troll_family') {
-        navigate('/apply/family')
-      } else if (type === 'troller') {
-        navigate('/apply/troller')
-      } else if (type === 'lead_officer') {
-        // Navigate to lead officer application page (if exists) or show form
-        navigate('/apply/lead-officer')
-      } else if (type === 'pastor') {
-        navigate('/apply/pastor')
-      } else if (type === 'attorney') {
-        navigate('/apply/attorney')
-      } else if (type === 'prosecutor') {
-        navigate('/apply/prosecutor')
-      } else if (type === 'seller') {
-        // Navigate to seller application - go to sell page
-        navigate('/sell')
-      } else if (type === 'journalist' || type === 'news_caster' || type === 'chief_news_caster') {
-        // Handle TCNN applications - submit directly
-        try {
-          const { error: appError } = await supabase
-            .from('applications')
-            .insert({
-              user_id: user.id,
-              type: type,
-              status: 'pending'
-            })
-          
-          if (appError) throw appError
-          
-          toast.success('Application submitted! We will review it soon.')
-          navigate('/career')
-        } catch (err: any) {
-          console.error('Application error:', err)
-          toast.error(err.message || 'Failed to submit application')
-        }
-        return
-      } else if (type === 'troll_station_dj' || type === 'troll_station_manager') {
-        // Handle Troll Station applications - submit directly
-        try {
-          const { error: appError } = await supabase
-            .from('applications')
-            .insert({
-              user_id: user.id,
-              type: type,
-              status: 'pending'
-            })
-          
-          if (appError) throw appError
-          
-          toast.success('Application submitted! We will review it soon.')
-          navigate('/career')
-        } catch (err: any) {
-          console.error('Application error:', err)
-          toast.error(err.message || 'Failed to submit application')
-        }
-        return
-      }
-    } catch (error: any) {
-      console.error('Error starting application:', error)
-      toast.error('Failed to start application')
+      toast.success('Application submitted! We will review it soon.')
+      navigate('/careers')
+    } catch (err: any) {
+      console.error('Application error:', err)
+      toast.error(err.message || 'Failed to submit application')
     } finally {
       setLoading(false)
     }
@@ -121,148 +102,58 @@ export default function Application() {
       navigate('/auth')
       return
     }
+  }, [user, navigate])
 
-    if (positionId && positionToApplicationType[positionId]) {
-      const appType = positionToApplicationType[positionId]
-      handleApplication(appType)
+  if (positionId && positionToJobPosition[positionId]) {
+    const position = positionToJobPosition[positionId]
+    const eligibility = checkRoleEligibility(positionId)
+    
+    if (!eligibility.eligible) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center">
+          <div className="text-center p-6">
+            <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">{eligibility.message}</h2>
+            <button
+              onClick={() => navigate('/careers')}
+              className="px-4 py-2 bg-purple-600 rounded-lg"
+            >
+              Back to Careers
+            </button>
+          </div>
+        </div>
+      )
     }
-  }, [user, positionId, handleApplication, navigate])
 
-  if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="mb-4">Please log in to apply</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <position.icon className="w-16 h-16 text-purple-400 mx-auto mb-4" />
+            <h1 className="text-3xl font-bold mb-2">Apply for {position.title}</h1>
+            <p className="text-gray-400">{position.description}</p>
+          </div>
+
+          <div className="bg-black/60 border border-purple-600/30 rounded-xl p-6 mb-6">
+            <h3 className="text-lg font-semibold mb-2">Application Process</h3>
+            <ul className="space-y-2 text-sm text-gray-300">
+              <li>• Click "Submit Application" to apply for this career</li>
+              <li>• Wait for admin review and approval</li>
+              <li>• You'll receive a notification when your application is reviewed</li>
+            </ul>
+          </div>
+
           <button
-            onClick={() => navigate('/auth')}
-            className="px-4 py-2 bg-purple-600 rounded-lg"
+            onClick={() => handleSubmitApplication(positionId)}
+            disabled={loading}
+            className="w-full px-6 py-3 rounded-xl font-bold bg-purple-600 hover:bg-purple-700 disabled:opacity-50 transition"
           >
-            Log In
+            {loading ? 'Submitting...' : 'Submit Application'}
           </button>
         </div>
       </div>
     )
   }
-
-  const applicationTypes = [
-    {
-      type: 'troll_officer' as ApplicationType,
-      title: 'Troll Officer',
-      icon: Shield,
-      description: 'Moderate streams, enforce rules, and keep Troll City safe',
-      color: 'purple',
-      disabled: profile?.is_troll_officer || profile?.role === 'troll_officer',
-      disabledText: 'You are already a Troll Officer'
-    },
-    {
-      type: 'troll_family' as ApplicationType,
-      title: 'Troll Family',
-      icon: Users,
-      description: 'Join or create a family, participate in family wars',
-      color: 'blue',
-      disabled: profile?.role === 'troll_family',
-      disabledText: 'You are already in a family'
-    },
-    {
-      type: 'troller' as ApplicationType,
-      title: 'Troller',
-      icon: Skull,
-      description: 'Become a certified troller with special privileges',
-      color: 'red',
-      disabled: profile?.is_troller || profile?.role === 'troller',
-      disabledText: 'You are already a Troller'
-    },
-    {
-      type: 'lead_officer' as ApplicationType,
-      title: 'Lead Officer',
-      icon: Crown,
-      description: 'Lead and manage Troll Officers',
-      color: 'yellow',
-      disabled: profile?.is_lead_officer,
-      disabledText: 'You are already a Lead Officer'
-    },
-    {
-      type: 'pastor' as ApplicationType,
-      title: 'Pastor',
-      icon: BookOpen,
-      description: 'Lead the Troll Church and host Sunday Services',
-      color: 'purple',
-      disabled: profile?.is_pastor,
-      disabledText: 'You are already a Pastor'
-    },
-    {
-      type: 'attorney' as ApplicationType,
-      title: 'Troll Court Attorney',
-      icon: Shield,
-      description: 'Represent defendants in Troll Court, choose pro bono (200 TC/case) or set your own fee',
-      color: 'amber',
-      disabled: profile?.is_attorney,
-      disabledText: 'You are already an Attorney'
-    },
-    {
-      type: 'prosecutor' as ApplicationType,
-      title: 'Troll Court Prosecutor',
-      icon: Gavel,
-      description: 'Prosecute cases on behalf of Troll City, work with judges and attorneys',
-      color: 'red',
-      disabled: profile?.is_prosecutor,
-      disabledText: 'You are already a Prosecutor'
-    },
-    {
-      type: 'seller' as ApplicationType,
-      title: 'Sell on Troll City',
-      icon: Store,
-      description: 'Create a shop and sell items to other users',
-      color: 'green',
-      disabled: false,
-      disabledText: ''
-    },
-    {
-      type: 'journalist' as ApplicationType,
-      title: 'TCNN Journalist',
-      icon: Newspaper,
-      description: 'Write articles and report news for Troll City News Network',
-      color: 'blue',
-      disabled: profile?.is_journalist || profile?.role === 'journalist',
-      disabledText: 'You are already a Journalist'
-    },
-    {
-      type: 'news_caster' as ApplicationType,
-      title: 'TCNN News Caster',
-      icon: Mic,
-      description: 'Broadcast live news and host shows on TCNN',
-      color: 'red',
-      disabled: profile?.is_news_caster || profile?.role === 'news_caster',
-      disabledText: 'You are already a News Caster'
-    },
-    {
-      type: 'chief_news_caster' as ApplicationType,
-      title: 'TCNN Chief News Caster',
-      icon: Radio,
-      description: 'Lead the TCNN team and manage news operations',
-      color: 'yellow',
-      disabled: profile?.is_chief_news_caster || profile?.role === 'chief_news_caster',
-      disabledText: 'You are already a Chief News Caster'
-    },
-    {
-      type: 'troll_station_dj' as ApplicationType,
-      title: 'Troll Station DJ',
-      icon: Radio,
-      description: 'Host live radio shows and manage Troll Station music queue',
-      color: 'pink',
-      disabled: false,
-      disabledText: ''
-    },
-    {
-      type: 'troll_station_manager' as ApplicationType,
-      title: 'Troll Station Manager',
-      icon: Crown,
-      description: 'Manage Troll Station, schedule shows, and assign DJs',
-      color: 'purple',
-      disabled: false,
-      disabledText: ''
-    }
-  ]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
@@ -273,76 +164,31 @@ export default function Application() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {applicationTypes.map((app) => {
-            const Icon = app.icon
-            const isDisabled = app.disabled || loading
-            const colorClasses = {
-              purple: 'border-purple-600 bg-purple-900/20',
-              blue: 'border-blue-600 bg-blue-900/20',
-              red: 'border-red-600 bg-red-900/20',
-              yellow: 'border-yellow-600 bg-yellow-900/20',
-              green: 'border-green-600 bg-green-900/20'
-            }
+          {Object.entries(positionToJobPosition).map(([id, pos]) => {
+            const Icon = pos.icon
+            const isDisabled = !checkRoleEligibility(id).eligible || loading
+            const disabledText = checkRoleEligibility(id).message
 
             return (
               <div
-                key={app.type}
-                className={`rounded-xl border-2 p-6 transition-all ${
-                  isDisabled
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:scale-105 cursor-pointer hover:shadow-lg'
-                } ${colorClasses[app.color as keyof typeof colorClasses]}`}
-                onClick={() => !isDisabled && handleApplication(app.type)}
+                key={id}
+                className="rounded-xl border-2 border-purple-600 bg-purple-900/20 p-6 transition-all hover:scale-105 cursor-pointer hover:shadow-lg"
+                onClick={() => navigate(`/apply?position=${id}`)}
               >
                 <div className="flex items-center gap-4 mb-4">
-                  <div className={`p-3 rounded-lg bg-${app.color}-600/20`}>
-                    <Icon className={`w-8 h-8 text-${app.color}-400`} />
+                  <div className="p-3 rounded-lg bg-purple-600/20">
+                    <Icon className="w-8 h-8 text-purple-400" />
                   </div>
                   <div className="flex-1">
-                    <h2 className="text-xl font-bold">{app.title}</h2>
+                    <h2 className="text-xl font-bold">{pos.title}</h2>
                   </div>
-                  {app.disabled && (
-                    <div className="flex items-center gap-2">
-                      {profile?.is_lead_officer || profile?.is_troll_officer ? (
-                        <CheckCircle className="w-6 h-6 text-green-400" />
-                      ) : (
-                        <XCircle className="w-6 h-6 text-gray-400" />
-                      )}
-                    </div>
-                  )}
                 </div>
-                <p className="text-gray-300 mb-4">{app.description}</p>
-                {app.disabled && (
-                  <p className="text-sm text-gray-400 italic">{app.disabledText}</p>
-                )}
-                {!app.disabled && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleApplication(app.type)
-                    }}
-                    disabled={loading}
-                    className={`w-full px-4 py-2 rounded-lg font-semibold bg-${app.color}-600 hover:bg-${app.color}-700 disabled:opacity-50`}
-                  >
-                    {loading ? 'Loading...' : 'Apply Now'}
-                  </button>
-                )}
+                <p className="text-gray-300 mb-4">{pos.description}</p>
               </div>
             )
           })}
         </div>
-
-        <div className="mt-8 bg-black/60 border border-purple-600/30 rounded-xl p-6">
-          <h3 className="text-lg font-semibold mb-2">Application Process</h3>
-          <ul className="space-y-2 text-sm text-gray-300">
-            <li>• Select a role above to start your application</li>
-            <li>• Complete the application form with required information</li>
-            <li>• Pay any required application fees (if applicable)</li>
-            <li>• Wait for admin review and approval</li>
-            <li>• You&apos;ll receive a notification when your application is reviewed</li>
-          </ul>
-        </div>
       </div>
     </div>
-  )
+)
 }

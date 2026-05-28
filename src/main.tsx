@@ -150,32 +150,42 @@ const isExpectedDevNoise = (errorLike: unknown) => {
      });
    });
 
-   const isBugReporterRequest = (input: RequestInfo | URL) => {
-     const url = typeof input === 'string'
-       ? input
-       : input instanceof Request
-         ? input.url
-         : input.toString()
+const isBugReporterRequest = (input: RequestInfo | URL) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
 
-     return url.includes('/rpc/log_app_bug_report') || url.includes('/app_bug_reports')
-   }
+      return url.includes('/rpc/log_app_bug_report') || url.includes('/app_bug_reports')
+    }
+
+const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
+  return (
+    url.includes('analytics.google.com') ||
+    url.includes('googletagmanager.com') ||
+    url.includes('google-analytics.com') ||
+    url.includes('/g/collect') ||
+    url.includes('/collect?v=2')
+  )
+}
 
 // Note: We only log actual failed responses here; validation errors should be logged at call site
-    const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
+    const originalFetch = window.fetch.bind(window)
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const urlString =
-        typeof args[0] === 'string'
-          ? args[0]
-          : args[0] instanceof Request
-            ? args[0].url
-            : String(args[0])
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input || '')
 
       // Bypass global fetch logging for Supabase Edge Functions
       // to avoid interference with critical auth flows like Terms agreement
       const isSupabaseFunction = urlString.includes('/functions/v1/')
 
       try {
-        const response = await originalFetch(...args);
+        const response = await originalFetch(input, init);
         if (!response.ok && !isSupabaseFunction) {
           // Handle HTTP 0 (network/CORS/insecure context/aborted) - classify appropriately
           if (response.status === 0) {
@@ -226,7 +236,11 @@ const isExpectedDevNoise = (errorLike: unknown) => {
           });
         }
         return response;
-} catch (error: any) {
+      } catch (error: any) {
+        if (shouldIgnoreNetworkErrorForBugCenter(urlString)) {
+          throw error
+        }
+
         if (!isSupabaseFunction && !isExpectedDevNoise(error)) {
           // Add more context to network errors
           const errorContext: any = {

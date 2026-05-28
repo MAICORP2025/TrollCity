@@ -317,7 +317,18 @@ export default function OpenPositions() {
     }
   }
 
-  const handleApply = async (position: JobPosition) => {
+  const positionToRoleCheck: Record<string, { field: string; message: string }> = {
+  troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
+  lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
+  troller: { field: 'is_troller', message: 'You are already a Troller' },
+  journalist: { field: 'is_journalist', message: 'You are already a Journalist' },
+  tcnn_news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
+  tcnn_chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
+  prosecutor: { field: 'is_prosecutor', message: 'You are already a Prosecutor' },
+  attorney: { field: 'is_attorney', message: 'You are already an Attorney' },
+}
+
+const handleApply = async (position: JobPosition) => {
     if (!user) {
       toast.error('Please sign in to apply')
       navigate('/auth')
@@ -334,6 +345,15 @@ export default function OpenPositions() {
     if (state.isFilled) {
       toast.error('This career is filled right now')
       return
+    }
+
+    const roleCheck = positionToRoleCheck[position.id]
+    if (roleCheck) {
+      const roleValue = (profile as any)?.[roleCheck.field]
+      if (roleValue) {
+        toast.error(roleCheck.message)
+        return
+      }
     }
 
     const { data: existingApplication, error } = await supabase

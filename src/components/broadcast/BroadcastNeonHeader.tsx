@@ -280,28 +280,7 @@ export default function BroadcastNeonHeader({
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 rounded-2xl border border-white/10 bg-black/50 px-4 py-2 shadow-[0_0_16px_rgba(0,0,0,0.35)] md:flex">
-          {isLive && (
-            <>
-              <span className="flex items-center gap-2 text-xs font-black text-red-400">
-                <span className={LIVE_DOT_CLASS} />
-                LIVE
-              </span>
-              <span className="h-5 w-px bg-white/10" />
-            </>
-          )}
 
-          <span className="flex items-center gap-1.5 text-xs font-bold text-white/80">
-            <Crown className="h-3.5 w-3.5 text-purple-300" />
-            {liveViewerCount >= 1000 ? `${(liveViewerCount / 1000).toFixed(1)}K` : liveViewerCount}
-          </span>
-
-          <span className="h-5 w-px bg-white/10" />
-
-          <span className="text-xs font-bold tabular-nums text-white/70">
-            ⏱ {timerStr}
-          </span>
-        </div>
 
         <div className="flex shrink-0 items-center gap-2">
           <div className="flex items-center gap-2 rounded-2xl border border-yellow-400/25 bg-yellow-500/10 px-3 py-2 shadow-[0_0_18px_rgba(234,179,8,0.14)]">

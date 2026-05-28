@@ -71,6 +71,7 @@ export function useLiveKitRoom({
   const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string) => {
     const requestBody = {
       room: roomName,
+      roomName,
       identity: userId,
       name: userName || 'User',
       role: publish ? 'publisher' : 'audience',
@@ -183,54 +184,129 @@ export function useLiveKitRoom({
     }
   }, [audioOnly, roomType, videoPreset]);
 
+  const getPublicationCount = (participant: any) => {
+    const publications =
+      participant?.trackPublications ||
+      participant?.tracks ||
+      participant?.trackPublicationMap ||
+      null;
+
+    if (!publications) return 0;
+    if (typeof publications.size === 'number') return publications.size;
+    if (Array.isArray(publications)) return publications.length;
+    if (typeof publications === 'object') return Object.keys(publications).length;
+    return 0;
+  };
+
+  const getParticipantIdentity = (participant: any) => {
+    return (
+      participant?.identity ||
+      participant?.sid ||
+      participant?.name ||
+      'unknown-participant'
+    );
+  };
+
   // Handle participant joined
   const handleParticipantJoined = useCallback((participant: RemoteParticipant) => {
-    console.log('[useLiveKitRoom] Participant joined:', participant.identity, 'hasAudio:', participant.audioTrack !== undefined, 'hasVideo:', participant.videoTracks.size);
+    const identity = getParticipantIdentity(participant);
+
+    console.log('[useLiveKitRoom] Participant connected:', {
+      identity,
+      publicationCount: getPublicationCount(participant),
+    });
+
     setRemoteUsers(prev => {
-      const exists = prev.find(p => p.identity === participant.identity);
-      if (exists) return prev;
+      const alreadyExists = prev.some(
+        (item: any) => getParticipantIdentity(item) === identity
+      );
+
+      if (alreadyExists) {
+        return prev.map((item: any) =>
+          getParticipantIdentity(item) === identity ? participant : item
+        );
+      }
+
       return [...prev, participant];
     });
+
     onUserJoined?.(participant);
   }, [onUserJoined]);
 
   // Handle participant left
   const handleParticipantLeft = useCallback((participant: RemoteParticipant) => {
-    console.log('[useLiveKitRoom] Participant left:', participant.identity);
-    setRemoteUsers(prev => prev.filter(p => p.identity !== participant.identity));
+    const identity = getParticipantIdentity(participant);
+
+    console.log('[useLiveKitRoom] Participant disconnected:', {
+      identity,
+      publicationCount: getPublicationCount(participant),
+    });
+
+    setRemoteUsers(prev =>
+      prev.filter((item: any) => getParticipantIdentity(item) !== identity)
+    );
+
     onUserLeft?.(participant);
   }, [onUserLeft]);
 
-// Handle track subscribed
-   const handleTrackSubscribed = useCallback((track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
-    if (!participant?.identity) {
-      console.warn('[useLiveKitRoom] Track subscribed without participant identity', {
-        kind: track?.kind,
-        publicationSid: publication?.trackSid,
-      })
-      return
-    }
+  // Handle track subscribed
+  const handleTrackSubscribed = useCallback(
+    (track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
+      const identity = getParticipantIdentity(participant);
 
-    console.log('[useLiveKitRoom] Track subscribed:', track.kind, 'from', participant.identity, 'sid:', publication?.trackSid || track.sid)
+      if (!identity || identity === 'unknown-participant') {
+        console.warn('[useLiveKitRoom] Track subscribed without participant identity', {
+          kind: track?.kind,
+          publicationSid: publication?.trackSid,
+        });
+        return;
+      }
 
-    setRemoteUsers(prev => {
-      const exists = prev.some(p => p.identity === participant.identity)
-      if (exists) return [...prev]
-      return [...prev, participant]
-    })
-  }, [])
+      console.log('[useLiveKitRoom] Track subscribed:', {
+        participantIdentity: identity,
+        trackSid: track?.sid || publication?.trackSid || publication?.sid || null,
+        kind: track?.kind || publication?.kind || null,
+        source: publication?.source || null,
+      });
 
-// Handle track unsubscribed
-   const handleTrackUnsubscribed = useCallback((track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
-    console.log('[useLiveKitRoom] Track unsubscribed:', track.kind, 'from', participant?.identity)
+      setRemoteUsers(prev => {
+        const exists = prev.some(
+          (item: any) => getParticipantIdentity(item) === identity
+        );
 
-    if (!participant?.identity) {
-      setRemoteUsers(prev => [...prev])
-      return
-    }
+        if (!exists) return [...prev, participant];
 
-    setRemoteUsers(prev => [...prev])
-  }, []);
+        return prev.map((item: any) =>
+          getParticipantIdentity(item) === identity ? participant : item
+        );
+      });
+    },
+    []
+  );
+
+  // Handle track unsubscribed
+  const handleTrackUnsubscribed = useCallback(
+    (_track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
+      const identity = getParticipantIdentity(participant);
+
+      console.log('[useLiveKitRoom] Track unsubscribed:', {
+        participantIdentity: identity,
+        trackSid: publication?.trackSid || publication?.sid || null,
+        kind: publication?.kind || null,
+      });
+
+      if (!participant?.identity) {
+        return;
+      }
+
+      setRemoteUsers(prev =>
+        prev.map((item: any) =>
+          getParticipantIdentity(item) === identity ? participant : item
+        )
+      );
+    },
+    []
+  );
 
   // Join LiveKit as publisher
   const joinAsPublisher = useCallback(async (userId: string, tokenOverride?: string | null) => {

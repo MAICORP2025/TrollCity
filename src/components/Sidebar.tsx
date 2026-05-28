@@ -289,7 +289,18 @@ profile?.role === 'superadmin' ||
           .maybeSingle()
         setIsApprovedAuctioneer(!!auctioneerData)
 
-        setCanSeeInmates(!!officerData || secData?.role === UserRole.ADMIN || secData?.role === UserRole.LEAD_TROLL_OFFICER)
+        setCanSeeInmates(
+          !!officerData ||
+            isAdmin ||
+            profile?.role === UserRole.TROLL_OFFICER ||
+            profile?.troll_role === UserRole.TROLL_OFFICER ||
+            profile?.is_troll_officer ||
+            profile?.role === UserRole.LEAD_TROLL_OFFICER ||
+            profile?.troll_role === UserRole.LEAD_TROLL_OFFICER ||
+            profile?.is_lead_officer ||
+            secData?.role === UserRole.ADMIN ||
+            secData?.role === UserRole.LEAD_TROLL_OFFICER
+        )
 
         const { data: profileData } = await supabase
           .from('user_profiles')
@@ -303,7 +314,7 @@ profile?.role === 'superadmin' ||
     }
 
     fetchUserData()
-  }, [profile?.id, profile])
+  }, [profile?.id, profile, isAdmin])
 
   useEffect(() => {
     const path = location.pathname

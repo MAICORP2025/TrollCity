@@ -116,12 +116,10 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             user_liked: likedPostIds.has(post.id),
             reactions: post.reactions || {},
             gifts: post.gifts || {},
-            user_role: author.role,
             is_verified: author.is_verified,
             is_gold: author.is_gold,
             username_style: author.username_style,
             badge: author.badge,
-            empire_role: author.empire_role,
             officer_level: author.officer_level,
             troller_level: author.troller_level,
             is_troller: author.is_troller,
@@ -411,13 +409,11 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                                             is_og_user: post.is_og_user,
                                             is_verified: post.user_verified,
                                             is_gold: post.user_is_gold,
-                                            role: post.user_role,
                                             officer_level: post.officer_level,
                                             troller_level: post.troller_level,
                                             is_troller: post.is_troller,
                                             username_style: post.username_style,
                                             badge: post.badge,
-                                            empire_role: post.empire_role,
                                         }}
                                         size="sm"
                                         onClick={() => {

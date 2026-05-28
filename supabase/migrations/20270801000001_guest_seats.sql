@@ -111,6 +111,9 @@ RETURNS TABLE (
     guest_id TEXT,
     status TEXT,
     joined_at TIMESTAMPTZ,
+    left_at TIMESTAMPTZ,
+    livekit_participant_identity TEXT,
+    price_paid INTEGER,
     username TEXT,
     avatar_url TEXT,
     is_gold BOOLEAN,
@@ -133,6 +136,9 @@ BEGIN
         s.guest_id::TEXT,
         s.status::TEXT,
         s.joined_at::TIMESTAMPTZ,
+        s.left_at::TIMESTAMPTZ,
+        s.livekit_participant_identity::TEXT,
+        s.price_paid::INTEGER,
         (CASE 
             WHEN s.user_id IS NOT NULL THEN COALESCE(u.username, 'Unknown')
             ELSE COALESCE(s.guest_id, 'Guest')

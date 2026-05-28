@@ -212,7 +212,7 @@ export default function LandingPage() {
                     {!user && (
                       <div className="mx-auto max-w-xl rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 backdrop-blur-md lg:mx-0">
                         New user launch promo starts May 1, 2026 at 3:00 PM MDT:
-                        earn a 1,000 coin bonus on your first 5,000 coin cashout.
+                        earn a 1,000 coin bonus on your first 7,500 coin cashout.
                       </div>
                     )}
                   </div>

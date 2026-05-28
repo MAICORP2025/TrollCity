@@ -188,6 +188,102 @@ const statusTone = (status?: string | null) => {
   return 'bg-cyan-500/10 text-cyan-100 border-cyan-300/20'
 }
 
+type DashboardErrorInfo = {
+  message: string
+  label?: string
+  code?: string | null
+  details?: string | null
+  hint?: string | null
+  status?: number | null
+  raw?: any
+}
+
+const serializeDashboardError = (error: any): DashboardErrorInfo => {
+  if (!error) {
+    return {
+      message: 'Unknown dashboard error',
+      raw: error,
+    }
+  }
+
+  if (typeof error === 'string') {
+    return {
+      message: error || 'Empty string error',
+      raw: error,
+    }
+  }
+
+  const message =
+    error.message ||
+    error.error_description ||
+    error.error ||
+    error.details ||
+    error.hint ||
+    error.statusText ||
+    ''
+
+  return {
+    message: message || JSON.stringify(error) || 'Dashboard error returned no message',
+    code: error.code || null,
+    details: error.details || null,
+    hint: error.hint || null,
+    status: error.status || null,
+    raw: error,
+  }
+}
+
+const runDashboardQuery = async <T,>(
+  label: string,
+  query: PromiseLike<{ data: T; error: any; count?: number | null }>,
+): Promise<{ data: T; count?: number | null }> => {
+  console.log(`[AgencyHRDashboard] starting: ${label}`)
+
+  const result = await query
+
+  if (result.error) {
+    const serialized = serializeDashboardError(result.error)
+
+    console.error(`[AgencyHRDashboard] failed: ${label}`, {
+      label,
+      ...serialized,
+    })
+
+    const err = new Error(`${label} failed: ${serialized.message}`)
+    ;(err as any).label = label
+    ;(err as any).supabaseError = serialized
+    throw err
+  }
+
+  console.log(`[AgencyHRDashboard] loaded: ${label}`, {
+    label,
+    count: result.count ?? (Array.isArray(result.data) ? result.data.length : null),
+    hasData: !!result.data,
+  })
+
+  return {
+    data: result.data,
+    count: result.count,
+  }
+}
+
+const runOptionalDashboardQuery = async <T,>(
+  label: string,
+  query: PromiseLike<{ data: T; error: any; count?: number | null }>,
+  fallbackData: T,
+): Promise<{ data: T; count?: number | null }> => {
+  try {
+    return await runDashboardQuery(label, query)
+  } catch (error) {
+    const serialized = serializeDashboardError(error)
+    console.warn(`[AgencyHRDashboard] optional query failed, using fallback: ${label}`, serialized)
+
+    return {
+      data: fallbackData,
+      count: 0,
+    }
+  }
+}
+
 export default function AgencyHRDashboard() {
   const { user, profile } = useAuthStore()
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
@@ -288,105 +384,156 @@ export default function AgencyHRDashboard() {
     }
   }
 
-  const loadAgencies = async () => {
-    const { data, error: agenciesError } = await supabase
-      .from('agencies')
-      .select(
-        'id, name, status, created_at, agency_fee_percent, platform_fee_percent, leader_commission_percent, recruiter_commission_percent, fee_updated_at, fee_updated_by',
-      )
-      .order('created_at', { ascending: false })
-
-    if (agenciesError) {
-      const fallback = await supabase.from('agencies').select('id, name, status, created_at').order('created_at', { ascending: false })
-      if (fallback.error) throw fallback.error
-      setAgencies((fallback.data || []) as AgencyRow[])
-      return (fallback.data || []) as AgencyRow[]
-    }
-
-    setAgencies((data || []) as AgencyRow[])
-    return (data || []) as AgencyRow[]
-  }
-
-  const loadApplications = async () => {
-    const { data, error: applicationsError } = await supabase
-      .from('agency_applications')
-      .select(
-        'id, agency_id, applicant_id, message, content_type, live_schedule, battle_interest, social_links, status, reviewed_by, reviewed_at, created_at, recruiter_user_id, recruiter_bonus_paid, recruiter_bonus_paid_at',
-      )
-      .in('status', ['pending', 'changes_requested'])
-      .order('created_at', { ascending: false })
-
-    if (applicationsError) throw applicationsError
-
-    setApplications((data || []) as AgencyApplication[])
-  }
-
-  const loadContracts = async () => {
-    const { data, error: contractsError } = await supabase
-      .from('agency_contracts')
-      .select(
-        'id, agency_id, creator_id, user_id, title, contract_type, contract_body, body, status, fee_percentage, payout_terms, effective_date, expiration_date, created_at',
-      )
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (contractsError) throw contractsError
-
-    setContracts((data || []) as AgencyContract[])
-  }
-
-  const loadAuditLogs = async () => {
-    const { data, error: activityError } = await supabase
-      .from('agency_activity_logs')
-      .select('id, action, details, created_at, agency_id')
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (activityError) throw activityError
-
-    setRecentActivity((data || []) as ActivityLog[])
-  }
-
   const loadDashboard = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const [agencyCount, memberCount, appCount, contractCount, inviteCount, goalCount] = await Promise.all([
-        supabase.from('agencies').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('agency_members').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-        supabase.from('agency_applications').select('id', { count: 'exact', head: true }).in('status', ['pending', 'changes_requested']),
-        supabase.from('agency_contracts').select('id', { count: 'exact', head: true }).in('status', ['pending', 'pending_signature']),
-        supabase.from('agency_invites').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('agency_goals').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-      ])
+      console.log('[AgencyHRDashboard] loading dashboard', {
+        userId: user?.id,
+        profileId: profile?.id,
+        role: profile?.role,
+        trollRole: profile?.troll_role,
+        isAdmin: profile?.is_admin,
+      })
 
-      if (agencyCount.error) throw agencyCount.error
-      if (memberCount.error) throw memberCount.error
-      if (appCount.error) throw appCount.error
-      if (contractCount.error) throw contractCount.error
-      if (inviteCount.error) throw inviteCount.error
-      if (goalCount.error) throw goalCount.error
+      const agencyCount = await runDashboardQuery(
+        'agencies approved count',
+        supabase
+          .from('agencies')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'approved'),
+      )
 
-      const loadedAgencies = await loadAgencies()
-      await Promise.all([loadApplications(), loadContracts(), loadAuditLogs()])
+      const memberCount = await runOptionalDashboardQuery(
+        'agency_members active count',
+        supabase
+          .from('agency_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'active'),
+        [],
+      )
+
+      const appCount = await runDashboardQuery(
+        'agency_applications pending count',
+        supabase
+          .from('agency_applications')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'changes_requested']),
+      )
+
+      const contractCount = await runOptionalDashboardQuery(
+        'agency_contracts pending count',
+        supabase
+          .from('agency_contracts')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'pending_signature']),
+        [],
+      )
+
+      const inviteCount = await runOptionalDashboardQuery(
+        'agency_invites pending count',
+        supabase
+          .from('agency_invites')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending'),
+        [],
+      )
+
+      const goalCount = await runOptionalDashboardQuery(
+        'agency_goals active count',
+        supabase
+          .from('agency_goals')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'active'),
+        [],
+      )
+
+      const agenciesResult = await runDashboardQuery(
+        'agencies full load',
+        supabase
+          .from('agencies')
+          .select(
+            'id, name, status, created_at, agency_fee_percent, platform_fee_percent, leader_commission_percent, recruiter_commission_percent, fee_updated_at, fee_updated_by',
+          )
+          .order('created_at', { ascending: false }),
+      )
+
+      const loadedAgencies = (agenciesResult.data || []) as AgencyRow[]
+      setAgencies(loadedAgencies)
+
+      const applicationsResult = await runDashboardQuery(
+        'agency_applications full load',
+        supabase
+          .from('agency_applications')
+          .select(
+            'id, agency_id, applicant_id, message, content_type, live_schedule, battle_interest, social_links, status, reviewed_by, reviewed_at, created_at, recruiter_user_id, recruiter_bonus_paid, recruiter_bonus_paid_at',
+          )
+          .in('status', ['pending', 'changes_requested'])
+          .order('created_at', { ascending: false }),
+      )
+
+      setApplications((applicationsResult.data || []) as AgencyApplication[])
+
+      const contractsResult = await runOptionalDashboardQuery(
+        'agency_contracts full load',
+        supabase
+          .from('agency_contracts')
+          .select(
+            'id, agency_id, creator_id, user_id, title, contract_type, contract_body, body, status, fee_percentage, payout_terms, effective_date, expiration_date, created_at',
+          )
+          .order('created_at', { ascending: false })
+          .limit(50),
+        [],
+      )
+
+      setContracts((contractsResult.data || []) as AgencyContract[])
+
+      const auditResult = await runOptionalDashboardQuery(
+        'agency_activity_logs full load',
+        supabase
+          .from('agency_activity_logs')
+          .select('id, action, details, created_at, agency_id')
+          .order('created_at', { ascending: false })
+          .limit(50),
+        [],
+      )
+
+      setRecentActivity((auditResult.data || []) as ActivityLog[])
 
       const previewAgencies = loadedAgencies.slice(0, 6)
+
       const detailedAgencies = await Promise.all(
         previewAgencies.map(async (agency) => {
-          const [memberResult, appResult, contractResult] = await Promise.all([
-            supabase.from('agency_members').select('id', { count: 'exact', head: true }).eq('agency_id', agency.id).eq('status', 'active'),
+          const memberResult = await runOptionalDashboardQuery(
+            `agency_members count for ${agency.id}`,
+            supabase
+              .from('agency_members')
+              .select('id', { count: 'exact', head: true })
+              .eq('agency_id', agency.id)
+              .eq('status', 'active'),
+            [],
+          )
+
+          const appResult = await runOptionalDashboardQuery(
+            `agency_applications count for ${agency.id}`,
             supabase
               .from('agency_applications')
               .select('id', { count: 'exact', head: true })
               .eq('agency_id', agency.id)
               .in('status', ['pending', 'changes_requested']),
+            [],
+          )
+
+          const contractResult = await runOptionalDashboardQuery(
+            `agency_contracts count for ${agency.id}`,
             supabase
               .from('agency_contracts')
               .select('id', { count: 'exact', head: true })
               .eq('agency_id', agency.id)
               .in('status', ['pending', 'pending_signature']),
-          ])
+            [],
+          )
 
           return {
             ...agency,
@@ -404,9 +551,21 @@ export default function AgencyHRDashboard() {
       setPendingInvites(inviteCount.count || 0)
       setActiveGoals(goalCount.count || 0)
       setTopAgencies(detailedAgencies)
-    } catch (err) {
-      console.error('Failed to load agency HR dashboard', err)
-      setNotice('We could not load the agency HR dashboard right now. Check the related agency table columns and RLS policies.', 'error')
+    } catch (err: any) {
+      const serialized = serializeDashboardError(err)
+
+      console.error('[AgencyHRDashboard] Failed to load agency HR dashboard', {
+        ...serialized,
+        label: err?.label,
+        supabaseError: err?.supabaseError,
+      })
+
+      setNotice(
+        `Agency HR dashboard failed at ${err?.label || 'unknown query'}: ${
+          err?.supabaseError?.message || serialized.message || 'No error message returned'
+        }`,
+        'error',
+      )
     } finally {
       setLoading(false)
     }
@@ -462,60 +621,43 @@ export default function AgencyHRDashboard() {
         if (!result?.success) {
           throw new Error(result?.message || 'Family conversion approval failed.')
         }
-      } else {
-        const applicantId = application.applicant_id
-        if (!application.agency_id || !applicantId) {
-          setNotice('This application is missing agency_id or applicant user_id.', 'error')
-          return
-        }
+       } else {
+         const applicantId = application.applicant_id
 
-        const { error: updateError } = await supabase
-          .from('agency_applications')
-          .update({
-            status: 'approved',
-            reviewed_by: actorId,
-            reviewed_at: new Date().toISOString(),
-          })
-          .eq('id', application.id)
+         if (!application.agency_id || !applicantId) {
+           setNotice('This application is missing agency_id or applicant user_id.', 'error')
+           return
+         }
 
-        if (updateError) {
-          const fallback = await supabase
-            .from('agency_applications')
-            .update({ status: 'approved', message: applicationNote || application.message || null })
-            .eq('id', application.id)
+         const { data, error } = await supabase.rpc('approve_agency_application_atomic', {
+           p_application_id: application.id,
+           p_approved_by: actorId,
+         })
 
-          if (fallback.error) throw fallback.error
-        }
+         if (error) {
+           throw error
+         }
 
-        const { error: memberError } = await supabase.from('agency_members').upsert(
-          {
-            agency_id: application.agency_id,
-            user_id: applicantId,
-            role: 'member',
-            status: 'active',
-            joined_at: new Date().toISOString(),
-          },
-          { onConflict: 'agency_id,user_id' },
-        )
+         const result = data as {
+           success?: boolean
+           agency_id?: string
+           fee_charged_amount?: number
+           message?: string
+         } | null
 
-        if (memberError) {
-          const fallbackMember = await supabase.from('agency_members').insert({
-            agency_id: application.agency_id,
-            user_id: applicantId,
-            role: 'member',
-            status: 'active',
-          })
+         if (!result?.success) {
+           throw new Error(result?.message || 'Agency application approval failed.')
+         }
 
-          if (fallbackMember.error) throw fallbackMember.error
-        }
-
-        await writeAgencyLog(application.agency_id, 'application_approved', {
-          application_id: application.id,
-          applicant_id: applicantId,
-          approved_by: actorId,
-          note: applicationNote || null,
-        })
-      }
+         await writeAgencyLog(application.agency_id, 'application_approved', {
+           application_id: application.id,
+           applicant_id: applicantId,
+           approved_by: actorId,
+           note: applicationNote || null,
+           fee_charged_amount: result.fee_charged_amount ?? 35000,
+           rpc_result: result,
+         })
+       }
 
       setApplicationNote('')
       setNotice(isFamilyConversion ? 'Family conversion approved.' : 'Application approved and member access was activated.')
@@ -1153,7 +1295,7 @@ export default function AgencyHRDashboard() {
                           </div>
                           <p className="mt-2 text-sm text-slate-300">Agency: {agencyName}</p>
                           <p className="text-sm text-slate-400">
-                            {isFamilyConversion ? 'Type: Family-to-Agency conversion' : 'Requested role: member'}
+                             {isFamilyConversion ? 'Type: Family-to-Agency conversion' : 'Requested role: creator'}
                           </p>
                           <p className="text-xs text-slate-500">Submitted: {safeDate(application.created_at)}</p>
                           {(application.message) && (

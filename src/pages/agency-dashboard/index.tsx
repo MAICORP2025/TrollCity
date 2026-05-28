@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../../components/ui/button'
@@ -71,6 +72,35 @@ type AgencyApplication = {
   application_fee_amount?: number | null
   fee_paid_at?: string | null
   source_family_id?: string | null
+}
+
+type AgencyContract = {
+  id: string
+  agency_id?: string | null
+  creator_id?: string | null
+  user_id?: string | null
+  title?: string | null
+  contract_type?: string | null
+  status?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  contract_body?: string | null
+  body?: string | null
+  fee_percentage?: number | null
+  split_percent?: number | null
+  payout_terms?: string | null
+  agency_responsibilities?: string | null
+  leader_responsibilities?: string | null
+  termination_terms?: string | null
+  effective_date?: string | null
+  expiration_date?: string | null
+  created_by?: string | null
+  sent_at?: string | null
+  signed_at?: string | null
+  signed_by?: string | null
+  signature_name?: string | null
+  signature_note?: string | null
+  signed_terms_accepted_at?: string | null
 }
 
 type ActivityLog = {
@@ -226,6 +256,36 @@ const renderDetails = (details: unknown) => {
   }
 }
 
+const normalizeContractStatus = (status?: string | null) => String(status || 'draft').trim().toLowerCase()
+
+const contractStatusTone = (status?: string | null) => {
+  const normalized = normalizeContractStatus(status)
+  if (['signed', 'approved', 'active', 'completed'].includes(normalized)) return 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
+  if (['pending', 'pending_signature', 'sent', 'awaiting_signature'].includes(normalized)) return 'border-amber-300/20 bg-amber-500/10 text-amber-100'
+  if (['voided', 'rejected', 'cancelled', 'expired'].includes(normalized)) return 'border-red-300/20 bg-red-500/10 text-red-100'
+  return 'border-slate-300/20 bg-slate-500/10 text-slate-100'
+}
+
+const isContractAwaitingSignature = (status?: string | null) =>
+  ['pending', 'pending_signature', 'sent', 'awaiting_signature'].includes(normalizeContractStatus(status))
+
+const getContractBody = (contract?: AgencyContract | null) => {
+  if (!contract) return ''
+  return (
+    contract.contract_body ||
+    contract.body ||
+    [
+      contract.payout_terms ? `Payout Terms:\n${contract.payout_terms}` : '',
+      contract.agency_responsibilities ? `Agency Responsibilities:\n${contract.agency_responsibilities}` : '',
+      contract.leader_responsibilities ? `Agency Leader Responsibilities:\n${contract.leader_responsibilities}` : '',
+      contract.termination_terms ? `Termination Terms:\n${contract.termination_terms}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n') ||
+    'No contract body was provided.'
+  )
+}
+
 export default function AgencyDashboard() {
   const { user } = useAuth()
   const [agency, setAgency] = useState<Agency | null>(null)
@@ -235,14 +295,22 @@ export default function AgencyDashboard() {
   const [memberCount, setMemberCount] = useState(0)
   const [pendingApplications, setPendingApplications] = useState(0)
   const [activeGoals, setActiveGoals] = useState(0)
-  const [pendingContracts, setPendingContracts] = useState(0)
+  const [contractCount, setContractCount] = useState(0)
+  const [contracts, setContracts] = useState<AgencyContract[]>([])
   const [userRole, setUserRole] = useState<UserRole>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
+  const [selectedContract, setSelectedContract] = useState<AgencyContract | null>(null)
+  const [signatureName, setSignatureName] = useState('')
+  const [signatureNote, setSignatureNote] = useState('')
+  const [contractAgreed, setContractAgreed] = useState(false)
+   const [signingContract, setSigningContract] = useState(false)
+   const navigate = useNavigate();
 
-  const agencyStatus = normalizeStatus(agency?.status || latestApplication?.status)
+   const agencyStatus = normalizeStatus(agency?.status || latestApplication?.status)
   const statusInfo = getStatusConfig(agency?.status || latestApplication?.status)
   const StatusIcon = statusInfo.icon
   const isApprovedAgency = agencyStatus === 'approved' || agencyStatus === 'active'
@@ -253,7 +321,7 @@ export default function AgencyDashboard() {
       supabase.from('agency_members').select('id', { count: 'exact', head: true }).eq('agency_id', agencyId).eq('status', 'active'),
       supabase.from('agency_applications').select('id', { count: 'exact', head: true }).eq('agency_id', agencyId).in('status', ['pending', 'under_review', 'changes_requested']),
       supabase.from('agency_goals').select('id', { count: 'exact', head: true }).eq('agency_id', agencyId).eq('status', 'active'),
-      supabase.from('agency_contracts').select('id', { count: 'exact', head: true }).eq('agency_id', agencyId).in('status', ['pending', 'pending_signature', 'draft']),
+      supabase.from('agency_contracts').select('id', { count: 'exact', head: true }).eq('agency_id', agencyId),
       supabase
         .from('agency_activity_logs')
         .select('id, agency_id, actor_id, target_user_id, action, metadata, details, created_at')
@@ -265,10 +333,32 @@ export default function AgencyDashboard() {
     setMemberCount(membersResult.count || 0)
     setPendingApplications(appsResult.count || 0)
     setActiveGoals(goalsResult.count || 0)
-    setPendingContracts(contractsResult.count || 0)
+    setContractCount(contractsResult.count || 0)
 
     if (!logsResult.error) {
       setActivityLogs((logsResult.data || []) as ActivityLog[])
+    }
+  }, [])
+
+  const fetchContracts = useCallback(async (agencyId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('agency_contracts')
+        .select('id, agency_id, creator_id, user_id, title, contract_type, status, fee_percentage, split_percent, payout_terms, agency_responsibilities, leader_responsibilities, termination_terms, contract_body, body, effective_date, expiration_date, created_by, sent_at, signed_at, signed_by, signature_name, signature_note, signed_terms_accepted_at, created_at, updated_at')
+        .eq('agency_id', agencyId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.warn('Could not load agency contracts', error)
+        setContracts([])
+        return
+      }
+
+      setContracts((data || []) as AgencyContract[])
+    } catch (err) {
+      console.warn('Could not load agency contracts', err)
+      setContracts([])
     }
   }, [])
 
@@ -323,34 +413,33 @@ export default function AgencyDashboard() {
     try {
       setError(null)
 
-      const { data: membershipData, error: membershipError } = await supabase
-        .from('agency_members')
-        .select(
-          `
-          *,
-          agencies (
-            id,
-            name,
-            slug,
-            bio,
-            logo_url,
-            banner_url,
-            status,
-            default_split_percent,
-            owner_id,
-            created_at,
-            updated_at,
-            monthly_fee_amount,
-            billing_status,
-            next_monthly_fee_due_at
-          )
-        `,
-        )
-        .eq('user_id', user.id)
-        .in('status', ['active', 'pending'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+       const { data: membershipData, error: membershipError } = await supabase
+         .from('agency_members')
+         .select(
+           `
+           *,
+           agencies (
+             id,
+             name,
+             slug,
+             bio,
+             logo_url,
+             banner_url,
+             status,
+             default_split_percent,
+             owner_id,
+             created_at,
+             updated_at,
+             monthly_fee_amount,
+             billing_status,
+             next_monthly_fee_due_at
+           )
+         `,
+         )
+         .eq('user_id', user.id)
+         .order('created_at', { ascending: false })
+         .limit(1)
+         .maybeSingle()
 
       let loadedMembership = (membershipData || null) as AgencyMember | null
       let loadedAgency = loadedMembership?.agencies || null
@@ -382,10 +471,18 @@ export default function AgencyDashboard() {
       setMembership(loadedMembership)
       setAgency(loadedAgency)
       setLatestApplication(app)
-      setUserRole((loadedMembership?.role || (loadedAgency?.owner_id === user.id ? 'owner' : null)) as UserRole)
+      const resolvedRole = (loadedMembership?.role || (loadedAgency?.owner_id === user.id ? 'owner' : null)) as UserRole
+      setUserRole(resolvedRole)
+
+      const isAgencyDashboardAllowed = ['owner', 'manager', 'agency_leader'].includes(String(resolvedRole || '').toLowerCase())
+      if (loadedAgency?.id && loadedMembership && !isAgencyDashboardAllowed) {
+        navigate(`/agency/${loadedAgency.slug || loadedAgency.id}`, { replace: true })
+        return
+      }
 
       if (loadedAgency?.id) {
         await fetchCounts(loadedAgency.id)
+        await fetchContracts(loadedAgency.id)
       }
 
       if (!loadedAgency && !app) {
@@ -398,7 +495,7 @@ export default function AgencyDashboard() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [fetchAgencyById, fetchCounts, fetchLatestApplication, user?.id])
+  }, [fetchAgencyById, fetchCounts, fetchContracts, fetchLatestApplication, user?.id])
 
   useEffect(() => {
     void fetchAgencyData()
@@ -413,6 +510,190 @@ export default function AgencyDashboard() {
     if (!agency?.owner_id) return 'Not assigned yet'
     return agency.owner_id === user?.id ? 'You' : agency.owner_id.slice(0, 8)
   }, [agency?.owner_id, user?.id])
+
+  const contractsNeedingSignature = useMemo(
+    () =>
+      contracts.filter((contract) => {
+        if (!isContractAwaitingSignature(contract.status)) return false
+        const recipientId = contract.user_id || contract.creator_id
+        if (!recipientId) return isOwnerOrManager
+        return recipientId === user?.id || isOwnerOrManager
+      }),
+    [contracts, isOwnerOrManager, user?.id],
+  )
+
+  const openContractModal = (contract: AgencyContract) => {
+    setSelectedContract(contract)
+    setSignatureName(
+      contract.signature_name ||
+        (user as any)?.user_metadata?.full_name ||
+        (user as any)?.email?.split('@')?.[0] ||
+        '',
+    )
+    setSignatureNote('')
+    setContractAgreed(false)
+    setError(null)
+    setSuccess(null)
+  }
+
+  const writeContractActivityLog = async (contract: AgencyContract, action: string, details: Record<string, unknown>) => {
+    if (!contract.agency_id) return
+
+    const { error: logError } = await supabase.from('agency_activity_logs').insert({
+      agency_id: contract.agency_id,
+      actor_id: user?.id,
+      target_user_id: contract.user_id || contract.creator_id || user?.id || null,
+      action,
+      details,
+    })
+
+    if (logError) {
+      console.warn('Failed to write agency contract activity log', logError)
+    }
+  }
+
+  const signSelectedContract = async () => {
+    if (!selectedContract || !user?.id) return
+
+    if (!contractAgreed) {
+      setError('You must agree to the contract terms before sending it back to Agency HR.')
+      setSuccess(null)
+      return
+    }
+
+    if (!signatureName.trim()) {
+      setError('Enter your signature name before sending the contract back to Agency HR.')
+      setSuccess(null)
+      return
+    }
+
+    try {
+      setSigningContract(true)
+      setError(null)
+      setSuccess(null)
+
+      const signedAt = new Date().toISOString()
+      const signaturePayload = {
+        status: 'signed',
+        signed_at: signedAt,
+        signed_by: user.id,
+        signature_name: signatureName.trim(),
+        signature_note: signatureNote.trim() || null,
+        signed_terms_accepted_at: signedAt,
+        updated_at: signedAt,
+      }
+
+      const { error: signatureError } = await supabase
+        .from('agency_contracts')
+        .update(signaturePayload)
+        .eq('id', selectedContract.id)
+
+      if (signatureError) {
+        console.warn('Full contract signature update failed, falling back to status-only update', signatureError)
+
+        const { error: fallbackError } = await supabase
+          .from('agency_contracts')
+          .update({ status: 'signed' })
+          .eq('id', selectedContract.id)
+
+        if (fallbackError) throw fallbackError
+      }
+
+      await writeContractActivityLog(selectedContract, 'contract_signed_by_agency', {
+        contract_id: selectedContract.id,
+        contract_title: selectedContract.title || null,
+        signed_by: user.id,
+        signature_name: signatureName.trim(),
+        signature_note: signatureNote.trim() || null,
+      })
+
+      setSelectedContract(null)
+      setContractAgreed(false)
+      setSignatureName('')
+      setSignatureNote('')
+      setSuccess('Contract signed and sent back to Agency HR.')
+      await fetchAgencyData()
+    } catch (err: any) {
+      console.error('Failed to sign agency contract', err)
+      setError(err?.message || 'Contract signature failed. Check agency_contracts columns and RLS.')
+      setSuccess(null)
+    } finally {
+      setSigningContract(false)
+    }
+  }
+
+  const renderContractInbox = () => (
+    <section className={`${glassPanel} p-5`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-fuchsia-200">Contract inbox</p>
+          <h2 className="mt-2 text-xl font-black text-white">Contracts sent by Agency HR</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-300">
+            When Agency HR sends a contract, it appears here. Open the contract, review the terms, agree, sign, and send it back to HR.
+          </p>
+        </div>
+        <span className="rounded-full border border-amber-300/20 bg-amber-500/10 px-3 py-1 text-xs font-black text-amber-100">
+          {contractsNeedingSignature.length} awaiting signature
+        </span>
+      </div>
+
+      <div className="mt-5 space-y-4">
+        {contracts.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-300">
+            No contracts have been sent to this agency yet.
+          </div>
+        ) : (
+          contracts.map((contract) => {
+            const awaitingSignature = isContractAwaitingSignature(contract.status)
+            const canSign =
+              awaitingSignature &&
+              ((contract.user_id || contract.creator_id) === user?.id || isOwnerOrManager || !(contract.user_id || contract.creator_id))
+
+            return (
+              <div key={contract.id} className="rounded-3xl border border-white/10 bg-black/30 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-lg font-black text-white">{contract.title || 'Untitled contract'}</h3>
+                    <p className="mt-2 text-sm text-slate-400">Type: {contract.contract_type || 'agency_leader'}</p>
+                    <p className="mt-1 text-xs text-slate-500">Sent: {safeDate(contract.sent_at || contract.created_at)}</p>
+                    {contract.signed_at && <p className="mt-1 text-xs text-emerald-200">Signed: {safeDate(contract.signed_at)}</p>}
+                  </div>
+                  <span className={`rounded-full border px-3 py-1 text-xs font-black ${contractStatusTone(contract.status)}`}>
+                    {contract.status || 'unknown'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Recipient</p>
+                    <p className="mt-2 break-all text-sm font-bold text-white">{contract.user_id || contract.creator_id || 'Agency leader / owner'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Pay terms</p>
+                    <p className="mt-2 text-sm font-bold text-white">{contract.payout_terms || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Fee percentage</p>
+                    <p className="mt-2 text-sm font-bold text-white">{contract.fee_percentage ?? contract.split_percent ?? 'Unknown'}%</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button type="button" onClick={() => openContractModal(contract)} className="bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30">
+                    <FileText className="mr-2 h-4 w-4" />
+                    {canSign ? 'Review & Sign' : 'View Contract'}
+                  </Button>
+                  {awaitingSignature && !canSign && (
+                    <p className="self-center text-xs text-amber-200">Awaiting signature from assigned agency leader.</p>
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </section>
+  )
 
   if (loading) return <Loader />
 
@@ -429,7 +710,13 @@ export default function AgencyDashboard() {
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-red-200">Agency dashboard</p>
                 <h1 className="mt-2 text-2xl font-black text-white">No agency access found</h1>
-                <p className="mt-3 text-sm leading-7 text-slate-300">{error}</p>
+                 {error === 'You do not have an agency application or agency membership yet.' ? (
+                   <p className="mt-3 text-sm leading-7 text-slate-300">
+                     You do not have an agency application or agency membership yet. Please visit the Agencies page to apply.
+                   </p>
+                 ) : (
+                   <p className="mt-3 text-sm leading-7 text-slate-300">{error}</p>
+                 )}
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Button onClick={refresh} disabled={refreshing} className="bg-cyan-500/20 text-cyan-50 hover:bg-cyan-500/30">
                     <RefreshCw className="mr-2 h-4 w-4" />
@@ -538,6 +825,8 @@ export default function AgencyDashboard() {
             </div>
           </section>
 
+          {renderContractInbox()}
+
           <section className={`${glassPanel} p-5`}>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">Recent agency updates</p>
             <div className="mt-4 space-y-3">
@@ -561,6 +850,26 @@ export default function AgencyDashboard() {
             </div>
           </section>
         </main>
+
+      <ContractSignatureModal
+        contract={selectedContract}
+        signatureName={signatureName}
+        signatureNote={signatureNote}
+        agreed={contractAgreed}
+        signing={signingContract}
+        canSign={
+          !!selectedContract &&
+          isContractAwaitingSignature(selectedContract.status) &&
+          (((selectedContract.user_id || selectedContract.creator_id) === user?.id) ||
+            isOwnerOrManager ||
+            !(selectedContract.user_id || selectedContract.creator_id))
+        }
+        onSignatureNameChange={setSignatureName}
+        onSignatureNoteChange={setSignatureNote}
+        onAgreedChange={setContractAgreed}
+        onClose={() => setSelectedContract(null)}
+        onSign={signSelectedContract}
+      />
       </div>
     )
   }
@@ -581,9 +890,9 @@ export default function AgencyDashboard() {
                   Your agency is approved, but only owners, agency leaders, and managers can access the management dashboard.
                 </p>
                 <p className="mt-3 text-sm text-slate-400">Your current agency role: {userRole || 'member'}</p>
-                <Button variant="outline" className="mt-6 border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={() => window.history.back()}>
-                  Go Back
-                </Button>
+                 <Button variant="outline" className="mt-6 border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={() => navigate(`/agency/${agency?.slug || agency?.id}`)}>
+                   Go Back
+                 </Button>
               </div>
             </div>
           </div>
@@ -648,11 +957,21 @@ export default function AgencyDashboard() {
                 🎯 {activeGoals} Active Goals
               </Badge>
               <Badge variant="outline" className="border-pink-500/30 text-pink-300">
-                📝 {pendingContracts} Contracts
+                📝 {contractCount} Contracts
               </Badge>
             </div>
           </div>
         </section>
+
+        {(error || success) && (
+          <div
+            className={`mb-6 rounded-[1.5rem] border px-4 py-3 text-sm ${
+              error ? 'border-red-400/30 bg-red-500/10 text-red-100' : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100'
+            }`}
+          >
+            {error || success}
+          </div>
+        )}
 
         <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-6 flex h-auto flex-wrap justify-start gap-2 border border-white/10 bg-black/30 p-2 backdrop-blur-xl">
@@ -664,6 +983,9 @@ export default function AgencyDashboard() {
             </TabsTrigger>
             <TabsTrigger value="applications" className={tabClass}>
               Applications
+            </TabsTrigger>
+            <TabsTrigger value="contracts" className={tabClass}>
+              Contracts
             </TabsTrigger>
             <TabsTrigger value="invites" className={tabClass}>
               Invites
@@ -731,13 +1053,9 @@ export default function AgencyDashboard() {
             <AgencyApplicationsTable agencyId={agency!.id} currentUserId={user?.id} canManage={isOwnerOrManager} />
           </TabsContent>
 
-          <TabsContent value="invites">
-  <AgencyInvitesPanel
-    agencyId={agency!.id}
-    currentUserId={user?.id}
-    canManage={isOwnerOrManager}
-  />
-</TabsContent>
+          <TabsContent value="contracts">
+            {renderContractInbox()}
+          </TabsContent>
 
           <TabsContent value="goals">
             <AgencyGoalsTable agencyId={agency!.id} userRole={userRole} />
@@ -771,9 +1089,177 @@ export default function AgencyDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <ContractSignatureModal
+        contract={selectedContract}
+        signatureName={signatureName}
+        signatureNote={signatureNote}
+        agreed={contractAgreed}
+        signing={signingContract}
+        canSign={
+          !!selectedContract &&
+          isContractAwaitingSignature(selectedContract.status) &&
+          (((selectedContract.user_id || selectedContract.creator_id) === user?.id) ||
+            isOwnerOrManager ||
+            !(selectedContract.user_id || selectedContract.creator_id))
+        }
+        onSignatureNameChange={setSignatureName}
+        onSignatureNoteChange={setSignatureNote}
+        onAgreedChange={setContractAgreed}
+        onClose={() => setSelectedContract(null)}
+        onSign={signSelectedContract}
+      />
     </div>
   )
 }
+
+
+function ContractSignatureModal({
+  contract,
+  signatureName,
+  signatureNote,
+  agreed,
+  signing,
+  canSign,
+  onSignatureNameChange,
+  onSignatureNoteChange,
+  onAgreedChange,
+  onClose,
+  onSign,
+}: {
+  contract: AgencyContract | null
+  signatureName: string
+  signatureNote: string
+  agreed: boolean
+  signing: boolean
+  canSign: boolean
+  onSignatureNameChange: (value: string) => void
+  onSignatureNoteChange: (value: string) => void
+  onAgreedChange: (value: boolean) => void
+  onClose: () => void
+  onSign: () => void
+}) {
+  if (!contract) return null
+
+  const contractBody = getContractBody(contract)
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-md">
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[#070812] shadow-2xl shadow-cyan-950/40">
+        <div className="flex flex-col gap-4 border-b border-white/10 bg-white/[0.04] p-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">Agency contract</p>
+            <h2 className="mt-2 text-2xl font-black text-white">{contract.title || 'Untitled contract'}</h2>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className={`rounded-full border px-3 py-1 font-black ${contractStatusTone(contract.status)}`}>
+                {contract.status || 'unknown'}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-bold text-slate-300">
+                {contract.contract_type || 'agency_leader'}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-bold text-slate-300">
+                Sent {safeDate(contract.sent_at || contract.created_at)}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white hover:bg-white/10"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="max-h-[calc(92vh-11rem)] overflow-y-auto p-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Fee / split</p>
+              <p className="mt-2 text-sm font-black text-white">{contract.fee_percentage ?? contract.split_percent ?? 'Unknown'}%</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Effective</p>
+              <p className="mt-2 text-sm font-black text-white">{safeDate(contract.effective_date)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Expires</p>
+              <p className="mt-2 text-sm font-black text-white">{safeDate(contract.expiration_date)}</p>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-3xl border border-white/10 bg-black/40 p-5">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-fuchsia-200">Contract terms</p>
+            <pre className="mt-4 max-h-[24rem] overflow-auto whitespace-pre-wrap rounded-2xl bg-black/40 p-4 text-sm leading-7 text-slate-100">
+              {contractBody}
+            </pre>
+          </div>
+
+          <div className="mt-5 rounded-3xl border border-cyan-300/15 bg-cyan-500/5 p-5">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">Sign and send back to Agency HR</p>
+
+            {canSign ? (
+              <div className="mt-4 space-y-4">
+                <label className="block">
+                  <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-300">Signature name</span>
+                  <input
+                    value={signatureName}
+                    onChange={(event) => onSignatureNameChange(event.target.value)}
+                    placeholder="Type your legal/display signature"
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/20"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-300">Optional note to Agency HR</span>
+                  <textarea
+                    value={signatureNote}
+                    onChange={(event) => onSignatureNoteChange(event.target.value)}
+                    placeholder="Add a note before sending back..."
+                    rows={3}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/20"
+                  />
+                </label>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-black/30 p-4">
+                  <input
+                    type="checkbox"
+                    checked={agreed}
+                    onChange={(event) => onAgreedChange(event.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-black"
+                  />
+                  <span className="text-sm leading-6 text-slate-200">
+                    I have reviewed this agency contract, agree to the terms shown above, and want to send my signed agreement back to Agency HR.
+                  </span>
+                </label>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    onClick={onSign}
+                    disabled={signing || !agreed || !signatureName.trim()}
+                    className="bg-emerald-500/20 text-emerald-50 hover:bg-emerald-500/30"
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {signing ? 'Sending signed contract…' : 'Agree, Sign & Send Back'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={onClose} className="border-white/10 bg-white/5 text-white hover:bg-white/10">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-7 text-slate-300">
+                This contract is not currently assigned to your signature or it has already been signed/closed.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 function BackgroundGlow() {
   return (

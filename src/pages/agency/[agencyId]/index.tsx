@@ -23,7 +23,7 @@ type AgencyMember = {
   id?: string;
   agency_id: string;
   user_id: string;
-  role: 'owner' | 'manager' | 'recruiter' | 'creator' | string;
+  role: 'owner' | 'manager' | 'recruiter' | 'creator' | 'agency_leader' | string;
   status: string;
   user_profiles?: {
     username?: string | null;
@@ -75,13 +75,14 @@ export default function AgencyProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMember, setIsMember] = useState(false);
-  const [userRole, setUserRole] = useState<'owner' | 'manager' | 'creator' | null>(null);
+  const [userRole, setUserRole] = useState<'owner' | 'manager' | 'creator' | 'agency_leader' | null>(null);
 
-  const activeSection = useMemo(() => {
-    if (location.pathname.includes('/roster')) return 'roster';
-    if (location.pathname.includes('/goals')) return 'goals';
-    return 'overview';
-  }, [location.pathname]);
+   const activeSection = useMemo(() => {
+     if (!isMember) return 'overview';
+     if (location.pathname.includes('/roster')) return 'roster';
+     if (location.pathname.includes('/goals')) return 'goals';
+     return 'overview';
+   }, [location.pathname, isMember]);
 
   useEffect(() => {
     void fetchAgencyData();
@@ -160,7 +161,8 @@ export default function AgencyProfilePage() {
           if (
             currentMember.role === 'owner' ||
             currentMember.role === 'manager' ||
-            currentMember.role === 'creator'
+            currentMember.role === 'creator' ||
+            currentMember.role === 'agency_leader'
           ) {
             setUserRole(currentMember.role);
           }
@@ -205,6 +207,8 @@ export default function AgencyProfilePage() {
     }
   };
 
+  const canManageAgency = ['owner', 'manager', 'agency_leader'].includes(userRole || '')
+
   const handleJoin = () => {
     if (!user) {
       navigate('/auth');
@@ -215,7 +219,17 @@ export default function AgencyProfilePage() {
   };
 
   const handleManageMembership = () => {
-    navigate('/agency-dashboard');
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    if (canManageAgency) {
+      navigate('/agency-dashboard');
+      return;
+    }
+
+    navigate(`/agency/${agencyId}`);
   };
 
   if (loading) return <Loader />;
@@ -316,7 +330,7 @@ export default function AgencyProfilePage() {
                   className="border-cyan-500/30 bg-transparent text-cyan-200 hover:bg-cyan-500/10"
                   onClick={handleManageMembership}
                 >
-                  Manage Membership
+                  {canManageAgency ? 'Manage Membership' : 'View Agency'}
                 </Button>
               ) : (
                 <Button type="button" variant="primary" onClick={handleJoin}>
@@ -328,43 +342,47 @@ export default function AgencyProfilePage() {
         </div>
 
         <div className="mb-6">
-          <div className="mb-4 flex flex-wrap border-b border-slate-700/50">
-            <button
-              type="button"
-              className={`px-4 py-2 text-sm font-bold ${
-                activeSection === 'overview'
-                  ? 'border-b-2 border-cyan-500 text-cyan-300'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              onClick={() => navigate(`/agency/${agencyId}`)}
-            >
-              Overview
-            </button>
+           <div className="mb-4 flex flex-wrap border-b border-slate-700/50">
+             <button
+               type="button"
+               className={`px-4 py-2 text-sm font-bold ${
+                 activeSection === 'overview'
+                   ? 'border-b-2 border-cyan-500 text-cyan-300'
+                   : 'text-slate-400 hover:text-white'
+               }`}
+               onClick={() => navigate(`/agency/${agencyId}`)}
+             >
+               Overview
+             </button>
 
-            <button
-              type="button"
-              className={`px-4 py-2 text-sm font-bold ${
-                activeSection === 'roster'
-                  ? 'border-b-2 border-cyan-500 text-cyan-300'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              onClick={() => navigate(`/agency/${agencyId}/roster`)}
-            >
-              Roster
-            </button>
+             {isMember && (
+               <>
+                 <button
+                   type="button"
+                   className={`px-4 py-2 text-sm font-bold ${
+                     activeSection === 'roster'
+                       ? 'border-b-2 border-cyan-500 text-cyan-300'
+                       : 'text-slate-400 hover:text-white'
+                   }`}
+                   onClick={() => navigate(`/agency/${agencyId}/roster`)}
+                 >
+                   Roster
+                 </button>
 
-            <button
-              type="button"
-              className={`px-4 py-2 text-sm font-bold ${
-                activeSection === 'goals'
-                  ? 'border-b-2 border-cyan-500 text-cyan-300'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-              onClick={() => navigate(`/agency/${agencyId}/goals`)}
-            >
-              Goals
-            </button>
-          </div>
+                 <button
+                   type="button"
+                   className={`px-4 py-2 text-sm font-bold ${
+                     activeSection === 'goals'
+                       ? 'border-b-2 border-cyan-500 text-cyan-300'
+                       : 'text-slate-400 hover:text-white'
+                   }`}
+                   onClick={() => navigate(`/agency/${agencyId}/goals`)}
+                 >
+                   Goals
+                 </button>
+               </>
+             )}
+           </div>
         </div>
 
         {activeSection === 'roster' && (

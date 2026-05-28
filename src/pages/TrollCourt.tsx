@@ -26,7 +26,7 @@ import { startCourtSession } from '../lib/courtSessions'
 import { trollCityTheme } from '../styles/trollCityTheme'
 import FileLawsuitModal from '../components/FileLawsuitModal'
 import JudgeRulingModal from '../components/JudgeRulingModal'
-import UserSearchDropdown from '../components/UserSearchDropdown'
+import { UserSearchInput } from '../components/UserSearchDropdown'
 import { generateUUID } from '../lib/uuid'
 
 const CASE_TYPE_MAP: Record<string, string> = {
@@ -803,18 +803,17 @@ export default function TrollCourt() {
                     className="w-full rounded-xl border border-amber-300/15 bg-black/35 py-3 pl-10 pr-4 text-white outline-none focus:border-amber-300/50"
                   />
 
-                  {showDropdown && (
-                    <UserSearchDropdown
-                      query={searchQuery}
-                      onSelect={(userId, username) => {
-                        setSelectedUser({ id: userId, username })
-                        setSearchQuery(username)
-                        setShowDropdown(false)
-                      }}
-                      onClose={() => setShowDropdown(false)}
-                      disableNavigation
-                    />
-                  )}
+{showDropdown && (
+                     <UserSearchInput
+                       query={searchQuery}
+                       onSelect={(userId, username) => {
+                         setSelectedUser({ id: userId, username })
+                         setSearchQuery(username)
+                         setShowDropdown(false)
+                       }}
+                       disableNavigation
+                     />
+                   )}
                 </div>
               </div>
 

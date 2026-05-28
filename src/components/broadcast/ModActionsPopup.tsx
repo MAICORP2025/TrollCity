@@ -844,15 +844,19 @@ const ModActionsPopup = memo(function ModActionsPopup({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-        onClick={onClose}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }}
       />
       
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="fixed left-1/2 top-[15%] -translate-x-1/2 -translate-y-0 w-[400px] max-h-[75vh] rounded-2xl overflow-hidden z-50 shadow-[0_25px_120px_rgba(124,58,237,0.35)] bg-[radial-gradient(circle_at_top,_rgba(168,85,247,0.18),_transparent_35%),_rgba(15,23,42,0.98)] border border-purple-500/20"
+        className="fixed left-1/2 top-[15%] -translate-x-1/2 -translate-y-0 w-[400px] max-h-[75vh] rounded-2xl overflow-hidden z-[70] shadow-[0_25px_120px_rgba(124,58,237,0.35)] bg-[radial-gradient(circle_at_top,_rgba(168,85,247,0.18),_transparent_35%),_rgba(15,23,42,0.98)] border border-purple-500/20"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -873,7 +877,15 @@ const ModActionsPopup = memo(function ModActionsPopup({
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+          >
             <X className="w-5 h-5 text-slate-400" />
           </button>
         </div>

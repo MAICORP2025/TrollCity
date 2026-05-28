@@ -15,7 +15,7 @@ export function useJailMode(userId: string | undefined) {
     const checkJailStatus = async () => {
       const { data, error } = await supabase
         .from('jail')
-        .select('release_time')
+        .select('release_time, bond_posted')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1);
@@ -28,7 +28,7 @@ export function useJailMode(userId: string | undefined) {
 
       const jailRecord = data?.[0];
 
-      if (jailRecord && jailRecord.release_time) {
+      if (jailRecord && jailRecord.release_time && !jailRecord.bond_posted) {
         const releaseDate = new Date(jailRecord.release_time);
         if (releaseDate > new Date()) {
           setIsJailed(true);

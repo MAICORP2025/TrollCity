@@ -9,21 +9,21 @@ interface HypeCoinPopupProps {
 
 /**
  * Popup notification shown when viewer earns a Hype Coin
- * Auto-dismisses after 3.5 seconds
+ * Auto-dismisses after 5 seconds
  * Shows +1 Hype Coin with neon cyan/purple styling
  */
 export default function HypeCoinPopup({ isVisible, onDismiss }: HypeCoinPopupProps) {
-  const [displayKey, setDisplayKey] = useState(0)
+   const [displayKey, setDisplayKey] = useState(0)
 
-  // Auto-dismiss after 3.5 seconds
-  useEffect(() => {
-    if (isVisible) {
-      const timer = setTimeout(() => {
-        onDismiss()
-      }, 3500)
-      return () => clearTimeout(timer)
-    }
-  }, [isVisible, onDismiss])
+   // Auto-dismiss after 5 seconds
+   useEffect(() => {
+     if (isVisible) {
+       const timer = setTimeout(() => {
+         onDismiss()
+       }, 5000)
+       return () => clearTimeout(timer)
+     }
+   }, [isVisible, onDismiss])
 
   // Reset display key to trigger re-animation on each new popup
   useEffect(() => {
@@ -42,12 +42,12 @@ export default function HypeCoinPopup({ isVisible, onDismiss }: HypeCoinPopupPro
           initial={{ opacity: 0, y: 20, scale: 0.8 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -10, scale: 0.9 }}
-          transition={{ type: 'spring', damping: 15, stiffness: 300 }}
+          transition={{ type: 'spring', damping: 15, stiffness: 300, duration: 0.3 }}
           className="fixed bottom-24 right-6 md:bottom-32 md:right-8 z-50 pointer-events-none"
         >
           <div className="relative">
             {/* Glow background */}
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-purple-500 to-cyan-500 rounded-2xl blur-xl opacity-40 animate-pulse" />
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-purple-500 to-cyan-500 rounded-2xl blur-xl opacity-40" />
 
             {/* Main card */}
             <div className="relative bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md rounded-2xl border border-cyan-400/60 px-6 py-4 shadow-[0_0_40px_rgba(34,211,238,0.3)]">
@@ -85,7 +85,6 @@ export default function HypeCoinPopup({ isVisible, onDismiss }: HypeCoinPopupPro
                   transition={{
                     duration: 1.5,
                     delay: i * 0.3,
-                    repeat: Infinity,
                   }}
                   style={{
                     left: `${20 + i * 30}%`,

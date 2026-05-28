@@ -275,28 +275,6 @@ export const jobPositions: JobPosition[] = [
 export const getJobPosition = (id: string) => jobPositions.find((position) => position.id === id)
 
 export const getApplicationRoute = (jobId: string): string => {
-  switch (jobId) {
-    case 'troller':
-      return '/apply/troller'
-    case 'troll_officer':
-      return '/apply/officer'
-    case 'lead_officer':
-      return '/apply/lead-officer'
-    case 'pastor':
-      return '/apply/pastor'
-    case 'attorney':
-      return '/apply/attorney'
-    case 'prosecutor':
-      return '/apply/prosecutor'
-    case 'auctioneer':
-      return '/apply?type=auctioneer'
-    case 'journalist':
-    case 'news_caster':
-    case 'chief_news_caster':
-      return `/apply?type=${jobId}`
-    case 'seller':
-      return '/sell'
-    default:
-      return '/apply'
-  }
+  // All job applications now go through the main Application page with position parameter
+  return `/apply?position=${jobId}`
 }

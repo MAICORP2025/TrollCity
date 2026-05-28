@@ -211,7 +211,13 @@ export function useHypeCoins() {
           return null
         }
 
-        const response = data as ConvertResponse
+        // Supabase returns TABLE results as an array
+        const response = (Array.isArray(data) && data.length > 0) ? data[0] : null
+
+        if (!response) {
+          console.warn('[useHypeCoins] Empty conversion response')
+          return null
+        }
 
         // Update local state if successful
         if (response.success) {

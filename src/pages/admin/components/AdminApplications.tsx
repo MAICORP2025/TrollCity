@@ -3,7 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { jobPositions } from '../../../lib/trollJobsData'
 import { toast } from 'sonner'
-import { Check, X, Shield, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Check, X, Shield, RefreshCw, AlertTriangle, FileText } from 'lucide-react'
 
 import UserNameWithAge from '../../../components/UserNameWithAge'
 

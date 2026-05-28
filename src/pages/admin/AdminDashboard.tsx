@@ -605,22 +605,41 @@ export default function AdminDashboard() {
           ].join(',')
         )
         .order('created_at', { ascending: false })
-        .limit(2000)
+.limit(2000)
 
       // Secondary source: legacy coinstore sales ledger (if present)
-      const { data: storeData, error: storeError } = await supabase
+      const { data: storeData } = await supabase
         .from('coin_store_sales')
         .select('id,user_id,amount_coins,amount_usd,paypal_order_id,paypal_capture_id,payer_email,package_id,created_at,status')
         .order('created_at', { ascending: false })
         .limit(2000)
 
-      if (txError && !storeData) throw txError
+      // Tertiary source: paypal_transactions (authoritative PayPal data)
+      const { data: paypalTxData } = await supabase
+        .from('paypal_transactions')
+        .select('id,user_id,paypal_order_id,paypal_capture_id,amount,coins,status,created_at')
+        .order('created_at', { ascending: false })
+        .limit(2000)
+
+      if (txError) throw txError
 
       const data = (txData || []) as any[]
       const storeRows = (storeData || []) as any[]
-      // Merge both sources; prefer public.transactions rows but include store rows that aren't present
+      const paypalRows = (paypalTxData || []) as any[]
+
+      // Track sources for each row
+      const rowSources = new Map<string, string>()
+
+      // Mark public.transactions rows
+      for (const r of data) {
+        rowSources.set(r.id, 'public.transactions')
+      }
+
+      // Merge all sources; prefer public.transactions rows but include store/paypal rows that aren't present
       const combined = [...data]
       const existingIds = new Set(combined.map((r) => r.id))
+
+      // Merge coin_store_sales
       for (const s of storeRows) {
         if (!existingIds.has(s.id)) {
           combined.push({
@@ -640,10 +659,33 @@ export default function AdminDashboard() {
             },
             created_at: s.created_at,
           })
+          rowSources.set(s.id, 'coin_store_sales')
+          existingIds.add(s.id)
         }
       }
 
-      if (error) throw error
+      // Merge paypal_transactions
+      for (const p of paypalRows) {
+        if (!existingIds.has(p.id)) {
+          combined.push({
+            id: p.id,
+            user_id: p.user_id,
+            type: 'purchase',
+            transaction_type: 'purchase',
+            coins_used: p.coins,
+            amount: p.amount,
+            description: 'PayPal transaction',
+            status: p.status,
+            metadata: {
+              paypal_order_id: p.paypal_order_id,
+              paypal_capture_id: p.paypal_capture_id,
+            },
+            created_at: p.created_at,
+          })
+          rowSources.set(p.id, 'paypal.transactions')
+          existingIds.add(p.id)
+        }
+      }
 
       const txRows = (combined || []) as TransactionRow[]
       const userIds = [...new Set(txRows.map((tx) => tx.user_id).filter(Boolean))] as string[]
@@ -691,7 +733,7 @@ export default function AdminDashboard() {
           amount_coins: Math.abs(coins),
           amount_usd: Math.abs(usd),
           type: tx.transaction_type || tx.type || 'purchase',
-          source: 'public.transactions',
+          source: rowSources.get(tx.id) || 'public.transactions',
           package_id: typeof meta.package_id === 'string' ? meta.package_id : null,
           paypal_order_id: typeof meta.paypal_order_id === 'string' ? meta.paypal_order_id : null,
           paypal_capture_id: typeof meta.paypal_capture_id === 'string' ? meta.paypal_capture_id : null,
@@ -753,12 +795,27 @@ export default function AdminDashboard() {
           .select('user_id, amount, coins_used, metadata')
           .or('transaction_type.eq.purchase,type.eq.purchase,description.ilike.%coin%')
 
+        // Also check paypal_transactions for authoritative PayPal purchase data
+        const { data: paypalTx } = await supabase
+          .from('paypal_transactions')
+          .select('user_id, amount, coins, status, created_at')
+
         const purchaseMap: Record<string, { purchased: number }> = {}
 
+        // Process transactions
         ;(purchaseTx || []).forEach((tx: any) => {
           const userId = tx.user_id || 'unknown'
           const existing = purchaseMap[userId] || { purchased: 0 }
           const coins = Number(tx.coins_used || tx.metadata?.coins || tx.metadata?.coins_awarded || 0)
+          existing.purchased += Math.abs(coins)
+          purchaseMap[userId] = existing
+        })
+
+        // Process paypal_transactions
+        ;(paypalTx || []).forEach((p: any) => {
+          const userId = p.user_id || 'unknown'
+          const existing = purchaseMap[userId] || { purchased: 0 }
+          const coins = Number(p.coins || 0)
           existing.purchased += Math.abs(coins)
           purchaseMap[userId] = existing
         })

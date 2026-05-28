@@ -32,5 +32,7 @@ export async function awardWatchHypeReward(
     throw new Error('No response from earn_hype_coin_watch_reward')
   }
 
-  return data as HypeCoinWatchResponse
+  // Supabase returns TABLE results as an array
+  const response = Array.isArray(data) ? data[0] : data
+  return response as HypeCoinWatchResponse
 }

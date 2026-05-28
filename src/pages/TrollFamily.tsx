@@ -163,12 +163,12 @@ export default function TrollFamily() {
             </button>
           )}
 
-          <button
-            onClick={() => navigate('/apply/family')}
-            className="flex-1 bg-green-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-          >
-            <Users /> Create Family
-          </button>
+           <button
+             onClick={() => navigate('/family/create')}
+             className="flex-1 bg-green-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+           >
+             <Users /> Create Family
+           </button>
         </div>
 
         {/* GRID */}
