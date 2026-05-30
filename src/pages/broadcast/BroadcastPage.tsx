@@ -222,7 +222,7 @@ function getAudioTrackFromRemoteParticipant(participant: any): RemoteAudioTrack 
 function RemoteSeatSurface({
   participant,
   fallback,
-  mirror = false,
+  mirror = true,
 }: {
   participant: RemoteParticipant | null
   fallback: React.ReactNode
@@ -5553,6 +5553,7 @@ function TrackAttach({ track }: { track: LocalVideoTrack | RemoteVideoTrack | nu
         const el = (track as any).attach();
         if (!el || !(el instanceof HTMLVideoElement)) return;
         el.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;display:block;';
+        el.style.transform = 'none';
         el.autoplay = true;
         el.muted = true;
         if (videoElRef.current && videoElRef.current !== el) {

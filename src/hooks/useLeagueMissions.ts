@@ -16,7 +16,7 @@ export interface UseLeagueMissionsResult {
 }
 
 export function useLeagueMissions(leagueEventId?: string | null): UseLeagueMissionsResult {
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const [missions, setMissions] = useState<LeagueMission[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isClaiming, setIsClaiming] = useState(false)
@@ -24,7 +24,7 @@ export function useLeagueMissions(leagueEventId?: string | null): UseLeagueMissi
   const [error, setError] = useState<string | null>(null)
 
   const fetchMissions = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || !profile?.id) {
       setMissions([])
       setIsLoading(false)
       return

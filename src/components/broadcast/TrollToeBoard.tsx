@@ -35,7 +35,12 @@ function LiveKitVideoPlayer({
       el.style.objectFit = 'cover';
       el.autoplay = true;
       el.playsInline = true;
-      if (isLocal) { el.muted = true; containerRef.current!.style.transform = 'scaleX(-1)'; }
+      if (isLocal) { el.muted = true; }
+      const mediaTrack = videoTrack?.mediaStreamTrack;
+      const trackSettings = mediaTrack ? (mediaTrack.getSettings?.() || {}) : {};
+      const isFrontCamera = (trackSettings as any).facingMode !== 'environment';
+      if (isFrontCamera) { containerRef.current!.style.transform = 'scaleX(-1)'; }
+      else { containerRef.current!.style.transform = ''; }
       containerRef.current!.appendChild(el);
       videoElementRef.current = el;
       hasPlayedRef.current = true;

@@ -11,6 +11,7 @@ interface PayoutBatch {
   total_requests: number;
   total_usd: number;
   created_at: string;
+  reviewed_by_assistant_username?: string;
 }
 
 interface PayoutRequest {
@@ -21,10 +22,17 @@ interface PayoutRequest {
   bonus_amount: number;
   status: string;
   created_at: string;
-  user_profiles: {
+  provider_type?: string | null;
+  provider_username?: string | null;
+  user_tag?: string | null;
+  forwarded_to_admin?: boolean;
+  reviewed_by_assistant_username?: string | null;
+  requester: {
     username: string;
     display_name: string;
     payout_paypal_email: string;
+    role?: string;
+    troll_coins?: number;
   };
 }
 
@@ -80,7 +88,7 @@ const PayoutBatches = () => {
     try {
       const { data, error } = await supabase
         .from('payout_requests')
-        .select('*, user_profiles(username, display_name, payout_paypal_email)')
+        .select('*, requester:user_profiles!payout_requests_user_id_fkey(username, display_name, payout_paypal_email, role, troll_coins)')
         .eq('batch_id', batchId)
         .order('created_at', { ascending: true });
 
@@ -190,6 +198,11 @@ const PayoutBatches = () => {
                   <DollarSign className="w-3 h-3" /> {batch.total_usd.toFixed(2)}
                 </div>
               </div>
+              {batch.reviewed_by_assistant_username && (
+                <div className="mt-2 text-[10px] text-cyan-400 font-bold uppercase">
+                  ✓ Reviewed by {batch.reviewed_by_assistant_username}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -239,11 +252,11 @@ const PayoutBatches = () => {
                   <table className="w-full text-left">
                     <thead className="bg-purple-900/30 text-xs uppercase text-gray-400">
                       <tr>
-                        <th className="px-4 py-3">Creator</th>
-                        <th className="px-4 py-3">PayPal Email</th>
+                        <th className="px-4 py-3">User</th>
+                        <th className="px-4 py-3">Payout Provider</th>
+                        <th className="px-4 py-3">User Tag</th>
                         <th className="px-4 py-3">Coins</th>
-                        <th className="px-4 py-3">Base USD</th>
-                        <th className="px-4 py-3">Bonus (2.5%)</th>
+                        <th className="px-4 py-3">Cash</th>
                         <th className="px-4 py-3">Total</th>
                         <th className="px-4 py-3">Status</th>
                       </tr>
@@ -252,26 +265,45 @@ const PayoutBatches = () => {
                       {requests.map(req => (
                         <tr key={req.id} className="border-t border-purple-700/30">
                           <td className="px-4 py-3">
-                            <div className="font-bold">{req.user_profiles?.display_name}</div>
-                            <div className="text-xs text-gray-500">@{req.user_profiles?.username}</div>
+                            <div className="font-bold">{req.requester?.display_name}</div>
+                            <div className="text-xs text-gray-500">@{req.requester?.username}</div>
+                            {req.requester?.role && (
+                              <div className="text-[10px] font-bold uppercase bg-purple-500/10 text-purple-300 border border-purple-300/20 px-2 py-0.5 rounded mt-1 inline-block">{req.requester.role}</div>
+                            )}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-mono bg-black/40 px-2 py-1 rounded">
-                                {req.user_profiles?.payout_paypal_email || 'NOT SET'}
-                              </span>
-                              {req.user_profiles?.payout_paypal_email && (
-                                <button 
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(req.user_profiles.payout_paypal_email);
-                                    toast.success('Email copied');
-                                  }}
-                                  className="text-[10px] text-purple-400 hover:text-white"
-                                >
-                                  Copy
-                                </button>
+                            <div className="flex flex-col gap-1">
+                              {req.provider_type && req.provider_username ? (
+                                <>
+                                  <span className="text-xs font-bold text-cyan-300 uppercase">{req.provider_type}</span>
+                                  <span className="text-xs font-mono bg-black/40 px-2 py-1 rounded">
+                                    {req.provider_username}
+                                  </span>
+                                </>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono bg-black/40 px-2 py-1 rounded">
+                                    {req.requester?.payout_paypal_email || 'NOT SET'}
+                                  </span>
+                                  {req.requester?.payout_paypal_email && (
+                                    <button 
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(req.requester.payout_paypal_email);
+                                        toast.success('Email copied');
+                                      }}
+                                      className="text-[10px] text-purple-400 hover:text-white"
+                                    >
+                                      Copy
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs font-mono text-amber-300 bg-amber-500/10 px-2 py-1 rounded">
+                              {req.user_tag || '—'}
+                            </span>
                           </td>
                           <td className="px-4 py-3 font-mono">{req.coin_amount.toLocaleString()}</td>
                           <td className="px-4 py-3">${req.cash_amount.toFixed(2)}</td>

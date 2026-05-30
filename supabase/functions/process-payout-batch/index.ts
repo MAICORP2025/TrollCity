@@ -9,7 +9,7 @@ interface _PayoutRequest {
   cash_amount: number;
   bonus_amount: number;
   net_amount: number;
-  user_profiles: {
+  requester: {
     payout_paypal_email: string;
   };
 }
@@ -64,7 +64,7 @@ serve(async (req) => {
 
     const { data: requests, error: requestsError } = await supabaseClient
       .from("payout_requests")
-      .select("*, user_profiles(payout_paypal_email)")
+      .select("*, requester:user_profiles!payout_requests_user_id_fkey(payout_paypal_email)")
       .eq("batch_id", batchId)
       .eq("status", "pending");
 
@@ -105,14 +105,14 @@ serve(async (req) => {
 
     // 5. Construct PayPal Batch
     const items = requests
-      .filter((r: any) => r.user_profiles?.payout_paypal_email)
+      .filter((r: any) => r.requester?.payout_paypal_email)
       .map((r: any) => ({
         recipient_type: "EMAIL",
         amount: {
           value: Number(r.net_amount).toFixed(2),
           currency: "USD",
         },
-        receiver: r.user_profiles.payout_paypal_email,
+        receiver: r.requester.payout_paypal_email,
         note: `Troll City Weekly Payout - Week Ending ${batch.week_end}`,
         sender_item_id: r.id,
       }));

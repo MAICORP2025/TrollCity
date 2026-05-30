@@ -69,6 +69,7 @@ import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import { useCoins } from '@/lib/hooks/useCoins'
 import { supabase, UserRole } from '@/lib/supabase'
 import { canAccessTromail } from '@/lib/tromail'
+import { List } from '@radix-ui/react-tabs'
 
 interface RecentMessage {
   id: string
@@ -128,60 +129,108 @@ export default function BottomNavigation() {
   const [pageSearch, setPageSearch] = useState('')
 
   const navButtonLastClick = useRef<number>(0)
+  const profileRole = String(profile?.role || '')
+  const profileTrollRole = String(profile?.troll_role || '')
 
   const isAdmin =
-    profile?.role === UserRole.ADMIN ||
-    profile?.role === UserRole.HR_ADMIN ||
-    profile?.role === UserRole.AGENCY_HR_MANAGER ||
-    profile?.role === 'admin' ||
-    profile?.role === 'superadmin' ||
-    profile?.role === 'ceo' ||
-    profile?.troll_role === UserRole.ADMIN ||
-    profile?.troll_role === 'admin' ||
-    profile?.troll_role === 'superadmin' ||
-    profile?.troll_role === 'ceo' ||
+    profileRole === UserRole.ADMIN ||
+    profileRole === UserRole.HR_ADMIN ||
+    profileRole === UserRole.AGENCY_HR_MANAGER ||
+    profileRole === 'admin' ||
+    profileRole === 'superadmin' ||
+    profileRole === 'ceo' ||
+    profileTrollRole === UserRole.ADMIN ||
+    profileTrollRole === 'admin' ||
+    profileTrollRole === 'superadmin' ||
+    profileTrollRole === 'ceo' ||
     !!(profile as any)?.is_admin ||
     !!(profile as any)?.is_superadmin
 
   const isSecretary =
-    profile?.role === UserRole.SECRETARY ||
-    profile?.role === 'secretary' ||
-    profile?.troll_role === UserRole.SECRETARY ||
-    profile?.troll_role === 'secretary' ||
+    profileRole === UserRole.SECRETARY ||
+    profileRole === 'secretary' ||
+    profileTrollRole === UserRole.SECRETARY ||
+    profileTrollRole === 'secretary' ||
     !!(profile as any)?.is_secretary ||
     isAdmin
 
   const isLead =
-    profile?.role === UserRole.LEAD_TROLL_OFFICER ||
-    profile?.role === 'lead_troll_officer' ||
-    profile?.troll_role === UserRole.LEAD_TROLL_OFFICER ||
-    profile?.troll_role === 'lead_troll_officer' ||
+    profileRole === UserRole.LEAD_TROLL_OFFICER ||
+    profileRole === 'lead_troll_officer' ||
+    profileTrollRole === UserRole.LEAD_TROLL_OFFICER ||
+    profileTrollRole === 'lead_troll_officer' ||
     !!(profile as any)?.is_lead_officer ||
     !!(profile as any)?.is_lead_troll_officer ||
     isAdmin
 
   const isOfficer =
-    profile?.role === UserRole.TROLL_OFFICER ||
-    profile?.role === 'troll_officer' ||
-    profile?.troll_role === UserRole.TROLL_OFFICER ||
-    profile?.troll_role === 'troll_officer' ||
+    profileRole === UserRole.TROLL_OFFICER ||
+    profileRole === 'troll_officer' ||
+    profileTrollRole === UserRole.TROLL_OFFICER ||
+    profileTrollRole === 'troll_officer' ||
     !!(profile as any)?.is_troll_officer ||
     isLead ||
     isAdmin
 
   const isPresident =
-    profile?.role === UserRole.PRESIDENT ||
-    profile?.role === 'president' ||
-    profile?.troll_role === UserRole.PRESIDENT ||
-    profile?.troll_role === 'president' ||
+    profileRole === UserRole.PRESIDENT ||
+    profileRole === 'president' ||
+    profileTrollRole === UserRole.PRESIDENT ||
+    profileTrollRole === 'president' ||
     !!(profile as any)?.is_president
 
   const isBroadcaster =
-    profile?.role === UserRole.BROADCASTER ||
-    profile?.role === 'broadcaster' ||
-    profile?.troll_role === UserRole.BROADCASTER ||
-    profile?.troll_role === 'broadcaster' ||
+    profileRole === 'broadcaster' ||
+    profileTrollRole === 'broadcaster' ||
     !!(profile as any)?.is_broadcaster
+
+  const isAttorney =
+    profileRole === 'attorney' ||
+    profileTrollRole === 'attorney' ||
+    !!(profile as any)?.is_attorney
+
+  const isProsecutor =
+    profileRole === 'prosecutor' ||
+    profileTrollRole === 'prosecutor' ||
+    !!(profile as any)?.is_prosecutor
+
+  const isAuctioneer =
+    profileRole === 'auctioneer' ||
+    profileTrollRole === 'auctioneer' ||
+    !!(profile as any)?.is_auctioneer
+
+  const isAgencyHR =
+    profileRole === 'agency_hr' ||
+    profileRole === String(UserRole.AGENCY_HR_MANAGER) ||
+    profileTrollRole === 'agency_hr' ||
+    profileTrollRole === 'agency_hr_manager' ||
+    !!(profile as any)?.is_agency_hr ||
+    !!(profile as any)?.is_agency_hr_manager
+
+  const isCEOAssistant =
+    profileRole === 'ceo_assistant' ||
+    profileTrollRole === 'ceo_assistant' ||
+    !!(profile as any)?.is_ceo_assistant
+
+  const isNoahAssistant =
+    profileRole === 'noah_assistant' ||
+    profileTrollRole === 'noah_assistant' ||
+    !!(profile as any)?.is_noah_assistant
+
+  const isJournalist =
+    profileRole === 'journalist' ||
+    profileTrollRole === 'journalist' ||
+    !!(profile as any)?.is_journalist
+
+  const isNewsCaster =
+    profileRole === 'tcnn_news_caster' ||
+    profileTrollRole === 'tcnn_news_caster' ||
+    !!(profile as any)?.is_news_caster
+
+  const isChiefNewsCaster =
+    profileRole === 'tcnn_chief_news_caster' ||
+    profileTrollRole === 'tcnn_chief_news_caster' ||
+    !!(profile as any)?.is_chief_news_caster
 
   const canSeeCourt = !!user && !!profile
 
@@ -565,6 +614,13 @@ export default function BottomNavigation() {
       { category: 'Broadcasting', label: 'Leagues', icon: Trophy, path: '/leagues' },
 
       { category: 'Careers + Work', label: 'Careers', icon: FileText, path: '/careers' },
+      { category: 'Careers + Work', label: 'Attorney', icon: Briefcase, path: '/attorney', show: isAttorney },
+      { category: 'Careers + Work', label: 'Prosecutor Dashboard', icon: Gavel, path: '/prosecutor', show: isProsecutor },
+      { category: 'Careers + Work', label: 'Auction Studio', icon: Gavel, path: '/auctions/studio', show: isAuctioneer },
+      { category: 'Careers + Work', label: 'My Shows', icon: List, path: '/auctions/my-shows', show: isAuctioneer },
+      { category: 'Careers + Work', label: 'Agency HR', icon: Briefcase, path: '/agency-hr-dashboard', show: isAgencyHR },
+      { category: 'Careers + Work', label: 'CEO Assistant', icon: LayoutDashboard, path: '/ceo-assistant-dashboard', show: isCEOAssistant },
+      { category: 'Careers + Work', label: 'Noah Assistant', icon: LayoutDashboard, path: '/noah-assistant-dashboard', show: isNoahAssistant },
       { category: 'Careers + Work', label: 'Mai Class', icon: BookOpen, path: '/mai-class' },
       { category: 'Careers + Work', label: 'Organization', icon: Building2, path: '/organization/dashboard' },
 

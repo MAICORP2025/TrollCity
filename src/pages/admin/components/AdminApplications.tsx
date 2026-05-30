@@ -127,6 +127,8 @@ export default function AdminApplications() {
 
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'attorney' | 'prosecutor' | 'auctioneer'>('pending')
 
+
+
   const loadApplications = useCallback(async (skipLoadingState = false) => {
     if (loadingRef.current) return
     loadingRef.current = true
@@ -140,7 +142,7 @@ export default function AdminApplications() {
         supabase.from('attorney_applications').select('*').order('created_at', { ascending: false }),
         supabase.from('prosecutor_applications').select('*').order('created_at', { ascending: false }),
         supabase.from('auctioneer_applications').select('*').order('created_at', { ascending: false }),
-        supabase.from('job_applications').select('*, user_profiles!user_id(username, email)').order('created_at', { ascending: false })
+        supabase.from('job_applications').select('id, user_id, position_id, status, created_at, updated_at, reviewed_by, reviewed_at, user_profiles!user_id(username, email)').order('created_at', { ascending: false })
       ])
 
       const { data: appData, error: appError } = appRes
@@ -393,22 +395,29 @@ export default function AdminApplications() {
         .update({ status: 'approved', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
         .eq('id', app.id)
 
-      if (error) throw error
+       if (error) throw error
 
-      await supabase
-        .from('user_profiles')
-        .update({ job_title: app.position_id, is_officer_active: true })
-        .eq('id', app.user_id)
+       const { error: profileError } = await supabase
+         .from('user_profiles')
+         .update({
+           role: app.position_id,
+         })
+         .eq('id', app.user_id)
 
-      toast.success('Job application approved and user profile updated')
+       if (profileError) throw profileError
+
+       toast.success('Job application approved and user profile updated')
+      const scrollY = window.scrollY
       await loadApplications()
+      if (refreshProfile) await refreshProfile()
+      requestAnimationFrame(() => window.scrollTo(0, scrollY))
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to approve job application'
       toast.error(message)
     } finally {
       setLoading(false)
     }
-  }, [user, loadApplications])
+  }, [user, loadApplications, refreshProfile])
 
   const handleBypassHireJobApplication = useCallback(async (app: JobApplication) => {
     if (!user) return toast.error('You must be logged in')
@@ -425,23 +434,27 @@ export default function AdminApplications() {
         })
         .eq('id', app.id)
 
-      if (error) throw error
+       if (error) throw error
 
-      await supabase
-        .from('user_profiles')
-        .update({ job_title: app.position_id, is_officer_active: app.position_id === 'troll_officer' })
-        .eq('id', app.user_id)
+       const { error: profileError } = await supabase
+         .from('user_profiles')
+         .update({
+           role: app.position_id,
+         })
+         .eq('id', app.user_id)
 
-      toast.success('Applicant bypass-hired. Refreshing profile...')
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+       if (profileError) throw profileError
+
+       toast.success('Applicant bypass-hired. Refreshing profile...')
       await loadApplications()
+      if (refreshProfile) await refreshProfile()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to bypass hire job application'
       toast.error(message)
     } finally {
       setLoading(false)
     }
-  }, [user, loadApplications])
+  }, [user, loadApplications, refreshProfile])
 
   const handleRejectJobApplication = useCallback(async (app: JobApplication) => {
     if (!user) return toast.error('You must be logged in')
@@ -1101,36 +1114,30 @@ export default function AdminApplications() {
                           >
                             MARK UNDER REVIEW
                           </button>
-                          <button
-                            onClick={() => handleScheduleJobInterview(jobApp)}
-                            className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg"
-                          >
-                            APPROVE
-                          </button>
+                           <button
+                             onClick={() => handleApproveJobApplication(jobApp)}
+                             className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg"
+                           >
+                             APPROVE
+                           </button>
                         </>
                       )}
-                      {jobApp.status !== 'approved' && jobApp.status !== 'rejected' && (
-                        <>
-                          <button
-                            onClick={() => handleApproveJobApplication(jobApp)}
-                            className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg"
-                          >
-                            APPROVE
-                          </button>
-                          <button
-                            onClick={() => handleBypassHireJobApplication(jobApp)}
-                            className="px-3 py-2 bg-amber-500 text-black text-xs rounded-lg"
-                          >
-                            BYPASS HIRE
-                          </button>
-                          <button
-                            onClick={() => handleRejectJobApplication(jobApp)}
-                            className="px-3 py-2 bg-red-600 text-white text-xs rounded-lg"
-                          >
-                            REJECT
-                          </button>
-                        </>
-                      )}
+                       {jobApp.status !== 'approved' && jobApp.status !== 'rejected' && (
+                         <>
+                           <button
+                             onClick={() => handleBypassHireJobApplication(jobApp)}
+                             className="px-3 py-2 bg-amber-500 text-black text-xs rounded-lg"
+                           >
+                             BYPASS HIRE
+                           </button>
+                           <button
+                             onClick={() => handleRejectJobApplication(jobApp)}
+                             className="px-3 py-2 bg-red-600 text-white text-xs rounded-lg"
+                           >
+                             REJECT
+                           </button>
+                         </>
+                       )}
                     </div>
                   </div>
                 </div>

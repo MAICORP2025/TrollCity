@@ -189,8 +189,8 @@ const { profile } = useAuthStore();
     canAccessWalkieTalkie: contextCanAccessWalkieTalkie,
   } = useStaffWalkieTalkieContext();
 
-  const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin'];
-  const isStaff = profile?.is_admin === true || staffRoles.includes(profile?.role || '');
+const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin', 'empire_partner', 'auctioneer', 'attorney', 'prosecutor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'agency_hr', 'agency_leader', 'ceo_assistant', 'noah_assistant'];
+   const isStaff = profile?.is_admin === true || staffRoles.includes(profile?.role || '');
   const isFullAdmin = profile?.is_admin === true || ['admin', 'ceo', 'superadmin'].includes(profile?.role || '');
   const canUseWalkieTalkie = contextCanAccessWalkieTalkie;
 
@@ -276,14 +276,15 @@ const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
    // Walkie-talkie state for LiveKit mic muting coordination
    const [walkieTalkieMutedLiveKit, setWalkieTalkieMutedLiveKit] = useState(false);
 
-   // Walkie-talkie allowed roles (same as in StaffWalkieTalkieProvider)
-   const WALKIE_TALKIE_ALLOWED_ROLES = [
-     'admin', 'ceo', 'staff', 'officer', 'broadofficer',
-     'troll_officer', 'lead_troll_officer', 'secretary', 'president',
-     'agency_hr', 'agency_hr_manager', 'agency_leader', 'attorney',
-     'prosecutor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster',
-     'auctioneer', 'pastor', 'org_admin',
-   ];
+// Walkie-talkie allowed roles (same as in StaffWalkieTalkieProvider)
+    const WALKIE_TALKIE_ALLOWED_ROLES = [
+      'admin', 'ceo', 'staff', 'officer', 'broadofficer',
+      'troll_officer', 'lead_troll_officer', 'secretary', 'president',
+      'agency_hr', 'agency_hr_manager', 'agency_leader', 'attorney',
+      'prosecutor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster',
+      'auctioneer', 'pastor', 'org_admin', 'empire_partner',
+      'ceo_assistant', 'noah_assistant',
+    ];
   
 
    const streamDetailsWithDuration = useMemo(() => {
@@ -1227,20 +1228,21 @@ const renderFloatingButton = () => {
        );
     };
 
-   const monitorTabs: Array<{ id: MainTab; label: string; icon: React.ReactNode; adminOnly?: boolean }> = [
+   const monitorTabs: Array<{ id: MainTab; label: string; icon: React.ReactNode; adminOnly?: boolean; staffOnly?: boolean }> = [
      { id: 'rtc', label: 'RTC Monitor', icon: <Radio className="h-3 w-3" /> },
      { id: 'walkie_talkie', label: 'Walkie Talkie', icon: <Radio className="h-3 w-3" /> },
      { id: 'mod_actions', label: 'Mod Actions', icon: <Shield className="h-3 w-3" /> },
      { id: 'signups', label: 'Signups', icon: <UserPlus className="h-3 w-3" />, adminOnly: true },
      { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="h-3 w-3" />, adminOnly: true },
      { id: 'cashout', label: 'Cashout Bonus', icon: <Coins className="h-3 w-3" />, adminOnly: true },
-     { id: 'team_meeting', label: 'Team Meeting', icon: <Video className="h-3 w-3" />, adminOnly: true },
+     { id: 'team_meeting', label: 'Team Meeting', icon: <Video className="h-3 w-3" />, staffOnly: true },
      { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
      { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
    ];
 
    const visibleMonitorTabs = monitorTabs.filter((tab) => {
      if (tab.adminOnly) return isFullAdmin;
+     if (tab.staffOnly) return isStaff;
      if (tab.id === 'walkie_talkie') return canUseWalkieTalkie;
      return true;
    });
@@ -1728,7 +1730,7 @@ const renderFloatingButton = () => {
      if (activeMainTab === 'mod_actions') return renderModActionsTab();
      if (isFullAdmin && activeMainTab === 'signups') return renderSignupsTab();
      if (isFullAdmin && activeMainTab === 'cashout') return renderCashoutTab();
-     if (isFullAdmin && activeMainTab === 'team_meeting') return renderTeamMeetingTab();
+     if (activeMainTab === 'team_meeting') return renderTeamMeetingTab();
      if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
      if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
      if (activeMainTab === 'tromail') return renderTromailTab();

@@ -10,7 +10,7 @@ import { usePresenceStore } from '../lib/presenceStore';
  * - Does NOT log out users - just tracks presence
  */
 export default function GlobalPresenceTracker() {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const setOnlineCount = usePresenceStore(state => state.setOnlineCount);
   const setOnlineUserIds = usePresenceStore(state => state.setOnlineUserIds);
   const isVisibleRef = useRef<boolean>(!document.hidden);
@@ -21,7 +21,7 @@ export default function GlobalPresenceTracker() {
 
   // Update user's online status in database
   const updateOnlineStatus = async (isOnline: boolean) => {
-    if (!user?.id) return;
+    if (!user?.id || !profile?.id) return;
     
     // Debounce - don't update more than every 10 seconds if same status
     const now = Date.now();
@@ -58,7 +58,7 @@ export default function GlobalPresenceTracker() {
   };
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !profile?.id) return;
 
     const clearSyncInterval = () => {
       if (intervalRef.current !== null) {

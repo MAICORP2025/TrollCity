@@ -14,7 +14,7 @@ import { GlobalEventProvider } from './contexts/GlobalEventContext'
 import AprilFoolsProvider from './components/april-fools/AprilFoolsProvider'
 import { EasterEggHuntProvider } from './contexts/EasterEggHuntContext'
 import { PWAProvider } from './contexts/PWAContext'
-import { supabase } from './lib/supabase'
+import { doesUserProfileExist, supabase } from './lib/supabase'
  import { initTelemetry } from './lib/telemetry'
  import { initMobilePlatform, isMobilePlatform } from './lib/mobilePlatform'
  import { reportBug, reportFetchError } from './lib/bugReporter'
@@ -450,6 +450,10 @@ if (typeof window !== 'undefined') {
          const { data: sessionData } = await supabase.auth.getSession()
          const userId = sessionData?.session?.user?.id
          if (!userId) {
+           return
+         }
+
+         if (!(await doesUserProfileExist(userId))) {
            return
          }
 

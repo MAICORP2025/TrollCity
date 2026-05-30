@@ -87,7 +87,10 @@ function LiveKitVideoPlayer({
     };
   }, [videoTrack, isLocal]);
 
-  return <div ref={containerRef} className="absolute inset-0" style={isLocal ? { transform: 'scaleX(-1)' } : undefined} />;
+  const mediaTrack = videoTrack?.mediaStreamTrack;
+  const trackSettings = mediaTrack ? (mediaTrack.getSettings?.() || {}) : {};
+  const isFrontCamera = (trackSettings as any).facingMode !== 'environment';
+  return <div ref={containerRef} className="absolute inset-0" style={isFrontCamera ? { transform: 'scaleX(-1)' } : undefined} />;
 }
 
 // ─── PREMIUM BATTLE SLOT ───

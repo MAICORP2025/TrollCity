@@ -4,7 +4,7 @@ import { Bell, BellRing, LogOut, UserCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useAuthStore } from '../lib/store'
-import { supabase } from '../lib/supabase'
+import { doesUserProfileExist, supabase } from '../lib/supabase'
 
 import ProfileDropdown from './ui/ProfileDropdown'
 import PresidentialToolsModal from './PresidentialToolsModal'
@@ -42,6 +42,11 @@ const Header = () => {
   const enablePushNotifications = async () => {
     if (!user?.id) {
       toast.error('You must be logged in to enable push notifications')
+      return
+    }
+
+    if (!(await doesUserProfileExist(user.id))) {
+      toast.error('Your account is still being initialized. Please refresh the page and try again.')
       return
     }
 

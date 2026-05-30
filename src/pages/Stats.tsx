@@ -168,6 +168,7 @@ export default function Stats() {
   
   const isInitialized = useRef(false)
   const prevCreditScore = useRef<number | null>(null)
+  const xpRef = useRef({ level: 1, xpTotal: 0, xpToNext: 100 })
 
   useEffect(() => {
     if (profile?.credit_score !== undefined && profile.credit_score !== prevCreditScore.current) {
@@ -176,11 +177,13 @@ export default function Stats() {
     }
   }, [profile?.credit_score, refreshCredit])
 
-  const loadStatsInternal = useCallback(async () => {
+  const loadStatsInternal = useCallback(async (showLoading = true) => {
     if (!user?.id) return
 
+    const currentXp = xpRef.current
+
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
 
       let familyData = null
 
@@ -211,7 +214,7 @@ export default function Stats() {
       const { data: battleProfile, error: battleProfileError } = await supabase
         .from('user_profiles')
         .select('total_battle_wins,battle_crown_streak,battle_crowns,total_battle_matches')
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .maybeSingle()
 
       if (battleProfileError) {
@@ -242,14 +245,14 @@ export default function Stats() {
       const badges = []
       if (profile?.role === 'admin' || profile?.troll_role === 'admin') badges.push('🛡️ Admin')
       if (familyMember) badges.push('⚔️ Family War')
-      if (level >= 10) badges.push('👑 Top Rank')
+      if (currentXp.level >= 10) badges.push('👑 Top Rank')
       if (balances.paid_coins > 1000) badges.push('💰 Big Spender')
 
       setStats({
-        level,
-        xp: xpTotal,
-        totalXp: xpTotal,
-        nextLevelXp: xpToNext + xpTotal,
+        level: currentXp.level,
+        xp: currentXp.xpTotal,
+        totalXp: currentXp.xpTotal,
+        nextLevelXp: currentXp.xpToNext + currentXp.xpTotal,
         troll_coins: balances.troll_coins || 0,
         paid_coins: balances.paid_coins || 0,
         cashout_coins: balances.cashout_coins || 0,
@@ -268,9 +271,6 @@ export default function Stats() {
     }
   }, [
     user?.id,
-    level,
-    xpTotal,
-    xpToNext,
     profile,
     balances.troll_coins,
     balances.paid_coins,
@@ -452,11 +452,11 @@ export default function Stats() {
         await fetchXP(user.id)
         subscribeToXP(user.id)
         isInitialized.current = true
-        loadStatsInternal()
+        loadStatsInternal(true)
       } catch (err) {
         console.error('Error initializing XP:', err)
         isInitialized.current = true
-        loadStatsInternal()
+        loadStatsInternal(true)
       }
     }
 
@@ -466,13 +466,16 @@ export default function Stats() {
       unsubscribe()
       isInitialized.current = false
     }
-  }, [user?.id, fetchXP, subscribeToXP, unsubscribe, loadStatsInternal])
+  }, [user?.id])
 
   useEffect(() => {
-    if (user?.id && isInitialized.current) {
-      loadStatsInternal()
+    xpRef.current = { level, xpTotal, xpToNext }
+    // When XP store data arrives after init, re-read stats once without
+    // toggling the loading spinner (just silently update the numbers).
+    if (user?.id && isInitialized.current && stats !== null) {
+      loadStatsInternal(false)
     }
-  }, [level, xpTotal, xpToNext, loadStatsInternal, user?.id])
+  }, [level, xpTotal, xpToNext, loadStatsInternal, user?.id, stats])
 
   const computedProgress =
     progress !== undefined && progress !== null ? (progress > 0 ? progress : 0) : 0
@@ -580,16 +583,10 @@ export default function Stats() {
            <CreatorSeasonalGoals />
          </div>
 
-         {activeTab === 'overview' && (
-           <>
-             {loading || coinsLoading ? (
-               <div className={`${cityPanel} p-12 text-center`}>
-                 <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-cyan-300" />
-                 <div className="text-xl font-black text-cyan-100">Loading Stats</div>
-                 <p className="mt-2 text-slate-400">Syncing your Troll City data...</p>
-               </div>
-             ) : stats ? (
-               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {activeTab === 'overview' && (
+            <>
+              {stats ? (
+                <div className={`grid grid-cols-1 gap-6 lg:grid-cols-2 ${loading || coinsLoading ? 'opacity-60 pointer-events-none' : ''}`}>
                  <div className={`${cityCard} p-6`}>
                    <StatHeader icon={Star} title="Level & XP" subtitle="Real-time progression sync" />
 
@@ -751,14 +748,16 @@ export default function Stats() {
                      )}
                    </div>
                  </div>
-               </div>
-             ) : (
-               <div className={`${cityPanel} p-12 text-center text-slate-400`}>
-                 Failed to load stats.
-               </div>
-             )}
-           </>
-         )}
+                </div>
+              ) : (
+                <div className={`${cityPanel} p-12 text-center`}>
+                  <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-cyan-300" />
+                  <div className="text-xl font-black text-cyan-100">Loading Stats</div>
+                  <p className="mt-2 text-slate-400">Syncing your Troll City data...</p>
+                </div>
+              )}
+            </>
+          )}
 
 {activeTab === 'earnings' && (
             <div className="grid grid-cols-1 gap-6">

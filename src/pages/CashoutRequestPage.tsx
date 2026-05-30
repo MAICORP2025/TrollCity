@@ -57,6 +57,7 @@ export default function CashoutRequestPage() {
   const [selectedTier, setSelectedTier] = useState<CashoutTier | null>(null);
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('paypal');
   const [providerUsername, setProviderUsername] = useState('');
+  const [userTag, setUserTag] = useState('');
   const [idFile, setIdFile] = useState<File | null>(null);
   const [idUploading, setIdUploading] = useState(false);
   const [idUrl, setIdUrl] = useState<string | null>(null);
@@ -70,9 +71,9 @@ export default function CashoutRequestPage() {
    const usdAmount = selectedTier ? selectedTier.usd : 0;
 
    const isFriday = isCashoutWindowOpen();
-   const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && idUrl && providerUsername.trim();
+   const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && idUrl && providerUsername.trim() && userTag.trim();
 
-  // Load user's eligible coins and recent cashout requests
+  // Load user's troll_coins balance and recent payout requests
   useEffect(() => {
     async function loadData() {
       if (!profile) return;
@@ -80,25 +81,13 @@ export default function CashoutRequestPage() {
       try {
         setLoading(true);
 
-        // Call RPC to get eligible gift coins
-        const { data: eligibleData, error: eligibleError } = await supabase.rpc(
-          'get_eligible_gift_coins',
-          { p_user_id: profile.id }
-        );
+        // Get troll_coins balance (all working-earned coins are cashable)
+        const eligibleTotal = Math.max(0, (profile.troll_coins || 0) - (profile.reserved_troll_coins || 0));
+        setEligibleCoins(eligibleTotal);
 
-        if (eligibleError) throw eligibleError;
-
-        const eligibleTotal = Array.isArray(eligibleData)
-          ? eligibleData[0]?.total_eligible_coins
-          : eligibleData?.total_eligible_coins
-
-        if (typeof eligibleTotal === 'number') {
-          setEligibleCoins(eligibleTotal);
-        }
-
-        // Load recent cashout requests from visa_redemptions
+        // Load recent payout requests
         const { data: requestsData, error: requestsError } = await supabase
-          .from('visa_redemptions')
+          .from('payout_requests')
           .select('*')
           .eq('user_id', profile.id)
           .order('created_at', { ascending: false })
@@ -107,8 +96,8 @@ export default function CashoutRequestPage() {
         if (requestsError) throw requestsError;
         setRecentRequests(requestsData || []);
 
-        // Auto-select highest eligible tier based on the loaded eligible coins
-        const eligibleTier = [...TIERS].reverse().find(t => t.coins <= (typeof eligibleTotal === 'number' ? eligibleTotal : 0)) || TIERS[0];
+        // Auto-select highest eligible tier based on the loaded balance
+        const eligibleTier = [...TIERS].reverse().find(t => t.coins <= eligibleTotal) || TIERS[0];
         if (eligibleTier) setSelectedTier(eligibleTier);
       } catch (err: any) {
         console.error('Failed to load cashout data:', err);
@@ -121,24 +110,23 @@ export default function CashoutRequestPage() {
     loadData();
   }, [profile]);
 
-  // Real-time subscription for cashout status updates
+  // Real-time subscription for payout status updates
   useEffect(() => {
     if (!profile) return;
 
     const channel = supabase
-      .channel(`visa_redemptions_${profile.id}`)
+      .channel(`payout_requests_${profile.id}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'visa_redemptions',
+          table: 'payout_requests',
           filter: `user_id=eq.${profile.id}`,
         },
         () => {
-          // Reload recent requests on any change
           supabase
-            .from('visa_redemptions')
+            .from('payout_requests')
             .select('*')
             .eq('user_id', profile.id)
             .order('created_at', { ascending: false })
@@ -227,12 +215,12 @@ export default function CashoutRequestPage() {
     try {
       setSubmitting(true);
 
-       const { data, error } = await supabase.rpc('request_cashout_v3', {
+       const { data, error } = await supabase.rpc('request_friday_cashout', {
          p_user_id: profile.id,
          p_coins_to_redeem: selectedTier.coins,
-         p_payout_method: payoutMethod,
-         p_payout_provider_username: providerUsername.trim(),
-         p_id_document_url: idUrl,
+         p_provider_type: payoutMethod,
+         p_provider_username: providerUsername.trim(),
+         p_user_tag: userTag.trim() || null,
        });
 
       if (error) throw error;
@@ -241,11 +229,11 @@ export default function CashoutRequestPage() {
         throw new Error(data.error || 'Cashout request failed');
       }
 
-      toast.success('Cashout request submitted successfully! Your coins have been reserved.');
-      
+      toast.success('Cashout request submitted! It will be reviewed by CEO Assistant and Noah Assistant before admin processing.');
+
       // Refresh profile to update balances
       await refreshProfile();
-      
+
       // Redirect to wallet or stay and show success
       navigate('/wallet');
     } catch (err: any) {
@@ -254,7 +242,7 @@ export default function CashoutRequestPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [profile, selectedTier, payoutMethod, providerUsername, idUrl, eligibleCoins, isFriday, refreshProfile, navigate]);
+  }, [profile, selectedTier, payoutMethod, providerUsername, userTag, idUrl, eligibleCoins, isFriday, refreshProfile, navigate]);
 
   if (loading) {
     return (
@@ -280,8 +268,8 @@ export default function CashoutRequestPage() {
             <div className="flex-1">
               <h1 className="text-3xl font-extrabold text-white mb-2">Request Cashout</h1>
               <p className="text-gray-300">
-                Convert your gift-received coins to cash. Only coins received as gifts from other users are eligible.
-                Purchased coins and bonus coins cannot be cashed out.
+                Convert your earned troll coins to cash. All coins you've earned from working in your role are cashable.
+                Coins are added to your balance on Thursdays. Cashout requests are processed on Fridays and sent to the CEO Assistant and Noah Assistant for review before admin payout.
               </p>
             </div>
           </div>
@@ -304,7 +292,7 @@ export default function CashoutRequestPage() {
           <div className="mt-4 bg-[#151027] rounded-lg p-4 border border-purple-500/30">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <p className="text-sm text-gray-400">Eligible Gift Coins</p>
+                <p className="text-sm text-gray-400">Troll Coins Balance</p>
                 <p className="text-2xl font-bold text-troll-green-neon">{eligibleCoins.toLocaleString()}</p>
               </div>
               <div>
@@ -427,6 +415,29 @@ export default function CashoutRequestPage() {
                 disabled={!isFriday}
               />
               {providerUsername.trim() && (
+                <CheckCircle className="absolute right-3 top-3 w-5 h-5 text-green-400" />
+              )}
+            </div>
+          </div>
+
+          {/* User Tag */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Your Tag / Cashtag / Identifier
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Enter your identifier for the payout provider (e.g. CashApp $Cashtag, Venmo handle, or PayPal email). Admin will see this when processing your payout.
+            </p>
+            <div className="relative">
+              <input
+                type="text"
+                value={userTag}
+                onChange={(e) => setUserTag(e.target.value)}
+                placeholder="$Cashtag, @handle, or email"
+                className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-troll-gold"
+                disabled={!isFriday}
+              />
+              {userTag.trim() && (
                 <CheckCircle className="absolute right-3 top-3 w-5 h-5 text-green-400" />
               )}
             </div>

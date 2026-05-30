@@ -4,13 +4,14 @@ import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { deductCoins } from '@/lib/coinTransactions'
 import { Zap, Lock, Clock } from 'lucide-react'
+import { PERKS as LEVEL_PERKS } from '@/config/levelSystem'
 
 interface Perk {
   id: string
   name: string
   description: string
   category: string
-  cost_tokens: number
+  cost: number
   required_level: number
   metadata: any
 }
@@ -33,6 +34,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
   const [perks, setPerks] = useState<Perk[]>([])
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState<string | null>(null)
+  const levelPerkIds = React.useMemo(() => new Set(LEVEL_PERKS.map((perk) => perk.id)), [])
 
   useEffect(() => {
     loadPerks()
@@ -44,10 +46,12 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
       const { data, error } = await supabase
         .from('perks')
         .select('*')
-        .order('cost_tokens', { ascending: true })
+        .gt('cost', 0)
+        .order('cost', { ascending: true })
       
       if (error) throw error
-      setPerks(data || [])
+      const filtered = (data || []).filter((perk: any) => !levelPerkIds.has(perk.id))
+      setPerks(filtered)
     } catch (error) {
       console.error('Error loading perks:', error)
       toast.error('Failed to load perks')
@@ -92,8 +96,13 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
       return
     }
 
+    if (perk.cost <= 0 || levelPerkIds.has(perk.id)) {
+      toast.error('This perk is unlocked by level progression and cannot be purchased.')
+      return
+    }
+
     // Check troll_coins instead of perk_tokens
-    if ((profile.troll_coins || 0) < perk.cost_tokens) {
+    if ((profile.troll_coins || 0) < perk.cost) {
       toast.error('Not enough Troll Coins')
       return
     }
@@ -103,7 +112,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
       // 1. Deduct Coins (Centralized Bank Logic)
       const deductResult = await deductCoins({
         userId: user!.id,
-        amount: perk.cost_tokens,
+        amount: perk.cost,
         type: 'perk_purchase',
         description: `Purchased Perk: ${perk.name}`,
         metadata: {
@@ -147,7 +156,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
         console.error('Failed to grant perk, refunding...', insertError)
         await supabase.rpc('add_coins', {
             p_user_id: user!.id,
-            p_amount: perk.cost_tokens,
+            p_amount: perk.cost,
             p_coin_type: 'paid'
         })
         throw insertError
@@ -224,7 +233,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {perks.map((perk) => {
             const isLocked = (profile?.level || 0) < perk.required_level
-            const canAfford = (profile?.troll_coins || 0) >= perk.cost_tokens
+const canAfford = (profile?.troll_coins || 0) >= perk.cost
             
             return (
               <div 
@@ -245,7 +254,7 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
                     <Zap className={`w-6 h-6 ${getCategoryColor(perk.category).replace('bg-', 'text-')}`} />
                   </div>
                   <div className="px-3 py-1 bg-white/5 rounded-full text-sm font-medium border border-white/10">
-                    {perk.cost_tokens} Coins
+                    {perk.cost} Coins
                   </div>
                 </div>
 

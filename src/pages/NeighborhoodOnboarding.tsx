@@ -147,7 +147,10 @@ const DRIVER_QUESTIONS = [
 
 export default function NeighborhoodOnboarding() {
   const navigate = useNavigate()
-  const { user, profile, setProfile, refreshProfile } = useAuthStore()
+  const user = useAuthStore((s) => s.user)
+  const profile = useAuthStore((s) => s.profile)
+  const setProfile = useAuthStore((s) => s.setProfile)
+  const refreshProfile = useAuthStore((s) => s.refreshProfile)
   const { createNeighborhood, checkInvites, acceptInvite } = useNeighborhood()
   const { activeVehicle, purchaseVehicle, updatePlate, loading: vehicleLoading } = useVehicleSystem()
   const { license, takeTest, loading: licenseLoading } = useDriverTest()
@@ -513,6 +516,11 @@ export default function NeighborhoodOnboarding() {
         profileAny?.license_status === 'suspended' &&
         !!profileAny?.driver_test_passed_at
 
+      // Also check if user passed test but license status wasn't set to active
+      const shouldActivateLicense =
+        (profileAny?.license_status !== 'active') &&
+        !!profileAny?.driver_test_passed_at
+
       const updateData: any = {
         car_insurance_expiry: expiry
       }
@@ -521,6 +529,11 @@ export default function NeighborhoodOnboarding() {
         updateData.license_status = 'active'
         updateData.license_restored_at = new Date().toISOString()
         updateData.insurance_required = false
+        updateData.drivers_license_expiry = expiry
+      } else if (shouldActivateLicense) {
+        // First-time user who passed test gets license activated with insurance
+        updateData.license_status = 'active'
+        updateData.license_activated_at = new Date().toISOString()
         updateData.drivers_license_expiry = expiry
       }
 
@@ -548,7 +561,7 @@ export default function NeighborhoodOnboarding() {
           ...profile,
           ...updateData
         })
-        if (shouldRestoreLicense) {
+        if (shouldRestoreLicense || shouldActivateLicense) {
           setDriversLicenseExpiry(expiry)
         }
       }

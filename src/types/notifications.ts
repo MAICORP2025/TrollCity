@@ -22,6 +22,7 @@ export type NotificationType =
   | 'get_out_of_jail_coin_won'
   | 'get_out_of_jail_coin_used'
   | 'get_out_of_jail_coin_denied'
+  | 'inmate_message_received'
 
   // BROADCAST / LIVE
   | 'someone_you_follow_went_live'
@@ -109,6 +110,7 @@ export type NotificationType =
    | 'team_meeting_scheduled'
    | 'team_meeting_rescheduled'
    | 'team_meeting_cancelled'
+   | 'team_meeting_started'
 
    // AUCTIONS / MARKETPLACE
    | 'auction_starting_soon'

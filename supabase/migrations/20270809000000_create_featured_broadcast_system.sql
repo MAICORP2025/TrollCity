@@ -102,6 +102,46 @@ BEGIN
   ) THEN
     ALTER TABLE streams ADD COLUMN is_featured BOOLEAN DEFAULT FALSE;
   END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'streams' AND column_name = 'featured_until'
+  ) THEN
+    ALTER TABLE streams ADD COLUMN featured_until TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'streams' AND column_name = 'boosted_until'
+  ) THEN
+    ALTER TABLE streams ADD COLUMN boosted_until TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'streams' AND column_name = 'featured_at'
+  ) THEN
+    ALTER TABLE streams ADD COLUMN featured_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'streams' AND column_name = 'featured_by'
+  ) THEN
+    ALTER TABLE streams ADD COLUMN featured_by UUID REFERENCES auth.users(id);
+  END IF;
+END
+$$;
+
+-- Add columns to auction_shows table if they don't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'auction_shows' AND column_name = 'featured_until'
+  ) THEN
+    ALTER TABLE auction_shows ADD COLUMN featured_until TIMESTAMPTZ;
+  END IF;
 END
 $$;
 

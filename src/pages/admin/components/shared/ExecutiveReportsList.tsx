@@ -6,7 +6,7 @@ import { FileText, CheckCircle, Plus, ChevronDown, ChevronUp, User } from 'lucid
 import { useAuthStore } from '../../../../lib/store'
 
 interface ExecutiveReportsListProps {
-  viewMode: 'admin' | 'secretary'
+  viewMode: 'admin' | 'secretary' | 'ceo_assistant' | 'noah_assistant'
 }
 
 interface ReporterUser {
@@ -24,17 +24,30 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
   const [reporters, setReporters] = useState<ReporterUser[]>([])
   const [filterUserId, setFilterUserId] = useState<string>('')
 
-  useEffect(() => {
-    fetchReports()
-  }, [])
-
-  const fetchReports = async () => {
+  const fetchReports = React.useCallback(async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('executive_reports')
         .select('*')
         .order('report_date', { ascending: false })
+
+      if (viewMode === 'ceo_assistant' || viewMode === 'noah_assistant') {
+        const { data: staffIds } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .or('role.eq.lead_troll_officer,role.eq.troll_officer,role.eq.secretary,troll_role.eq.lead_troll_officer,troll_role.eq.troll_officer,troll_role.eq.secretary')
+        const ids = (staffIds || []).map((r: any) => r.id)
+        if (ids.length > 0) {
+          query = query.in('created_by', ids)
+        } else {
+          setReports([])
+          setLoading(false)
+          return
+        }
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       const list = (data || []) as ExecutiveReport[]
@@ -71,7 +84,11 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
     } finally {
       setLoading(false)
     }
-  }
+  }, [viewMode])
+
+  useEffect(() => {
+    fetchReports()
+  }, [fetchReports])
 
   const handleSubmitReport = async () => {
     if (!user || !newReport.title || !newReport.summary) {
@@ -232,7 +249,7 @@ export default function ExecutiveReportsList({ viewMode }: ExecutiveReportsListP
                   <div className="p-4 border-t border-slate-700 bg-slate-900/30">
                     <p className="text-slate-300 whitespace-pre-wrap">{report.summary}</p>
                     
-                    {viewMode === 'admin' && !report.reviewed_by_admin && (
+                    {viewMode !== 'secretary' && !report.reviewed_by_admin && (
                       <div className="mt-4 flex justify-end">
                         <button 
                           onClick={(e) => {

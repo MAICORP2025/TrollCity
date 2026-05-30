@@ -32,35 +32,57 @@ export default function AdminMeetingsDashboard() {
   const [isCreating, setIsCreating] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'live' | 'scheduled' | 'ended'>('all');
 
-  // Check access and determine permissions - all staff roles can create/access meetings
-  const canCreateMeeting = profile && (
-    profile.role === 'admin' ||
-    profile.role === 'ceo' ||
-    profile.role === 'lead_officer' ||
-    profile.role === 'lead_troll_officer' ||
-    profile.role === 'troll_officer' ||
-    profile.role === 'officer' ||
-    profile.role === 'secretary' ||
-    profile.role === 'prosecutor' ||
-    profile.role === 'judge' ||
-    profile.role === 'attorney' ||
-    profile.role === 'pastor' ||
-    profile.role === 'auctioneer' ||
-    profile.role === 'moderator' ||
-    profile.is_admin === true ||
-    profile.is_ceo === true ||
-    profile.is_lead_officer === true ||
-    profile.is_troll_officer === true ||
-    profile.is_officer === true ||
-    profile.is_secretary === true ||
-    profile.is_prosecutor === true ||
-    profile.is_judge === true ||
-    profile.is_attorney === true ||
-    profile.is_pastor === true ||
-    profile.is_auctioneer === true ||
-    profile.is_moderator === true ||
-    profile.officer_role === 'lead_officer'
-  );
+// Check access and determine permissions - all staff roles can create/access meetings
+   const canCreateMeeting = profile && (
+     profile.role === 'admin' ||
+     profile.role === 'ceo' ||
+     profile.role === 'lead_officer' ||
+     profile.role === 'lead_troll_officer' ||
+     profile.role === 'troll_officer' ||
+     profile.role === 'officer' ||
+     profile.role === 'secretary' ||
+     profile.role === 'prosecutor' ||
+     profile.role === 'judge' ||
+     profile.role === 'attorney' ||
+     profile.role === 'pastor' ||
+     profile.role === 'auctioneer' ||
+     profile.role === 'moderator' ||
+     profile.role === 'ceo_assistant' ||
+     profile.role === 'noah_assistant' ||
+     profile.role === 'agency_hr' ||
+     profile.role === 'agency_hr_manager' ||
+     profile.role === 'journalist' ||
+     profile.role === 'tcnn_news_caster' ||
+     profile.role === 'tcnn_chief_news_caster' ||
+     profile.role === 'troller' ||
+     profile.role === 'troll_family_leader' ||
+     profile.role === 'agency_leader' ||
+     profile.role === 'noah_admin' ||
+     profile.is_admin === true ||
+     profile.is_ceo === true ||
+     profile.is_lead_officer === true ||
+     profile.is_troll_officer === true ||
+     profile.is_officer === true ||
+     profile.is_secretary === true ||
+     profile.is_prosecutor === true ||
+     profile.is_judge === true ||
+     profile.is_attorney === true ||
+     profile.is_pastor === true ||
+     profile.is_auctioneer === true ||
+     profile.is_moderator === true ||
+     profile.is_ceo_assistant === true ||
+     profile.is_noah_assistant === true ||
+     profile.is_agency_hr === true ||
+     profile.is_agency_hr_manager === true ||
+     profile.is_journalist === true ||
+     profile.is_tcnn_news_caster === true ||
+     profile.is_tcnn_chief_news_caster === true ||
+     profile.is_troller === true ||
+     profile.is_troll_family_leader === true ||
+     profile.is_agency_leader === true ||
+     profile.is_noah_admin === true ||
+     profile.officer_role === 'lead_officer'
+   );
 
   useEffect(() => {
     if (!user || !profile) {
@@ -192,8 +214,8 @@ export default function AdminMeetingsDashboard() {
     }
   };
 
-  // Start meeting
-  const handleStartMeeting = async (meetingId: string) => {
+// Start meeting
+const handleStartMeeting = async (meetingId: string) => {
     try {
       const { error } = await supabase
         .from('staff_meetings')
@@ -202,12 +224,61 @@ export default function AdminMeetingsDashboard() {
 
       if (error) throw error;
 
+      // Get all staff user IDs
+      const { data: staffUsers, error: staffError } = await supabase
+        .rpc('get_staff_user_ids');
+
+      // Fallback: get users with staff roles manually (including organization members)
+      let staffIds: string[] = [];
+      if (staffError) {
+        const [{ data: fallbackUsers }, { data: orgFallbackUsers }] = await Promise.all([
+          supabase
+            .from('user_profiles')
+            .select('id')
+            .or('role.eq.admin,role.eq.lead_troll_officer,role.eq.troll_officer,role.eq.officer,role.eq.secretary,role.eq.prosecutor,role.eq.judge,role.eq.attorney,role.eq.pastor,role.eq.auctioneer,role.eq.moderator,role.eq.ceo,role.eq.ceo_assistant,role.eq.noah_assistant,role.eq.agency_hr,role.eq.agency_hr_manager,role.eq.journalist,role.eq.tcnn_news_caster,role.eq.tcnn_chief_news_caster,role.eq.troller,role.eq.troll_family_leader,role.eq.agency_leader,role.eq.noah_admin,is_admin.eq.true,is_ceo.eq.true,is_lead_officer.eq.true,is_troll_officer.eq.true,is_officer.eq.true,is_secretary.eq.true,is_prosecutor.eq.true,is_judge.eq.true,is_attorney.eq.true,is_pastor.eq.true,is_auctioneer.eq.true,is_moderator.eq.true,is_ceo_assistant.eq.true,is_noah_assistant.eq.true,is_agency_hr.eq.true,is_agency_hr_manager.eq.true,is_journalist.eq.true,is_tcnn_news_caster.eq.true,is_tcnn_chief_news_caster.eq.true,is_troller.eq.true,is_troll_family_leader.eq.true,is_agency_leader.eq.true,is_noah_admin.eq.true'),
+          supabase
+            .from('user_profiles')
+            .select('id')
+            .not('organization_id', 'is', null)
+        ]);
+
+        const staffIdsSet = new Set<string>();
+        fallbackUsers?.forEach((u: any) => staffIdsSet.add(u.id));
+        orgFallbackUsers?.forEach((u: any) => staffIdsSet.add(u.id));
+        staffIds = Array.from(staffIdsSet);
+      } else {
+        staffIds = staffUsers?.map((u: any) => u.id) || [];
+      }
+
+      // Send notifications to all staff members
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/send-bulk-notifications`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          type: 'team_meeting_started',
+          title: 'Team Meeting Started',
+          message: 'A staff meeting has started. Click to join.',
+          metadata: {
+            meeting_id: meetingId,
+            action_url: `/meeting/${meetingId}`
+          },
+          targetUserIds: staffIds
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Failed to send staff meeting notifications:', await response.text());
+      }
+
       // Navigate to the meeting room to display the staff grid
       navigate(`/meeting/${meetingId}`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to start meeting');
-    }
-  };
+     }
+   };
 
   // Delete meeting
   const handleDeleteMeeting = async (meetingId: string) => {

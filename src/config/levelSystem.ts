@@ -90,3 +90,17 @@ export const getLevelUpReward = (level: number) => {
 
   return rewards
 }
+
+export const getUnlockedPerks = (level: number) => {
+  return PERKS
+    .filter(perk => perk.levelRequired <= level)
+    .sort((a, b) => a.levelRequired - b.levelRequired)
+}
+
+export const getUpcomingPerks = (level: number, window = 3) => {
+  return PERKS
+    .filter(perk => perk.levelRequired > level && perk.levelRequired <= level + window)
+    .sort((a, b) => a.levelRequired - b.levelRequired)
+}
+
+export const getLevelPerkIds = (level: number) => getUnlockedPerks(level).map(perk => perk.id)

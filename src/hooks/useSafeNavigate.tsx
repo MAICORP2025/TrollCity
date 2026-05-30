@@ -30,7 +30,6 @@ export function useSafeNavigate() {
 }
 
 export function SafeLink({ to, onClick, replace, ...props }: Omit<React.ComponentProps<typeof Link>, 'to'> & { to: To }) {
-  const navigate = useNavigate()
   const location = useLocation()
   const lastNavigateAt = useRef(0)
 
@@ -58,9 +57,9 @@ export function SafeLink({ to, onClick, replace, ...props }: Omit<React.Componen
       }
 
       lastNavigateAt.current = now
-      navigate(to, { replace })
+      // Let the React Router Link component handle navigation normally.
     },
-    [navigate, location.pathname, location.search, onClick, replace, to],
+    [location.pathname, location.search, onClick, replace, to],
   )
 
   return <Link to={to} onClick={handleClick} replace={replace} {...props} />

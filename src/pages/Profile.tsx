@@ -42,6 +42,7 @@ import { getLevelName } from '../lib/xp';
 import { useXPStore } from '@/stores/useXPStore';
 import { PERK_CONFIG } from '@/lib/perkSystem';
 import { canMessageAdmin, getGlowingTextStyle } from '@/lib/perkEffects';
+import { PERKS as LEVEL_PERKS } from '@/config/levelSystem';
 import { getProfileDisplayName } from '@/lib/profileDisplay';
 import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPicker';
 import { cars } from '../data/vehicles';
@@ -761,16 +762,21 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {inventory.perks.map((perk) => {
             const isExpired = perk.expires_at && new Date(perk.expires_at) < new Date();
-            const config = PERK_CONFIG[perk.perk_id as keyof typeof PERK_CONFIG];
-            const fallbackName = perk.perk_id ? perk.perk_id.replace(/^perk_/, '').replace(/_/g, ' ').toUpperCase() : 'Unknown Perk';
-            const displayName = config?.name || perk.metadata?.perk_name || fallbackName;
-            return (
-              <div key={perk.id} className={`${innerPanel} p-5`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="font-black text-white">{displayName}</h4>
-                    <p className="mt-1 text-sm text-zinc-400">{config?.description || perk.metadata?.description || 'Premium account perk.'}</p>
-                  </div>
+          const config = PERK_CONFIG[perk.perk_id as keyof typeof PERK_CONFIG];
+          const levelPerk = LEVEL_PERKS.find((item) => item.id === perk.perk_id);
+          const fallbackName = perk.perk_id ? perk.perk_id.replace(/^perk_/, '').replace(/_/g, ' ').toUpperCase() : 'Unknown Perk';
+          const displayName = config?.name || perk.metadata?.perk_name || levelPerk?.label || fallbackName;
+          const description = config?.description || perk.metadata?.perk_description || perk.metadata?.description || levelPerk?.description || 'Premium account perk.';
+          return (
+            <div key={perk.id} className={`${innerPanel} p-5`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="font-black text-white">{displayName}</h4>
+                  <p className="mt-1 text-sm text-zinc-400">{description}</p>
+                  {perk.metadata?.source === 'level_unlock' && perk.metadata?.level_required && (
+                    <p className="mt-2 text-xs uppercase tracking-[0.2em] text-cyan-300">Level Reward • Level {perk.metadata.level_required}</p>
+                  )}
+                </div>
                   <Pill className={isExpired ? 'border-red-500/30 text-pink-300' : perk.is_active ? 'border-emerald-500/30 text-emerald-300' : 'text-zinc-400'}>{isExpired ? 'EXPIRED' : perk.is_active ? 'ACTIVE' : 'INACTIVE'}</Pill>
                 </div>
                 <p className="mt-4 text-xs text-zinc-500">Expires: {formatDateTime(perk.expires_at)}</p>

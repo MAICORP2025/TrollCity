@@ -39,6 +39,7 @@ let lastProfileUpdateAt = 0
 let lastRealtimeProfileAt = 0
 let lastRefreshProfileAt = 0
 let lastCreditRefreshAt = 0
+let lastRealtimePatchHash: string | null = null
 let refreshInFlight: Promise<void> | null = null
 
 let initPromise: Promise<void> | null = null
@@ -99,10 +100,36 @@ const profilePatchKeys = [
 function didProfilePatchActuallyChange(currentProfile: any, patch: any) {
   if (!currentProfile || !patch) return true
 
-  return profilePatchKeys.some((key) => {
-    if (key === 'updated_at') return false
-    return currentProfile[key] !== patch[key]
+  return Object.keys(getProfilePatchDiff(currentProfile, patch)).length > 0
+}
+
+function getProfilePatchDiff(currentProfile: any, patch: any) {
+  if (!currentProfile || !patch) return {}
+
+  const normalizedCurrent = normalizeProfileCoins(currentProfile)
+  const normalizedMerged = normalizeProfileCoins({
+    ...currentProfile,
+    ...patch,
+    terms_accepted:
+      patch.terms_accepted === true || currentProfile.terms_accepted === true,
+    terms_accepted_at:
+      patch.terms_accepted_at || currentProfile.terms_accepted_at || null,
+    court_recording_consent:
+      patch.court_recording_consent === true ||
+      currentProfile.court_recording_consent === true,
   })
+
+  const diff: Record<string, any> = {}
+  const keys = new Set([...Object.keys(normalizedCurrent), ...Object.keys(normalizedMerged)])
+
+  for (const key of keys) {
+    if (PROFILE_IGNORED_KEYS.has(key)) continue
+    if (normalizedCurrent[key] !== normalizedMerged[key]) {
+      diff[key] = normalizedMerged[key]
+    }
+  }
+
+  return diff
 }
 
 function toSafeNumber(value: any, fallback = 0) {
@@ -137,22 +164,7 @@ function normalizeProfileCoins(profile: any) {
 }
 
 function shouldApplyRealtimeProfilePatch(currentProfile: any, patch: any) {
-  if (!currentProfile || !patch) return false
-
-  const normalizedCurrent = normalizeProfileCoins(currentProfile)
-  const normalizedPatch = normalizeProfileCoins({
-    ...currentProfile,
-    ...patch,
-  })
-
-  for (const key of Object.keys(normalizedPatch)) {
-    if (PROFILE_IGNORED_KEYS.has(key)) continue
-    if (normalizedCurrent[key] !== normalizedPatch[key]) {
-      return true
-    }
-  }
-
-  return false
+  return Object.keys(getProfilePatchDiff(currentProfile, patch)).length > 0
 }
 
 const USER_PROFILE_SELECT = `
@@ -164,10 +176,25 @@ const USER_PROFILE_SELECT = `
   avatar_url,
   role,
   troll_role,
+  job_title,
   is_admin,
   is_troll_officer,
   is_officer_active,
   is_lead_officer,
+  is_secretary,
+  is_attorney,
+  is_prosecutor,
+  is_auctioneer,
+  is_news_caster,
+  is_chief_news_caster,
+  is_journalist,
+  is_troller,
+  is_pastor,
+  is_agency_hr_manager,
+  is_agency_hr,
+  is_agency_leader,
+  is_ceo_assistant,
+  is_noah_assistant,
   drivers_license_status,
   organization_id,
   is_org_student,
@@ -180,7 +207,8 @@ const USER_PROFILE_SELECT = `
   reserved_troll_coins,
   total_earned_coins,
   credit_score,
-  credit_used,
+   credit_limit,
+   credit_used,
   level,
   xp,
   total_xp,
@@ -198,7 +226,17 @@ const USER_PROFILE_SELECT = `
   home_type,
   entrance_join_type,
   created_at,
-  updated_at
+  updated_at,
+  neighborhood_id,
+  house_id,
+  vehicle_id,
+  license_id,
+  license_status,
+  license_plate,
+  car_insurance_expiry,
+  drivers_license_expiry,
+  driver_test_passed_at,
+  insurance_required
 `
 
 interface AuthState {
@@ -297,7 +335,11 @@ function announceGlobalEvent(event: { title: string; icon: string; priority: num
     return
   }
 
-  supabase.from('global_events').insert([event]).then().catch(() => {})
+  supabase.from('global_events').insert([event]).then(({ error }) => {
+    if (error) {
+      console.error('Failed to announce global event:', error)
+    }
+  })
 }
 
 function areProfilesShallowEqual(a: Partial<UserProfile> | null, b: Partial<UserProfile> | null) {
@@ -317,10 +359,46 @@ function areProfilesShallowEqual(a: Partial<UserProfile> | null, b: Partial<User
   return true
 }
 
+function pickProfileComparable(profile: any) {
+  return {
+    id: profile?.id ?? null,
+    username: profile?.username ?? null,
+    role: profile?.role ?? null,
+    troll_role: profile?.troll_role ?? null,
+    troll_coins: toSafeNumber(profile?.troll_coins, 0),
+    paid_coin_balance: toSafeNumber(profile?.paid_coin_balance, 0),
+    free_coin_balance: toSafeNumber(profile?.free_coin_balance, 0),
+    credit_score: toSafeNumber(profile?.credit_score, 0),
+  }
+}
+
+function shallowEqualProfile(a: any, b: any) {
+  const left = pickProfileComparable(a)
+  const right = pickProfileComparable(b)
+
+  return Object.keys(left).every(
+    (key) => left[key as keyof typeof left] === right[key as keyof typeof right]
+  )
+}
+
+function normalizePatchForHash(patch: Partial<UserProfile>) {
+  const normalized: Record<string, any> = {}
+  const keys = Object.keys(patch).sort()
+
+  for (const key of keys) {
+    if (PROFILE_IGNORED_KEYS.has(key)) continue
+
+    const value = (patch as any)[key]
+    normalized[key] = value === undefined ? null : value
+  }
+
+  return JSON.stringify(normalized)
+}
+
 function mergeAgreementFields(current: Partial<UserProfile> | null, incoming: Partial<UserProfile>) {
   return {
     terms_accepted: incoming.terms_accepted === true || current?.terms_accepted === true,
-    terms_accepted_at: incoming.terms_accepted_at || current?.terms_accepted_at || null,
+    terms_accepted_at: (incoming as any).terms_accepted_at || (current as any)?.terms_accepted_at || null,
     court_recording_consent:
       incoming.court_recording_consent === true || current?.court_recording_consent === true,
   }
@@ -501,7 +579,10 @@ setProfile: (profile, options = {}) => {
           return
         }
 
-        if (!options.force && prevProfile && areProfilesShallowEqual(prevProfile, profile)) {
+        if (!options.force && prevProfile && profile && shallowEqualProfile(prevProfile, profile)) {
+          if (isDev()) {
+            console.debug('[authStore] Profile unchanged, skipping setProfile')
+          }
           return
         }
 
@@ -514,7 +595,7 @@ setProfile: (profile, options = {}) => {
           get()
         )
 
-        let normalizedProfile = normalizeProfileCoins(mergedProfile)
+        const normalizedProfile = normalizeProfileCoins(mergedProfile)
 
         const isFirstProfile = !prevProfile
         const hasSignificantChange = !areProfilesShallowEqual(prevProfile, normalizedProfile)
@@ -587,20 +668,20 @@ setProfile: (profile, options = {}) => {
 
         const now = Date.now()
         if (!force && now - lastRealtimeProfileAt < REALTIME_PROFILE_DEBOUNCE_MS) {
-          set({ isLoading: false, isRefreshing: false })
+          set({ isRefreshing: false })
           return
         }
         if (!force && now - lastRefreshProfileAt < REFRESH_PROFILE_DEBOUNCE_MS) {
-          set({ isLoading: false, isRefreshing: false })
+          set({ isRefreshing: false })
           return
         }
 
         lastRefreshProfileAt = now
-        set({ isLoading: true, isRefreshing: true })
+        set({ isRefreshing: true })
 
         refreshInFlight = (async () => {
           try {
-            const bundle = await globalRequestScheduler.schedule(
+            const bundle: any = await globalRequestScheduler.schedule(
               () => fetchProfileBundle(user.id),
               10
             )
@@ -674,7 +755,7 @@ setProfile: (profile, options = {}) => {
             console.error('[authStore] refreshProfile failed:', error)
           } finally {
             refreshInFlight = null
-            set({ isRefreshing: false, isLoading: false })
+            set({ isRefreshing: false })
           }
         })()
 
@@ -778,7 +859,7 @@ export function setupProfileRealtime(userId: string) {
   cleanupProfileRealtime()
   subscribedUserId = userId
 
-profileChannel = supabase
+  profileChannel = supabase
     .channel(`profile:${userId}`)
     .on(
       'postgres_changes',
@@ -794,32 +875,71 @@ profileChannel = supabase
           return
         }
 
-        const patch = payload.new || {}
+        const rawPatch = payload.new || {}
+        const diffPatch = getProfilePatchDiff(currentProfile, rawPatch)
 
-        if (!didProfilePatchActuallyChange(currentProfile, patch)) {
-          console.debug('[ProfileRealtime] Ignoring duplicate/no-op profile patch')
+        if (Object.keys(diffPatch).length === 0) {
+          if (isDev()) {
+            console.debug('[ProfileRealtime] Ignoring duplicate/no-op profile patch')
+          }
           return
         }
 
         const updatedProfile = {
           ...currentProfile,
-          ...patch,
-          terms_accepted:
-            patch.terms_accepted === true || currentProfile.terms_accepted === true,
-          terms_accepted_at:
-            patch.terms_accepted_at || currentProfile.terms_accepted_at || null,
-          court_recording_consent:
-            patch.court_recording_consent === true ||
-            currentProfile.court_recording_consent === true,
+          ...diffPatch,
+          ...mergeAgreementFields(currentProfile, rawPatch),
         }
 
-        if (!shouldApplyRealtimeProfilePatch(currentProfile, updatedProfile)) {
+        const normalizedCurrent = normalizeProfileCoins(currentProfile)
+        const normalizedUpdated = normalizeProfileCoins(updatedProfile)
+
+        if (areProfilesShallowEqual(normalizedCurrent, normalizedUpdated)) {
+          if (isDev()) {
+            console.debug('[ProfileRealtime] Ignoring no-op normalized profile update')
+          }
+          return
+        }
+
+        const patchHash = normalizePatchForHash(diffPatch)
+
+        if (patchHash === lastRealtimePatchHash) {
+          if (isDev()) {
+            console.debug('[ProfileRealtime] Duplicate patch ignored', { userId, patchHash })
+          }
+          return
+        }
+
+        lastRealtimePatchHash = patchHash
+        lastRealtimeProfileAt = Date.now()
+
+        const relevantPatch = {
+          ...currentProfile,
+          ...(diffPatch as any),
+        } as any
+
+        const relevantKeys = [
+          'troll_coins',
+          'paid_coin_balance',
+          'free_coin_balance',
+          'credit_score',
+          'username',
+          'role',
+          'troll_role',
+        ]
+        const hasRelevantPatchKeys = Object.keys(diffPatch).some((key) => relevantKeys.includes(key))
+        const hasRelevantFieldsChanged = !shallowEqualProfile(currentProfile, relevantPatch)
+
+        if (!hasRelevantFieldsChanged && hasRelevantPatchKeys) {
+          if (isDev()) {
+            console.debug('[ProfileRealtime] Relevant fields unchanged, skipping patch')
+          }
           return
         }
 
         if (isDev()) {
           const normalized = normalizeProfileCoins(updatedProfile)
-          console.log('[ProfileRealtime] Applying profile patch:', {
+          console.debug('[ProfileRealtime] Applying profile patch:', {
             userId,
             troll_coins: normalized.troll_coins,
             paid_coin_balance: normalized.paid_coin_balance,
@@ -867,7 +987,9 @@ profileChannel = supabase
       }
     })
 
-  console.log('[ProfileRealtime] Subscribed to profile and credit changes:', userId)
+  if (isDev()) {
+    console.log('[ProfileRealtime] Subscribed to profile and credit changes:', userId)
+  }
 }
 
 export function cleanupProfileRealtime() {
@@ -882,16 +1004,29 @@ export function cleanupProfileRealtime() {
   }
 
   subscribedUserId = null
+  lastRealtimePatchHash = null
+  lastRealtimeProfileAt = 0
 }
 
-async function acceptSession(session: Session, options: { register?: boolean; checkConcurrentLogin?: boolean } = {}) {
-  const sessionId = generateUUID()
+async function acceptSession(session: Session, options: { register?: boolean; checkConcurrentLogin?: boolean; force?: boolean } = {}) {
+  const state = useAuthStore.getState()
+  const currentSessionId = state.sessionId
+  const sessionId = currentSessionId || generateUUID()
 
   if (options.register !== false) {
-    await registerActiveSession(session.user, sessionId)
+    if (!currentSessionId) {
+      await registerActiveSession(session.user, sessionId)
+    } else {
+      setCurrentDeviceSessionId(sessionId)
+    }
   } else {
     setCurrentDeviceSessionId(sessionId)
   }
+
+  const priorUserId = state.user?.id
+  const priorProfile = state.profile
+  const sameUser = priorUserId === session.user.id
+  const sameSession = sameUser && Boolean(currentSessionId)
 
   useAuthStore.getState().setAuth(session.user, session, sessionId)
   setupProfileRealtime(session.user.id)
@@ -905,7 +1040,15 @@ async function acceptSession(session: Session, options: { register?: boolean; ch
     )
   }
 
-  await useAuthStore.getState().refreshProfile(true)
+  const shouldForceRefresh =
+    options.force ||
+    !sameUser ||
+    !priorProfile ||
+    !sameSession
+
+  if (shouldForceRefresh) {
+    await useAuthStore.getState().refreshProfile(true)
+  }
 }
 
 async function handleNoSession() {
@@ -1000,3 +1143,7 @@ export async function initAuthAndData() {
 
   return initPromise
 }
+
+
+
+

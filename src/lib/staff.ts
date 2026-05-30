@@ -52,3 +52,54 @@ export function isStaffProfile(profile: any): boolean {
       STAFF_ROLES.has(trollRole)
   );
 }
+
+export const NIGHT_WATCH_PATROL_ROLES = [
+  'admin',
+  'ceo',
+  'staff',
+  'officer',
+  'broadofficer',
+  'lead_troll_officer',
+  'troll_officer',
+  'ceo_assistant',
+  'noah_assistant',
+  'agency_hr',
+  'agency_hr_manager',
+  'hr_admin',
+  'secretary'
+] as const;
+
+export const NIGHT_WATCH_PROTECTED_ROLES = [
+  'admin',
+  'ceo',
+  'noah_admin',
+  'ceo_assistant',
+  'noah_assistant'
+] as const;
+
+export const ADMIN_ONLY_RECORDING_ROLES = ['admin', 'ceo'] as const;
+
+export function canAccessNightWatch(profile: any): boolean {
+  if (!profile) return false;
+  const role = String(profile.role || '').toLowerCase();
+  const trollRole = String(profile.troll_role || '').toLowerCase();
+
+  return (
+    profile.is_admin === true ||
+    role === 'ceo' ||
+    role === 'staff' ||
+    role === 'officer' ||
+    role === 'broadofficer' ||
+    role === 'lead_troll_officer' ||
+    role === 'troll_officer' ||
+    role === 'ceo_assistant' ||
+    role === 'noah_assistant' ||
+    role === 'agency_hr' ||
+    role === 'agency_hr_manager' ||
+    role === 'hr_admin' ||
+    role === 'secretary' ||
+    trollRole === 'admin' ||
+    trollRole === 'ceo' ||
+    trollRole === 'secretary'
+  );
+}

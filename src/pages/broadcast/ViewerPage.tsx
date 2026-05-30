@@ -246,7 +246,7 @@ function getAudioTrackFromParticipant(participant: any): any {
 
 function RemoteVideoSurface({
   participant,
-  mirror = false,
+  mirror = true,
   className,
   fallback,
   onTap,
@@ -269,6 +269,7 @@ function RemoteVideoSurface({
 
     try {
       videoTrack.attach(videoEl)
+      videoEl.style.transform = mirror ? 'scaleX(-1)' : 'none'
       videoEl.play().catch(() => {})
     } catch (err) {
       console.warn('[ViewerPage] Failed to attach remote video track:', err)
@@ -351,6 +352,7 @@ function LocalVideoSurface({
 
     try {
       videoTrack.attach(videoEl)
+      videoEl.style.transform = mirror ? 'scaleX(-1)' : 'none'
       videoEl.play().catch(() => {})
     } catch (err) {
       console.warn('[ViewerPage] Failed to attach local video track:', err)
@@ -1736,7 +1738,7 @@ useStreamRealtime(
             >
               <RemoteVideoSurface
                 participant={hostParticipant}
-                mirror={false}
+                mirror={true}
                 className="absolute inset-0"
                 onTap={handleLike}
                 fallback={
@@ -1928,6 +1930,7 @@ useStreamRealtime(
                           <LocalVideoSurface
                             videoTrack={localVideoTrack}
                             audioTrack={localAudioTrack}
+                            mirror={false}
                             className="absolute inset-0"
                             fallback={
                               <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
@@ -1942,7 +1945,7 @@ useStreamRealtime(
                         ) : seat.isOccupied ? (
                           <RemoteVideoSurface
                             participant={seatParticipant}
-                            mirror={false}
+                            mirror={true}
                             className="absolute inset-0"
                             fallback={
                               <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">

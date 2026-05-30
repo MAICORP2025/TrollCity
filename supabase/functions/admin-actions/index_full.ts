@@ -105,11 +105,11 @@ Deno.serve(async (req) => {
 
       case "get_payout_requests": {
         if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
-        let query = supabaseAdmin.from('payout_requests').select(`*, user_profiles!payout_requests_user_id_fkey(username, email), processor:user_profiles!payout_requests_processed_by_fkey(username)`).order('created_at', { ascending: false });
+        let query = supabaseAdmin.from('payout_requests').select(`*, requester:user_profiles!payout_requests_user_id_fkey(username, email), admin:user_profiles!payout_requests_admin_id_fkey(username), processor:user_profiles!payout_requests_processed_by_fkey(username)`).order('created_at', { ascending: false });
         if (params.statusFilter && params.statusFilter !== 'all') query = query.eq('status', params.statusFilter);
         const { data: payouts, error } = await query;
         if (error) throw error;
-        result = { payouts: payouts?.map((p: any) => ({ ...p, username: p.user_profiles?.username || 'Unknown', email: p.user_profiles?.email || 'Unknown', processed_by_username: p.processor?.username || null })) };
+        result = { payouts: payouts?.map((p: any) => ({ ...p, username: p.requester?.username || 'Unknown', email: p.requester?.email || 'Unknown', processed_by_username: p.processor?.username || null })) };
         break;
       }
 
@@ -417,8 +417,16 @@ Deno.serve(async (req) => {
         } else {
           const { error: updateError } = await supabaseAdmin.from('applications').update({ status: 'approved', reviewed_by: user.id, reviewed_at: new Date().toISOString() }).eq('id', applicationId);
           if (updateError) throw updateError;
+          // Career positions that should set job_title instead of role
+          const careerPositionTypes = ['auctioneer', 'secretary', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'prosecutor', 'attorney', 'agency_hr', 'agency_hr_manager', 'agency_leader', 'ceo_assistant', 'noah_assistant'];
           if (appType === "seller") await supabaseAdmin.rpc('set_user_role', { target_user: appUserId, new_role: 'seller', reason: 'Application Approved', acting_admin_id: user.id });
-          else if (appType === "troll_officer") await supabaseAdmin.from('user_profiles').update({ is_troll_officer: true }).eq('id', appUserId);
+          else if (appType === "troll_officer") await supabaseAdmin.from('user_profiles').update({ is_troll_officer: true, is_officer_active: true }).eq('id', appUserId);
+          else if (appType === "lead_officer") await supabaseAdmin.from('user_profiles').update({ is_lead_officer: true, is_officer_active: true }).eq('id', appUserId);
+          else if (careerPositionTypes.includes(appType)) await supabaseAdmin.from('user_profiles').update({ job_title: appType }).eq('id', appUserId);
+          // Send Tromail notification
+          const roleLabelMap: Record<string, string> = { seller: 'Seller', troll_officer: 'Troll Officer', lead_officer: 'Lead Troll Officer', auctioneer: 'Auctioneer', secretary: 'Secretary', journalist: 'Journalist', tcnn_news_caster: 'TCNN News Caster', tcnn_chief_news_caster: 'TCNN Chief News Caster', prosecutor: 'Prosecutor', attorney: 'Attorney', agency_hr: 'Agency HR', agency_hr_manager: 'Agency HR Manager', agency_leader: 'Agency Leader', ceo_assistant: 'CEO Assistant', noah_assistant: 'Noah Assistant' };
+          const roleLabel = roleLabelMap[appType] || appType;
+          try { await supabaseAdmin.rpc('send_tromail_message', { p_sender_user_id: user.id, p_sender_role: profile.role, p_sender_tromail_address: '', p_subject: `Application Approved: ${roleLabel}`, p_body: `Your application for the ${roleLabel} position has been approved! You now have access to the RTC Admin Monitor dashboard at /rtcadminmonitor.`, p_is_admin_email: true, p_is_important: true, p_recipient_user_ids: [appUserId], p_recipient_roles: [''] }); } catch (e) { console.warn('Tromail error:', e); }
           result = { success: true };
         }
         break;

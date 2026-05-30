@@ -1,4 +1,3 @@
-
 // src/App.tsx
 import React, { useEffect, Suspense, useState, useRef } from "react";
 import TrollProvider from "./troll/TrollProvider";
@@ -11,6 +10,7 @@ import { BatterySaverProvider } from "./contexts/BatterySaverContext";
 import { useEligibilityStore } from "./lib/eligibilityStore";
 import { useJailMode } from "./hooks/useJailMode";
 import { supabase, UserRole, reportError } from "./lib/supabase";
+import { NIGHT_WATCH_PATROL_ROLES } from "./lib/staff";
 import { Toaster, toast } from "sonner";
 import GlobalLoadingOverlay from "./components/GlobalLoadingOverlay";
 import GlobalErrorBanner from "./components/GlobalErrorBanner";
@@ -23,6 +23,8 @@ import BugAlertPopup from './components/BugAlertPopup';
 
 import { useBugAlertStore } from "./stores/useBugAlertStore";
 import DailyChurchNotification from "./components/church/DailyChurchNotification";
+import TeamMeetingNotification from "./components/TeamMeetingRoom/TeamMeetingNotification";
+
 import { useGlobalApp } from "./contexts/GlobalAppContext";
 import { updateRoute } from "./utils/sessionStorage";
 import { useDebouncedProfileUpdate } from "./hooks/useDebouncedProfileUpdate";
@@ -78,6 +80,8 @@ const SecretaryConsole = lazyWithRetry(() => import("./pages/secretary/Secretary
 const AppealManagement = lazyWithRetry(() => import("./pages/admin/AppealManagement"));
 const AdminMeetingsDashboard = lazyWithRetry(() => import("./pages/admin/AdminMeetingsDashboard"));
 import { systemManagementRoutes } from "./pages/admin/adminRoutes";
+const CEOAssistantDashboard = lazyWithRetry(() => import("./pages/ceo-assistant-dashboard"));
+const NoahAssistantDashboard = lazyWithRetry(() => import("./pages/noah-assistant-dashboard"));
 
 const TaxOnboarding = lazyWithRetry(() => import("./pages/TaxOnboarding"));
 const MyEarnings = lazyWithRetry(() => import("./pages/MyEarnings"));
@@ -141,6 +145,7 @@ const ExportData = lazyWithRetry(() => import("./pages/admin/ExportData"));
 const UserSearch = lazyWithRetry(() => import("./pages/admin/UserSearch"));
 const ReportsQueue = lazyWithRetry(() => import("./pages/admin/ReportsQueue"));
 const StreamMonitorPage = lazyWithRetry(() => import("./pages/admin/StreamMonitorPage"));
+const NightWatchDashboard = lazyWithRetry(() => import("./pages/admin/NightWatchDashboard"));
 const TrotingAdminPage = lazyWithRetry(() => import("./pages/admin/TrotingAdminPage"));
 const PaymentLogs = lazyWithRetry(() => import("./pages/admin/PaymentLogs"));
 const StorePriceEditor = lazyWithRetry(() => import("./pages/admin/components/StorePriceEditor"));
@@ -179,7 +184,7 @@ const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersT
 const TMFamilyInviteHandler = lazyWithRetry(() => import("./components/trollmatch/TMFamilyInviteHandler"));
 const EmbedPage = lazyWithRetry(() => import("./pages/broadcast/EmbedPage"));
 const HomepageBackgroundShowcase = lazyWithRetry(() => import("./pages/dev/HomepageBackgroundShowcase"));
-const LandingHome = lazyWithRetry(() => import("./pages/LandingPage"));
+
 const AuthenticatedHome = lazyWithRetry(() => import("./pages/Home"));
 
 // Tromail
@@ -380,6 +385,11 @@ import MyAuctionShows from "./pages/auction/MyAuctionShows.js";
 import AuctionReports from "./pages/auction/AuctionReports.js";
 import AdminAuctionApps from "./pages/auction/AdminAuctionApps.js";
 import LiveAuctionRoom from "./pages/auction/LiveAuctionRoom.js";
+import AuctionBidders from "./pages/auction/AuctionBidders.js";
+import AuctionSales from "./pages/auction/AuctionSales.js";
+import AuctionAnalytics from "./pages/auction/AuctionAnalytics.js";
+import AuctionSettings from "./pages/auction/AuctionSettings.js";
+import AuctionInventory from "./pages/auction/AuctionInventory.js";
 import CoinStore from "./pages/CoinStore.jsx";
 import SellOnTrollCity from "./pages/SellOnTrollCity.js";
 import SellerOrders from "./pages/SellerOrders.js";
@@ -440,6 +450,10 @@ function AppContent() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<ServiceWorker | null>(null);
   const [initialProfileLoaded, setInitialProfileLoaded] = useState(false);
+  const [activeMeetingNotification, setActiveMeetingNotification] = useState<{
+    meetingId: string;
+    meetingTitle: string;
+  } | null>(null);
   const userIdRef = useRef<string | null>(null);
   const hasNavigatedRef = useRef(false);
   const lastVisibilityRefreshRef = useRef(0);
@@ -1051,7 +1065,7 @@ function AppContent() {
   useEffect(() => {
     if (!userId) return
  
-    const handleVisibilityChange = async () => {
+const handleVisibilityChange = async () => {
       if (!document.hidden) {
         const now = Date.now();
         if (now - lastVisibilityRefreshRef.current < 10000) {
@@ -1060,9 +1074,9 @@ function AppContent() {
         lastVisibilityRefreshRef.current = now;
 
         const currentPath = window.location.pathname;
-        const isRealtimeRoute = /\/(battle|broadcast|watch|live|broadcasting)(\/|$)/.test(currentPath)
-        if (isRealtimeRoute) {
-          console.log('⏳ Realtime route detected - skipping visibility refresh to prevent broadcast/battle disruption');
+        const isNoRefreshRoute = /\/(battle|broadcast|watch|live|broadcasting|stats)(\/|$)/.test(currentPath)
+        if (isNoRefreshRoute) {
+          console.log('⏳ Route detected - skipping visibility refresh to prevent disruption');
           return;
         }
 
@@ -1202,10 +1216,10 @@ function AppContent() {
 {/* 🏢 Talent Offices (Public) */}
                 <Route path="/agencies" element={<AgenciesPage />} />
                 <Route path="/agencies/create" element={<CreateAgencyPage />} />
-                <Route path="/agency/:agencyId" element={<AgencyProfilePage />} />
-                <Route path="/agency/:agencyId/roster" element={<AgencyProfilePage />} />
-                <Route path="/agency/:agencyId/goals" element={<AgencyProfilePage />} />
-                <Route path="/agency-apply/:agencyId" element={<AgencyApplyPage />} />
+                <Route path="/agency/:agencyIdOrSlug" element={<AgencyProfilePage />} />
+                <Route path="/agency/:agencyIdOrSlug/roster" element={<AgencyProfilePage />} />
+                <Route path="/agency/:agencyIdOrSlug/goals" element={<AgencyProfilePage />} />
+                <Route path="/agency-apply/:agencyIdOrSlug" element={<AgencyApplyPage />} />
 
                  {/* Application Routes */}
                  <Route path="/apply" element={<ApplicationPage />} />
@@ -1216,7 +1230,7 @@ function AppContent() {
 
                 {/* 🏠 Home - Public with limited auth for interactions */}
                 <Route path="/home" element={<AuthenticatedHome />} />
-                <Route path="/" element={<LandingHome />} />
+                 <Route path="/" element={<AuthenticatedHome />} />
 
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
@@ -1231,10 +1245,10 @@ function AppContent() {
                           UserRole.ADMIN,
                           UserRole.AGENCY_HR_MANAGER,
                           UserRole.HR_ADMIN,
-                          'agency hr' as any,
-                          'agency_hr' as any,
-                          'agency hr manager' as any,
-                          'agency_hr_manager' as any,
+                          'agency hr',
+                          'agency_hr',
+                          'agency hr manager',
+                          'agency_hr_manager',
                         ]}
                       >
                         <AgencyHRDashboard />
@@ -1264,6 +1278,11 @@ function AppContent() {
                       <TreasuryDashboard />
                     </RequireRole>
                   } />
+                  <Route path="/prosecutor" element={
+                    <RequireRole roles={['prosecutor']}>
+                      <ProsecutorDashboard />
+                    </RequireRole>
+                  } />
 
                   <Route path="/mobile" element={<Navigate to="/home" replace />} />
                   <Route path="/live" element={<ExploreFeed />} />
@@ -1279,10 +1298,38 @@ function AppContent() {
                 {/* 📺 TCNN - Troll City News Network */}
                 <Route path="/tcnn" element={<TCNNMainPage />} />
                 <Route path="/tcnn/article/:id" element={<ArticleReader />} />
-                <Route path="/tcnn/dashboard" element={<TCNNInternalDashboard />} />
-                <Route path="/tcnn/setup" element={<TCNNSetupPage />} />
-                <Route path="/tcnn/broadcaster" element={<TCNNBroadcasterPage />} />
-                <Route path="/tcnn/broadcaster/:streamId" element={<TCNNBroadcasterPage />} />
+                <Route
+                  path="/tcnn/dashboard"
+                  element={
+                    <RequireRole roles={['journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster']}>
+                      <TCNNInternalDashboard />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/tcnn/setup"
+                  element={
+                    <RequireRole roles={['tcnn_news_caster', 'tcnn_chief_news_caster']}>
+                      <TCNNSetupPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/tcnn/broadcaster"
+                  element={
+                    <RequireRole roles={['tcnn_news_caster', 'tcnn_chief_news_caster']}>
+                      <TCNNBroadcasterPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/tcnn/broadcaster/:streamId"
+                  element={
+                    <RequireRole roles={['tcnn_news_caster', 'tcnn_chief_news_caster']}>
+                      <TCNNBroadcasterPage />
+                    </RequireRole>
+                  }
+                />
                 <Route path="/tcnn/viewer/:streamId" element={<TCNNViewerPage />} />
                 
                 <Route path="/call/:roomId/:type/:userId" element={<Call />} />
@@ -1347,7 +1394,30 @@ function AppContent() {
                     
                     <Route path="/church" element={<ChurchPage />} />
                   <Route path="/church/pastor" element={<PastorDashboard />} />
-                  <Route path="/attorney" element={<AttorneyDashboard />} />
+                  <Route
+                    path="/attorney"
+                    element={
+                      <RequireRole roles={['attorney']}>
+                        <AttorneyDashboard />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/ceo-assistant-dashboard"
+                    element={
+                      <RequireRole roles={['ceo_assistant']}>
+                        <CEOAssistantDashboard />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/noah-assistant-dashboard"
+                    element={
+                      <RequireRole roles={['noah_assistant']}>
+                        <NoahAssistantDashboard />
+                      </RequireRole>
+                    }
+                  />
                    {/* 📺 Live Streaming System */}
                   <Route path="/live/command-center/:streamId" element={<LiveCommandCenter />} />
                   <Route path="/live/overlay/:streamId" element={<LiveStreamOverlay />} />
@@ -1369,22 +1439,91 @@ function AppContent() {
                   <Route path="/troll-court/watch/:sessionId" element={<CourtViewerPage />} />
                   <Route path="/court/:courtId" element={<CourtRoom />} />
                   
-                  {/* � Team Meeting Room */}
-                  <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
-                  
-                  <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
+{/* � Team Meeting Room */}
+                   <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
+                   
+                   {/* /team-meeting/:meetingId - alias for joining meetings */}
+                   <Route path="/team-meeting/:meetingId" element={<TeamMeetingRoom />} />
 
                    {/* 📧 Tromail - Internal Role Email */}
                    <Route path="/tromail" element={<TromailPage />} />
 
                    {/* 🎥 Team Meeting Room */}
 <Route path="/auctions" element={<AuctionsPage />} />
-                   <Route path="/auctions/studio" element={<AuctionStudio />} />
-                   <Route path="/auctions/studio/:showId/lots" element={<AuctionStudioLots />} />
-                   <Route path="/auctions/studio/:showId/live" element={<AuctioneerDashboard />} />
-                   <Route path="/auctions/my-shows" element={<MyAuctionShows />} />
+                   <Route
+                     path="/auctions/studio"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctionStudio />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/auctions/studio/:showId/lots"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctionStudioLots />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/auctions/studio/:showId/live"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctioneerDashboard />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/auctions/my-shows"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <MyAuctionShows />
+                       </RequireRole>
+                     }
+                   />
                    <Route path="/auctions/reports" element={<AuctionReports />} />
                    <Route path="/auctions/applications" element={<AdminAuctionApps />} />
+                   <Route
+                     path="/auctions/bidders"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctionBidders />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/auctions/sales"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctionSales />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/auctions/analytics"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctionAnalytics />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/auctions/settings"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctionSettings />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/auctions/inventory"
+                     element={
+                       <RequireRole roles={['auctioneer']}>
+                         <AuctionInventory />
+                       </RequireRole>
+                     }
+                   />
                    <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
                    
                    {/* 🎙️ Podcast Central */}
@@ -1836,6 +1975,14 @@ function AppContent() {
                       }
                     />
                     <Route
+                      path="/admin/night-watch"
+                      element={
+                        <RequireRole roles={NIGHT_WATCH_PATROL_ROLES}>
+                          <NightWatchDashboard />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
                       path="/admin/voting"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
@@ -1975,7 +2122,7 @@ function AppContent() {
                    <Route
                      path="/admin/meetings"
                      element={
-                       <RequireRole roles={[UserRole.ADMIN, 'ceo' as any, UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, 'officer' as any, UserRole.SECRETARY]}>
+                       <RequireRole roles={[UserRole.ADMIN, 'ceo', UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, 'officer', UserRole.SECRETARY]}>
                          <AdminMeetingsDashboard />
                        </RequireRole>
                      }
@@ -1983,7 +2130,7 @@ function AppContent() {
 <Route
                       path="/rtcadminmonitor"
                       element={
-                        <RequireRole roles={[UserRole.ADMIN, UserRole.HR_ADMIN, UserRole.AGENCY_HR_MANAGER, UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, UserRole.SECRETARY, 'ceo' as any, 'officer' as any]}>
+                        <RequireRole roles={[UserRole.ADMIN, UserRole.HR_ADMIN, UserRole.AGENCY_HR_MANAGER, UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, UserRole.SECRETARY, 'ceo', 'officer']}>
                           <RTCAdminMonitor />
                         </RequireRole>
                       }

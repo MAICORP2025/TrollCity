@@ -232,6 +232,7 @@ export default function InmatesPage() {
           bond_posted_by: user.id,
           bond_amount: bondAmount,
           release_time: releaseNow,
+          status: 'released_bond',
         })
         .eq('id', selectedInmate.id)
 
@@ -365,6 +366,20 @@ export default function InmatesPage() {
         amount: MESSAGE_COST,
         recipient_type: 'public_pool',
         notes: `Message sent to inmate ${selectedInmate.username}`,
+      })
+
+      const senderUsername = profile?.username || 'Someone'
+      await supabase.from('jail_notifications').insert({
+        user_id: selectedInmate.user_id,
+        notification_type: 'inmate_message_received',
+        title: `New message from @${senderUsername}`,
+        message: `"${cleanMessage.substring(0, 100)}${cleanMessage.length > 100 ? '...' : ''}"`,
+        data: {
+          inmate_id: selectedInmate.user_id,
+          sender_id: user.id,
+          sender_username: senderUsername,
+          jail_id: selectedInmate.id,
+        },
       })
 
       toast.success('Message sent.')

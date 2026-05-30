@@ -99,7 +99,7 @@ export type PerkKey = keyof typeof PERK_CONFIG;
 /**
  * Check if a perk is currently active for a user
  */
-export async function isPerkActive(userId: string, perkKey: PerkKey): Promise<boolean> {
+export async function isPerkActive(userId: string, perkKey: string): Promise<boolean> {
   try {
     const cacheKey = `${userId}:${perkKey}`
     const now = Date.now()

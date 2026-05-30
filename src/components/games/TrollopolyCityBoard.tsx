@@ -74,7 +74,11 @@ function LiveKitMiniVideo({ media, fallbackInitial, color }: { media?: { videoTr
     videoElement.style.objectFit = 'cover';
     videoElement.style.position = 'absolute';
     videoElement.style.inset = '0';
-    if (media?.isLocal) videoElement.style.transform = 'scaleX(-1)';
+    // Mirror front-camera video for natural appearance on both self-view and remote viewers
+    const mediaStreamTrack = track?.mediaStreamTrack;
+    const trackSettings = mediaStreamTrack ? (mediaStreamTrack.getSettings?.() || {}) : {};
+    const isFrontCamera = (trackSettings as any).facingMode !== 'environment';
+    if (isFrontCamera) videoElement.style.transform = 'scaleX(-1)';
     container.innerHTML = '';
     container.appendChild(videoElement);
 

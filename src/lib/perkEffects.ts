@@ -109,9 +109,20 @@ export async function isProtectedFromModeration(userId: string): Promise<boolean
  * DOUBLE XP MODE (1h)
  * Multiply XP rewards by 2
  */
-export async function getXPMultiplier(userId: string): Promise<number> {
-  const isActive = await isPerkActive(userId, 'perk_double_xp');
-  return isActive ? 2 : 1;
+export async function getXPMultiplier(userId: string, source?: string): Promise<number> {
+  let multiplier = 1;
+  const hasDoubleXp = await isPerkActive(userId, 'perk_double_xp');
+  if (hasDoubleXp) multiplier *= 2;
+
+  if (await isPerkActive(userId, 'xp_boost_5' as any)) {
+    multiplier *= 1.05;
+  }
+
+  if (source?.startsWith('gift') && await isPerkActive(userId, 'gift_xp_2' as any)) {
+    multiplier *= 1.02;
+  }
+
+  return multiplier;
 }
 
 /**

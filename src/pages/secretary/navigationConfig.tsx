@@ -1,4 +1,4 @@
-import { LayoutDashboard, ClipboardList, AlertTriangle, DollarSign, CreditCard, Shield, Landmark, Crown, FileText, Building2, Users, Network, Bell, Briefcase, LogOut, ChevronRight, Activity } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, AlertTriangle, DollarSign, CreditCard, Shield, Landmark, Crown, FileText, Building2, Users, Bell, Briefcase, LogOut, ChevronRight, Activity, CalendarDays, CheckSquare } from 'lucide-react'
 
 type Section =
   | 'dashboard'
@@ -7,6 +7,7 @@ type Section =
   | 'governance'
   | 'community'
   | 'administration'
+  | 'my_dashboard'
   | 'security'
 
 type View =
@@ -17,9 +18,10 @@ type View =
   | 'elections'
   | 'proposals'
   | 'neighbors'
-  | 'partners'
   | 'ads'
   | 'staff'
+  | 'calendar'
+  | 'secretary_dashboard'
 
 interface NavigationItem {
   id: View
@@ -100,11 +102,6 @@ export const navigation: NavigationGroup[] = [
         icon: <Users className="w-4 h-4" />
       },
       {
-        id: 'partners',
-        label: 'Empire Partners',
-        icon: <Network className="w-4 h-4" />
-      },
-      {
         id: 'ads',
         label: 'Promo Ads',
         icon: <Bell className="w-4 h-4" />
@@ -121,6 +118,24 @@ export const navigation: NavigationGroup[] = [
         id: 'staff',
         label: 'Staff Management',
         icon: <Users className="w-4 h-4" />
+      },
+      {
+        id: 'calendar',
+        label: 'Secretary Calendar',
+        icon: <CalendarDays className="w-4 h-4" />
+      }
+    ]
+  },
+
+  {
+    id: 'my_dashboard',
+    title: 'My Dashboard',
+    icon: <CheckSquare className="w-4 h-4" />,
+    items: [
+      {
+        id: 'secretary_dashboard',
+        label: 'Secretary Dashboard',
+        icon: <LayoutDashboard className="w-4 h-4" />
       }
     ]
   }

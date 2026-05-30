@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, X, Download, Share2 } from 'lucide-react';
 import { useAuthStore } from '../lib/store';
-import { supabase } from '../lib/supabase';
+import { doesUserProfileExist, supabase } from '../lib/supabase';
 import { isIos } from '../pwa/install';
 
 const HomeNotificationPrompt: React.FC = () => {
@@ -128,6 +128,13 @@ const HomeNotificationPrompt: React.FC = () => {
         alert('Failed to subscribe to push notifications: ' + (subError?.message || 'Unknown error'));
         setLoading(false);
         return;
+      }
+
+      const hasProfile = await doesUserProfileExist(user!.id);
+      if (!hasProfile) {
+        alert('Your account is still being initialized. Please refresh the page and try again.')
+        setLoading(false)
+        return
       }
 
       const subJson = subscription.toJSON() as any;

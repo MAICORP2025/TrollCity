@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+﻿import { useState, useRef, useCallback, useEffect } from 'react'
 import AgoraRTC, {
   IAgoraRTCClient,
   IAgoraRTCRemoteUser,
@@ -12,6 +12,8 @@ import { useAuthStore } from '../lib/store'
 interface PodcastAgoraConfig {
   channelName: string
   enabled: boolean
+  isHost?: boolean
+  podcastId?: string
   onUserJoined?: (user: IAgoraRTCRemoteUser) => void
   onUserLeft?: (user: IAgoraRTCRemoteUser) => void
   onError?: (error: string) => void
@@ -20,6 +22,8 @@ interface PodcastAgoraConfig {
 export function usePodcastAgora({
   channelName,
   enabled,
+  isHost = false,
+  podcastId,
   onUserJoined,
   onUserLeft,
   onError
@@ -83,20 +87,38 @@ export function usePodcastAgora({
 
       client.on('user-published', async (user, mediaType) => {
         debugAgora('[PodcastAgora] User published:', user.uid, mediaType)
-        await client.subscribe(user, mediaType)
-        if (mediaType === 'audio') {
-          const audioTrack = user.audioTrack
-          if (audioTrack) {
-            audioTrack.play()
-            setIsPlaying(true)
+        try {
+          await client.subscribe(user, mediaType)
+          debugAgora('[PodcastAgora] Subscribed to:', user.uid, mediaType)
+          if (mediaType === 'audio') {
+            const audioTrack = user.audioTrack
+            if (audioTrack) {
+              if (isMutedRef.current || !isPlayingRef.current) {
+                audioTrack.setVolume(0)
+              } else {
+                audioTrack.setVolume(volumeRef.current)
+                audioTrack.play()
+              }
+              setIsPlaying(true)
+            }
           }
+        } catch (subErr) {
+          console.error('[PodcastAgora] Subscribe error:', subErr)
         }
       })
 
-      client.on('user-unpublished', (user, mediaType) => {
-        debugAgora('[PodcastAgora] User unpublished:', user.uid, mediaType)
+      client.on('user-subscribed', (user, mediaType) => {
+        debugAgora('[PodcastAgora] User subscribed event:', user.uid, mediaType)
+        if (mediaType === 'audio' && user.audioTrack) {
+          if (isMutedRef.current || !isPlayingRef.current) {
+            user.audioTrack.setVolume(0)
+          } else {
+            user.audioTrack.setVolume(volumeRef.current)
+            user.audioTrack.play()
+          }
+          setIsPlaying(true)
+        }
       })
-
       clientRef.current = client
       return client
     } catch (err) {
@@ -117,7 +139,7 @@ export function usePodcastAgora({
         body: {
           channelName: channel,
           userId: uid.toString(),
-          role: 'subscriber',
+          role: isHost ? 'publisher' : 'subscriber',
           podcastId: podcastId
         }
       })
@@ -150,7 +172,7 @@ export function usePodcastAgora({
       onError?.(errMsg)
       throw err
     }
-  }, [onError, user, profile])
+  }, [isHost, onError, user, profile])
 
   // Convert user ID to numeric UID
   const getUserUid = (uid: string): UID => {
@@ -163,7 +185,8 @@ export function usePodcastAgora({
   }
 
   // Join podcast channel
-  const joinPodcast = useCallback(async (podcastId?: string) => {
+  const joinPodcast = useCallback(async (podcastIdArg?: string) => {
+    const resolvedPodcastId = podcastIdArg || podcastId
     if (joiningRef.current || joinedRef.current) return
     if (!channelName) {
       console.error('[PodcastAgora] No channel name provided')
@@ -191,7 +214,7 @@ export function usePodcastAgora({
         throw new Error('Agora App ID not configured')
       }
 
-      const { token } = await fetchAgoraToken(channelName, uid, podcastId)
+      const { token } = await fetchAgoraToken(channelName, uid, resolvedPodcastId)
 
       // Join channel
       const joinPromise = client.join(appId, channelName, token, uid)
@@ -201,6 +224,18 @@ export function usePodcastAgora({
 
       await Promise.race([joinPromise, timeoutPromise])
       debugAgora('[PodcastAgora] Joined channel successfully')
+
+      if (isHost) {
+        try {
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack()
+          audioTrackRef.current = audioTrack
+          await client.publish([audioTrack])
+          debugAgora('[PodcastAgora] Published local microphone track as host')
+        } catch (trackError) {
+          console.error('[PodcastAgora] Failed to publish local microphone track:', trackError)
+          setError('Could not access microphone for podcast host')
+        }
+      }
 
       setIsConnected(true)
       joinedRef.current = true
@@ -215,7 +250,7 @@ export function usePodcastAgora({
 
       // Log join success
       await supabase.from('podcast_rtc_logs').insert({
-        podcast_id: podcastId || null,
+        podcast_id: resolvedPodcastId || null,
         user_id: user?.id || null,
         username: profile?.username || null,
         role: profile?.role || null,
@@ -233,7 +268,7 @@ export function usePodcastAgora({
       
       // Log join failure
       await supabase.from('podcast_rtc_logs').insert({
-        podcast_id: podcastId || null,
+        podcast_id: resolvedPodcastId || null,
         user_id: user?.id || null,
         username: profile?.username || null,
         role: profile?.role || null,
@@ -285,45 +320,127 @@ export function usePodcastAgora({
     }
   }, [])
 
-  // Toggle mute
+  // Toggle mute — uses refs to avoid stale closures
   const toggleMute = useCallback(async () => {
-    if (!audioTrackRef.current && !clientRef.current) return
+    const nextMuted = !isMutedRef.current
+    setIsMuted(nextMuted)
+    isMutedRef.current = nextMuted
 
-    try {
-      const wasMuted = isMuted
-      setIsMuted(!wasMuted)
+    debugAgora(`[PodcastAgora] Toggle mute: ${nextMuted ? 'muted' : 'unmuted'}`)
 
-      // Log mute/unmute
-      await supabase.from('podcast_rtc_logs').insert({
-        podcast_id: null,
-        user_id: user?.id || null,
-        username: profile?.username || null,
-        role: profile?.role || null,
-        level: profile?.level || null,
-        event_type: wasMuted ? 'podcast_unmuted' : 'podcast_muted',
-        message: `User ${wasMuted ? 'unmuted' : 'muted'} podcast audio`,
-        metadata: {}
-      })
-    } catch (err) {
-      console.error('[PodcastAgora] Mute error:', err)
+    // For host: enable/disable the local microphone track
+    if (audioTrackRef.current) {
+      try {
+        audioTrackRef.current.setEnabled(!nextMuted)
+        debugAgora(`[PodcastAgora] Host mic setEnabled: ${!nextMuted}`)
+      } catch (err) {
+        console.error('[PodcastAgora] Error setting host mic enabled:', err)
+      }
     }
-  }, [isMuted, user, profile])
 
-  // Toggle play/pause
+    // For listener: set volume on all remote audio tracks
+    const client = clientRef.current
+    if (client) {
+      const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
+      if (allRemoteUsers) {
+        allRemoteUsers.forEach((remoteUser) => {
+          const audioTrack = remoteUser.audioTrack
+          if (audioTrack) {
+            if (nextMuted || !isPlayingRef.current) {
+              audioTrack.setVolume(0)
+            } else {
+              audioTrack.setVolume(volumeRef.current)
+              try { audioTrack.play() } catch { /* already playing */ }
+            }
+          }
+        })
+      }
+    }
+
+    // Log mute/unmute (fire-and-forget)
+    supabase.from('podcast_rtc_logs').insert({
+      podcast_id: podcastId || null,
+      user_id: user?.id || null,
+      username: profile?.username || null,
+      role: profile?.role || null,
+      level: profile?.level || null,
+      event_type: nextMuted ? 'podcast_muted' : 'podcast_unmuted',
+      message: `User ${nextMuted ? 'muted' : 'unmuted'} podcast audio`,
+      metadata: {}
+    })
+  }, [user, profile, podcastId])
+
+  // Toggle play/pause — actually controls audio playback
   const togglePlay = useCallback(() => {
-    setIsPlaying(prev => !prev)
+    const nextPlaying = !isPlayingRef.current
+    setIsPlaying(nextPlaying)
+    isPlayingRef.current = nextPlaying
+
+    debugAgora(`[PodcastAgora] Toggle play: ${nextPlaying ? 'playing' : 'paused'}`)
+
+    const client = clientRef.current
+    if (client) {
+      const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
+      if (allRemoteUsers) {
+        allRemoteUsers.forEach((remoteUser) => {
+          const audioTrack = remoteUser.audioTrack
+          if (audioTrack) {
+            if (!nextPlaying || isMutedRef.current) {
+              audioTrack.setVolume(0)
+            } else {
+              audioTrack.setVolume(volumeRef.current)
+              try { audioTrack.play() } catch { /* already playing */ }
+            }
+          }
+        })
+      }
+    }
   }, [])
 
-  // Set volume
+  // Set volume — applies to all remote tracks immediately
   const handleSetVolume = useCallback((newVolume: number) => {
     setVolume(newVolume)
-    // Apply volume to remote audio tracks
-    remoteUsers.forEach(user => {
-      if (user.audioTrack) {
-        user.audioTrack.setVolume(newVolume)
+    volumeRef.current = newVolume
+
+    if (!isMutedRef.current && isPlayingRef.current) {
+      const client = clientRef.current
+      if (client) {
+        const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
+        if (allRemoteUsers) {
+          allRemoteUsers.forEach((remoteUser) => {
+            if (remoteUser.audioTrack) {
+              remoteUser.audioTrack.setVolume(newVolume)
+            }
+          })
+        }
+      }
+    }
+  }, [])
+
+  // Apply current volume and mute state to all remote audio tracks
+  const applyAudioStateToRemotes = useCallback(() => {
+    const client = clientRef.current
+    if (!client) return
+    const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
+    if (!allRemoteUsers) return
+    allRemoteUsers.forEach((remoteUser) => {
+      const audioTrack = remoteUser.audioTrack
+      if (audioTrack) {
+        if (isMutedRef.current || !isPlayingRef.current) {
+          audioTrack.setVolume(0)
+        } else {
+          audioTrack.setVolume(volumeRef.current)
+          try { audioTrack.play() } catch { /* already playing */ }
+        }
       }
     })
-  }, [remoteUsers])
+  }, [])
+
+  // When isMuted or isPlaying changes, apply to remote tracks
+  useEffect(() => {
+    if (!joinedRef.current) return
+    applyAudioStateToRemotes()
+  }, [isMuted, isPlaying, applyAudioStateToRemotes])
 
   // Auto-join when enabled and channel changes
   useEffect(() => {
@@ -337,6 +454,14 @@ export function usePodcastAgora({
       }
     }
   }, [enabled, channelName, joinPodcast, leavePodcast])
+
+  useEffect(() => {
+    if (!isHost && isMuted) {
+      remoteUsers.forEach((remoteUser) => {
+        remoteUser.audioTrack?.setVolume(0)
+      })
+    }
+  }, [isHost, isMuted, remoteUsers])
 
   // Cleanup on unmount
   useEffect(() => {

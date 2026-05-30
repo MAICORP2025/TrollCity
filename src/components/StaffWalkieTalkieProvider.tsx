@@ -37,6 +37,10 @@ const WALKIE_TALKIE_ALLOWED_ROLES = [
   'auctioneer',
   'pastor',
   'org_admin',
+  'empire_partner',
+  'troller',
+  'ceo_assistant',
+  'noah_assistant',
 ]
 
 export function StaffWalkieTalkieProvider({ children }: { children: React.ReactNode }) {

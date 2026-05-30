@@ -4,11 +4,19 @@ import { supabase } from '@/lib/supabase'
 import { useBank } from '@/lib/hooks/useBank'
 import { useCoins } from '@/lib/hooks/useCoins'
 import { toast } from 'sonner'
-import { Coins, CreditCard, Landmark, History, AlertCircle, CheckCircle, Lock, Plus, ArrowUpRight } from 'lucide-react'
+import { Coins, CreditCard, Landmark, History, AlertCircle, CheckCircle, Lock, Plus, ArrowUpRight, CalendarClock, AlertTriangle, Clock, TrendingDown } from 'lucide-react'
 import { trollCityTheme } from '@/styles/trollCityTheme'
 import SquarePaymentModal from '@/components/broadcast/SquarePaymentModal'
 import TrollCardSaver from '@/components/payments/TrollCardSaver'
 import { useAuthStore } from '@/lib/store'
+
+function getDaysUntilDue(dueDate: string | null): number | null {
+  if (!dueDate) return null;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const due = new Date(dueDate + 'T00:00:00');
+  return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 export default function TrollBank() {
   const { user, profile, refreshProfile } = useAuthStore()
@@ -221,13 +229,23 @@ export default function TrollBank() {
                 <div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-bold text-red-400">{creditInfo.used.toLocaleString()}</span>
-                    <span className="text-sm text-red-400/70">due</span>
+                    <span className="text-sm text-red-400/70">owed</span>
                   </div>
-                  <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <p className="text-xs text-red-200">
-                      <strong>Warning:</strong> You cannot request cashouts while you have outstanding credit debt.
-                    </p>
+                  <div className="mt-3 flex items-center gap-2 text-xs">
+                    <span className={`font-medium ${creditInfo.pastDue ? 'text-red-400' : 'text-yellow-400'}`}>
+                      {creditInfo.pastDue
+                        ? `⚠ Past due — ${Number(creditInfo.apr).toFixed(1)}% APR accruing`
+                        : `Min payment ${(creditInfo.minimumPayment ?? 0).toLocaleString()} by ${creditInfo.dueDate ? new Date(creditInfo.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}`
+                      }
+                    </span>
                   </div>
+                  {creditInfo.pastDue && (
+                    <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <p className="text-xs text-red-200">
+                        Interest and late fees are being charged daily.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -241,67 +259,159 @@ export default function TrollBank() {
           </div>
         </div>
 
-        {/* Credit Card Management */}
-        <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6`}>
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-purple-400" />
-            Credit Card Management
-          </h2>
+         {/* Credit Card Management */}
+         <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6`}>
+           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+             <CreditCard className="w-5 h-5 text-purple-400" />
+             Credit Card Management
+           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-             <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                 <p className="text-sm text-purple-300 mb-1">Total Credit Limit</p>
-                 <p className="text-2xl font-bold text-white">{(creditInfo?.limit ?? 0).toLocaleString()}</p>
-             </div>
-             <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                 <p className="text-sm text-blue-300 mb-1">Available to Spend</p>
-                 <p className="text-2xl font-bold text-white">{(creditInfo?.available ?? 0).toLocaleString()}</p>
-             </div>
-          </div>
-          
-          {creditInfo.used > 0 && (
-            <div className="space-y-4">
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                <h3 className="font-semibold text-emerald-400 mb-2">Pay Credit Card Bill</h3>
-                <p className={`text-sm ${trollCityTheme.text.secondary} mb-4`}>
-                   Pay down your balance to unlock cashouts and restore your spending limit.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={payAmount}
-                    onChange={(e) => setPayAmount(e.target.value)}
-                    placeholder="Amount to pay"
-                    className={`${trollCityTheme.components.input} flex-1`}
-                  />
-                  <button
-                    onClick={handlePayCredit}
-                    disabled={paying || !payAmount}
-                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold transition-colors"
-                  >
-                    {paying ? 'Paying...' : 'Pay Bill'}
-                  </button>
-                  <button
-                    onClick={() => setPayAmount(creditInfo.used.toString())}
-                    className={`${trollCityTheme.buttons.secondary} px-3 py-2 rounded-lg font-medium transition-colors`}
-                  >
-                    Full Balance
-                  </button>
-                </div>
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                  <p className="text-sm text-purple-300 mb-1">Total Credit Limit</p>
+                  <p className="text-2xl font-bold text-white">{(creditInfo?.limit ?? 0).toLocaleString()}</p>
               </div>
-            </div>
-          )}
+              <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                  <p className="text-sm text-blue-300 mb-1">Available to Spend</p>
+                  <p className="text-2xl font-bold text-white">{(creditInfo?.available ?? 0).toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                  <p className="text-sm text-amber-300 mb-1">Current APR</p>
+                  <p className="text-2xl font-bold text-white">{Number(creditInfo?.apr ?? 25.0).toFixed(1)}%</p>
+              </div>
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+                  <div className="flex items-center gap-1">
+                    <CalendarClock className="w-3.5 h-3.5 text-cyan-300" />
+                    <p className="text-sm text-cyan-300 mb-1">Due Date</p>
+                  </div>
+                  <p className={`text-2xl font-bold ${creditInfo?.pastDue ? 'text-red-400' : 'text-white'}`}>
+                    {creditInfo?.dueDate ? new Date(creditInfo.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                  </p>
+              </div>
+           </div>
 
-          <div className="mt-6 p-4 bg-gray-800/50 rounded-xl">
-             <h3 className="text-sm font-semibold text-gray-300 mb-2">Credit Card Terms</h3>
-             <ul className="text-sm text-gray-400 space-y-1 list-disc pl-4">
-                 <li><strong>Usage:</strong> Valid for Coin Store items and KT Auto vehicles.</li>
-                 <li><strong>Restrictions:</strong> Cannot be used for P2P transfers, gifts, or rent.</li>
-                 <li><strong>Fees:</strong> Flat 8% finance fee added to every transaction.</li>
-                 <li><strong>Cashouts:</strong> Blocked until debt is fully paid.</li>
-             </ul>
-          </div>
-        </div>
+           {/* Billing Cycle Info */}
+           {creditInfo.used > 0 && (
+             <div className="mb-4">
+               {creditInfo.pastDue ? (
+                 <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl mb-4">
+                   <div className="flex items-center gap-2 mb-2">
+                     <AlertTriangle className="w-5 h-5 text-red-400" />
+                     <h3 className="font-semibold text-red-400">PAST DUE — Interest Accruing</h3>
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                     <div>
+                       <p className="text-red-300/70">Minimum Payment</p>
+                       <p className="text-lg font-bold text-red-300">{(creditInfo.minimumPayment ?? 0).toLocaleString()}</p>
+                     </div>
+                     <div>
+                       <p className="text-red-300/70">Interest Accrued</p>
+                       <p className="text-lg font-bold text-red-300">{(creditInfo.interestAccrued ?? 0).toLocaleString()}</p>
+                     </div>
+                     <div>
+                       <p className="text-red-300/70">Late Fees</p>
+                       <p className="text-lg font-bold text-red-300">{(creditInfo.lateFeesAccrued ?? 0).toLocaleString()}</p>
+                     </div>
+                   </div>
+                 </div>
+               ) : (
+                 creditInfo.minimumPayment > 0 && (
+                   <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl mb-4">
+                     <div className="flex items-center gap-2 mb-2">
+                       <Clock className="w-5 h-5 text-yellow-400" />
+                       <h3 className="font-semibold text-yellow-400">Next Payment Due</h3>
+                     </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                       <div>
+                         <p className="text-yellow-300/70">Minimum Payment</p>
+                         <p className="text-lg font-bold text-yellow-300">{(creditInfo.minimumPayment ?? 0).toLocaleString()} coins</p>
+                       </div>
+                       <div>
+                         <p className="text-yellow-300/70">Due By</p>
+                         <p className="text-lg font-bold text-yellow-300">
+                           {creditInfo.dueDate ? new Date(creditInfo.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                         </p>
+                       </div>
+                     </div>
+                   </div>
+                 )
+               )}
+
+               <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                 <h3 className="font-semibold text-emerald-400 mb-2">Make a Payment</h3>
+                 <p className={`text-sm ${trollCityTheme.text.secondary} mb-4`}>
+                   Pay down your balance to reduce interest charges and restore your spending limit.
+                   {creditInfo.pastDue && <span className="text-red-300 block mt-1">Pay at least the minimum of {(creditInfo.minimumPayment ?? 0).toLocaleString()} coins to stop additional late fees.</span>}
+                 </p>
+                 <div className="flex gap-2 items-center">
+                   <input
+                     type="number"
+                     value={payAmount}
+                     onChange={(e) => setPayAmount(e.target.value)}
+                     placeholder="Amount to pay"
+                     className={`${trollCityTheme.components.input} flex-1`}
+                   />
+                   <button
+                     onClick={handlePayCredit}
+                     disabled={paying || !payAmount}
+                     className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold transition-colors whitespace-nowrap"
+                   >
+                     {paying ? 'Paying...' : 'Pay Now'}
+                   </button>
+                   {creditInfo.minimumPayment > 0 && (
+                     <button
+                       onClick={() => setPayAmount(creditInfo.minimumPayment.toString())}
+                       className={`${trollCityTheme.buttons.secondary} px-3 py-2 rounded-lg font-medium transition-colors whitespace-nowrap`}
+                     >
+                       Minimum
+                     </button>
+                   )}
+                   <button
+                     onClick={() => setPayAmount(creditInfo.used.toString())}
+                     className={`${trollCityTheme.buttons.secondary} px-3 py-2 rounded-lg font-medium transition-colors whitespace-nowrap`}
+                   >
+                     Full Balance
+                   </button>
+                 </div>
+               </div>
+
+               {/* Payment History */}
+               {(creditInfo.onTimePayments > 0 || creditInfo.latePayments > 0) && (
+                 <div className="mt-4 p-4 bg-gray-800/50 rounded-xl">
+                   <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                     <TrendingDown className="w-4 h-4 text-gray-400" />
+                     Payment History
+                   </h3>
+                   <div className="grid grid-cols-2 gap-4">
+                     <div className="flex items-center gap-2">
+                       <div className="w-3 h-3 rounded-full bg-green-500" />
+                       <span className="text-sm text-gray-400">On-time payments: <strong className="text-green-400">{creditInfo.onTimePayments}</strong></span>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       <div className="w-3 h-3 rounded-full bg-red-500" />
+                       <span className="text-sm text-gray-400">Late payments: <strong className="text-red-400">{creditInfo.latePayments}</strong></span>
+                     </div>
+                   </div>
+                 </div>
+               )}
+             </div>
+           )}
+
+           <div className="mt-6 p-4 bg-gray-800/50 rounded-xl">
+              <h3 className="text-sm font-semibold text-gray-300 mb-2">Credit Card Terms</h3>
+              <ul className="text-sm text-gray-400 space-y-1 list-disc pl-4">
+                  <li><strong>Usage:</strong> Valid for Coin Store items and KT Auto vehicles.</li>
+                  <li><strong>Restrictions:</strong> Cannot be used for P2P transfers, gifts, or rent.</li>
+                  <li><strong>APR:</strong> Variable rate based on your credit tier (Elite 15%, Trusted 18%, Reliable 22%, Building 28%, Shaky 35%, Untrusted 45%).</li>
+                  <li><strong>Grace Period:</strong> Pay your full statement balance within 25 days of the statement date to avoid all interest charges.</li>
+                  <li><strong>Interest:</strong> If balance is not paid in full by the due date, daily compound interest accrues on the entire balance at your APR rate.</li>
+                  <li><strong>Minimum Payment:</strong> Each billing cycle, pay at least 1% of your balance (min 25 coins) by the due date, or a 35-coin late fee is applied.</li>
+                  <li><strong>Credit Limit:</strong> Automatically increases with on-time payments. Late payments reduce your limit.</li>
+                  <li><strong>Cashouts:</strong> Blocked until debt is fully paid.</li>
+                  <li><strong>Default:</strong> Assets may be repossessed if payment is 7+ days past due.</li>
+              </ul>
+           </div>
+         </div>
 
         {/* ── Small Installment Purchase Credit Building ─────────────────── */}
         <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl p-6`}>

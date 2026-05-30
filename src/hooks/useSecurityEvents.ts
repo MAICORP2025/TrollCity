@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 
@@ -7,8 +7,8 @@ export type SecurityEvent = {
   event_type: string;
   title: string;
   description: string | null;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  status: 'open' | 'investigating' | 'resolved' | 'ignored' | 'false_positive';
+  severity: string;
+  status: string;
   user_id: string | null;
   actor_id: string | null;
   target_user_id: string | null;
@@ -20,8 +20,6 @@ export type SecurityEvent = {
   device_fingerprint: string | null;
   route: string | null;
   source: string;
-  title: string;
-  description: string | null;
   metadata: Record<string, any>;
   risk_score: number;
   reviewed_by: string | null;
@@ -35,7 +33,7 @@ export type RiskScore = {
   id: string;
   user_id: string;
   risk_score: number;
-  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  risk_level: string;
   failed_login_count: number;
   suspicious_action_count: number;
   last_event_at: string | null;
@@ -46,21 +44,92 @@ export type RiskScore = {
   updated_at: string;
 };
 
+export type RateLimitRow = {
+  id: string;
+  bucket: string;
+  identifier: string;
+  user_id: string | null;
+  ip_address: string | null;
+  action: string;
+  hit_count: number;
+  window_start: string;
+  window_end: string;
+  blocked_until: string | null;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  action: string;
+  user_id: string | null;
+  target_id: string | null;
+  details: any;
+  created_at: string;
+  ip_address: string | null;
+};
+
+export type BugReport = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  status: string;
+  severity: string;
+  source: string;
+  page_url: string | null;
+  route_path: string | null;
+  user_id: string | null;
+  user_email: string | null;
+  error_code: string | null;
+  error_message: string;
+  error_details: string | null;
+  stack_trace: string | null;
+  browser_info: any;
+  app_context: any;
+  occurrence_count: number;
+  last_seen_at: string;
+};
+
+export type PayoutRequest = {
+  id: string;
+  user_id: string;
+  coin_amount: number;
+  cash_amount: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  rejection_reason: string | null;
+  amount_usd: number;
+  paypal_email: string | null;
+};
+
+export type IncidentReport = {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  created_by: string | null;
+  assigned_to: string | null;
+  summary: string | null;
+  evidence: any;
+  actions_taken: any;
+  created_at: string;
+  updated_at: string;
+};
+
 type UseSecurityEventsReturn = {
   events: SecurityEvent[];
   riskScores: RiskScore[];
+  rateLimits: RateLimitRow[];
+  auditLogs: AuditLogEntry[];
+  bugReports: BugReport[];
+  payoutRequests: PayoutRequest[];
+  incidentReports: IncidentReport[];
   loading: boolean;
   error: Error | null;
-  filters: {
-    severity: string[];
-    status: string[];
-    event_type: string[];
-    user_id: string | null;
-    search: string;
-  };
-  setFilters: (filters: Partial<UseSecurityEventsReturn['filters']>) => void;
   refresh: () => Promise<void>;
-  resolveEvent: (eventId: string, status: SecurityEvent['status'], note?: string) => Promise<void>;
+  resolveEvent: (eventId: string, status: string, note?: string | null) => Promise<void>;
   markFalsePositive: (eventId: string) => Promise<void>;
   ignoreEvent: (eventId: string) => Promise<void>;
 };
@@ -69,148 +138,176 @@ export const useSecurityEvents = (): UseSecurityEventsReturn => {
   const { user } = useAuthStore();
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
+  const [rateLimits, setRateLimits] = useState<RateLimitRow[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [bugReports, setBugReports] = useState<BugReport[]>([]);
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [incidentReports, setIncidentReports] = useState<IncidentReport[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
-  const [filters, setFilters] = useState<UseSecurityEventsReturn['filters']>({
-    severity: [],
-    status: [],
-    event_type: [],
-    user_id: null,
-    search: '',
-  });
+  const mountedRef = useRef(true);
 
-  // Fetch security events and risk scores
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const fetchData = useCallback(async () => {
     if (!user) {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
-      // Fetch security events with filters
-      let eventsQuery = supabase
-        .from('security_events')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [eventsRes, riskRes, rateRes, auditRes, bugRes, payoutRes, incidentRes] = await Promise.allSettled([
+        supabase
+          .from('security_events')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(500),
+        supabase
+          .from('security_user_risk_scores')
+          .select('*')
+          .order('risk_score', { ascending: false })
+          .limit(200),
+        supabase
+          .from('security_rate_limits')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200),
+        supabase
+          .from('audit_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(300),
+        supabase
+          .from('app_bug_reports')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(300),
+        supabase
+          .from('payout_requests')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200),
+        supabase
+          .from('security_incident_reports')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100),
+      ]);
 
-      // Apply filters
-      if (filters.severity.length > 0) {
-        eventsQuery = eventsQuery.in('severity', filters.severity);
+      if (!mountedRef.current) return;
+
+      const safeSet = <T>(setter: React.Dispatch<React.SetStateAction<T>>, result: PromiseSettledResult<any>) => {
+        if (result.status === 'fulfilled' && !result.value.error) {
+          setter(result.value.data || []);
+        } else if (result.status === 'fulfilled' && result.value.error) {
+          console.warn('[useSecurityEvents] Query returned error:', result.value.error.message);
+        } else if (result.status === 'rejected') {
+          console.warn('[useSecurityEvents] Query failed:', result.reason?.message);
+        }
+      };
+
+      safeSet(setEvents, eventsRes);
+      safeSet(setRiskScores, riskRes);
+      safeSet(setRateLimits, rateRes);
+      safeSet(setAuditLogs, auditRes);
+      safeSet(setBugReports, bugRes);
+      safeSet(setPayoutRequests, payoutRes);
+      safeSet(setIncidentReports, incidentRes);
+
+      const criticalErrors = [eventsRes, riskRes]
+        .filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
+      if (criticalErrors.length === 2) {
+        const firstErr = criticalErrors[0];
+        const errObj = firstErr.status === 'rejected'
+          ? new Error(firstErr.reason?.message || 'Failed to fetch security data')
+          : new Error(firstErr.value.error.message);
+        setError(errObj);
       }
-      if (filters.status.length > 0) {
-        eventsQuery = eventsQuery.in('status', filters.status);
-      }
-      if (filters.event_type.length > 0) {
-        eventsQuery = eventsQuery.in('event_type', filters.event_type);
-      }
-      if (filters.user_id) {
-        eventsQuery = eventsQuery.eq('user_id', filters.user_id);
-      }
-      if (filters.search) {
-        // Search in title and description
-        eventsQuery = eventsQuery.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
-      }
-
-      const { data: eventsData, error: eventsError } = await eventsQuery;
-
-      if (eventsError) throw eventsError;
-
-      // Fetch risk scores
-      const { data: riskScoresData, error: riskScoresError } = await supabase
-        .from('security_user_risk_scores')
-        .select('*')
-        .order('risk_score', { ascending: false });
-
-      if (riskScoresError) throw riskScoresError;
-
-      setEvents(eventsData || []);
-      setRiskScores(riskScoresData || []);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-      console.error('Failed to fetch security events:', err);
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Unknown error fetching security data'));
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, [user, filters.severity, filters.status, filters.event_type, filters.user_id, filters.search]);
+  }, [user]);
 
-  // Fetch initial data
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Realtime subscription for security events
   useEffect(() => {
     if (!user) return;
 
-    const channel = supabase
-      .channel('security-events-changes')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'security_events' },
+    const eventChannel = supabase
+      .channel('security-events-realtime')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'security_events' },
         (payload) => {
-          setEvents((prev) => [payload.new as SecurityEvent, ...prev]);
-        }
-      )
-      .on('postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'security_events' },
-        (payload) => {
-          setEvents((prev) => 
-            prev.map((event) => 
-              event.id === payload.new.id ? (payload.new as SecurityEvent) : event
-            )
-          );
+          if (payload.eventType === 'INSERT') {
+            setEvents((prev) => [(payload.new as SecurityEvent), ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setEvents((prev) =>
+              prev.map((e) => e.id === (payload.new as SecurityEvent).id ? (payload.new as SecurityEvent) : e)
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setEvents((prev) => prev.filter((e) => e.id !== (payload.old as SecurityEvent).id));
+          }
         }
       )
       .subscribe();
 
-    // Also subscribe to risk score updates
     const riskChannel = supabase
-      .channel('security-risk-scores-changes')
-      .on('postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'security_user_risk_scores' },
+      .channel('security-risk-realtime')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'security_user_risk_scores' },
         (payload) => {
-          setRiskScores((prev) => 
-            prev.map((score) => 
-              score.user_id === (payload.new as RiskScore).user_id ? (payload.new as RiskScore) : score
-            )
-          );
+          if (payload.eventType === 'INSERT') {
+            setRiskScores((prev) => [(payload.new as RiskScore), ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setRiskScores((prev) =>
+              prev.map((r) => r.user_id === (payload.new as RiskScore).user_id ? (payload.new as RiskScore) : r)
+            );
+          }
         }
       )
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'security_user_risk_scores' },
+      .subscribe();
+
+    const bugChannel = supabase
+      .channel('security-bugs-realtime')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'app_bug_reports' },
         (payload) => {
-          setRiskScores((prev) => [payload.new as RiskScore, ...prev]);
+          setBugReports((prev) => [(payload.new as BugReport), ...prev]);
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(eventChannel);
       supabase.removeChannel(riskChannel);
+      supabase.removeChannel(bugChannel);
     };
   }, [user]);
 
-  const refresh = useCallback(() => {
-    fetchData();
-  }, [fetchData]);
+  const refresh = useCallback(() => fetchData(), [fetchData]);
 
-  const resolveEvent = async (eventId: string, status: SecurityEvent['status'], note: string = null) => {
-    try {
-      const { error } = await supabase.rpc('resolve_security_event', {
-        p_event_id: eventId,
-        p_status: status,
-        p_note: note,
-      });
-
-      if (error) throw error;
-      
-      // Refetch to get updated data
-      await refresh();
-    } catch (err) {
-      throw err;
-    }
+  const resolveEvent = async (eventId: string, status: string, note: string | null = null) => {
+    const { error } = await supabase.rpc('resolve_security_event', {
+      p_event_id: eventId,
+      p_status: status,
+      p_note: note,
+    });
+    if (error) throw error;
+    await refresh();
   };
 
   const markFalsePositive = async (eventId: string) => {
@@ -224,10 +321,13 @@ export const useSecurityEvents = (): UseSecurityEventsReturn => {
   return {
     events,
     riskScores,
+    rateLimits,
+    auditLogs,
+    bugReports,
+    payoutRequests,
+    incidentReports,
     loading,
     error,
-    filters,
-    setFilters,
     refresh,
     resolveEvent,
     markFalsePositive,

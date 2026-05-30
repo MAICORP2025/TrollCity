@@ -53,16 +53,16 @@ const SETTING_KEYS = {
 
 // Default settings
 const DEFAULT_SETTINGS: DailyRewardSettings = {
-  broadcasterRewardEnabled: true,
-  broadcasterRewardAmount: 25,
+  broadcasterRewardEnabled: false,
+  broadcasterRewardAmount: 0,
   broadcasterMinDurationSeconds: 60,
-  viewerRewardEnabled: true,
-  viewerRewardAmount: 10,
+  viewerRewardEnabled: false,
+  viewerRewardAmount: 0,
   viewerMinStaySeconds: 30,
   viewerMinAccountAgeHours: 24,
   poolThreshold: 10000,
   poolReductionPct: 50,
-  failSafeMode: 'reduce'
+  failSafeMode: 'disable'
 }
 
 /**

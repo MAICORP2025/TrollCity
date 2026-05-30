@@ -14,8 +14,10 @@ import { getBroadcastTheme } from '../lib/broadcastThemes';
 import { deductCoins } from '@/lib/coinTransactions';
 import { purchaseCallMinutes } from '../lib/callMinutes';
 import { useLiveContextStore } from '../lib/liveContextStore';
-
+import { PERKS as LEVEL_PERKS } from '@/config/levelSystem';
 import { trollCityTheme } from '@/styles/trollCityTheme';
+
+const LEVEL_PERK_IDS = new Set(LEVEL_PERKS.map((perk) => perk.id));
 import ManualPaymentModal from '@/components/broadcast/ManualPaymentModal';
 import PayPalPaymentModal from '@/components/broadcast/PayPalPaymentModal';
 import TrollPassBanner from '@/components/ui/TrollPassBanner';
@@ -72,45 +74,11 @@ const SAMPLE_CHAT_SOUNDS = [
   { id: 'sound_10', name: 'Magic Wand', cost: 250, sound_type: 'chat', file_path: '/sounds/wand.mp3' },
 ];
 
-const PROMOTION_TIERS = [
-  { id: '24h', label: '24 Hours', price: 500, hours: 24 },
-  { id: '48h', label: '48 Hours', price: 1000, hours: 48 },
-  { id: '168h', label: '1 Week', price: 2000, hours: 168 },
-];
 
-const FEATURE_PURCHASE_ITEMS = [
-  {
-    id: 'featured_broadcast',
-    title: 'Featured Broadcast',
-    description: 'Schedule your next live stream to appear at the top of LiveNow and receive system promotion via Troll Wall.',
-    category: 'broadcast',
-  },
-  {
-    id: 'troll_wall_spotlight',
-    title: 'Troll Wall Spotlight',
-    description: 'Highlight a system-generated Troll Wall post for your next broadcast or stream update.',
-    category: 'post',
-  },
-  {
-    id: 'podcast_promotion',
-    title: 'Podcast Promotion',
-    description: 'Promote your podcast with premium visibility and a stronger chance to attract live listeners.',
-    category: 'podcast',
-  },
-  {
-    id: 'auction_spotlight',
-    title: 'Live Auction Spotlight',
-    description: 'Feature your auction room and boost visibility for live auction activity.',
-    category: 'auction',
-  },
-];
 
-const formatPromotionDuration = (hours) => {
-  if (hours === 24) return '24h';
-  if (hours === 48) return '48h';
-  if (hours === 168) return '1 week';
-  return `${hours}h`;
-};
+
+
+
 
 const SAMPLE_BROADCAST_THEMES = [
   {
@@ -581,15 +549,24 @@ export default function CoinStore() {
   const [callSounds, setCallSounds] = useState([]);
   const [ownedCallSoundIds, setOwnedCallSoundIds] = useState(new Set());
   const [activeCallSounds, setActiveCallSounds] = useState({});
-  const [callSoundPurchasing, setCallSoundPurchasing] = useState(null);
-  const activeStreamId = useLiveContextStore((s) => s.activeStreamId);
-  const [liveStreamIsLive, setLiveStreamIsLive] = useState(false);
-  const [snackLoading, setSnackLoading] = useState(null);
-  const [lastSnackAt, setLastSnackAt] = useState({});
-  const [showPurchaseComplete, setShowPurchaseComplete] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return Boolean(sessionStorage.getItem('tc-store-show-complete'));
-  });
+const [callSoundPurchasing, setCallSoundPurchasing] = useState(null);
+   const activeStreamId = useLiveContextStore((s) => s.activeStreamId);
+   const [liveStreamIsLive, setLiveStreamIsLive] = useState(false);
+   const [snackLoading, setSnackLoading] = useState(null);
+   const [promotionPurchaseLoading, setPromotionPurchaseLoading] = useState({});
+   const [lastSnackAt, setLastSnackAt] = useState({});
+   const [showPurchaseComplete, setShowPurchaseComplete] = useState(() => {
+     if (typeof window === 'undefined') return false;
+     return Boolean(sessionStorage.getItem('tc-store-show-complete'));
+   });
+const [selectedPostId, setSelectedPostId] = useState(null);
+    const [selectedPodcastId, setSelectedPodcastId] = useState(null);
+    const [selectedAuctionId, setSelectedAuctionId] = useState(null);
+    const [selectedStreamId, setSelectedStreamId] = useState(null);
+    const [userPosts, setUserPosts] = useState([]);
+    const [userPodcasts, setUserPodcasts] = useState([]);
+    const [userAuctions, setUserAuctions] = useState([]);
+    const [userStreams, setUserStreams] = useState([]);
 
   const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
   const isSecretary = profile?.role === 'secretary' || profile?.troll_role === 'secretary';
@@ -732,6 +709,8 @@ export default function CoinStore() {
         setPerksNote,
         'perks',
       );
+      const filteredPerks = (loadedPerks || []).filter((perk) => !LEVEL_PERK_IDS.has(perk.id) && Number(perk.cost || 0) > 0);
+      setPerks(filteredPerks);
       const loadedPlans = applyCatalogData(
         planRes,
         SAMPLE_INSURANCE_PLANS,
@@ -804,13 +783,32 @@ export default function CoinStore() {
     };
   }, [activeStreamId]);
 
-  useEffect(() => {
-    if (tab === 'live_snacks' && !showLiveSnacks) setTab('effects');
-  }, [tab, showLiveSnacks]);
+useEffect(() => {
+     if (tab === 'live_snacks' && !showLiveSnacks) setTab('effects');
+   }, [tab, showLiveSnacks]);
 
-  useEffect(() => {
-    sessionStorage.setItem(STORE_TAB_KEY, tab);
-  }, [tab]);
+   useEffect(() => {
+     sessionStorage.setItem(STORE_TAB_KEY, tab);
+   }, [tab]);
+
+useEffect(() => {
+       if (!user?.id) return;
+       
+       const loadUserContent = async () => {
+         const [postsRes, podcastsRes, auctionsRes, streamsRes] = await Promise.all([
+           supabase.from('troll_wall_posts').select('id,content,created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
+           supabase.from('podcasts').select('id,title,created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
+           supabase.from('auction_shows').select('id,title,status,scheduled_for').eq('auctioneer_id', user.id).order('created_at', { ascending: false }).limit(20),
+           supabase.from('streams').select('id,title,is_live').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20)
+         ]);
+         if (!postsRes.error) setUserPosts(postsRes.data || []);
+         if (!podcastsRes.error) setUserPodcasts(podcastsRes.data || []);
+         if (!auctionsRes.error) setUserAuctions(auctionsRes.data || []);
+         if (!streamsRes.error) setUserStreams(streamsRes.data || []);
+       };
+       
+       loadUserContent();
+     }, [user?.id]);
 
   const showPurchaseCompleteOverlay = () => {
     sessionStorage.setItem(STORE_COMPLETE_KEY, Date.now().toString());
@@ -886,61 +884,7 @@ export default function CoinStore() {
    }
   }
 
-  const buyPromotionFeature = async (item, tier) => {
-    if (!item || !tier) return;
-    const price = Number(tier.price || 0);
-    const hours = Number(tier.hours || 0);
 
-    if (price <= 0 || hours <= 0) {
-      toast.error('Invalid promotion selection');
-      return;
-    }
-
-    if (!useCredit && troll_coins < price) {
-      toast.error(`Not enough Troll Coins. Need ${formatCoins(price)}`);
-      return;
-    }
-    if (useCredit && (creditInfo?.available || 0) < price) {
-      toast.error(`Not enough Credit. Need ${formatCoins(price)}`);
-      return;
-    }
-
-    try {
-      const { success, error: deductError } = await deductCoins({
-        userId: user.id,
-        amount: price,
-        type: 'promotion_purchase',
-        description: `Purchased ${item.title} for ${formatPromotionDuration(hours)}`,
-        metadata: {
-          promotion_id: item.id,
-          promotion_title: item.title,
-          promotion_category: item.category,
-          duration_hours: hours,
-          tier: tier.id,
-        },
-        useCredit,
-        supabaseClient: supabase,
-      });
-
-      if (!success) throw new Error(deductError || 'Payment failed');
-
-      if (item.id === 'featured_broadcast') {
-        const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
-        const { error: updateError } = await supabase
-          .from('user_profiles')
-          .update({ featured_broadcaster_until: expiresAt })
-          .eq('id', user.id);
-        if (updateError) throw updateError;
-      }
-
-      toast.success(`${item.title} purchased for ${formatPromotionDuration(hours)}!`);
-      showPurchaseCompleteOverlay();
-      await loadWalletData(false);
-    } catch (err) {
-      console.error('Promotion purchase error:', err);
-      toast.error(err.message || 'Purchase failed');
-    }
-  }
 
   const unlockBroadcastTheme = async (theme) => {
     try {
@@ -965,6 +909,11 @@ export default function CoinStore() {
   const buyPerk = async (perk) => {
    if (perk.role_required === 'officer' && !(isOfficer || isAdmin || isSecretary)) {
      toast.error('This perk is limited to officers');
+     return;
+   }
+
+   if (LEVEL_PERK_IDS.has(perk.id) || !Number(perk.cost || 0)) {
+     toast.error('This perk is unlocked by level progression and cannot be purchased.');
      return;
    }
 
@@ -1274,28 +1223,27 @@ export default function CoinStore() {
               <button type="button" className={`px-3 py-2 rounded ${tab==='portfolio'?'bg-green-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('portfolio')}>Portfolio</button>
               
               <div className="relative">
-                <button 
-                    type="button" 
-                    className={`px-3 py-2 rounded flex items-center gap-2 ${['effects', 'perks', 'calls', 'insurance', 'themes'].includes(tab) ? 'bg-purple-600' : trollCityTheme.backgrounds.card}`}
-                    onClick={() => setShowStoreDropdown(!showStoreDropdown)}
-                >
-                    Store Items
-                    <ChevronDown className="w-4 h-4" />
-                </button>
-                
-                {showStoreDropdown && (
-                    <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-purple-500/30 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
-                                <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='effects' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('effects'); setShowStoreDropdown(false); }}>Featured Promotions</button>
-                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='perks' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('perks'); setShowStoreDropdown(false); }}>Perks</button>
-                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
-                        <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='themes' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('themes'); setShowStoreDropdown(false); }}>Broadcast Themes</button>
-
-                    </div>
-                )}
-              </div>
+                 <button 
+                     type="button" 
+                     className={`px-3 py-2 rounded flex items-center gap-2 ${['perks', 'calls', 'insurance', 'themes'].includes(tab) ? 'bg-purple-600' : trollCityTheme.backgrounds.card}`}
+                     onClick={() => setShowStoreDropdown(!showStoreDropdown)}
+                 >
+                     Store Items
+                     <ChevronDown className="w-4 h-4" />
+                 </button>
+                 
+                 {showStoreDropdown && (
+                     <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-purple-500/30 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
+                             <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='perks' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('perks'); setShowStoreDropdown(false); }}>Perks</button>
+                         <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
+                         <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='themes' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('themes'); setShowStoreDropdown(false); }}>Broadcast Themes</button>
+ 
+                     </div>
+                 )}
+               </div>
               
 {/* Use Credit Card Toggle */}
-{creditInfo?.limit > 0 && ((creditInfo?.limit || 0) - (creditInfo?.used || 0)) > 0 && (
+{creditInfo?.limit > 0 && (
   <div className="ml-4 flex items-center gap-2 px-3 py-2 bg-zinc-900 border border-purple-500/30 rounded-lg">
     <CreditCard className="w-4 h-4 text-purple-400" />
     <label className="text-sm text-gray-300 flex items-center gap-2 cursor-pointer">
@@ -1307,30 +1255,29 @@ export default function CoinStore() {
       />
       Use Credit Card
     </label>
-    <span className="text-xs text-gray-500">
-      (${((creditInfo?.limit || 0) - (creditInfo?.used || 0)).toLocaleString()} available)
-    </span>
+<span className="text-xs text-gray-500">
+       (${((creditInfo?.limit || 250) - (creditInfo?.used || 0)).toLocaleString()} available)
+     </span>
   </div>
 )}
             </div>
             <div className="md:hidden w-full space-y-2">
-              <select
-                value={tab}
-                onChange={(e) => setTab(e.target.value)}
-                className={`w-full ${trollCityTheme.backgrounds.card} text-white ${trollCityTheme.borders.glass} rounded-lg p-2 text-sm focus:outline-none focus:border-purple-500`}
-              >
-                <option value="coins">Coins</option>
-                <option value="bank">Bank</option>
-                <option value="market">Market</option>
-                <option value="portfolio">Portfolio</option>
-                <option value="effects">Featured Promotions</option>
-                <option value="perks">Perks</option>
-                <option value="calls">Call Minutes</option>
-                <option value="insurance">Insurance</option>
-              </select>
+               <select
+                 value={tab}
+                 onChange={(e) => setTab(e.target.value)}
+                 className={`w-full ${trollCityTheme.backgrounds.card} text-white ${trollCityTheme.borders.glass} rounded-lg p-2 text-sm focus:outline-none focus:border-purple-500`}
+               >
+                 <option value="coins">Coins</option>
+                 <option value="bank">Bank</option>
+                 <option value="market">Market</option>
+                 <option value="portfolio">Portfolio</option>
+                 <option value="perks">Perks</option>
+                 <option value="calls">Call Minutes</option>
+                 <option value="insurance">Insurance</option>
+               </select>
               
               {/* Mobile Use Credit Card Toggle */}
-              {creditInfo?.limit > 0 && creditInfo?.available > 0 && (
+              {creditInfo?.limit > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border border-purple-500/30 rounded-lg">
                   <CreditCard className="w-4 h-4 text-purple-400" />
                   <label className="text-sm text-gray-300 flex items-center gap-2 cursor-pointer">
@@ -1690,7 +1637,7 @@ export default function CoinStore() {
                 
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <Coins className="w-5 h-5 text-yellow-400" />
-                Coin Packages
+                Coin Packages All Coins Packs Have A 5% Coin Fee That Goes To The Bank To Keep The Economy Stable
               </h2>
 
               {/* New User Discount Banner */}
@@ -1816,18 +1763,18 @@ export default function CoinStore() {
                             </div>
                             <div className="flex justify-between text-sm mb-2">
                                <span className="text-gray-400">Credit Limit</span>
-                               <span className="text-gray-400 font-mono">{formatCoins(creditInfo?.limit || 1000)}</span>
+                               <span className="text-gray-400 font-mono">{formatCoins(creditInfo?.limit || 250)}</span>
                             </div>
                             <div className="h-4 bg-gray-800 rounded-full overflow-hidden border border-white/5 relative">
                                <div 
                                   className={`h-full transition-all duration-500 ${
-                                     (creditInfo?.used || 0) > (creditInfo?.limit || 1000) ? 'bg-red-500' : 'bg-purple-500'
+                                     (creditInfo?.used || 0) > (creditInfo?.limit || 250) ? 'bg-red-500' : 'bg-purple-500'
                                   }`}
-                                  style={{ width: `${Math.min(100, ((creditInfo?.used || 0) / (creditInfo?.limit || 1000)) * 100)}%` }}
+                                  style={{ width: `${Math.min(100, ((creditInfo?.used || 0) / (creditInfo?.limit || 250)) * 100)}%` }}
                                />
                             </div>
                             <div className="flex justify-between text-xs mt-2">
-                               <span className="text-purple-400 font-bold">Available: {formatCoins((creditInfo?.limit || 1000) - (creditInfo?.used || 0))}</span>
+                               <span className="text-purple-400 font-bold">Available: {formatCoins((creditInfo?.limit || 250) - (creditInfo?.used || 0))}</span>
                                <span className="text-gray-500">APR: {creditInfo?.apr || 8}%</span>
                             </div>
                          </div>
@@ -1873,7 +1820,7 @@ export default function CoinStore() {
                       </li>
                       <li className="flex items-start gap-2">
                          <span className="text-green-400 font-bold">•</span>
-                         <span><strong className="text-white">Dynamic Limit:</strong> Increases by 10 coins for every day your account exists.</span>
+                         <span><strong className="text-white">Dynamic Limit:</strong> Increases by 1 coin for every day your account exists.</span>
                       </li>
                    </ul>
                 </div>
@@ -2018,48 +1965,7 @@ export default function CoinStore() {
               </div>
           )}
 
-          {/* Promotions Tab */}
-          {tab === 'effects' && (
-            <>
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5 text-purple-400" />
-                Featured Promotions
-              </h2>
-              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
-                Purchase feature packs for broadcasts, Troll Wall posts, podcasts, or live auctions.
-                Featured broadcasts will show on LiveNow and receive system-generated Troll Wall coverage.
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {FEATURE_PURCHASE_ITEMS.map((item) => (
-                  <div key={item.id} className="bg-black/40 p-4 rounded-xl border border-white/10">
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <h3 className="font-semibold text-lg text-white">{item.title}</h3>
-                        <p className="text-sm text-gray-400 mt-2">{item.description}</p>
-                      </div>
-                      <span className="text-xs uppercase tracking-[0.15em] text-purple-300 font-semibold">{item.category}</span>
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {PROMOTION_TIERS.map((tier) => (
-                        <button
-                          key={tier.id}
-                          onClick={() => buyPromotionFeature(item, tier)}
-                          className="group rounded-2xl border border-white/10 bg-zinc-900/70 p-3 text-left hover:border-purple-500/50 hover:bg-zinc-800 transition"
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="text-sm text-gray-300">{tier.label}</span>
-                            <span className="text-yellow-400 font-bold">{formatCoins(tier.price)}</span>
-                          </div>
-                          <p className="text-xs text-gray-500">Features active for {formatPromotionDuration(tier.hours)}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
 
           {/* Perks Tab */}
           {tab === 'perks' && (
@@ -2325,3 +2231,5 @@ export default function CoinStore() {
       )
   );
 }
+
+

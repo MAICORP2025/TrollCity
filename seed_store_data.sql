@@ -26,7 +26,30 @@ INSERT INTO perks (id, name, cost, description, duration_minutes, perk_type) VAL
   ('perk_ban_shield', 'Ban Shield (2hrs)', 1700, 'Immunity from kick, mute, or ban for 2 hours', 120, 'protection'),
   ('perk_double_xp', 'Double XP Mode (1h)', 1300, 'Earn 2x XP for the next hour', 60, 'boost'),
   ('perk_flex_banner', 'Golden Flex Banner (100h)', 3500, 'Golden crown banner on all your messages', 6000, 'cosmetic'),
-  ('perk_troll_spell', 'Troll Spell (1h)', 2800, 'Randomly change another user''s username style & emoji for 100 hour', 60, 'cosmetic')
+  ('perk_troll_spell', 'Troll Spell (1h)', 2800, 'Randomly change another user''s username style & emoji for 100 hour', 60, 'cosmetic'),
+  ('citizen_badge', 'Citizen Badge', 0, 'Show off your status', 52560000, 'cosmetic'),
+  ('profile_border_basic', 'Basic Profile Border', 0, 'Decorate your avatar', 52560000, 'cosmetic'),
+  ('coin_boost_2', '+2% Coin Boost', 0, 'Earn more coins passively', 52560000, 'boost'),
+  ('spotlight_ticket', 'Spotlight Ticket', 0, '15 min spotlight', 52560000, 'visibility'),
+  ('daily_reward_10', '+10% Daily Reward', 0, 'Login bonus increased', 52560000, 'boost'),
+  ('emojis_pack_1', 'Emoji Pack #1', 0, 'New chat emojis', 52560000, 'cosmetic'),
+  ('xp_boost_5', '+5% XP Boost', 0, 'Level up faster', 52560000, 'boost'),
+  ('boost_token', 'Boost Token', 0, 'Boost a stream', 52560000, 'boost'),
+  ('create_family', 'Create Family', 0, 'Start your own Troll Family', 52560000, 'visibility'),
+  ('rising_citizen_badge', 'Rising Citizen Badge', 0, 'You are going places', 52560000, 'cosmetic'),
+  ('gift_xp_2', '+2% Gift XP', 0, 'More XP from gifting', 52560000, 'boost'),
+  ('vip_chat_color', 'VIP Chat Color', 0, 'Stand out in chat', 52560000, 'cosmetic'),
+  ('mini_profile_glow', 'Mini Profile Glow', 0, 'Shiny profile card', 52560000, 'cosmetic'),
+  ('streamer_intro', 'Streamer Intro Sound', 0, 'Play sound when starting stream', 52560000, 'visibility'),
+  ('voice_replies', 'Voice Replies', 0, 'Reply with voice messages', 52560000, 'chat'),
+  ('influencer_badge', 'Influencer Badge', 0, 'A true local celebrity', 52560000, 'cosmetic'),
+  ('legend_chat_badge', 'Legend Chat Badge', 0, 'Respect the legend', 52560000, 'cosmetic'),
+  ('shimmer_name', 'Shimmer Name Effect', 0, 'Your name sparkles', 52560000, 'cosmetic'),
+  ('legend_badge', 'Legend Badge', 0, 'Top tier status', 52560000, 'cosmetic'),
+  ('custom_emote', 'Custom Emote Slot', 0, 'Upload your own emote', 52560000, 'cosmetic'),
+  ('cyber_city_theme', 'Theme: Cyber City', 0, 'Exclusive app theme', 52560000, 'cosmetic'),
+  ('voice_room', 'Voice Room Access', 0, 'Create voice-only rooms', 52560000, 'chat'),
+  ('founders_wall', 'Founders Wall', 0, 'Name listed on wall', 52560000, 'cosmetic')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert insurance options

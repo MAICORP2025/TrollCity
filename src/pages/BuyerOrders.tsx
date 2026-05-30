@@ -208,6 +208,7 @@ export default function BuyerOrders() {
     setIsLoading(true)
 
     try {
+      // Fetch marketplace purchases
       const { data, error } = await supabase
         .from('marketplace_purchases')
         .select(`
@@ -244,8 +245,100 @@ export default function BuyerOrders() {
         .eq('buyer_id', user.id)
         .order('created_at', { ascending: false })
 
+      // Also fetch auction wins that may not be in marketplace_purchases yet
+      const { data: auctionWins } = await supabase
+        .from('auction_lots')
+        .select(`
+          id,
+          title,
+          image_url,
+          current_highest_bid,
+          starting_bid,
+          winner_user_id,
+          auction_show_id,
+          condition,
+          auction_shows!inner(
+            id,
+            title,
+            auctioneer_id,
+            auctioneer:auctioneer_profiles(
+              user_id,
+              user_profiles!inner(
+                id,
+                username,
+                avatar_url
+              )
+            )
+          )
+        `)
+        .eq('winner_user_id', user.id)
+        .eq('status', 'sold')
+        .order('queue_position', { ascending: true })
+
       if (error) throw error
-      setOrders((data || []) as MarketplacePurchase[])
+
+      const marketplaceOrders = (data || []) as MarketplacePurchase[]
+
+      // Convert auction wins to marketplace purchase format for unified display
+      const auctionOrderItems: MarketplacePurchase[] = (auctionWins || [])
+        .filter((aw: any) => {
+          // Only include if not already in marketplace_purchases
+          return !marketplaceOrders.some((mo) => mo.item_id === aw.id)
+        })
+        .map((aw: any) => {
+          const show = aw.auction_shows
+          const auctioneerProfile = show?.auctioneer?.user_profiles
+          return {
+            id: `auction-${aw.id}`,
+            buyer_id: user.id,
+            seller_id: show?.auctioneer?.user_id || '',
+            item_id: aw.id,
+            price_paid: aw.current_highest_bid || aw.starting_bid || 0,
+            platform_fee: 0,
+            seller_earnings: aw.current_highest_bid || aw.starting_bid || 0,
+            status: 'paid' as const,
+            fulfillment_status: 'awaiting_fulfillment' as any,
+            tracking_number: null,
+            tracking_url: null,
+            shipping_carrier: null,
+            shipped_at: null,
+            delivered_at: null,
+            cancellation_requested_at: null,
+            cancelled_at: null,
+            refunded_at: null,
+            shipping_name: null,
+            shipping_address: null,
+            shipping_city: null,
+            shipping_state: null,
+            shipping_zip: null,
+            created_at: new Date().toISOString(),
+            appeal_id: null,
+            troll_court_case_id: null,
+            source: 'auction',
+            marketplace_item: {
+              id: aw.id,
+              title: aw.title,
+              description: null,
+              thumbnail_url: aw.image_url,
+              type: 'auction',
+            },
+            seller_profile: auctioneerProfile
+              ? {
+                  id: auctioneerProfile.id,
+                  username: auctioneerProfile.username || 'Auctioneer',
+                  avatar_url: auctioneerProfile.avatar_url,
+                }
+              : null,
+            shipment: null,
+          } as unknown as MarketplacePurchase
+        })
+
+      // Combine and sort by date
+      const allOrders = [...marketplaceOrders, ...auctionOrderItems].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+
+      setOrders(allOrders)
     } catch (err) {
       console.error('[BuyerOrders] Error fetching orders:', err)
       toast.error('Failed to load orders')
@@ -281,7 +374,17 @@ export default function BuyerOrders() {
     const query = searchQuery.trim().toLowerCase()
 
     return orders.filter((order) => {
-      const matchesStatus = filterStatus === 'all' || order.status === filterStatus
+      const isAuction = (order as any).source === 'auction'
+
+      let matchesStatus: boolean
+      if (filterStatus === 'all') {
+        matchesStatus = true
+      } else if (filterStatus === 'auction') {
+        matchesStatus = isAuction
+      } else {
+        matchesStatus = order.status === filterStatus && !isAuction
+      }
+
       const matchesSearch =
         !query ||
         order.marketplace_item?.title?.toLowerCase().includes(query) ||
@@ -445,7 +548,7 @@ export default function BuyerOrders() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {(['all', 'paid', 'shipped', 'completed', 'cancelled'] as const).map((status) => (
+            {(['all', 'auction', 'paid', 'shipped', 'completed', 'cancelled'] as const).map((status) => (
               <button
                 key={status}
                 onClick={() => setFilterStatus(status)}
@@ -454,7 +557,7 @@ export default function BuyerOrders() {
                   filterStatus === status ? 'bg-cyan-300 text-slate-950' : 'bg-slate-900/80 text-slate-400 hover:bg-slate-800'
                 )}
               >
-                {status === 'all' ? 'All' : STATUS_CONFIG[status]?.label || status}
+                {status === 'all' ? 'All' : status === 'auction' ? '🎯 Auction Wins' : STATUS_CONFIG[status]?.label || status}
               </button>
             ))}
           </div>
@@ -505,7 +608,15 @@ export default function BuyerOrders() {
                       )}
 
                       <div>
-                        <div className="font-bold text-white">{order.marketplace_item?.title || 'Item'}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white">{order.marketplace_item?.title || 'Item'}</span>
+                          {(order as any).source === 'auction' && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-purple-300/25 bg-purple-400/10 px-2 py-0.5 text-[10px] font-black uppercase text-purple-100">
+                              <Gavel className="h-2.5 w-2.5" />
+                              Auction Win
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <span>by {order.seller_profile?.username || 'Unknown'}</span>
                           <span>•</span>

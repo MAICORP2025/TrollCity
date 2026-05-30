@@ -133,14 +133,14 @@ export default function OrganizationMembers({ organization, canManage = false }:
         <h2 className="mb-1 text-sm font-semibold text-white">Staff Members</h2>
         <p className="mb-4 text-xs text-zinc-400">Invite staff into this organization scope.</p>
         {canManage && (
-          <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_140px_auto]">
-            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="member@email.com" className="rounded-md border border-purple-500/20 bg-black/30 px-3 py-2 text-sm text-white" />
-            <select value={role} onChange={(event) => setRole(event.target.value)} className="rounded-md border border-purple-500/20 bg-black/30 px-3 py-2 text-sm text-white">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="member@email.com" className="min-w-0 flex-1 rounded-md border border-purple-500/20 bg-black/30 px-3 py-2 text-sm text-white" />
+            <select value={role} onChange={(event) => setRole(event.target.value)} className="rounded-md border border-purple-500/20 bg-black/30 px-3 py-2 text-sm text-white sm:w-36">
               <option value="org_admin">Org admin</option>
               <option value="staff">Staff</option>
               <option value="viewer">Viewer</option>
             </select>
-            <button onClick={inviteMember} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white">
+            <button onClick={inviteMember} disabled={loading} className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white">
               <UserPlus className="h-4 w-4" />
               Add
             </button>

@@ -56,22 +56,21 @@ type PayoutItem = {
 };
 
 const roleOptions = [
-    { value: 'auctioneer', label: 'Auctioneer' },
-    { value: 'prosecutor', label: 'Prosecutor' },
-    { value: 'attorney', label: 'Attorney' },
-    { value: 'tcnn_news_caster', label: 'TCNN News Caster' },
-    { value: 'secretary', label: 'Secretary' },
-    { value: 'tcnn_chief_news_caster', label: 'TCNN Chief News Caster' },
-    { value: 'troll_officer', label: 'Troll Officer' },
-    { value: 'journalist', label: 'Journalist' },
-    { value: 'lead_troll_officer', label: 'Lead Troll Officer' },
-    { value: 'troller', label: 'Troller' },
-    { value: 'agency_hr_manager', label: 'Agency HR Manager' },
-    { value: 'agency_hr', label: 'Agency HR' },
-    { value: 'agency_leader', label: 'Agency Leader' },
-    { value: 'troll_family_leader', label: 'Troll Family Leader' },
-    { value: 'ceo_assistant', label: 'CEO Assistant' },
-    { value: 'noah_assistant', label: 'Noah Assistant' },
+    { value: 'auctioneer', label: 'Auctioneer', pricingModel: 'case' as const },
+    { value: 'prosecutor', label: 'Prosecutor', pricingModel: 'case' as const },
+    { value: 'attorney', label: 'Attorney', pricingModel: 'case' as const },
+    { value: 'tcnn_news_caster', label: 'TCNN News Caster', pricingModel: 'week' as const },
+    { value: 'secretary', label: 'Secretary', pricingModel: 'week' as const },
+    { value: 'tcnn_chief_news_caster', label: 'TCNN Chief News Caster', pricingModel: 'week' as const },
+    { value: 'troll_officer', label: 'Troll Officer', pricingModel: 'week' as const },
+    { value: 'journalist', label: 'Journalist', pricingModel: 'week' as const },
+    { value: 'lead_troll_officer', label: 'Lead Troll Officer', pricingModel: 'week' as const },
+    { value: 'agency_hr_manager', label: 'Agency HR Manager', pricingModel: 'week' as const },
+    { value: 'agency_hr', label: 'Agency HR', pricingModel: 'week' as const },
+    { value: 'agency_leader', label: 'Agency Leader', pricingModel: 'week' as const },
+    { value: 'troll_family_leader', label: 'Troll Family Leader', pricingModel: 'week' as const },
+    { value: 'ceo_assistant', label: 'CEO Assistant', pricingModel: 'week' as const },
+    { value: 'noah_assistant', label: 'Noah Assistant', pricingModel: 'week' as const },
 ];
 
 const getCurrentWeekStart = () => {
@@ -588,7 +587,9 @@ export default function TreasuryDashboard() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm text-slate-200">Weekly Troll Coins</label>
+                  <label className="mb-2 block text-sm text-slate-200">
+                    Troll Coins per {roleOptions.find((o) => o.value === selectedRole)?.pricingModel === 'case' ? 'Case' : 'Week'}
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -597,6 +598,9 @@ export default function TreasuryDashboard() {
                     disabled={!canEdit}
                     className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white disabled:cursor-not-allowed disabled:text-slate-500"
                   />
+                  {roleOptions.find((o) => o.value === selectedRole)?.pricingModel === 'case' && (
+                    <p className="mt-1 text-xs text-slate-500">This role earns coins per case handled. Set the amount per case below.</p>
+                  )}
                 </div>
 
                 <div className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-300">

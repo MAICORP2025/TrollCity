@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '../supabaseClient'
 import { useAuthStore } from '../lib/store'
+import { grantLevelPerksForUser } from '../lib/levelPerkSystem'
 
 interface XPState {
   xpTotal: number
@@ -21,6 +22,7 @@ export const useXPStore = create<XPState>((set) => {
   let xpFetchPromise: Promise<void> | null = null;
   let lastXPFetchUserId: string | null = null;
   let lastXPFetchTime = 0;
+  let lastLevelPerksSynced = 0;
   const XP_FETCH_DEBOUNCE_MS = 20 * 1000;
 
   const syncAuthProfile = (level: number, totalXp: number, nextLevelXp: number | null) => {
@@ -149,6 +151,10 @@ export const useXPStore = create<XPState>((set) => {
         return;
       }
 
+      if (userId !== lastXPFetchUserId) {
+        lastLevelPerksSynced = 0;
+      }
+
       if (userId === lastXPFetchUserId && now - lastXPFetchTime < XP_FETCH_DEBOUNCE_MS) {
         console.log('[XP Store] Skipping XP fetch due to cooldown:', userId);
         set({ isLoading: false });
@@ -186,6 +192,10 @@ export const useXPStore = create<XPState>((set) => {
             });
 
             syncAuthProfile(levelValue, totalXp, nextLevelAbsolute);
+            if (levelValue > lastLevelPerksSynced) {
+              await grantLevelPerksForUser(userId, levelValue)
+              lastLevelPerksSynced = levelValue
+            }
             lastXPFetchTime = Date.now();
           } else {
             console.log('[XP Store] No user_stats found, initializing...');
@@ -207,6 +217,8 @@ export const useXPStore = create<XPState>((set) => {
                 isLoading: false
               });
               syncAuthProfile(1, 0, 100);
+              lastLevelPerksSynced = 1;
+              await grantLevelPerksForUser(userId, 1)
               lastXPFetchTime = Date.now();
             } else {
               set({ isLoading: false });
@@ -235,9 +247,18 @@ export const useXPStore = create<XPState>((set) => {
         return
       }
 
-      if (xpChannelUserId === userId && channel) {
+      if (channel && channel.state === 'joined') {
         console.log('[XP Store] Already subscribed to XP for user:', userId)
         return
+      }
+
+      if (xpChannelUserId === userId && channel) {
+        console.log('[XP Store] Channel exists for user, skipping re-subscribe:', userId)
+        return
+      }
+
+      if (xpChannelUserId !== userId) {
+        lastLevelPerksSynced = 0
       }
 
       if (channel) {
@@ -262,7 +283,7 @@ export const useXPStore = create<XPState>((set) => {
             table: 'user_stats',
             filter: `user_id=eq.${userId}`
           },
-          (payload) => {
+          async (payload) => {
             console.log('[XP Store] Realtime update received:', payload)
             
             if (payload.eventType === 'DELETE') {
@@ -298,6 +319,10 @@ export const useXPStore = create<XPState>((set) => {
                 isLoading: false
               });
               syncAuthProfile(levelValue, totalXp, nextLevelAbsolute);
+              if (levelValue > lastLevelPerksSynced) {
+                await grantLevelPerksForUser(userId, levelValue)
+                lastLevelPerksSynced = levelValue
+              }
             }
           }
         )
@@ -305,12 +330,11 @@ export const useXPStore = create<XPState>((set) => {
           console.log('[XP Store] Subscription status:', status)
           if (status === 'CHANNEL_ERROR') {
             console.error('[XP Store] Channel error, will retry in 5s')
-            // Retry subscription after delay
+            const capturedChannel = channel
+            channel = null
+            xpChannelUserId = null
             setTimeout(() => {
-              if (channel) {
-                supabase.removeChannel(channel)
-                channel = null
-              }
+              supabase.removeChannel(capturedChannel)
               useXPStore.getState().subscribeToXP(userId)
             }, 5000)
           }

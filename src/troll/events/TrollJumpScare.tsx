@@ -46,23 +46,44 @@ const TrollJumpScare: React.FC<TrollJumpScareProps> = ({ rarity }) => {
       // Clean up previous audio
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.removeAttribute('src');
+        audioRef.current.load();
         audioRef.current = null;
       }
 
       const soundIndex = index % scarySounds.length;
       const soundPath = scarySounds[soundIndex];
-      
-      const audio = new Audio(soundPath);
+
+      const audio = new Audio();
       audioRef.current = audio;
-      
+
       audio.volume = Math.min(volume, 1.0);
       audio.preload = 'auto';
-      
-      // Play with user interaction requirement handled by the overlay
-      audio.play().catch(err => {
-        console.warn('[JumpScare] Audio play failed:', err);
-        // Audio might be blocked by browser - this is expected without user gesture
-        // But jumpscare is triggered by gift which usually has user gesture
+
+      // Set up error handling before setting src
+      audio.onerror = () => {
+        console.warn('[JumpScare] Audio load error:', audio.error?.message || 'unknown', 'src:', soundPath);
+        // Clean up failed audio
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+      };
+
+      // Set src after error handler is registered
+      audio.src = soundPath;
+
+      // Wait for the audio to be ready before playing
+      const onCanPlay = () => {
+        audio.removeEventListener('canplaythrough', onCanPlay);
+        audio.play().catch(err => {
+          console.warn('[JumpScare] Audio play failed:', err);
+        });
+      };
+      audio.addEventListener('canplaythrough', onCanPlay);
+
+      // Also try playing immediately in case the audio is already cached
+      audio.play().catch(() => {
+        // Ignore — the canplaythrough handler will retry
       });
     } catch (err) {
       console.warn('[JumpScare] Sound error:', err);

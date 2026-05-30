@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { toast } from 'sonner';
 import { 
-  AlertTriangle, Eye, Check, X, Clock, User, Gavel
+  AlertTriangle, ArrowLeft, BarChart3, Check, CheckCircle2, Clock, Eye, Gavel, Package, Settings, Users, X
 } from 'lucide-react';
 
 interface AuctionReport {
@@ -115,9 +116,46 @@ export default function AuctionReports() {
     return r.status === filter;
   });
 
+  const navigate = useNavigate();
+
+  const navItems = [
+    { label: 'My Shows', icon: Gavel, route: '/auctions/studio' },
+    { label: 'Inventory', icon: Package, route: '/auctions/inventory' },
+    { label: 'Bidders', icon: Users, route: '/auctions/bidders' },
+    { label: 'Sales', icon: CheckCircle2, route: '/auctions/sales' },
+    { label: 'Analytics', icon: BarChart3, route: '/auctions/analytics' },
+    { label: 'Settings', icon: Settings, route: '/auctions/settings' },
+  ];
+
   return (
     <div className="bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
       <div className="max-w-6xl mx-auto">
+        {/* Nav bar */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            onClick={() => navigate('/auctions/studio')}
+            className="inline-flex items-center gap-2 self-start rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/20"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Studio
+          </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  onClick={() => navigate(item.route)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-900/60 px-2.5 py-1.5 text-[11px] font-bold text-gray-400 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-200"
+                >
+                  <Icon className="h-3 w-3" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <div className="p-3 bg-red-500/20 rounded-xl border border-red-500/30">

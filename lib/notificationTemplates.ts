@@ -142,6 +142,12 @@ export const STAFF_OFFLINE_NOTIFICATIONS = {
     body: 'A system event needs review in the RTC monitor.',
     type: 'rtc_monitor_alert',
   },
+
+  team_meeting_started: {
+    title: '👥 Team Meeting Started',
+    body: 'A staff meeting has started. Click to join.',
+    type: 'team_meeting_started',
+  },
 } as const
 
 export const ADMIN_OFFLINE_NOTIFICATIONS = {

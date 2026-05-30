@@ -53,6 +53,7 @@ import { useJailMode } from '@/hooks/useJailMode'
 import { useBroadcastLockdown } from '@/hooks/useBroadcastLockdown'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { STORE_USD_PER_COIN } from '@/lib/coinMath'
+import { NIGHT_WATCH_PATROL_ROLES } from '@/lib/staff'
 
 type GridGlow = 'green' | 'pink' | 'cyan' | 'red' | 'purple' | 'teal'
 
@@ -131,42 +132,91 @@ export default function Sidebar() {
   const { isCollapsed, setCollapsed, expandGroup } = useSidebarStore()
   const isSidebarCollapsed = isCollapsed
   const setIsSidebarCollapsed = setCollapsed
-  const { isJailed } = useJailMode()
-  const { isBroadcastLockedDown } = useBroadcastLockdown()
+  const { isJailed } = useJailMode(profile?.id)
+  const { isLocked: isBroadcastLockedDown } = useBroadcastLockdown()
+
+  const role = String(profile?.role || '')
+  const trollRole = String(profile?.troll_role || '')
+
+  const canSeeAttorneyDashboard = Boolean(
+    isAttorney ||
+    profile?.is_attorney ||
+    role === 'attorney' ||
+    trollRole === 'attorney'
+  )
+
+  const canSeeAuctionStudio = Boolean(
+    isApprovedAuctioneer ||
+    (profile?.role as string) === 'auctioneer' ||
+    profile?.troll_role === 'auctioneer' ||
+    (profile as any)?.is_auctioneer
+  )
+
+  const canSeeProsecutorDashboard = Boolean(
+    isProsecutor ||
+    profile?.is_prosecutor ||
+    role === 'prosecutor' ||
+    trollRole === 'prosecutor'
+  )
 
   const isAdmin =
-    profile?.role === UserRole.ADMIN ||
-    profile?.troll_role === UserRole.ADMIN ||
-    profile?.role === UserRole.HR_ADMIN ||
-    profile?.role === UserRole.AGENCY_HR_MANAGER ||
+    role === String(UserRole.ADMIN) ||
+    trollRole === String(UserRole.ADMIN) ||
+    role === String(UserRole.HR_ADMIN) ||
+    role === String(UserRole.AGENCY_HR_MANAGER) ||
     profile?.is_admin ||
-profile?.role === 'superadmin' ||
-    profile?.troll_role === 'ceo' ||
+    role === 'superadmin' ||
+    trollRole === 'ceo' ||
     !!(profile as { is_superadmin?: boolean })?.is_superadmin
 
-  const isAgentHRManager =
-    profile?.role === UserRole.AGENCY_HR_MANAGER ||
-    profile?.role === UserRole.HR_ADMIN ||
-    profile?.role === UserRole.ADMIN
+  const isCEO = role === 'ceo' || trollRole === 'ceo' || isAdmin
+  const isCEOAssistant = role === 'ceo_assistant' || trollRole === 'ceo_assistant' || (profile as any)?.is_ceo_assistant
+  const isNoahAssistant = role === 'noah_assistant' || trollRole === 'noah_assistant' || (profile as any)?.is_noah_assistant
+  const isNoahAdmin = role === 'noah_admin' || trollRole === 'noah_admin' || (profile as any)?.is_noah_admin
 
-  const isSecretary = profile?.role === UserRole.SECRETARY || profile?.troll_role === UserRole.SECRETARY
+  const canSeeAgencyHRDashboard = Boolean(
+    role === String(UserRole.AGENCY_HR_MANAGER) ||
+    role === String(UserRole.HR_ADMIN) ||
+    role === String(UserRole.ADMIN) ||
+    role === 'agency_hr' ||
+    trollRole === 'agency_hr' ||
+    trollRole === String(UserRole.AGENCY_HR_MANAGER) ||
+    trollRole === 'agency_hr_manager' ||
+    (profile as any)?.is_agency_hr ||
+    (profile as any)?.is_agency_hr_manager
+  )
+
+  const isSecretary = role === String(UserRole.SECRETARY) || trollRole === String(UserRole.SECRETARY)
 
   const isLead =
-    profile?.role === UserRole.LEAD_TROLL_OFFICER ||
+    role === String(UserRole.LEAD_TROLL_OFFICER) ||
     profile?.is_lead_officer ||
-    profile?.troll_role === UserRole.LEAD_TROLL_OFFICER ||
+    trollRole === String(UserRole.LEAD_TROLL_OFFICER) ||
     isAdmin
 
   const canSeeCourt = !!user && !!profile
   const canAccessOrgDashboard = hasOrganization || isOrgAdmin || isAdmin || isStaff || isSecretary || canSeeOfficer || canSeeSecretary
-  const canAccessMaiClass = canAccessOrgDashboard || profile?.role === 'student' || (profile as any)?.is_org_student
+  const canAccessMaiClass = canAccessOrgDashboard || role === 'student' || (profile as any)?.is_org_student
+
+  const profileRoleLower = String(profile?.role || '').toLowerCase()
+  const trollRoleLower = String(profile?.troll_role || '').toLowerCase()
+
+  const canAccessNightWatch = Boolean(
+    isAdmin ||
+    canSeeOfficer ||
+    canSeeSecretary ||
+    isCEOAssistant ||
+    isNoahAssistant ||
+    NIGHT_WATCH_PATROL_ROLES.includes(profileRoleLower as any) ||
+    NIGHT_WATCH_PATROL_ROLES.includes(trollRoleLower as any)
+  )
 
   const canBroadcast = () => {
     return !isBroadcastLockedDown &&
       profile?.drivers_license_status !== 'suspended' &&
-      (profile?.role === UserRole.BROADCASTER ||
+      (role === 'broadcaster' ||
         profile?.is_broadcaster ||
-        profile?.troll_role === UserRole.BROADCASTER)
+        trollRole === 'broadcaster')
   }
 
   useEffect(() => {
@@ -259,11 +309,11 @@ profile?.role === 'superadmin' ||
             secData?.role === UserRole.TROLL_CITY_SECRETARY ||
             !!(profile?.is_admin as boolean | undefined) ||
             !!(profile?.is_secretary as boolean | undefined) ||
-            profile?.role === 'superadmin' ||
-            profile?.role === 'ceo' ||
-            !!(profile?.troll_role &&
-              ['secretary', UserRole.EXECUTIVE_SECRETARY, UserRole.TROLL_CITY_SECRETARY].includes(
-                String(profile.troll_role),
+            role === 'superadmin' ||
+            role === 'ceo' ||
+            !!(trollRole &&
+              ['secretary', String(UserRole.EXECUTIVE_SECRETARY), String(UserRole.TROLL_CITY_SECRETARY)].includes(
+                trollRole,
               ))
         )
         setIsStaff(secData?.role === UserRole.SECRETARY || secData?.role === UserRole.ADMIN || !!officerData)
@@ -369,13 +419,13 @@ profile?.role === 'superadmin' ||
   return (
     <aside
       className={cx(
-        'fixed left-0 top-0 z-50 flex h-[100dvh] max-h-screen flex-col border-r border-cyan-400/20 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.50),0_0_28px_rgba(45,212,191,0.10),inset_0_0_30px_rgba(147,51,234,0.08)] backdrop-blur-2xl transition-all duration-300',
+        'fixed left-0 top-0 z-50 flex h-screen max-h-screen flex-col overflow-hidden border-r border-cyan-400/20 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.50),0_0_28px_rgba(45,212,191,0.10),inset_0_0_30px_rgba(147,51,234,0.08)] backdrop-blur-2xl transition-all duration-300',
         isSidebarCollapsed ? 'w-20' : 'w-72'
       )}
     >
       <ShellBackdrop />
 
-      <div className="relative z-10 border-b border-white/10 bg-white/[0.025] p-3">
+      <div className="relative z-10 shrink-0 border-b border-white/10 bg-white/[0.025] p-3">
         <div className={cx('flex items-center', isSidebarCollapsed ? 'justify-center' : 'justify-between')}>
           {!isSidebarCollapsed && (
             <SafeLink to="/home" className="group flex min-w-0 items-center gap-3">
@@ -398,7 +448,7 @@ profile?.role === 'superadmin' ||
             type="button"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className={cx(
-              'rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-all duration-200 hover:border-cyan-300/35 hover:bg-white/[0.08] hover:text-white hover:shadow-[0_0_18px_rgba(45,212,191,0.18)]',
+              'shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-all duration-200 hover:border-cyan-300/35 hover:bg-white/[0.08] hover:text-white hover:shadow-[0_0_18px_rgba(45,212,191,0.18)]',
               isSidebarCollapsed && 'mx-auto'
             )}
             aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -409,7 +459,7 @@ profile?.role === 'superadmin' ||
       </div>
 
       {!isSidebarCollapsed && profile && (
-        <div className="relative z-10 px-3 pt-3">
+        <div className="relative z-10 shrink-0 px-3 pt-3">
           <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
             <UserProfileWidget />
           </div>
@@ -417,7 +467,7 @@ profile?.role === 'superadmin' ||
       )}
 
       {!isSidebarCollapsed && profile && (
-        <div className="relative z-10 grid grid-cols-3 gap-2 px-3 pt-3">
+        <div className="relative z-10 shrink-0 grid grid-cols-3 gap-2 px-3 pt-3">
           {quickStatus.map(item => (
             <div key={item.label} className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-center">
               <div className="truncate text-[10px] text-slate-400">{item.label}</div>
@@ -430,7 +480,7 @@ profile?.role === 'superadmin' ||
         </div>
       )}
 
-      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto px-2 py-3 custom-scrollbar">
+      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 pb-6 overscroll-contain custom-scrollbar">
     {jailedLocked ? (
   <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
     {!isSidebarCollapsed && (
@@ -503,13 +553,13 @@ profile?.role === 'superadmin' ||
             <SectionTitle title="City Services" collapsed={isSidebarCollapsed} />
             <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Advertise" to="/city-registry/advertise" active={isActive('/city-registry/advertise')} highlight={isUpdated('/city-registry/advertise')} onClick={() => markAsViewed('/city-registry/advertise')} tone="pink" />
             <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Appeals" to="/city-registry" active={isActive('/city-registry')} highlight={isUpdated('/city-registry')} onClick={() => markAsViewed('/city-registry')} tone="purple" />
-            {((profile as any)?.is_journalist || profile?.is_news_caster || profile?.is_chief_news_caster || isAdmin || profile?.role === 'superadmin' || (profile as any)?.is_superadmin) && (
+            {((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin || role === 'superadmin' || (profile as any)?.is_superadmin) && (
               <GridItem collapsed={isSidebarCollapsed} icon={Newspaper} label="TCNN" to="/tcnn/dashboard" active={location.pathname.startsWith('/tcnn/dashboard')} highlight={isUpdated('/tcnn/dashboard')} onClick={() => markAsViewed('/tcnn/dashboard')} className="text-blue-400" tone="blue" />
             )}
-            {isAttorney && (
+            {canSeeAttorneyDashboard && (
               <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Attorney" to="/attorney" active={isActive('/attorney')} highlight={isUpdated('/attorney')} onClick={() => markAsViewed('/attorney')} className="text-cyan-200" tone="cyan" />
             )}
-{isApprovedAuctioneer && (
+{canSeeAuctionStudio && (
   <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Auction Studio" to="/auctions/studio" active={location.pathname.startsWith('/auctions/studio')} highlight={isUpdated('/auctions/studio')} onClick={() => markAsViewed('/auctions/studio')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
 )}
             <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Credit" to="/credit-scores" active={isActive('/credit-scores')} highlight={isUpdated('/credit-scores')} onClick={() => markAsViewed('/credit-scores')} tone="green" />
@@ -531,7 +581,7 @@ profile?.role === 'superadmin' ||
             )}
              <GridItem collapsed={isSidebarCollapsed} icon={Star} label="Mai Talent" to="/mai-talent" active={isActive('/mai-talent')} highlight={isUpdated('/mai-talent')} onClick={() => markAsViewed('/mai-talent')} className="text-pink-400" tone="pink" glow="pink" underConstruction={!isAdmin} />
             <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} highlight={isUpdated('/marketplace')} onClick={() => markAsViewed('/marketplace')} tone="purple" />
-            {isApprovedAuctioneer && (
+            {canSeeAuctionStudio && (
               <GridItem collapsed={isSidebarCollapsed} icon={List} label="My Shows" to="/auctions/my-shows" active={location.pathname.startsWith('/auctions/my-shows')} highlight={isUpdated('/auctions/my-shows')} onClick={() => markAsViewed('/auctions/my-shows')} className="text-green-400" tone="green" />
             )}
             <GridItem collapsed={isSidebarCollapsed} icon={Waves} label="Pool" to="/pool" active={isActive('/pool')} highlight={isUpdated('/pool')} onClick={() => markAsViewed('/pool')} className="text-cyan-400" tone="cyan" />
@@ -568,6 +618,9 @@ profile?.role === 'superadmin' ||
     <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Security Command" to="/admin/security-command-center" active={location.pathname.startsWith('/admin/security-command-center')} highlight={isUpdated('/admin/security-command-center')} onClick={() => markAsViewed('/admin/security-command-center')} className="text-cyan-300" tone="cyan" />
   </>
 )}
+{canAccessNightWatch && (
+  <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Night Watch" to="/admin/night-watch" active={isActive('/admin/night-watch')} highlight={isUpdated('/admin/night-watch')} onClick={() => markAsViewed('/admin/night-watch')} className="text-cyan-300" tone="cyan" />
+)}
 
              {/* 📧 Tromail - Internal Role Email for approved roles */}
              {canAccessTromail && canAccessTromail(profile) && (
@@ -578,7 +631,33 @@ profile?.role === 'superadmin' ||
              <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
              <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
              <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Careers" to="/career" active={isActive('/career')} highlight={isUpdated('/career')} onClick={() => markAsViewed('/career')} className="text-purple-400" tone="purple" />
-             {isAgentHRManager && (
+             {canSeeAttorneyDashboard && (
+               <GridItem
+                 collapsed={isSidebarCollapsed}
+                 icon={Briefcase}
+                 label="Attorney"
+                 to="/attorney"
+                 active={isActive('/attorney')}
+                 highlight={isUpdated('/attorney')}
+                 onClick={() => markAsViewed('/attorney')}
+                 className="text-teal-300"
+                 tone="teal"
+               />
+             )}
+             {canSeeAuctionStudio && (
+               <GridItem
+                 collapsed={isSidebarCollapsed}
+                 icon={Gavel}
+                 label="Auction Studio"
+                 to="/auctions/studio"
+                 active={isActive('/auctions/studio')}
+                 highlight={isUpdated('/auctions/studio')}
+                 onClick={() => markAsViewed('/auctions/studio')}
+                 className="text-orange-300"
+                 tone="orange"
+               />
+             )}
+             {canSeeAgencyHRDashboard && (
               <GridItem
                 collapsed={isSidebarCollapsed}
                 icon={Briefcase}
@@ -594,11 +673,22 @@ profile?.role === 'superadmin' ||
 
             <SectionTitle title="Support" collapsed={isSidebarCollapsed} />
             <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} tone="blue" />
+            
+            <SectionTitle title="Dashboards" collapsed={isSidebarCollapsed} />
+            {(isCEOAssistant || isAdmin || isCEO) && (
+              <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="CEO Assistant Dashboard" to="/ceo-assistant-dashboard" active={isActive('/ceo-assistant-dashboard')} highlight={isUpdated('/ceo-assistant-dashboard')} onClick={() => markAsViewed('/ceo-assistant-dashboard')} tone="cyan" />
+            )}
+            {(isNoahAssistant || isAdmin || isNoahAdmin || isCEO) && (
+              <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Noah Assistant Dashboard" to="/noah-assistant-dashboard" active={isActive('/noah-assistant-dashboard')} highlight={isUpdated('/noah-assistant-dashboard')} onClick={() => markAsViewed('/noah-assistant-dashboard')} tone="purple" />
+            )}
+            {canSeeProsecutorDashboard && (
+              <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Prosecutor Dashboard" to="/prosecutor" active={isActive('/prosecutor')} highlight={isUpdated('/prosecutor')} onClick={() => markAsViewed('/prosecutor')} className="text-red-400" tone="red" />
+            )}
           </div>
         )}
       </div>
 
-      <div className="relative z-10 border-t border-white/10 bg-slate-950/50 p-3">
+      <div className="relative z-10 shrink-0 border-t border-white/10 bg-slate-950/50 p-3">
         <SafeLink
           to="/stats"
           className={cx(

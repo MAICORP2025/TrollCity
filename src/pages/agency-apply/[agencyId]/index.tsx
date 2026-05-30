@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { isUuid } from '../../../lib/validators';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
@@ -11,7 +12,7 @@ import { Textarea } from '../../../components/ui/textarea';
 import { Input } from '../../../components/ui/input';
 
 export default function AgencyApplyPage() {
-  const { agencyId } = useParams<{ agencyId: string }>();
+  const { agencyIdOrSlug } = useParams<{ agencyIdOrSlug: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
   
@@ -32,10 +33,7 @@ export default function AgencyApplyPage() {
     agree_to_split: false
   });
   
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  function isUuid(value) {
-    return typeof value === 'string' && UUID_RE.test(value)
-  }
+  
   
   useEffect(() => {
     if (!user) {
@@ -43,108 +41,121 @@ export default function AgencyApplyPage() {
       return;
     }
     fetchAgencyAndCheckStatus();
-  }, [agencyId, user]);
+  }, [agencyIdOrSlug, navigate, user]);
 
-   const fetchAgencyAndCheckStatus = async () => {
-     try {
-       setLoading(true);
-       setError(null);
-       setAgency(null);
-       setUserHasApplied(false);
-       setUserIsMember(false);
- 
-       // Fetch agency info by ID or by slug/agency_code/public_id
-       let agencyData = null;
-       let agencyError = null;
- 
-       if (isUuid(agencyId)) {
-         // Fetch by UUID
-         const { data, error } = await supabase
-           .from('agencies')
-           .select('*')
-           .eq('id', agencyId)
-           .eq('status', 'approved')
-           .single();
-         agencyData = data;
-         agencyError = error;
-       } else {
-         // Try slug
-         const { data: slugData, error: slugError } = await supabase
-           .from('agencies')
-           .select('*')
-           .eq('slug', agencyId)
-           .eq('status', 'approved')
-           .single();
-         if (!slugError && slugData) {
-           agencyData = slugData;
-         } else {
-           // Try agency_code
-           const { data: codeData, error: codeError } = await supabase
-             .from('agencies')
-             .select('*')
-             .eq('agency_code', agencyId)
-             .eq('status', 'approved')
-             .single();
-           if (!codeError && codeData) {
-             agencyData = codeData;
-           } else {
-             // Try public_id
-             const { data: publicIdData, error: publicIdError } = await supabase
-               .from('agencies')
-               .select('*')
-               .eq('public_id', agencyId)
-               .eq('status', 'approved')
-               .single();
-             if (!publicIdError && publicIdData) {
-               agencyData = publicIdData;
-             } else {
-               agencyError = new Error('Agency not found or not approved');
-             }
-           }
-         }
-       }
- 
-       if (agencyError) throw agencyError;
-       if (!agencyData) {
-         setError('Agency not found or not approved');
-         return;
-       }
-       setAgency(agencyData);
- 
-       // Check if user is already a member
-       const { data: memberData, error: memberError } = await supabase
-         .from('agency_members')
-         .select('id')
-         .eq('agency_id', agency.id) // Use the resolved agency UUID
-         .eq('user_id', user.id)
-         .eq('status', 'active')
-         .single();
- 
-       if (memberError && memberError.code !== 'PGRST116') { // PGRST116 means no rows returned
-         throw memberError;
-       }
-       setUserIsMember(!!memberData);
- 
-       // Check if user has already applied
-       const { data: applicationData, error: applicationError } = await supabase
-         .from('agency_applications')
-         .select('id')
-         .eq('agency_id', agency.id) // Use the resolved agency UUID
-         .eq('applicant_id', user.id)
-         .in('status', ['pending', 'approved'])
-         .single();
- 
-       if (applicationError && applicationError.code !== 'PGRST116') {
-         throw applicationError;
-       }
-       setUserHasApplied(!!applicationData);
- 
-     } catch (err) {
-       setError(err.message);
-     } finally {
-       setLoading(false);
-     }
-   };
+  const fetchAgencyAndCheckStatus = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setAgency(null);
+      setUserHasApplied(false);
+      setUserIsMember(false);
+
+      if (!agencyIdOrSlug) {
+        setError('Missing agency id or slug.');
+        return;
+      }
+
+      // Fetch agency info by ID or by slug/public_slug/agency_code/public_id
+      let agencyData: any = null;
+
+      if (isUuid(agencyIdOrSlug)) {
+        const { data, error } = await supabase
+          .from('agencies')
+          .select('*')
+          .eq('id', agencyIdOrSlug)
+          .eq('status', 'approved')
+          .maybeSingle();
+
+        if (error) throw error;
+        agencyData = data;
+      } else {
+        const { data: slugData, error: slugError } = await supabase
+          .from('agencies')
+          .select('*')
+          .eq('slug', agencyIdOrSlug)
+          .eq('status', 'approved')
+          .maybeSingle();
+        if (slugError) throw slugError;
+        if (slugData) {
+          agencyData = slugData;
+        }
+
+        if (!agencyData) {
+          const { data: publicSlugData, error: publicSlugError } = await supabase
+            .from('agencies')
+            .select('*')
+            .eq('public_slug', agencyIdOrSlug)
+            .eq('status', 'approved')
+            .maybeSingle();
+          if (publicSlugError) throw publicSlugError;
+          agencyData = publicSlugData;
+        }
+
+        if (!agencyData) {
+          const { data: codeData, error: codeError } = await supabase
+            .from('agencies')
+            .select('*')
+            .eq('agency_code', agencyIdOrSlug)
+            .eq('status', 'approved')
+            .maybeSingle();
+          if (codeError) throw codeError;
+          agencyData = codeData;
+        }
+
+        if (!agencyData) {
+          const { data: publicIdData, error: publicIdError } = await supabase
+            .from('agencies')
+            .select('*')
+            .eq('public_id', agencyIdOrSlug)
+            .eq('status', 'approved')
+            .maybeSingle();
+          if (publicIdError) throw publicIdError;
+          agencyData = publicIdData;
+        }
+      }
+
+      if (!agencyData) {
+        setError('Agency not found or not approved');
+        return;
+      }
+
+      setAgency(agencyData);
+      const resolvedAgencyId = agencyData?.id;
+      if (!resolvedAgencyId) {
+        setError('Resolved agency ID is missing.');
+        return;
+      }
+
+      // Check if user is already a member
+      const { data: memberData, error: memberError } = await supabase
+        .from('agency_members')
+        .select('id')
+        .eq('agency_id', resolvedAgencyId)
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (memberError) throw memberError;
+      setUserIsMember(!!memberData);
+
+      // Check if user has already applied
+      const { data: applicationData, error: applicationError } = await supabase
+        .from('agency_applications')
+        .select('id')
+        .eq('agency_id', resolvedAgencyId)
+        .eq('applicant_id', user.id)
+        .in('status', ['pending', 'approved'])
+        .maybeSingle();
+
+      if (applicationError) throw applicationError;
+      setUserHasApplied(!!applicationData);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load agency information.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type, checked } = e.target;
@@ -190,7 +201,7 @@ export default function AgencyApplyPage() {
 
        // Submit application via RPC
        const { data, error } = await supabase.rpc('submit_agency_application', {
-         p_agency_ref: agencyId,
+         p_agency_ref: agency?.id,
          p_applicant_user_id: user.id,
          p_role: 'creator',
          p_answers: {

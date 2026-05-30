@@ -4,7 +4,7 @@ import { useAuthStore } from '../lib/store';
 import { hasRole, UserRole, validateProfile, isAdminEmail } from '../lib/supabase';
 
 interface RequireRoleProps {
-  roles: UserRole | UserRole[];
+  roles: UserRole | string | readonly (UserRole | string)[];
   children: React.ReactNode;
   fallbackPath?: string; // Custom redirect path
   showValidationErrors?: boolean; // For development

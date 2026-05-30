@@ -9,7 +9,7 @@ import React, {
 } from 'react';
 import { isStandalone, isIos, isSafari } from '../pwa/install';
 import { useInstallPrompt } from '../pwa/useInstallPrompt';
-import { supabase } from '../lib/supabase';
+import { doesUserProfileExist, supabase } from '../lib/supabase';
 
 const env = import.meta.env;
 
@@ -526,6 +526,12 @@ const isLocalhost =
       const userId = sessionData?.session?.user?.id;
       if (!userId) {
         console.warn('[PWA] Cannot save push subscription without a signed-in user');
+        return;
+      }
+
+      const hasProfile = await doesUserProfileExist(userId);
+      if (!hasProfile) {
+        console.warn('[PWA] Cannot save push subscription because the user profile is missing');
         return;
       }
 

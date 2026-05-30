@@ -183,9 +183,12 @@ Deno.serve(async (req) => {
             .from('payout_requests')
             .select(`
                 *,
-                user_profiles!payout_requests_user_id_fkey (
+                requester:user_profiles!payout_requests_user_id_fkey (
                     username,
                     email
+                ),
+                admin:user_profiles!payout_requests_admin_id_fkey (
+                    username
                 ),
                 processor:user_profiles!payout_requests_processed_by_fkey (
                     username
@@ -202,8 +205,8 @@ Deno.serve(async (req) => {
 
         const formattedPayouts = payouts?.map((p: any) => ({
             ...p,
-            username: p.user_profiles?.username || 'Unknown',
-            email: p.user_profiles?.email || 'Unknown',
+            username: p.requester?.username || 'Unknown',
+            email: p.requester?.email || 'Unknown',
             processed_by_username: p.processor?.username || null
         }));
 
@@ -470,8 +473,8 @@ Deno.serve(async (req) => {
         const canViewEmails = profile.role === 'admin' || profile.is_admin === true;
 
         const selectFields = canViewEmails
-          ? 'id, username, email, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge'
-          : 'id, username, role, troll_coins, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge';
+? 'id, username, email, role, troll_coins, paid_coin_balance, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge'
+        : 'id, username, role, troll_coins, paid_coin_balance, free_coin_balance, level, is_troll_officer, is_lead_officer, is_admin, is_troller, created_at, full_name, phone, onboarding_completed, terms_accepted, id_verification_status, bypass_broadcast_restriction, glowing_username_color, rgb_username_expires_at, is_gold, username_style, badge';
 
         let query = supabaseAdmin
           .from('user_profiles')
@@ -917,6 +920,128 @@ Deno.serve(async (req) => {
         const { error } = await supabaseAdmin.from("support_tickets").delete().eq("id", ticketId);
         if (error) throw error;
         result = { success: true };
+        break;
+      }
+
+      case "approve_application": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { applicationId, type, userId, interviewDate, interviewTime } = params;
+        if (!applicationId) throw new Error("Missing applicationId");
+
+        let appType = type;
+        let appUserId = userId;
+
+        if (!appType || !appUserId) {
+          const { data: app, error: fetchError } = await supabaseAdmin
+            .from("applications")
+            .select("type, user_id")
+            .eq("id", applicationId)
+            .single();
+
+          if (fetchError) throw fetchError;
+          appType = app.type;
+          appUserId = app.user_id;
+        }
+
+        if (interviewDate && interviewTime) {
+          const scheduledAt = new Date(`${interviewDate}T${interviewTime}`).toISOString();
+          const { error: interviewError } = await supabaseAdmin.from("interview_sessions").insert({
+            application_id: applicationId,
+            user_id: appUserId,
+            interviewer_id: user.id,
+            scheduled_at: scheduledAt,
+            status: "active",
+          });
+
+          if (interviewError) throw interviewError;
+
+          const { error: updateError } = await supabaseAdmin
+            .from("applications")
+            .update({ status: "interview_scheduled", reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+            .eq("id", applicationId);
+
+          if (updateError) throw updateError;
+
+          result = { success: true, message: "Interview scheduled" };
+        } else {
+          const { error: updateError } = await supabaseAdmin
+            .from("applications")
+            .update({ status: "approved", reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+            .eq("id", applicationId);
+
+          if (updateError) throw updateError;
+
+          // Career positions that should set job_title instead of role
+          const careerPositionTypes = ['auctioneer', 'secretary', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'prosecutor', 'attorney', 'agency_hr', 'agency_hr_manager', 'agency_leader', 'ceo_assistant', 'noah_assistant'];
+
+          if (appType === "seller") {
+            const { error: roleError } = await supabaseAdmin.rpc("set_user_role", {
+              target_user: appUserId,
+              new_role: "seller",
+              reason: "Application Approved",
+              acting_admin_id: user.id,
+            });
+            if (roleError) throw roleError;
+          } else if (appType === "troll_officer") {
+            const { error: profileError } = await supabaseAdmin
+              .from("user_profiles")
+              .update({ is_troll_officer: true, is_officer_active: true })
+              .eq("id", appUserId);
+            if (profileError) throw profileError;
+          } else if (appType === "lead_officer") {
+            const { error: profileError } = await supabaseAdmin
+              .from("user_profiles")
+              .update({ is_lead_officer: true, is_officer_active: true })
+              .eq("id", appUserId);
+            if (profileError) throw profileError;
+          } else if (careerPositionTypes.includes(appType)) {
+            // For career positions, set job_title and appropriate role
+            const { error: profileError } = await supabaseAdmin
+              .from("user_profiles")
+              .update({ job_title: appType })
+              .eq("id", appUserId);
+            if (profileError) throw profileError;
+          }
+
+          // Send Tromail notification for all approvals
+          const roleLabelMap: Record<string, string> = {
+            seller: 'Seller',
+            troll_officer: 'Troll Officer',
+            lead_officer: 'Lead Troll Officer',
+            auctioneer: 'Auctioneer',
+            secretary: 'Secretary',
+            journalist: 'Journalist',
+            tcnn_news_caster: 'TCNN News Caster',
+            tcnn_chief_news_caster: 'TCNN Chief News Caster',
+            prosecutor: 'Prosecutor',
+            attorney: 'Attorney',
+            agency_hr: 'Agency HR',
+            agency_hr_manager: 'Agency HR Manager',
+            agency_leader: 'Agency Leader',
+            ceo_assistant: 'CEO Assistant',
+            noah_assistant: 'Noah Assistant',
+          };
+
+          const roleLabel = roleLabelMap[appType] || appType;
+          try {
+            await supabaseAdmin.rpc('send_tromail_message', {
+              p_sender_user_id: user.id,
+              p_sender_role: profile.role,
+              p_sender_tromail_address: '',
+              p_subject: `Application Approved: ${roleLabel}`,
+              p_body: `Your application for the ${roleLabel} position has been approved! You now have access to the RTC Admin Monitor dashboard at /rtcadminmonitor.`,
+              p_is_admin_email: true,
+              p_is_important: true,
+              p_recipient_user_ids: [appUserId],
+              p_recipient_roles: ['']
+            });
+          } catch (tromailErr) {
+            console.warn('Failed to send Tromail notification on approval:', tromailErr);
+          }
+
+          result = { success: true };
+        }
+
         break;
       }
 

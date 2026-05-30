@@ -10,9 +10,8 @@
 
 DO $$      
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'credit_limit') THEN
-        ALTER TABLE public.user_profiles ADD COLUMN credit_limit BIGINT DEFAULT 0;
-    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'credit_limit') THEN ALTER TABLE public.user_profiles ADD COLUMN credit_limit BIGINT DEFAULT 250; END IF;
+     ALTER TABLE public.user_profiles ALTER COLUMN credit_limit SET DEFAULT 250;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_profiles' AND column_name = 'credit_used') THEN
         ALTER TABLE public.user_profiles ADD COLUMN credit_used BIGINT DEFAULT 0;
     END IF;
@@ -26,11 +25,11 @@ BEGIN
         ALTER TABLE public.user_profiles ADD COLUMN billing_month TEXT;
     END IF;
     
-    -- Set initial credit limits for existing users based on tenure (Simple rule: 1000 + 10 * days_active)
-    -- This ensures the feature is usable immediately
+    -- Set initial credit limits for existing users (250 coins default)
+    -- This ensures the feature is usable immediately for all users
     UPDATE public.user_profiles 
-    SET credit_limit = 1000 + (EXTRACT(DAY FROM (now() - created_at)) * 10)
-    WHERE credit_limit = 0;
+    SET credit_limit = 250
+    WHERE credit_limit = 0 OR credit_limit IS NULL;
 END $$;
 
 -- ==========================================
@@ -610,3 +609,4 @@ BEGIN
     RETURN jsonb_build_object('success', true);
 END;
 $$;
+

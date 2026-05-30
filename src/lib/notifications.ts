@@ -205,6 +205,20 @@ export async function notifyJailReleaseCompleted(userId: string) {
   )
 }
 
+export async function notifyInmateMessageReceived(
+  inmateUserId: string,
+  senderUsername: string,
+  messagePreview: string
+) {
+  return createNotification(
+    inmateUserId,
+    'inmate_message_received',
+    `📩 New message from @${senderUsername}`,
+    messagePreview,
+    { sender_username: senderUsername, action_url: '/jail' }
+  )
+}
+
 // ==========================================
 // BROADCAST / LIVE NOTIFICATIONS
 // ==========================================
@@ -1022,4 +1036,37 @@ export async function notifySubscriptionExpired(userId: string, perkName: string
     `"${perkName}" subscription has expired.`,
     { perk_name: perkName, action_url: '/store' }
   )
+}
+
+// ==========================================
+// TEAM MEETING NOTIFICATIONS
+// ==========================================
+
+export async function notifyTeamMeetingStarted(
+  meetingId: string,
+  meetingTitle: string,
+  staffUserIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  if (!staffUserIds || staffUserIds.length === 0) {
+    return { success: false, error: 'No staff users to notify' }
+  }
+
+  try {
+    for (const userId of staffUserIds) {
+      await createNotification(
+        userId,
+        'team_meeting_started',
+        '👥 Team Meeting Started',
+        `${meetingTitle} has started. Click to join.`,
+        {
+          meeting_id: meetingId,
+          meeting_title: meetingTitle,
+          action_url: `/meeting/${meetingId}`
+        }
+      )
+    }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to send notifications' }
+  }
 }

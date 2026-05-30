@@ -845,10 +845,25 @@ const voteWithCoins = async (candidateId: string, amount: number) => {
     fetchVicePresident();
     fetchTreasuryBalance();
     fetchProposals();
-  }, [fetchCurrentElection, fetchCurrentPresident, fetchVicePresident, fetchTreasuryBalance, fetchProposals]);
+  }, [fetchCurrentElection, fetchCurrentPresident, fetchPresidentAppointment, fetchVicePresident, fetchTreasuryBalance, fetchProposals]);
 
   const isPresident = currentPresident?.user_id === user?.id;
   const isVP = currentVP?.vice_president_user_id === user?.id;
+
+  const refresh = useCallback(async () => {
+    try {
+      await Promise.all([
+        fetchCurrentElection(),
+        fetchCurrentPresident(),
+        fetchPresidentAppointment(),
+        fetchVicePresident(),
+        fetchTreasuryBalance(),
+        fetchProposals()
+      ]);
+    } catch (err) {
+      console.warn('Refresh error:', err);
+    }
+  }, [fetchCurrentElection, fetchCurrentPresident, fetchPresidentAppointment, fetchVicePresident, fetchTreasuryBalance, fetchProposals]);
 
   return {
     currentElection,
@@ -859,20 +874,7 @@ const voteWithCoins = async (candidateId: string, amount: number) => {
     treasuryBalance,
     proposals,
     loading,
-    refresh: async () => {
-      try {
-        await Promise.all([
-          fetchCurrentElection(),
-          fetchCurrentPresident(),
-          fetchPresidentAppointment(),
-          fetchVicePresident(),
-          fetchTreasuryBalance(),
-          fetchProposals()
-        ]);
-      } catch (err) {
-        console.warn('Refresh error:', err);
-      }
-    },
+    refresh,
     createElection,
     finalizeElection,
     endElection,

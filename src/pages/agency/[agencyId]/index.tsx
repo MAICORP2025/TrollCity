@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { isUuid } from '../../../lib/validators';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
@@ -60,7 +61,7 @@ const getGoalPercent = (goal: AgencyGoal) => {
 };
 
 export default function AgencyProfilePage() {
-  const { agencyId } = useParams<{ agencyId: string }>();
+  const { agencyIdOrSlug } = useParams<{ agencyIdOrSlug: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,7 +78,59 @@ export default function AgencyProfilePage() {
   const [isMember, setIsMember] = useState(false);
   const [userRole, setUserRole] = useState<'owner' | 'manager' | 'creator' | 'agency_leader' | null>(null);
 
-   const activeSection = useMemo(() => {
+  async function resolveAgencyId(ref: string): Promise<Agency | null> {
+    if (!ref) return null
+
+    if (isUuid(ref)) {
+      const { data, error } = await supabase
+        .from('agencies')
+        .select('*')
+        .eq('id', ref)
+        .eq('status', 'approved')
+        .maybeSingle()
+
+      if (error) throw error
+      return data
+    }
+
+    const { data: slugData, error: slugError } = await supabase
+      .from('agencies')
+      .select('*')
+      .eq('slug', ref)
+      .eq('status', 'approved')
+      .maybeSingle()
+    if (slugError) throw slugError
+    if (slugData) return slugData
+
+    const { data: publicSlugData, error: publicSlugError } = await supabase
+      .from('agencies')
+      .select('*')
+      .eq('public_slug', ref)
+      .eq('status', 'approved')
+      .maybeSingle()
+    if (publicSlugData) return publicSlugData
+    if (publicSlugError) throw publicSlugError
+
+    const { data: codeData, error: codeError } = await supabase
+      .from('agencies')
+      .select('*')
+      .eq('agency_code', ref)
+      .eq('status', 'approved')
+      .maybeSingle()
+    if (codeError) throw codeError
+    if (codeData) return codeData
+
+    const { data: publicIdData, error: publicIdError } = await supabase
+      .from('agencies')
+      .select('*')
+      .eq('public_id', ref)
+      .eq('status', 'approved')
+      .maybeSingle()
+    if (publicIdError) throw publicIdError
+    return publicIdData
+  }
+
+    const activeSection = useMemo(() => {
      if (!isMember) return 'overview';
      if (location.pathname.includes('/roster')) return 'roster';
      if (location.pathname.includes('/goals')) return 'goals';
@@ -87,125 +140,118 @@ export default function AgencyProfilePage() {
   useEffect(() => {
     void fetchAgencyData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agencyId, user?.id]);
+  }, [agencyIdOrSlug, user?.id]);
 
-  const fetchAgencyData = async () => {
-    if (!agencyId) {
-      setError('Missing agency id.');
-      setLoading(false);
-      return;
-    }
+   const fetchAgencyData = async () => {
+     if (!agencyIdOrSlug) {
+       setError('Missing agency id or slug.');
+       setLoading(false);
+       return;
+     }
 
-    try {
-      setLoading(true);
-      setError(null);
-      setIsMember(false);
-      setUserRole(null);
+     try {
+       setLoading(true);
+       setError(null);
+       setIsMember(false);
+       setUserRole(null);
+       setAgency(null) // Reset agency data
 
-      const { data: agencyData, error: agencyError } = await supabase
-        .from('agencies')
-        .select('*')
-        .eq('id', agencyId)
-        .eq('status', 'approved')
-        .maybeSingle();
+       // Resolve the agency reference to an agency record
+       const agencyData = await resolveAgencyId(agencyIdOrSlug)
+       if (!agencyData) {
+         setError('Agency not found or not approved yet.')
+         setLoading(false)
+         return
+       }
 
-      if (agencyError) throw agencyError;
+       setAgency(agencyData as Agency)
 
-      if (!agencyData) {
-        setError('Agency not found or not approved yet.');
-        setAgency(null);
-        return;
-      }
+       const { data: ownerData, error: ownerError } = await supabase
+         .from('user_profiles')
+         .select('username')
+         .eq('id', agencyData.owner_id)
+         .maybeSingle()
 
-      const typedAgency = agencyData as Agency;
-      setAgency(typedAgency);
+       if (!ownerError && ownerData?.username) {
+         setOwnerUsername(ownerData.username)
+       } else {
+         setOwnerUsername('Unknown')
+       }
 
-      const { data: ownerData, error: ownerError } = await supabase
-        .from('user_profiles')
-        .select('username')
-        .eq('id', typedAgency.owner_id)
-        .maybeSingle();
+       const { data: membersData, error: membersError } = await supabase
+         .from('agency_members')
+         .select(
+           `
+           *,
+           user_profiles:user_id (
+             username,
+             avatar_url,
+             rgb_username_expires_at
+           )
+         `,
+         )
+         .eq('agency_id', agencyData.id) // Use the resolved agency UUID
+         .eq('status', 'active')
 
-      if (!ownerError && ownerData?.username) {
-        setOwnerUsername(ownerData.username);
-      } else {
-        setOwnerUsername('Unknown');
-      }
+       if (membersError) throw membersError
 
-      const { data: membersData, error: membersError } = await supabase
-        .from('agency_members')
-        .select(
-          `
-          *,
-          user_profiles:user_id (
-            username,
-            avatar_url,
-            rgb_username_expires_at
-          )
-        `,
-        )
-        .eq('agency_id', agencyId)
-        .eq('status', 'active');
+       const typedMembers = (membersData || []) as AgencyMember[]
+       setMembers(typedMembers)
 
-      if (membersError) throw membersError;
+       if (user) {
+         const currentMember = typedMembers.find((member) => member.user_id === user.id)
 
-      const typedMembers = (membersData || []) as AgencyMember[];
-      setMembers(typedMembers);
+         if (currentMember) {
+           setIsMember(true)
 
-      if (user) {
-        const currentMember = typedMembers.find((member) => member.user_id === user.id);
+           if (
+             currentMember.role === 'owner' ||
+             currentMember.role === 'manager' ||
+             currentMember.role === 'creator' ||
+             currentMember.role === 'agency_leader'
+           ) {
+             setUserRole(currentMember.role)
+           }
+         }
+       }
 
-        if (currentMember) {
-          setIsMember(true);
+       const creators = typedMembers.filter((member) => member.role === 'creator')
 
-          if (
-            currentMember.role === 'owner' ||
-            currentMember.role === 'manager' ||
-            currentMember.role === 'creator' ||
-            currentMember.role === 'agency_leader'
-          ) {
-            setUserRole(currentMember.role);
-          }
-        }
-      }
+       setTopCreators(creators.slice(0, 3))
 
-      const creators = typedMembers.filter((member) => member.role === 'creator');
+       setWeeklyStats({
+         liveHours: 0,
+         giftEarnings: 0,
+         battleCount: 0,
+         creatorCount: creators.length,
+       })
 
-      setTopCreators(creators.slice(0, 3));
+       setMonthlyStats({
+         liveHours: 0,
+         giftEarnings: 0,
+         battleCount: 0,
+         creatorCount: creators.length,
+       })
 
-      setWeeklyStats({
-        liveHours: 0,
-        giftEarnings: 0,
-        battleCount: 0,
-        creatorCount: creators.length,
-      });
+       const { data: goalsData, error: goalsError } = await supabase
+         .from('agency_goals')
+         .select('*')
+         .eq('agency_id', agencyData.id) // Use the resolved agency UUID
+         .in('status', ['active', 'completed'])
+         .order('created_at', { ascending: false })
 
-      setMonthlyStats({
-        liveHours: 0,
-        giftEarnings: 0,
-        battleCount: 0,
-        creatorCount: creators.length,
-      });
-
-      const { data: goalsData, error: goalsError } = await supabase
-        .from('agency_goals')
-        .select('*')
-        .eq('agency_id', agencyId)
-        .in('status', ['active', 'completed'])
-        .order('created_at', { ascending: false });
-
-      if (!goalsError && goalsData) {
-        setGoals(goalsData as AgencyGoal[]);
-      } else {
-        setGoals([]);
-      }
-    } catch (err: any) {
-      console.error('Error loading agency profile:', err);
-      setError(err?.message || 'Failed to load agency profile.');
-    } finally {
-      setLoading(false);
-    }
-  };
+       if (!goalsError && goalsData) {
+         setGoals(goalsData as AgencyGoal[])
+       } else {
+         setGoals([])
+       }
+     } catch (err: any) {
+       console.error('Error loading agency profile:', err)
+       setError(err?.message || 'Failed to load agency profile.')
+     } finally {
+       setLoading(false)
+     }
+   };
 
   const canManageAgency = ['owner', 'manager', 'agency_leader'].includes(userRole || '')
 
@@ -215,7 +261,7 @@ export default function AgencyProfilePage() {
       return;
     }
 
-    navigate(`/agency-apply/${agencyId}`);
+    navigate(`/agency-apply/${agencyIdOrSlug}`);
   };
 
   const handleManageMembership = () => {
@@ -229,7 +275,7 @@ export default function AgencyProfilePage() {
       return;
     }
 
-    navigate(`/agency/${agencyId}`);
+    navigate(`/agency/${agencyIdOrSlug}`);
   };
 
   if (loading) return <Loader />;
@@ -364,7 +410,7 @@ export default function AgencyProfilePage() {
                        ? 'border-b-2 border-cyan-500 text-cyan-300'
                        : 'text-slate-400 hover:text-white'
                    }`}
-                   onClick={() => navigate(`/agency/${agencyId}/roster`)}
+                   onClick={() => navigate(`/agency/${agencyIdOrSlug}/roster`)}
                  >
                    Roster
                  </button>
@@ -376,7 +422,7 @@ export default function AgencyProfilePage() {
                        ? 'border-b-2 border-cyan-500 text-cyan-300'
                        : 'text-slate-400 hover:text-white'
                    }`}
-                   onClick={() => navigate(`/agency/${agencyId}/goals`)}
+                   onClick={() => navigate(`/agency/${agencyIdOrSlug}/goals`)}
                  >
                    Goals
                  </button>

@@ -207,7 +207,7 @@ export default function UserManagementPanel({
 
   const handleEditUser = (user: UserProfile) => {
     setSelectedUser(user)
-    setEditingCoins({ paid: user.troll_coins || 0, free: user.free_coin_balance || 0 })
+    setEditingCoins({ paid: user.paid_coin_balance || 0, free: user.free_coin_balance || 0 })
     setEditingLevel(user.level || 1)
     setEditingRole(user.role || 'user')
     setEditingBypassBroadcast(user.bypass_broadcast_restriction || false)
@@ -241,9 +241,9 @@ export default function UserManagementPanel({
     setSaving(true)
     try {
       // 1. Prepare data
-      const currentTrollCoins = selectedUser.troll_coins || 0
-      const newTrollCoins = editingCoins.paid
-      const delta = newTrollCoins - currentTrollCoins
+      const currentPaidCoins = selectedUser.paid_coin_balance || 0
+      const newPaidCoins = editingCoins.paid
+      const delta = newPaidCoins - currentPaidCoins
 
       const updates: any = {
         free_coin_balance: editingCoins.free,
@@ -552,7 +552,7 @@ export default function UserManagementPanel({
                     </span>
                   </td>
                   <td className="py-3 text-white">{user.level || 1}</td>
-                  <td className="py-3 text-purple-300">{user.troll_coins?.toLocaleString() || 0}</td>
+                  <td className="py-3 text-purple-300">{user.paid_coin_balance?.toLocaleString() || 0}</td>
                   <td className="py-3 text-green-300">{user.free_coin_balance?.toLocaleString() || 0}</td>
                   <td className="py-3">
                     <button
@@ -640,12 +640,21 @@ export default function UserManagementPanel({
                   onChange={(e) => setEditingRole(e.target.value)}
                   className="w-full px-4 py-2 bg-zinc-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="user">User</option>
+                    <option value="user">User</option>
+                  <option value="guest">Guest</option>
+                  <option value="member">Member</option>
+                  <option value="broadcaster">Broadcaster</option>
+                  <option value="family_leader">Family Leader</option>
+                  <option value="troll_family">Troll Family</option>
                   <option value="secretary">Secretary</option>
+                  <option value="moderator">Moderator</option>
                   <option value="troll_officer">Troll Officer</option>
+                  <option value="lead_troll_officer">Lead Troll Officer</option>
                   <option value="troller">Troller</option>
                   <option value="admin">CEO</option>
                   <option value="marketing_readonly">Marketing Read-Only</option>
+                  <option value="empire_partner">Empire Partner</option>
+                  <option value="hr_admin">HR Admin</option>
                 </select>
               </div>
 

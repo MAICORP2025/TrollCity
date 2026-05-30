@@ -171,7 +171,7 @@ const jobPositions: JobPosition[] = [
     id: 'agency_leader',
     title: 'Agency Leader',
     department: 'Agencies',
-    description: 'Lead a Troll City agency, recruit members, manage applications, and grow creator talent.',
+    description: 'Lead a Troll City agency, recruit members, and grow creator talent.',
     requirements: ['Leadership skills', 'Recruitment ability', 'Strong community standing'],
     benefits: ['Agency dashboard access', 'Build creator teams', 'Potential weekly role perk from Treasury'],
     icon: Users,

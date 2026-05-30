@@ -14,11 +14,21 @@ export function useBank() {
 
   // Credit Card Info derived from profile
   const creditInfo = {
-    limit: profile?.credit_limit || 0,
+    limit: profile?.credit_limit || 250,
     used: profile?.credit_used || 0,
-    apr: profile?.credit_apr_fee_percent || 8,
+    apr: profile?.stmt_apr_percent ?? profile?.credit_apr_fee_percent ?? 25.0,
     status: profile?.credit_status || 'active',
-    available: (profile?.credit_limit || 0) - (profile?.credit_used || 0)
+    available: (profile?.credit_limit || 250) - (profile?.credit_used || 0),
+    // New billing cycle fields
+    statementDate: profile?.stmt_statement_date || null,
+    dueDate: profile?.stmt_due_date || null,
+    stmtBalance: profile?.stmt_balance || 0,
+    minimumPayment: profile?.stmt_minimum_payment || 0,
+    pastDue: profile?.stmt_past_due || false,
+    lateFeesAccrued: profile?.stmt_late_fees_accrued || 0,
+    interestAccrued: profile?.stmt_interest_accrued || 0,
+    onTimePayments: profile?.stmt_on_time_payments || 0,
+    latePayments: profile?.stmt_late_payments || 0,
   }
 
   const fetchBankData = useCallback(async () => {

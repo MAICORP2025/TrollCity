@@ -1,29 +1,60 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { Mic, MicOff, Play, Pause, Volume2, VolumeX, X, Maximize2, Lock, Users, Clock, Radio, ChevronRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import {
+  AlertCircle,
+  BarChart3,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  Headphones,
+  Loader2,
+  Lock,
+  Mic,
+  Play,
+  Radio,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  TrendingUp,
+  Users,
+  Volume2,
+  Zap,
+} from 'lucide-react'
 import { toast } from 'sonner'
+
+import { RTCAdminMonitor } from '@/components/admin'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
-import { useIsMobile } from '@/hooks/useIsMobile'
-import { trollCityBroadcastTheme as theme } from '@/styles/broadcastTheme'
-import { usePodcastStore } from '@/stores/podcastStore'
-import { usePodcastAgora } from '@/hooks/usePodcastAgora'
-import { RTCAdminMonitor } from '@/components/admin'
 import { cn } from '@/lib/utils'
+import { usePodcastStore } from '@/stores/podcastStore'
+import { trollCityBroadcastTheme as theme } from '@/styles/broadcastTheme'
+
+type PodcastStatus =
+  | 'scheduled'
+  | 'live'
+  | 'active'
+  | 'ended'
+  | 'archived'
+  | 'draft'
+  | 'paused'
+  | 'cancelled'
 
 interface Podcast {
   id: string
   host_user_id: string
   title: string
   description: string | null
-  status: 'scheduled' | 'live' | 'active' | 'ended' | 'archived'
+  status: PodcastStatus
   agora_channel_name: string
   started_at: string | null
   ended_at: string | null
-  listener_count: number
-  peak_listener_count: number
+  listener_count: number | null
+  peak_listener_count: number | null
   created_at: string
   updated_at: string
+  host_username?: string | null
 }
 
 interface PodcastEpisode {
@@ -32,618 +63,929 @@ interface PodcastEpisode {
   title: string
   description: string | null
   duration_seconds: number | null
-  recorded_at: string
+  recorded_at: string | null
   audio_url: string | null
-  listener_count: number
+  listener_count: number | null
 }
 
-interface PodcastParticipant {
-  id: string
-  podcast_id: string
-  user_id: string
-  role: 'host' | 'speaker' | 'listener'
-  is_muted: boolean
-  joined_at: string
-  left_at: string | null
+const LIVE_PODCAST_STATUSES: PodcastStatus[] = ['live', 'active']
+
+const STAFF_ROLES_REQUIRING_LEVEL_10 = new Set([
+  'staff',
+  'admin',
+  'officer',
+  'broadofficer',
+  'troll_officer',
+  'lead_troll_officer',
+  'secretary',
+  'agency_hr',
+  'agency_hr_manager',
+])
+
+const CEO_ADMIN_ROLES = new Set(['admin', 'ceo'])
+
+const normalizeRole = (role?: string | null) => String(role || '').trim().toLowerCase()
+
+const asNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
-// Staff roles that require level 10 to start podcasts
-const STAFF_ROLES = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager']
+const formatTime = (seconds?: number | null) => {
+  const safeSeconds = Math.max(0, Number(seconds || 0))
+  const mins = Math.floor(safeSeconds / 60)
+  const secs = safeSeconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
 
-// Roles exempt from level 10 requirement (all non-staff roles can start)
-const EXEMPT_ROLES = ['creator', 'broadcaster', 'troll_family', 'president', 'pastor']
+const formatStartedTime = (value?: string | null) => {
+  if (!value) return 'recently'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'recently'
+
+  return date.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+const glassCard =
+  'rounded-3xl border border-white/10 bg-white/[0.055] shadow-2xl shadow-black/25 backdrop-blur-xl'
+
+const neonCard =
+  'rounded-3xl border border-cyan-300/20 bg-cyan-400/[0.06] shadow-2xl shadow-cyan-950/30 backdrop-blur-xl'
 
 export default function PodcastCentral() {
   const navigate = useNavigate()
   const { user, profile } = useAuthStore()
   const { isMobileWidth } = useIsMobile()
-  
-  // Podcast state
+
   const [livePodcasts, setLivePodcasts] = useState<Podcast[]>([])
   const [trendingPodcasts, setTrendingPodcasts] = useState<Podcast[]>([])
   const [recentEpisodes, setRecentEpisodes] = useState<PodcastEpisode[]>([])
   const [userHistory, setUserHistory] = useState<PodcastEpisode[]>([])
+
   const [loading, setLoading] = useState(true)
-  
-  // New podcast form state
+  const [refreshing, setRefreshing] = useState(false)
+
   const [showStartForm, setShowStartForm] = useState(false)
   const [podcastTitle, setPodcastTitle] = useState('')
   const [podcastDescription, setPodcastDescription] = useState('')
   const [isStarting, setIsStarting] = useState(false)
 
-  {/* Podcast state - connected to global store */}
-  const globalActivePodcast = usePodcastStore(state => state.activePodcast)
-  const showMiniPlayer = usePodcastStore(state => state.showMiniPlayer)
-  const globalSetActivePodcast = usePodcastStore(state => state.setActivePodcast)
-  const globalSetShowMiniPlayer = usePodcastStore(state => state.setShowMiniPlayer)
-  const isPlaying = usePodcastStore(state => state.isPlaying)
-  const isMuted = usePodcastStore(state => state.isMuted)
-  const volume = usePodcastStore(state => state.volume)
-  const elapsedTime = usePodcastStore(state => state.elapsedTime)
-  const globalSetPlaying = usePodcastStore(state => state.setPlaying)
-  const globalSetMuted = usePodcastStore(state => state.setMuted)
-  const globalSetVolume = usePodcastStore(state => state.setVolume)
+  const setActivePodcast = usePodcastStore((state) => state.setActivePodcast)
+  const setShowMiniPlayer = usePodcastStore((state) => state.setShowMiniPlayer)
+  const setPlaying = usePodcastStore((state) => state.setPlaying)
 
-  // Agora hook for podcast audio
-  const {
-    isConnected,
-    joinPodcast,
-    leavePodcast,
-    error: agoraError
-  } = usePodcastAgora({
-    channelName: globalActivePodcast?.agora_channel_name || '',
-    enabled: !!globalActivePodcast
-  })
-
-  // Check if user can start a podcast
-  const canStartPodcast = useMemo(() => {
-    if (!user || !profile) return false
-    
-    const level = profile.level || 1
-    const role = profile.role || ''
-    
-    // Admin and CEO always have access
-    if (role === 'admin' || (profile as any).is_admin || (profile as any).troll_role === 'superadmin') {
-      return true
-    }
-    
-    // If level >= 10, they can start
-    if (level >= 10) return true
-    
-    // Staff under level 10 cannot start
-    if (STAFF_ROLES.includes(role)) return false
-    
-    // All other roles can start regardless of level
-    return true
-  }, [user, profile])
-
-  const getLockedMessage = useMemo(() => {
-    if (!profile) return ''
-    
-    const level = profile.level || 1
-    const role = profile.role || ''
-    
-    if (STAFF_ROLES.includes(role) && level < 10) {
-      return 'Staff accounts need Level 10 to start podcasts.'
-    }
-    return 'Podcast Central unlocks at Level 10.'
+  const currentRole = useMemo(() => normalizeRole(profile?.role), [profile?.role])
+  const currentTrollRole = useMemo(() => normalizeRole((profile as any)?.troll_role), [profile])
+  const currentLevel = useMemo(() => {
+    return asNumber((profile as any)?.level ?? (profile as any)?.user_level, 1)
   }, [profile])
 
-  // Fetch live podcasts
+  const isAdminOrCeo = useMemo(() => {
+    return (
+      Boolean((profile as any)?.is_admin) ||
+      CEO_ADMIN_ROLES.has(currentRole) ||
+      CEO_ADMIN_ROLES.has(currentTrollRole)
+    )
+  }, [profile, currentRole, currentTrollRole])
+
+  const canStartPodcast = useMemo(() => {
+    if (!user?.id || !profile) return false
+
+    if (isAdminOrCeo) return true
+    if (currentLevel >= 10) return true
+
+    if (STAFF_ROLES_REQUIRING_LEVEL_10.has(currentRole)) return false
+    if (STAFF_ROLES_REQUIRING_LEVEL_10.has(currentTrollRole)) return false
+
+    return true
+  }, [user?.id, profile, isAdminOrCeo, currentLevel, currentRole, currentTrollRole])
+
+  const lockedMessage = useMemo(() => {
+    if (!profile) return 'Sign in to start podcasts.'
+
+    const isLockedStaff =
+      currentLevel < 10 &&
+      (STAFF_ROLES_REQUIRING_LEVEL_10.has(currentRole) ||
+        STAFF_ROLES_REQUIRING_LEVEL_10.has(currentTrollRole))
+
+    if (isLockedStaff) return 'Staff accounts need Level 10 to start podcasts.'
+
+    return 'Podcast Central unlocks at Level 10.'
+  }, [profile, currentLevel, currentRole, currentTrollRole])
+
+  const totalLiveListeners = useMemo(() => {
+    return livePodcasts.reduce((sum, podcast) => sum + Number(podcast.listener_count || 0), 0)
+  }, [livePodcasts])
+
+  const topPodcast = livePodcasts[0] || null
+
   const fetchLivePodcasts = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('podcasts')
-        .select('*')
-        .in('status', ['live', 'active'])
-        .order('started_at', { ascending: false })
-        .limit(5)
+    const { data, error } = await supabase
+      .from('podcasts')
+      .select('*')
+      .in('status', LIVE_PODCAST_STATUSES)
+      .order('started_at', { ascending: false, nullsFirst: false })
+      .limit(12)
 
-      if (error) throw error
-
-      setLivePodcasts(data || [])
-    } catch (err) {
-      console.error('[PodcastCentral] Error fetching live podcasts:', err)
-    }
+    if (error) throw error
+    setLivePodcasts((data || []) as Podcast[])
   }, [])
 
-  // Fetch trending podcasts
   const fetchTrendingPodcasts = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('podcasts')
-        .select('*')
-        .eq('status', 'ended')
-        .order('peak_listener_count', { ascending: false })
-        .limit(10)
+    const { data, error } = await supabase
+      .from('podcasts')
+      .select('*')
+      .eq('status', 'ended')
+      .order('peak_listener_count', { ascending: false, nullsFirst: false })
+      .limit(9)
 
-      if (error) throw error
-
-      setTrendingPodcasts(data || [])
-    } catch (err) {
-      console.error('[PodcastCentral] Error fetching trending podcasts:', err)
-    }
+    if (error) throw error
+    setTrendingPodcasts((data || []) as Podcast[])
   }, [])
 
-  // Fetch recent episodes
   const fetchRecentEpisodes = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('podcast_episodes')
-        .select('*')
-        .order('recorded_at', { ascending: false })
-        .limit(10)
+    const { data, error } = await supabase
+      .from('podcast_episodes')
+      .select('*')
+      .order('recorded_at', { ascending: false, nullsFirst: false })
+      .limit(9)
 
-      if (error) throw error
-      setRecentEpisodes(data || [])
-    } catch (err) {
-      console.error('[PodcastCentral] Error fetching recent episodes:', err)
-    }
+    if (error) throw error
+    setRecentEpisodes((data || []) as PodcastEpisode[])
   }, [])
 
-  // Fetch user podcast history
   const fetchUserHistory = useCallback(async () => {
-    if (!user?.id) return
-    
-    try {
-      const { data, error } = await supabase
-        .from('podcast_episodes')
-        .select(`
-          *,
-          podcasts!inner(host_user_id)
-        `)
-        .eq('podcasts.host_user_id', user.id)
-        .order('recorded_at', { ascending: false })
-        .limit(5)
-
-      if (error) throw error
-      setUserHistory(data || [])
-    } catch (err) {
-      console.error('[PodcastCentral] Error fetching user history:', err)
+    if (!user?.id) {
+      setUserHistory([])
+      return
     }
+
+    const { data, error } = await supabase
+      .from('podcast_episodes')
+      .select(
+        `
+        *,
+        podcasts!inner(host_user_id)
+      `
+      )
+      .eq('podcasts.host_user_id', user.id)
+      .order('recorded_at', { ascending: false, nullsFirst: false })
+      .limit(6)
+
+    if (error) throw error
+    setUserHistory((data || []) as PodcastEpisode[])
   }, [user?.id])
 
-  // Initial load
+  const loadPodcastData = useCallback(
+    async (mode: 'initial' | 'refresh' = 'refresh') => {
+      if (mode === 'initial') {
+        setLoading(true)
+      } else {
+        setRefreshing(true)
+      }
+
+      try {
+        await Promise.all([
+          fetchLivePodcasts(),
+          fetchTrendingPodcasts(),
+          fetchRecentEpisodes(),
+          fetchUserHistory(),
+        ])
+      } catch (err) {
+        console.error('[PodcastCentral] Error loading podcast data:', err)
+        toast.error('Could not load Podcast Central.')
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    },
+    [fetchLivePodcasts, fetchTrendingPodcasts, fetchRecentEpisodes, fetchUserHistory]
+  )
+
   useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true)
-      await Promise.all([
-        fetchLivePodcasts(),
-        fetchTrendingPodcasts(),
-        fetchRecentEpisodes(),
-        fetchUserHistory()
-      ])
-      setLoading(false)
+    loadPodcastData('initial')
+
+    const interval = window.setInterval(() => {
+      loadPodcastData('refresh')
+    }, 30000)
+
+    return () => window.clearInterval(interval)
+  }, [loadPodcastData])
+
+  const checkUserCanJoinPodcast = useCallback(async () => {
+    if (!user?.id) {
+      toast.error('Sign in to listen to podcasts.')
+      return false
     }
-    
-    loadInitialData()
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(loadInitialData, 30000)
-    return () => clearInterval(interval)
-  }, [fetchLivePodcasts, fetchTrendingPodcasts, fetchRecentEpisodes, fetchUserHistory])
 
-  // Handle joining a podcast
-  const handleJoinPodcast = useCallback(async (podcast: Podcast) => {
-    try {
-      // Check if user is jailed/banned before joining
-      const { data: jailData } = await supabase
-        .from('jail')
-        .select('release_time')
-        .eq('user_id', user?.id || '')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+    const { data: jailData, error } = await supabase
+      .from('jail')
+      .select('release_time')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-      if (jailData && new Date(jailData.release_time) > new Date()) {
-        toast.error('You are in jail and cannot join podcasts')
-        return
+    if (error) {
+      console.warn('[PodcastCentral] Jail check failed:', error)
+      return true
+    }
+
+    if (jailData?.release_time && new Date(jailData.release_time) > new Date()) {
+      toast.error('You are in jail and cannot join podcasts.')
+      return false
+    }
+
+    return true
+  }, [user?.id])
+
+  const handleJoinPodcast = useCallback(
+    async (podcast: Podcast) => {
+      try {
+        const allowed = await checkUserCanJoinPodcast()
+        if (!allowed) return
+
+        setActivePodcast({
+          id: podcast.id,
+          host_user_id: podcast.host_user_id,
+          title: podcast.title,
+          description: podcast.description || '',
+          status: podcast.status as any,
+          agora_channel_name: podcast.agora_channel_name,
+          started_at: podcast.started_at || new Date().toISOString(),
+          listener_count: podcast.listener_count || 0,
+          host_username: podcast.host_username || undefined,
+        })
+
+        setShowMiniPlayer(true)
+        setPlaying(true)
+
+        toast.success(`Joining "${podcast.title}"`)
+      } catch (err) {
+        console.error('[PodcastCentral] Error joining podcast:', err)
+        toast.error('Failed to join podcast.')
       }
+    },
+    [checkUserCanJoinPodcast, setActivePodcast, setShowMiniPlayer, setPlaying]
+  )
 
-      globalSetActivePodcast(podcast)
-      globalSetShowMiniPlayer(true)
-      toast.success(`Joining "${podcast.title}"`)
-    } catch (err) {
-      console.error('[PodcastCentral] Error joining podcast:', err)
-      toast.error('Failed to join podcast')
-    }
-  }, [user?.id, globalSetActivePodcast, globalSetShowMiniPlayer])
-
-  // Handle starting a podcast
   const handleStartPodcast = useCallback(async () => {
-    if (!canStartPodcast || !user) return
-    
+    if (!user?.id) {
+      toast.error('Sign in to start a podcast.')
+      return
+    }
+
+    if (!canStartPodcast) {
+      toast.error(lockedMessage)
+      return
+    }
+
+    const title = podcastTitle.trim() || 'Untitled Podcast'
+    const description = podcastDescription.trim() || null
+    const channelName = `podcast_${user.id}_${Date.now()}`
+
     setIsStarting(true)
+
     try {
-      const channelName = `podcast_${user.id}_${Date.now()}`
-      const statuses: Array<'live' | 'active' | 'scheduled'> = ['live', 'active', 'scheduled']
-      let podcast = null
-      let lastError: any = null
+      const { data: podcast, error } = await supabase
+        .from('podcasts')
+        .insert({
+          host_user_id: user.id,
+          title,
+          description,
+          status: 'live',
+          agora_channel_name: channelName,
+          started_at: new Date().toISOString(),
+          listener_count: 0,
+          peak_listener_count: 0,
+        })
+        .select('*')
+        .single()
 
-      for (const status of statuses) {
-        const { data, error } = await supabase
-          .from('podcasts')
-          .insert({
-            host_user_id: user.id,
-            title: podcastTitle.trim() || 'Untitled Podcast',
-            description: podcastDescription.trim() || null,
-            status,
-            agora_channel_name: channelName,
-            started_at: new Date().toISOString(),
-            listener_count: 0,
-            peak_listener_count: 0
-          })
-          .select()
-          .single()
+      if (error) throw error
+      if (!podcast?.id) throw new Error('Podcast was created but no podcast id was returned.')
 
-        if (!error) {
-          podcast = data
-          break
-        }
-
-        lastError = error
-        const isStatusConstraint =
-          error?.code === '23514' &&
-          String(error?.message).includes('podcasts_status_check')
-
-        if (!isStatusConstraint) {
-          throw error
-        }
-      }
-
-      if (!podcast) {
-        throw lastError || new Error('Unable to create podcast')
-      }
-
-      // Log to RTCAdmin Monitor
-      await supabase.from('podcast_rtc_logs').insert({
+      const { error: rtcLogError } = await supabase.from('podcast_rtc_logs').insert({
         podcast_id: podcast.id,
         user_id: user.id,
         username: profile?.username || '',
         role: profile?.role || '',
-        level: profile?.level || 1,
+        level: currentLevel,
         event_type: 'podcast_started',
         message: `User started podcast: ${podcast.title}`,
-        metadata: { title: podcast.title, channelName, status: podcast.status }
+        metadata: {
+          title: podcast.title,
+          channelName,
+          status: podcast.status,
+          source: 'PodcastCentral',
+        },
       })
 
-      // Navigate to the podcast room
-      navigate(`/podcast/${podcast.id}`)
+      if (rtcLogError) {
+        console.warn('[PodcastCentral] RTCAdmin Monitor log failed:', rtcLogError)
+      }
+
+      setActivePodcast({
+        id: podcast.id,
+        host_user_id: podcast.host_user_id,
+        title: podcast.title,
+        description: podcast.description || '',
+        status: podcast.status,
+        agora_channel_name: podcast.agora_channel_name,
+        started_at: podcast.started_at || new Date().toISOString(),
+        listener_count: podcast.listener_count || 0,
+        host_username: profile?.username || undefined,
+      })
+
+      setShowMiniPlayer(true)
+      setPlaying(true)
+
+      setPodcastTitle('')
+      setPodcastDescription('')
+      setShowStartForm(false)
+
       toast.success('Podcast started!')
+      navigate(`/podcast/${podcast.id}`)
     } catch (err: any) {
       console.error('[PodcastCentral] Error starting podcast:', err)
-      toast.error(err?.message || 'Failed to start podcast')
+
+      if (
+        err?.code === '23514' &&
+        String(err?.message || '').includes('podcasts_status_check')
+      ) {
+        toast.error('Database status constraint needs live added to podcasts_status_check.')
+      } else if (err?.code === '42501') {
+        toast.error('RLS blocked podcast creation. Check podcasts insert policy.')
+      } else {
+        toast.error(err?.message || 'Failed to start podcast.')
+      }
     } finally {
       setIsStarting(false)
-      setShowStartForm(false)
     }
-  }, [canStartPodcast, user, profile, podcastTitle, podcastDescription, navigate])
+  }, [
+    user?.id,
+    profile?.username,
+    profile?.role,
+    canStartPodcast,
+    lockedMessage,
+    podcastTitle,
+    podcastDescription,
+    currentLevel,
+    setActivePodcast,
+    setShowMiniPlayer,
+    setPlaying,
+    navigate,
+  ])
 
-  // Format elapsed time
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
+  const PodcastTile = ({
+    podcast,
+    variant = 'default',
+  }: {
+    podcast: Podcast
+    variant?: 'default' | 'featured' | 'compact'
+  }) => {
+    const isLive = LIVE_PODCAST_STATUSES.includes(podcast.status)
 
-  // Agora error handling
-  useEffect(() => {
-    if (agoraError) {
-      toast.error(agoraError)
-    }
-  }, [agoraError])
+    return (
+      <article
+        className={cn(
+          'group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.055] p-4 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-cyan-300/35 hover:bg-white/[0.08]',
+          variant === 'featured' && 'min-h-[320px] border-cyan-300/25 bg-cyan-400/[0.07]',
+          variant === 'compact' && 'p-3'
+        )}
+      >
+        <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
+          <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-cyan-400/20 blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-purple-500/20 blur-3xl" />
+        </div>
 
-  return (
-    <div className="relative min-h-full w-full bg-slate-950">
-      {/* Background glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-        <div className="absolute bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.18),transparent_42%)] inset-0" />
-        <div className="absolute bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.14),transparent_46%)] inset-0" />
-        <div className="absolute bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.10),transparent_44%)] inset-0" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:42px_42px] opacity-20" />
-      </div>
-
-      <div className="relative z-10 flex flex-col min-h-0 px-3 md:px-5 pt-2 pb-6 safe-top">
-        <div className="max-w-7xl mx-auto flex flex-col min-h-0 w-full">
-          
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-cyan-500 to-pink-500 flex items-center justify-center">
-                <Radio className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">Podcast Central</h1>
-                <p className="text-sm text-slate-400">Troll City's Audio Hub</p>
-              </div>
+        <div className="relative z-10 flex h-full flex-col">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div
+              className={cn(
+                'flex items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600/35 via-cyan-500/25 to-pink-500/25',
+                variant === 'featured' ? 'h-16 w-16' : 'h-12 w-12'
+              )}
+            >
+              <Mic className={cn('text-cyan-200', variant === 'featured' ? 'h-8 w-8' : 'h-6 w-6')} />
             </div>
-            
-            {/* Feature chips */}
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-bold text-cyan-300">
-                <Mic className="w-3 h-3" />
-                Mute Supported
+
+            {isLive ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-rose-300/25 bg-rose-500/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-rose-100">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-rose-300" />
+                Live
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/20 px-3 py-1 text-xs font-bold text-purple-300">
-                <Volume2 className="w-3 h-3" />
-                Background Listening
+            ) : (
+              <span className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-300">
+                Replay
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-cyan-500/20 to-purple-500/20 px-3 py-1 text-xs font-bold text-white">
-                Powered by Agora Audio
-              </span>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <h3
+              className={cn(
+                'line-clamp-2 font-black text-white',
+                variant === 'featured' ? 'text-2xl' : 'text-base'
+              )}
+            >
+              {podcast.title}
+            </h3>
+
+            <p
+              className={cn(
+                'mt-2 text-slate-300',
+                variant === 'featured' ? 'line-clamp-4 text-sm' : 'line-clamp-2 text-xs'
+              )}
+            >
+              {podcast.description || 'No description'}
+            </p>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+              <div className="flex items-center gap-1 text-slate-400">
+                <Users className="h-3.5 w-3.5" />
+                Listeners
+              </div>
+              <p className="mt-1 font-black text-white">{podcast.listener_count || 0}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+              <div className="flex items-center gap-1 text-slate-400">
+                <Clock className="h-3.5 w-3.5" />
+                Started
+              </div>
+              <p className="mt-1 font-black text-white">{formatStartedTime(podcast.started_at)}</p>
             </div>
           </div>
 
-          {/* Start Podcast Card */}
-          <div className={`${theme.panelStrong} p-5 mb-4`}>
+          <button
+            type="button"
+            onClick={() => handleJoinPodcast(podcast)}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 via-cyan-500 to-pink-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-cyan-950/30 transition hover:scale-[1.02]"
+          >
+            <Play className="h-4 w-4" />
+            {isLive ? 'Listen Live' : 'Open Replay'}
+          </button>
+        </div>
+      </article>
+    )
+  }
+
+  const EpisodeTile = ({
+    episode,
+    label = 'Play',
+  }: {
+    episode: PodcastEpisode
+    label?: string
+  }) => {
+    return (
+      <article className="group rounded-3xl border border-white/10 bg-white/[0.055] p-4 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-cyan-300/30 hover:bg-white/[0.08]">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-600/35 to-purple-500/25">
+            <Volume2 className="h-6 w-6 text-cyan-200" />
+          </div>
+
+          <span className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-300">
+            Episode
+          </span>
+        </div>
+
+        <h3 className="line-clamp-2 font-black text-white">{episode.title}</h3>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+            <p className="text-slate-400">Duration</p>
+            <p className="mt-1 font-black text-white">
+              {episode.duration_seconds ? formatTime(episode.duration_seconds) : 'Recorded'}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+            <p className="text-slate-400">Plays</p>
+            <p className="mt-1 font-black text-white">{episode.listener_count || 0}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => navigate(`/podcast/${episode.podcast_id}`)}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm font-black text-cyan-100 transition hover:bg-cyan-400/20"
+        >
+          <Play className="h-4 w-4" />
+          {label}
+        </button>
+      </article>
+    )
+  }
+
+  return (
+    <div className="relative min-h-full w-full overflow-hidden bg-slate-950">
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(120%_120%_at_18%_12%,rgba(147,51,234,0.22),transparent_42%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(140%_140%_at_84%_0%,rgba(45,212,191,0.17),transparent_46%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.13),transparent_44%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:42px_42px] opacity-20" />
+      </div>
+
+      <div className="safe-top relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-5 px-3 pb-8 pt-3 md:px-5">
+        <header className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+          <section className="relative overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-slate-950/70 p-5 shadow-2xl shadow-cyan-950/30 backdrop-blur-xl md:p-7">
+            <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-28 -left-28 h-64 w-64 rounded-full bg-purple-500/20 blur-3xl" />
+
+            <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-cyan-100">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Agora Audio Hub
+                </div>
+
+                <h1 className="text-3xl font-black tracking-tight text-white md:text-5xl">
+                  Podcast Central
+                </h1>
+
+                <p className="mt-2 max-w-2xl text-sm text-slate-300 md:text-base">
+                  Start live audio rooms, keep listeners connected with the mini player, and let
+                  RTCAdmin Monitor track the session.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-2">
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                  <Radio className="mb-2 h-5 w-5 text-cyan-200" />
+                  <p className="text-2xl font-black text-white">{livePodcasts.length}</p>
+                  <p className="text-xs text-slate-400">Live Rooms</p>
+                </div>
+
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                  <Users className="mb-2 h-5 w-5 text-purple-200" />
+                  <p className="text-2xl font-black text-white">{totalLiveListeners}</p>
+                  <p className="text-xs text-slate-400">Listeners</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className={cn(neonCard, 'p-5')}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-white">Start Studio</h2>
+                <p className="text-xs text-slate-400">Go live with Agora audio</p>
+              </div>
+
+              {canStartPodcast ? (
+                <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs font-black text-emerald-200">
+                  Unlocked
+                </span>
+              ) : (
+                <span className="rounded-full border border-red-300/20 bg-red-500/10 px-3 py-1 text-xs font-black text-red-200">
+                  Locked
+                </span>
+              )}
+            </div>
+
             {canStartPodcast ? (
               showStartForm ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <input
                     type="text"
                     value={podcastTitle}
-                    onChange={(e) => setPodcastTitle(e.target.value)}
+                    onChange={(event) => setPodcastTitle(event.target.value)}
                     placeholder="Podcast title..."
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-cyan-400/50"
                     maxLength={100}
+                    className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/60"
                   />
+
                   <textarea
                     value={podcastDescription}
-                    onChange={(e) => setPodcastDescription(e.target.value)}
-                    placeholder="Description (optional)..."
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-cyan-400/50 resize-none"
-                    rows={3}
+                    onChange={(event) => setPodcastDescription(event.target.value)}
+                    placeholder="Description optional..."
+                    rows={4}
                     maxLength={500}
+                    className="w-full resize-none rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/60"
                   />
-                  <div className="flex gap-3">
+
+                  <div className="grid grid-cols-2 gap-2">
                     <button
+                      type="button"
                       onClick={() => setShowStartForm(false)}
-                      className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-semibold text-white hover:bg-white/10"
+                      disabled={isStarting}
+                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-black text-white transition hover:bg-white/10 disabled:opacity-50"
                     >
                       Cancel
                     </button>
+
                     <button
+                      type="button"
                       onClick={handleStartPodcast}
                       disabled={isStarting}
-                      className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 via-cyan-500 to-pink-500 px-4 py-3 font-semibold text-white shadow-lg hover:from-purple-500 hover:via-cyan-400 hover:to-pink-500 disabled:opacity-50"
+                      className="rounded-2xl bg-gradient-to-r from-purple-600 via-cyan-500 to-pink-500 px-4 py-3 font-black text-white shadow-lg shadow-cyan-950/30 transition hover:scale-[1.02] disabled:opacity-50"
                     >
                       {isStarting ? (
                         <span className="flex items-center justify-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Starting...
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Starting
                         </span>
                       ) : (
-                        'Start Podcast'
+                        'Go Live'
                       )}
                     </button>
                   </div>
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => setShowStartForm(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 via-cyan-500 to-pink-500 px-6 py-4 font-semibold text-white shadow-lg hover:from-purple-500 hover:via-cyan-400 hover:to-pink-500 transition-all"
+                  className="flex min-h-[180px] w-full flex-col items-center justify-center gap-3 rounded-3xl border border-cyan-300/20 bg-gradient-to-br from-purple-600/25 via-cyan-500/15 to-pink-500/20 px-6 py-6 text-center transition hover:scale-[1.01] hover:border-cyan-300/40"
                 >
-                  <Radio className="w-5 h-5" />
-                  Start Podcast
+                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-400/20 shadow-lg shadow-cyan-950/30">
+                    <Mic className="h-8 w-8 text-cyan-100" />
+                  </div>
+
+                  <div>
+                    <p className="text-xl font-black text-white">Start Podcast</p>
+                    <p className="mt-1 text-xs text-slate-300">Creates a live Agora podcast room</p>
+                  </div>
                 </button>
               )
             ) : (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <Lock className="w-5 h-5 text-red-400" />
+              <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4">
+                <div className="flex items-start gap-3">
+                  <Lock className="mt-1 h-5 w-5 text-red-300" />
                   <div>
-                    <p className="font-semibold text-red-300">Access Locked</p>
-                    <p className="text-sm text-red-400/80">{getLockedMessage}</p>
+                    <p className="font-black text-red-200">Access Locked</p>
+                    <p className="mt-1 text-sm text-red-200/80">{lockedMessage}</p>
                   </div>
                 </div>
               </div>
             )}
-          </div>
+          </section>
+        </header>
 
-          {/* Podcast Access Card */}
-          <div className={`${theme.panel} p-4 mb-4`}>
-            <h3 className="mb-3 text-sm font-bold text-cyan-300 uppercase tracking-wide">Podcast Access Rules</h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                <span className="text-white"><strong>Level 10+</strong> can start and host podcasts</span>
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className={cn(glassCard, 'p-4')}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/15">
+                <Headphones className="h-5 w-5 text-cyan-200" />
               </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                <span className="text-white"><strong>All users</strong> can listen to live podcasts</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-                <span className="text-white"><strong>Staff roles</strong> under Level 10 cannot start</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                <span className="text-white"><strong>Admin/CEO</strong> always have access</span>
+              <div>
+                <p className="text-sm font-black text-white">Mini Player</p>
+                <p className="text-xs text-slate-400">Listen while navigating</p>
               </div>
             </div>
           </div>
 
-          {/* Featured Live Podcast */}
-          <div className={`${theme.panelStrong} p-5 mb-4`}>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Featured Live Podcast</h2>
-              <Link to="/podcast/explore" className="flex items-center gap-1 text-xs font-medium text-cyan-300 hover:text-cyan-200">
-                View All <ChevronRight className="w-3 h-3" />
+          <div className={cn(glassCard, 'p-4')}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-400/15">
+                <ShieldCheck className="h-5 w-5 text-purple-200" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-white">Access Rules</p>
+                <p className="text-xs text-slate-400">Staff need Level 10</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={cn(glassCard, 'p-4')}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-pink-400/15">
+                <Zap className="h-5 w-5 text-pink-200" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-white">Agora Powered</p>
+                <p className="text-xs text-slate-400">Audio-only sessions</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={cn(glassCard, 'p-4')}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/15">
+                {refreshing ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-emerald-200" />
+                ) : (
+                  <RefreshCw className="h-5 w-5 text-emerald-200" />
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-black text-white">Auto Refresh</p>
+                <p className="text-xs text-slate-400">Updates every 30 seconds</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <main className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+          <section className={cn(theme.panelStrong, 'p-5')}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black text-white">Live Podcast Grid</h2>
+                <p className="text-sm text-slate-400">No long tabs — just live room cards</p>
+              </div>
+
+              <Link
+                to="/podcast/explore"
+                className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-400/20"
+              >
+                Explore <ChevronRight className="h-3.5 w-3.5" />
               </Link>
             </div>
-            
+
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+              <div className="grid gap-4 sm:grid-cols-2">
+                {[1, 2, 3, 4].map((item) => (
+                  <div key={item} className="h-72 animate-pulse rounded-3xl bg-white/5" />
+                ))}
               </div>
             ) : livePodcasts.length === 0 ? (
-              <div className="text-center py-8">
-                <Radio className="w-12 h-12 text-slate-600 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">No live podcasts right now</p>
+              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.04] text-center">
+                <Radio className="mb-3 h-14 w-14 text-slate-600" />
+                <p className="text-lg font-black text-white">No live podcasts right now</p>
+                <p className="mt-1 text-sm text-slate-400">Start one from the studio card.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {livePodcasts.slice(0, 1).map((podcast) => (
-                  <div key={podcast.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-purple-600/30 to-cyan-500/30 flex-shrink-0 flex items-center justify-center">
-                        <Mic className="w-8 h-8 text-cyan-300" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-white truncate">{podcast.title}</h3>
-                        <p className="text-sm text-slate-300 mt-1 line-clamp-2">{podcast.description || 'No description'}</p>
-                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            {podcast.listener_count || 0} listeners
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            Started {podcast.started_at ? new Date(podcast.started_at).toLocaleTimeString() : 'recently'}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleJoinPodcast(podcast)}
-                        className="rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 px-4 py-2 font-semibold text-white hover:from-purple-500 hover:to-cyan-400"
-                      >
-                        Listen Live
-                      </button>
-                    </div>
-                  </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {livePodcasts.map((podcast, index) => (
+                  <PodcastTile
+                    key={podcast.id}
+                    podcast={podcast}
+                    variant={index === 0 && !isMobileWidth ? 'featured' : 'default'}
+                  />
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Trending Podcasts */}
-          <div className={`${theme.panel} p-5 mb-4`}>
-            <h2 className="mb-3 text-lg font-bold text-white">Trending Podcasts</h2>
-            
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
-              </div>
-            ) : trendingPodcasts.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-slate-500 text-sm">No trending podcasts yet</p>
-              </div>
-            ) : (
-              <div className={`grid gap-3 ${isMobileWidth ? 'grid-cols-1' : 'grid-cols-2 md:grid-cols-3'}`}>
-                {trendingPodcasts.map((podcast) => (
-                  <div key={podcast.id} className="rounded-xl border border-white/10 bg-white/5 p-3 hover:bg-white/10 transition-all cursor-pointer">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600/30 to-pink-500/30 flex items-center justify-center">
-                        <Mic className="w-5 h-5 text-purple-300" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white truncate text-sm">{podcast.title}</p>
-                        <p className="text-xs text-slate-400">Podcast</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>{podcast.peak_listener_count || 0} peak listeners</span>
-                      <button
-                        onClick={() => handleJoinPodcast(podcast)}
-                        className="text-cyan-300 hover:text-cyan-200 font-medium"
-                      >
-                        Replay
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <aside className="grid gap-5">
+            <section className={cn(neonCard, 'p-5')}>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/15">
+                  <Star className="h-6 w-6 text-cyan-100" />
+                </div>
 
-          {/* Recent Episodes */}
-          <div className={`${theme.panel} p-5 mb-4`}>
-            <h2 className="mb-3 text-lg font-bold text-white">Recent Episodes</h2>
-            
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-pink-400" />
+                <div>
+                  <h2 className="text-lg font-black text-white">Featured Room</h2>
+                  <p className="text-xs text-slate-400">Top current live podcast</p>
+                </div>
               </div>
-            ) : recentEpisodes.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-slate-500 text-sm">No episodes recorded yet</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {recentEpisodes.map((episode) => (
-                  <div key={episode.id} className="rounded-xl border border-white/10 bg-white/5 p-3 hover:bg-white/10 transition-all cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-600/30 to-purple-500/30 flex items-center justify-center">
-                        <Volume2 className="w-5 h-5 text-cyan-300" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white truncate">{episode.title}</p>
-                        <div className="flex items-center gap-3 text-xs text-slate-400">
-                          <span>{episode.duration_seconds ? formatTime(episode.duration_seconds) : 'Recorded'}</span>
-                          <span>•</span>
-                          <span>{episode.listener_count || 0} plays</span>
-                        </div>
-                      </div>
-                      <button
-onClick={() => navigate(`/podcast/${episode.podcast_id}`)}
-                         className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
-                      >
-                        Play
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
-          {/* My Podcast History */}
-          {user && (
-            <div className={`${theme.panel} p-5 mb-4`}>
-              <h2 className="mb-3 text-lg font-bold text-white">My Podcast History</h2>
-              
               {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
-                </div>
-              ) : userHistory.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-slate-500 text-sm">No podcast history yet</p>
-                </div>
+                <div className="h-64 animate-pulse rounded-3xl bg-white/5" />
+              ) : topPodcast ? (
+                <PodcastTile podcast={topPodcast} variant="compact" />
               ) : (
-                <div className="space-y-2">
-                  {userHistory.map((episode) => (
-                    <div key={episode.id} className="rounded-xl border border-white/10 bg-white/5 p-3 hover:bg-white/10 transition-all cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600/30 to-pink-500/30 flex items-center justify-center">
-                          <Mic className="w-5 h-5 text-purple-300" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-white truncate">{episode.title}</p>
-                          <p className="text-xs text-slate-400">Recorded {episode.recorded_at ? new Date(episode.recorded_at).toLocaleDateString() : 'recently'}</p>
-                        </div>
-                        <button
-onClick={() => navigate(`/podcast/${episode.podcast_id}`)}
-                           className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
-                         >
-                           Replay
-                         </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="rounded-3xl border border-white/10 bg-black/20 p-6 text-center">
+                  <Radio className="mx-auto mb-2 h-10 w-10 text-slate-600" />
+                  <p className="text-sm font-bold text-slate-300">Nothing featured yet</p>
                 </div>
               )}
-            </div>
-          )}
+            </section>
 
-{/* RTCAdmin Monitor Status Card */}
-           <div className={`${theme.panel} p-5`}>
-             <h2 className="mb-3 text-lg font-bold text-white">RTCAdmin Monitor</h2>
-             <RTCAdminMonitor />
-           </div>
-         </div>
-       </div>
-     </div>
-   )
+            <section className={cn(glassCard, 'p-5')}>
+              <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-white">
+                <CheckCircle2 className="h-5 w-5 text-emerald-300" />
+                Rules Grid
+              </h2>
+
+              <div className="grid gap-3">
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-3">
+                  <p className="text-sm font-black text-emerald-100">Level 10+</p>
+                  <p className="text-xs text-emerald-100/75">Can start and host podcasts.</p>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-3">
+                  <p className="text-sm font-black text-cyan-100">All Users</p>
+                  <p className="text-xs text-cyan-100/75">Can listen to live podcasts.</p>
+                </div>
+
+                <div className="rounded-2xl border border-red-300/20 bg-red-500/10 p-3">
+                  <p className="text-sm font-black text-red-100">Staff Under Level 10</p>
+                  <p className="text-xs text-red-100/75">Cannot start podcasts.</p>
+                </div>
+
+                <div className="rounded-2xl border border-purple-300/20 bg-purple-400/10 p-3">
+                  <p className="text-sm font-black text-purple-100">Admin / CEO</p>
+                  <p className="text-xs text-purple-100/75">Always has access.</p>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </main>
+
+        <section className="grid gap-5 lg:grid-cols-2">
+          <section className={cn(theme.panel, 'p-5')}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-black text-white">
+                  <TrendingUp className="h-5 w-5 text-purple-200" />
+                  Trending Grid
+                </h2>
+                <p className="text-sm text-slate-400">Top ended podcasts by peak listeners</p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[1, 2, 3, 4].map((item) => (
+                  <div key={item} className="h-48 animate-pulse rounded-3xl bg-white/5" />
+                ))}
+              </div>
+            ) : trendingPodcasts.length === 0 ? (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] py-10 text-center">
+                <p className="text-sm text-slate-500">No trending podcasts yet.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {trendingPodcasts.slice(0, 6).map((podcast) => (
+                  <PodcastTile key={podcast.id} podcast={podcast} variant="compact" />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className={cn(theme.panel, 'p-5')}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-black text-white">
+                  <BarChart3 className="h-5 w-5 text-cyan-200" />
+                  Recent Episodes
+                </h2>
+                <p className="text-sm text-slate-400">Recorded podcast cards</p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[1, 2, 3, 4].map((item) => (
+                  <div key={item} className="h-48 animate-pulse rounded-3xl bg-white/5" />
+                ))}
+              </div>
+            ) : recentEpisodes.length === 0 ? (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] py-10 text-center">
+                <p className="text-sm text-slate-500">No episodes recorded yet.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {recentEpisodes.slice(0, 6).map((episode) => (
+                  <EpisodeTile key={episode.id} episode={episode} label="Play" />
+                ))}
+              </div>
+            )}
+          </section>
+        </section>
+
+        {user?.id && (
+          <section className={cn(theme.panel, 'p-5')}>
+            <div className="mb-4">
+              <h2 className="text-xl font-black text-white">My Podcast History</h2>
+              <p className="text-sm text-slate-400">Your hosted podcast episodes in grid view</p>
+            </div>
+
+            {loading ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="h-48 animate-pulse rounded-3xl bg-white/5" />
+                ))}
+              </div>
+            ) : userHistory.length === 0 ? (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] py-10 text-center">
+                <p className="text-sm text-slate-500">No podcast history yet.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {userHistory.map((episode) => (
+                  <EpisodeTile key={episode.id} episode={episode} label="Replay" />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <section className={cn(theme.panel, 'p-5')}>
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/15">
+              <ShieldCheck className="h-5 w-5 text-cyan-100" />
+            </div>
+
+            <div>
+              <h2 className="text-xl font-black text-white">RTCAdmin Monitor</h2>
+              <p className="text-sm text-slate-400">Podcast sessions report into admin monitoring</p>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-black/20 p-3">
+            <RTCAdminMonitor />
+          </div>
+        </section>
+      </div>
+    </div>
+  )
 }

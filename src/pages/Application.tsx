@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Shield, XCircle, Gavel, Briefcase, Video, Sparkles, Newspaper, Mic, Radio, Users, Crown } from 'lucide-react'
+import { Shield, XCircle, Gavel, Briefcase, Video, Sparkles, Newspaper, Mic, Radio, Crown } from 'lucide-react'
 
 interface JobPosition {
   id: string
@@ -16,32 +16,26 @@ interface JobPosition {
 
 const positionToJobPosition: Record<string, { title: string; icon: any; description: string }> = {
   auctioneer: { title: 'Auctioneer', icon: Sparkles, description: 'Host live auction shows where users bid with Troll Coins and build a trusted auctioneer reputation.' },
-  prosecutor: { title: 'Prosecutor', icon: Gavel, description: 'Represents Troll City in court cases, reviews evidence, presents charges, and supports city justice.' },
-  attorney: { title: 'Attorney', icon: Shield, description: 'Defense attorney representing defendants in Troll Court cases, appeals, hearings, and disputes.' },
-  tcnn_news_caster: { title: 'TCNN News Caster', icon: Mic, description: 'On-air TCNN personality delivering breaking news, live reports, and official city broadcasts.' },
+  prosecutor: { title: 'Troll Court Prosecutor', icon: Gavel, description: 'Represents Troll City in court cases, reviews evidence, presents charges, and supports city justice.' },
+  attorney: { title: 'Troll Court Attorney', icon: Shield, description: 'Defense attorney representing defendants in Troll Court cases, appeals, hearings, and disputes.' },
+  news_caster: { title: 'News Caster', icon: Mic, description: 'On-air TCNN personality delivering breaking news, live reports, and official city broadcasts.' },
   secretary: { title: 'Secretary', icon: Briefcase, description: 'Official city support role for admin operations, reports, meetings, and city coordination.' },
-  tcnn_chief_news_caster: { title: 'TCNN Chief News Caster', icon: Radio, description: 'Lead the TCNN team, manage journalists and news casters, and maintain editorial standards.' },
+  chief_news_caster: { title: 'Chief News Caster', icon: Radio, description: 'Lead the TCNN team, manage journalists and news casters, and maintain editorial standards.' },
   troll_officer: { title: 'Troll Officer', icon: Shield, description: 'Official city enforcer responsible for reports, moderation, investigations, arrests, and safety response.' },
   journalist: { title: 'Journalist', icon: Newspaper, description: 'Write articles, conduct investigations, and keep the city informed through Troll City News Network.' },
-  lead_troll_officer: { title: 'Lead Troll Officer', icon: Crown, description: 'Senior enforcement role overseeing Troll Officers, cases, escalation, and city safety consistency.' },
+  lead_officer: { title: 'Lead Troll Officer', icon: Crown, description: 'Senior enforcement role overseeing Troll Officers, cases, escalation, and city safety consistency.' },
   troller: { title: 'Troller', icon: Video, description: 'Entertainer role focused on playful chaos, satire, comedy, and broadcast engagement within city rules.' },
-  agency_hr_manager: { title: 'Agency HR Manager', icon: Briefcase, description: 'Manage, approve, review, and settle issues for Troll City agencies.' },
-  agency_hr: { title: 'Agency HR', icon: Shield, description: 'Support agency applications, reports, fee reviews, and HR operations.' },
-  agency_leader: { title: 'Agency Leader', icon: Users, description: 'Lead a Troll City agency, recruit members, manage applications, and grow creator talent.' },
-  ceo_assistant: { title: 'CEO Assistant', icon: Crown, description: 'Assist the CEO with reports, coordination, admin follow-up, and platform operations.' },
-  noah_assistant: { title: 'Noah Assistant', icon: Briefcase, description: 'Assist Noah Admin with reports, support tasks, and city operation follow-up.' },
 }
 
 const positionToRoleCheck: Record<string, { field: string; message: string }> = {
   auctioneer: { field: 'is_auctioneer', message: 'You are already an Auctioneer' },
   secretary: { field: 'is_secretary', message: 'You are already a Secretary' },
   troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
-  lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
-  lead_officer: { field: 'is_lead_officer', message: 'You are already a Lead Officer' },
+  lead_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
   troller: { field: 'is_troller', message: 'You are already a Troller' },
   journalist: { field: 'is_journalist', message: 'You are already a Journalist' },
-  tcnn_news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
-  tcnn_chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
+  news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
+  chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
   prosecutor: { field: 'is_prosecutor', message: 'You are already a Prosecutor' },
   attorney: { field: 'is_attorney', message: 'You are already an Attorney' },
 }

@@ -90,7 +90,7 @@ const districtZones = [
 
 export default function NeighborhoodMapHub() {
   const { neighborhood, members, house, loading } = useNeighborhood()
-  const { profile } = useAuthStore()
+  const profile = useAuthStore((s) => s.profile)
   const { vehicles } = useVehicleSystem()
   const { raids, isRaided } = useHouseRaids(house?.id || null)
 

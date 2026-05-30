@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import './admin.css'
 import { useAuthStore } from '../../lib/store'
 import { supabase, isAdminEmail, UserRole } from '../../lib/supabase'
-import { sendNotification } from '../../lib/sendNotification'
 import {
   Shield,
   LogOut,
@@ -18,19 +17,19 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import CitySummaryBar from './components/CitySummaryBar'
-import CityControlsHealth from './components/CityControlsHealth'
 import FinanceEconomyCenter from './components/FinanceEconomyCenter'
-import RevenueInventoryDashboard from './components/RevenueInventoryDashboard'
+import LivePurchasableInventory from './components/LivePurchasableInventory'
 import OperationsControlDeck from './components/OperationsControlDeck'
 import AdditionalTasksGrid from './components/AdditionalTasksGrid'
 import QuickActionsBar from './components/QuickActionsBar'
-import PresidentialOversightPanel from './components/PresidentialOversightPanel'
 import ProposalManagementPanel from './components/shared/ProposalManagementPanel'
 import TempAdminDashboard from './TempAdminDashboard'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import { useAdminFinanceRealtime } from '../../hooks/useAdminFinanceRealtime'
 import { useAdminDashboardMetrics } from '../../hooks/useAdminDashboardMetrics'
+import PresidentialOversightPanel from './components/PresidentialOversightPanel'
+
+
 
 type StatState = {
   totalUsers: number
@@ -500,18 +499,12 @@ export default function AdminDashboard() {
       }
 
   const [activeTab, setActiveTab] = useState<TabId>('connections')
-  const [supabaseStatus, setSupabaseStatus] = useState<unknown | null>(null)
-  const [paypalStatus, setPaypalStatus] = useState<unknown | null>(null)
-  const [paypalTesting, setPaypalTesting] = useState(false)
-  const [trollDropAmount, setTrollDropAmount] = useState<number>(100)
-  const [trollDropDuration, setTrollDropDuration] = useState<number>(60)
   const [economySummary, setEconomySummary] = useState<EconomySummary | null>(null)
   const [economyLoading, setEconomyLoading] = useState(false)
   const [liveStreams, setLiveStreams] = useState<LiveStream[]>([])
   const [streamsLoading, setStreamsLoading] = useState(false)
   const [coinPurchases, setCoinPurchases] = useState<CoinPurchaseRow[]>([])
   const [coinPurchasesLoading, setCoinPurchasesLoading] = useState(false)
-
   const [taskCounts, setTaskCounts] = useState({
     taxReviews: 0,
     supportTickets: 0,
@@ -910,23 +903,6 @@ export default function AdminDashboard() {
     return () => clearInterval(interval)
   }, [isAuthorized, loadLiveStreams, loadTaskCounts, loadCoinPurchases])
 
-  const createTrollDrop = async () => {
-    try {
-      const amt = Math.max(1, Math.min(100000, Number(trollDropAmount || 0)))
-      const dur = Math.max(5, Math.min(3600, Number(trollDropDuration || 0)))
-      const ends = new Date(Date.now() + dur * 1000).toISOString()
-
-      await sendNotification(null, 'troll_drop', '🎉 Troll Drop!', `Troll Drop: ${amt} coins available!`, {
-        coins: amt,
-        ends_at: ends,
-      })
-
-      toast.success('Troll Drop created')
-    } catch {
-      toast.error('Failed to create Troll Drop')
-    }
-  }
-
   const endStreamById = async (id: string) => {
     try {
       const { data: session } = await supabase.auth.getSession()
@@ -1031,74 +1007,6 @@ export default function AdminDashboard() {
   }
 
   const viewStream = (id: string) => navigate(`/watch/${id}?admin=1`)
-
-  const testSupabase = async () => {
-    try {
-      const uid = user?.id || profile?.id
-      if (!uid) throw new Error('No user id')
-
-      const { data, error } = await supabase.from('user_profiles').select('id').eq('id', uid).limit(1)
-
-      if (error) throw error
-      if (!data || data.length === 0) throw new Error('Profile not found')
-
-      setSupabaseStatus({ ok: true })
-      toast.success('Supabase connection verified')
-    } catch (e: any) {
-      setSupabaseStatus({ ok: false, error: e?.message || 'Failed' })
-      toast.error('Supabase test failed')
-    }
-  }
-
-  const testPayPal = async () => {
-    setPaypalTesting(true)
-    setPaypalStatus(null)
-
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-      const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-      if (!supabaseUrl) throw new Error('VITE_SUPABASE_URL environment variable is not set')
-      if (!apikey) throw new Error('VITE_SUPABASE_ANON_KEY environment variable is not set')
-
-      const testUrl = `${supabaseUrl}/functions/v1/paypal-test-live`
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000)
-
-      try {
-        const response = await fetch(testUrl, {
-          method: 'OPTIONS',
-          headers: { apikey },
-          signal: controller.signal,
-        })
-
-        clearTimeout(timeoutId)
-
-        if (response.ok || response.status === 200 || response.status === 204) {
-          setPaypalStatus({ ok: true })
-          toast.success('PayPal function reachable')
-        } else {
-          const responseText = await response.text().catch(() => 'No response body')
-          throw new Error(`HTTP ${response.status}: ${responseText.substring(0, 200)}`)
-        }
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId)
-
-        if (fetchError.name === 'AbortError') {
-          throw new Error(`Request timeout after 15 seconds. Function may not be deployed: ${testUrl}`)
-        }
-
-        throw fetchError
-      }
-    } catch (e: any) {
-      const errorMsg = e?.message || 'Unknown error occurred'
-      console.error('[PayPal Test] Error:', e)
-      setPaypalStatus({ ok: false, error: errorMsg })
-      toast.error(`PayPal test failed: ${errorMsg}`)
-    } finally {
-      setPaypalTesting(false)
-    }
-  }
 
   const handleEmergencyStop = async () => {
     if (!window.confirm('EMERGENCY STOP: This will immediately END ALL active broadcasts. Continue?')) return
@@ -1344,57 +1252,25 @@ export default function AdminDashboard() {
                <MoneyMetric icon={Radio} label="Live Streams" value={Number(dashboardMetrics.activeStreams || liveStreams.length).toLocaleString()} sub="active broadcasts" />
                <MoneyMetric icon={DollarSign} label="Coin Revenue" value={`$${Number(stats.coinSalesRevenue || 0).toFixed(2)}`} sub="from public.transactions" />
                <MoneyMetric icon={Coins} label="Coins Sold" value={Number(stats.purchasedCoins || 0).toLocaleString()} sub="purchased coin balance" />
-             </div>
-          </header>
+</div>
+           </header>
 
-<ErrorBoundary>
-             <CitySummaryBar
+           <CoinSalesPanel purchases={coinPurchases} loading={coinPurchasesLoading} onRefresh={loadCoinPurchases} />
+
+           <ErrorBoundary>
+             <FinanceEconomyCenter
                stats={stats}
-               liveStreamsCount={dashboardMetrics.activeStreams || liveStreams.length}
-               financeLoading={financeLoading}
-               isConnected={isConnected}
-               lastSync={lastSync}
-               reconciliation={reconciliation}
-               onRefreshFinance={() => {
-                 refreshFinance()
-                 refreshMetrics()
-               }}
+               economySummary={economySummary}
+               economyLoading={economyLoading}
+               onLoadEconomySummary={loadEconomySummary}
              />
            </ErrorBoundary>
 
-          <CoinSalesPanel purchases={coinPurchases} loading={coinPurchasesLoading} onRefresh={loadCoinPurchases} />
+           <ErrorBoundary>
+             <LivePurchasableInventory />
+           </ErrorBoundary>
 
-          <ErrorBoundary>
-            <CityControlsHealth
-              paypalStatus={paypalStatus}
-              supabaseStatus={supabaseStatus}
-              liveStreams={liveStreams}
-              onTestPayPal={testPayPal}
-              onTestSupabase={testSupabase}
-              onLoadLiveStreams={loadLiveStreams}
-              onCreateTrollDrop={createTrollDrop}
-              trollDropAmount={trollDropAmount}
-              setTrollDropAmount={setTrollDropAmount}
-              trollDropDuration={trollDropDuration}
-              setTrollDropDuration={setTrollDropDuration}
-              paypalTesting={paypalTesting}
-            />
-          </ErrorBoundary>
-
-          <ErrorBoundary>
-            <FinanceEconomyCenter
-              stats={stats}
-              economySummary={economySummary}
-              economyLoading={economyLoading}
-              onLoadEconomySummary={loadEconomySummary}
-            />
-          </ErrorBoundary>
-
-          <ErrorBoundary>
-            <RevenueInventoryDashboard />
-          </ErrorBoundary>
-
-          <ErrorBoundary>
+           <ErrorBoundary>
             <OperationsControlDeck
               liveStreams={liveStreams}
               streamsLoading={streamsLoading}

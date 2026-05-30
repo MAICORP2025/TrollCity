@@ -39,6 +39,8 @@ export function useLiveKitRoom({
   publish = false,
   isAdmin = false,
   userName,
+  identity,
+  initialAudioEnabled = true,
   onUserJoined,
   onUserLeft,
   onError
@@ -72,7 +74,7 @@ export function useLiveKitRoom({
     const requestBody = {
       room: roomName,
       roomName,
-      identity: userId,
+      identity: identity || userId,
       name: userName || 'User',
       role: publish ? 'publisher' : 'audience',
       isHost: publish && roomType === 'pod' ? true : undefined,
@@ -402,24 +404,32 @@ export function useLiveKitRoom({
       }
 
       audioTrack = await createLocalAudioTrack();
-      await audioTrack.enable();
+      if (initialAudioEnabled) {
+        await audioTrack.enable();
+      } else {
+        await audioTrack.disable();
+      }
 
-      const { createLocalVideoTrack } = await import('livekit-client');
-      videoTrack = await createLocalVideoTrack({
-        ...videoPreset,
-        facingMode: 'user'
-      });
+      if (!audioOnly) {
+        const { createLocalVideoTrack } = await import('livekit-client');
+        videoTrack = await createLocalVideoTrack({
+          ...videoPreset,
+          facingMode: 'user'
+        });
+      }
 
       setLocalAudioTrack(audioTrack);
       setLocalVideoTrack(videoTrack);
       localAudioTrackRef.current = audioTrack;
       localVideoTrackRef.current = videoTrack;
 
-      await room.connect(url, token, { name: roomId, identity: userId });
+      await room.connect(url, token, { name: roomId, identity: identity || userId });
       await waitForRoomConnected(room, 5000);
 
       await room.localParticipant.publishTrack(audioTrack);
-      await room.localParticipant.publishTrack(videoTrack);
+      if (videoTrack) {
+        await room.localParticipant.publishTrack(videoTrack);
+      }
 
       setIsConnected(true);
       setIsPublishing(true);
@@ -571,7 +581,7 @@ export function useLiveKitRoom({
       // Connect to room
       await room.connect(url, token, {
         name: roomId,
-        identity: userId
+        identity: identity || userId
       });
       await waitForRoomConnected(room, 5000);
 

@@ -369,7 +369,7 @@ export function useDriverTest() {
     fetchLicense()
   }, [fetchLicense])
 
-  const takeTest = async (answers: number[], correctAnswers: number[] = [1, 2, 1, 1, 1, 1, 1, 0, 1, 0]): Promise<{success: boolean, passed: boolean, score: number, message?: string}> => {
+const takeTest = async (answers: number[], correctAnswers: number[] = [1, 2, 1, 1, 1, 1, 1, 0, 1, 0]): Promise<{success: boolean, passed: boolean, score: number, message?: string}> => {
     if (!user?.id) return { success: false, passed: false, score: 0 }
 
     const score = answers.reduce((sum, answer, index) => {
@@ -407,12 +407,14 @@ export function useDriverTest() {
           hasActiveInsurance = !!insurance
         }
 
-        if (!profile.insurance_required || hasActiveInsurance) {
-          newLicenseStatus = 'active'
-          message = 'Congratulations! You passed the driver test and your license is now active.'
-        } else {
+        // For first-time users without insurance_required, they get active license immediately
+        // For users with insurance_required, they need insurance to activate
+        if (profile.insurance_required && !hasActiveInsurance) {
           newLicenseStatus = 'suspended'
           message = 'You passed, but insurance is required before your license can be restored. Please purchase car insurance.'
+        } else {
+          newLicenseStatus = 'active'
+          message = 'Congratulations! You passed the driver test and your license is now active.'
         }
       } else {
         newLicenseStatus = 'none'
@@ -426,13 +428,32 @@ export function useDriverTest() {
       }
 
       if (passed && newLicenseStatus === 'active') {
-        updateData.license_restored_at = new Date().toISOString()
+        updateData.license_activated_at = new Date().toISOString()
+        // Set expiry 30 days from now for the license
+        const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        updateData.drivers_license_expiry = expiry
       }
 
       await supabase
         .from('user_profiles')
         .update(updateData)
         .eq('id', user.id)
+
+      // Also insert into user_licenses table for consistency
+      if (passed) {
+        const licenseNumber = `TC${Date.now().toString(36).toUpperCase()}`
+        const expiry = passed && newLicenseStatus === 'active' 
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          : null
+        
+        await supabase.from('user_licenses').upsert({
+          user_id: user.id,
+          license_number: licenseNumber,
+          status: newLicenseStatus,
+          issued_at: new Date().toISOString(),
+          expires_at: expiry || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        }, { onConflict: 'user_id' })
+      }
 
       // Save test result
       await supabase.from('driver_tests').insert({
@@ -534,4 +555,8 @@ export function useDriverTest() {
     fetchLicense,
     checkAndSuspendExpiredInsurance
   }
+}
+
+function fetchLicense() {
+  throw new Error('Function not implemented.')
 }

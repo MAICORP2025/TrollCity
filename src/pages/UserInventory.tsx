@@ -5,8 +5,9 @@ import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone, X, Car, Home, ChevronDown, ChevronUp } from 'lucide-react'
 import { trollCityTheme } from '../styles/trollCityTheme'
-// import { PERK_CONFIG } from '../lib/perkSystem'
+import { PERK_CONFIG } from '../lib/perkSystem'
 import { ENTRANCE_EFFECTS_MAP } from '../lib/entranceEffects'
+import { PERKS as LEVEL_PERKS } from '@/config/levelSystem'
 import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPicker'
 import TitleDeedModal from '../components/TitleDeedModal'
 import ShopConsumablesSection from '../components/ShopConsumablesSection'
@@ -852,11 +853,14 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
                             )}
                           </div>
                           <h3 className="text-xl font-bold text-white mb-1">
-                            {perk.config?.name || 'Unknown Perk'}
+                            {perk.config?.name || perk.metadata?.perk_name || LEVEL_PERKS.find((item) => item.id === perk.perk_id)?.label || 'Unknown Perk'}
                           </h3>
                           <p className={`${trollCityTheme.text.muted} text-sm mb-2`}>
-                            {perk.config?.description || 'No description'}
+                            {perk.config?.description || perk.metadata?.perk_description || perk.metadata?.description || LEVEL_PERKS.find((item) => item.id === perk.perk_id)?.description || 'No description'}
                           </p>
+                          {perk.metadata?.source === 'level_unlock' && perk.metadata?.level_required && (
+                            <p className="text-xs text-cyan-300">Level Reward • Level {perk.metadata.level_required}</p>
+                          )}
                           {perk.expires_at && (
                             <p className={`text-xs ${trollCityTheme.text.secondary}`}>
                               Expires: {new Date(perk.expires_at).toLocaleString()}

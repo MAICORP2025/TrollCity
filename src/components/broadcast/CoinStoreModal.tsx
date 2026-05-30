@@ -74,16 +74,18 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
    const fetchCoinPacks = async () => {
      setLoading(true);
      
-     // Standard coin packs for broadcast quick store
-     const basePacks = [
-       { id: '1', coins: 100, price: '$1.00' },
-       { id: '2', coins: 300, price: '$3.00' },
-       { id: '3', coins: 500, price: '$5.00' },
-       { id: '4', coins: 1000, price: '$10.00', popular: true },
-       { id: '5', coins: 2500, price: '$25.00' },
-       { id: '6', coins: 5000, price: '$50.00' },
-       { id: '7', coins: 10000, price: '$100.00' },
-     ];
+// Standard coin packs for broadcast quick store
+      const basePacks = [
+        { id: '1', coins: 100, price: '$1.00' },
+        { id: '2', coins: 300, price: '$3.00' },
+        { id: '3', coins: 500, price: '$5.00' },
+        { id: '4', coins: 1000, price: '$10.00', popular: true },
+        { id: '5', coins: 2500, price: '$25.00' },
+        { id: '6', coins: 5000, price: '$50.00' },
+        { id: '7', coins: 10000, price: '$100.00' },
+        { id: '8', coins: 75000, price: '$750.00' },
+        { id: '9', coins: 100000, price: '$1000.00' },
+      ];
     const standardPacks: CoinPackage[] = basePacks.map((pkg) => {
       const bonusCoins = Math.floor(pkg.coins * 0.10);
       return {

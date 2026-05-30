@@ -25,6 +25,7 @@ interface ExpenseRow {
   amount: number
   paymentMethod: string
   status: ExpenseStatus
+  currency?: string
   notes: string
 }
 
@@ -114,8 +115,6 @@ const STATUS_COLORS: Record<ExpenseStatus, string> = {
 const LOW_BALANCE_THRESHOLD = 40
 const WARNING_BALANCE_THRESHOLD = 75
 
-const STARTING_CASH = 175
-
 const LS_KEYS = {
   expenses: 'tc_startup_expenses',
   assets: 'tc_gift_assets',
@@ -125,6 +124,8 @@ const LS_KEYS = {
   files: 'tc_startup_files',
   // Track total funds added to available cash
   fundsAdded: 'tc_startup_funds_added',
+  // Editable starting cash (default $175)
+  startingCash: 'tc_startup_starting_cash',
 }
 
 function loadLS<T>(key: string, fallback: T): T {
@@ -251,6 +252,9 @@ export default function StartupExpenseTracker() {
   const [notes, setNotes] = useState<NoteItem[]>(() => loadLS(LS_KEYS.notes, []))
   const [files, setFiles] = useState<FileItem[]>(() => loadLS(LS_KEYS.files, []))
   const [fundsAdded, setFundsAdded] = useState<number>(() => loadLS(LS_KEYS.fundsAdded, 0))
+  const [startingCash, setStartingCash] = useState<number>(() => loadLS(LS_KEYS.startingCash, 175))
+  const [editingStartingCash, setEditingStartingCash] = useState(false)
+  const [startingCashInput, setStartingCashInput] = useState('')
 
   // ── Expense form state ──
   const [showExpenseForm, setShowExpenseForm] = useState(false)
@@ -304,6 +308,7 @@ export default function StartupExpenseTracker() {
   useEffect(() => { saveLS(LS_KEYS.notes, notes) }, [notes])
   useEffect(() => { saveLS(LS_KEYS.files, files) }, [files])
   useEffect(() => { saveLS(LS_KEYS.fundsAdded, fundsAdded) }, [fundsAdded])
+  useEffect(() => { saveLS(LS_KEYS.startingCash, startingCash) }, [startingCash])
 
   // ── Computed totals ──
   const totalSpent = useMemo(() =>
@@ -317,9 +322,9 @@ export default function StartupExpenseTracker() {
   }, [expenses, promoters])
 
   // ── Startup cash ────────────────────────────────────────
-  // Starting cash is the base; additional funds (received money) are added on top
+  // Starting cash is editable (default $175); additional funds (received money) are added on top
   // Expenses and pending payouts subtract from the total available
-  const availableCash = STARTING_CASH + fundsAdded
+  const availableCash = startingCash + fundsAdded
   const remainingBalance = useMemo(() => Math.max(0, availableCash - totalSpent - totalPendingPayouts), [availableCash, totalSpent, totalPendingPayouts])
 
   const infraMonthly = useMemo(() =>
@@ -497,13 +502,14 @@ export default function StartupExpenseTracker() {
             <StatCard
               label="Available Cash"
               value={`$${availableCash.toFixed(2)}`}
+              sub={`Starting: $${startingCash.toFixed(2)} + Added: $${fundsAdded.toFixed(2)}`}
               icon={<DollarSign size={16} />}
               accent="text-cyan-200"
               glow="cyan"
             />
             <StatCard
               label="Total Spent"
-              value={`$${totalSpent.toFixed(0)}`}
+              value={`$${totalSpent.toFixed(2)}`}
               icon={<TrendingDown size={16} />}
               accent="text-red-300"
             />
@@ -512,7 +518,7 @@ export default function StartupExpenseTracker() {
                 remainingBalance <= LOW_BALANCE_THRESHOLD ? '⚠️ LOW' :
                 remainingBalance <= WARNING_BALANCE_THRESHOLD ? '⚠ Caution' : 'Balance'
               }`}
-              value={`$${remainingBalance.toFixed(0)}`}
+              value={`$${remainingBalance.toFixed(2)}`}
               sub={remainingBalance <= LOW_BALANCE_THRESHOLD ? 'Act immediately' : remainingBalance <= WARNING_BALANCE_THRESHOLD ? 'Watch spending' : 'Healthy'}
               icon={<Wallet size={16} />}
               accent={balanceColor}
@@ -520,7 +526,7 @@ export default function StartupExpenseTracker() {
             />
             <StatCard
               label="Pending Payouts"
-              value={`$${totalPendingPayouts.toFixed(0)}`}
+              value={`$${totalPendingPayouts.toFixed(2)}`}
               sub="Expenses + Promoters"
               icon={<AlertTriangle size={16} />}
               accent="text-amber-200"
@@ -528,20 +534,50 @@ export default function StartupExpenseTracker() {
             />
             <StatCard
               label="Infra / Month"
-              value={`$${infraMonthly.toFixed(0)}`}
+              value={`$${infraMonthly.toFixed(2)}`}
               sub={`${infraItems.length} services`}
               icon={<Server size={16} />}
               accent="text-blue-200"
             />
             <StatCard
               label="Gift / Licenses"
-              value={`$${giftLicenseSpend.toFixed(0)}`}
+              value={`$${giftLicenseSpend.toFixed(2)}`}
               sub={`${giftAssets.length} assets`}
               icon={<Gift size={16} />}
               accent="text-purple-200"
               glow="purple"
             />
           </div>
+
+          {/* Edit Starting Cash inline panel */}
+          {editingStartingCash && (
+            <div className="rounded-2xl border border-cyan-400/25 bg-cyan-500/[0.04] p-4 flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label className="text-[10px] font-bold uppercase tracking-[0.1em] text-cyan-300">Edit Starting Cash ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={startingCashInput}
+                  onChange={e => setStartingCashInput(e.target.value)}
+                  className="rounded-xl border border-cyan-400/30 bg-cyan-950/40 px-3 py-2 text-sm text-white placeholder-cyan-300/40 focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/20"
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+              <ActionButton onClick={() => {
+                const amt = parseFloat(startingCashInput)
+                if (isNaN(amt) || amt < 0) { toast.error('Enter a valid amount'); return }
+                setStartingCash(amt)
+                setEditingStartingCash(false); setStartingCashInput('')
+                toast.success(`Starting cash set to $${amt.toFixed(2)}`)
+              }} icon={<Save size={14} />}>Save</ActionButton>
+              <ActionButton variant="ghost" onClick={() => { setEditingStartingCash(false); setStartingCashInput('') }}>Cancel</ActionButton>
+            </div>
+          )}
+
+          {!editingStartingCash && (
+            <ActionButton onClick={() => { setStartingCashInput(String(startingCash)); setEditingStartingCash(true) }} icon={<Edit3 size={14} />} variant="ghost">Edit Starting Cash</ActionButton>
+          )}
 
           {/* Add Funds inline panel */}
           {showFundsForm && (
@@ -887,6 +923,7 @@ export default function StartupExpenseTracker() {
           setEditingFileNote={setEditingFileNote}
           newFileNote={newFileNote}
           setNewFileNote={setNewFileNote}
+          filteredFiles={filteredFiles}
           onUpload={handleFileUpload}
           onDelete={deleteFile}
         />
@@ -1122,6 +1159,14 @@ function FileManager({
   newFileNote: string; setNewFileNote: (v: string) => void
   onUpload: () => void; onDelete: (id: string) => void
 }) {
+  const readFileAsDataURL = (file: File): Promise<string> =>
+    new Promise((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(r.result as string)
+      r.onerror = rej
+      r.readAsDataURL(file)
+    })
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -1129,6 +1174,14 @@ function FileManager({
     const dataUrl = await readFileAsDataURL(file)
     setUploadFile({ name: file.name, type: file.type, data: dataUrl })
   }
+
+  const filteredFiles = React.useMemo(() => {
+    return files.filter(f => {
+      if (fileFilter !== 'all' && f.category !== fileFilter) return false
+      if (fileSearch && !f.name.toLowerCase().includes(fileSearch.toLowerCase())) return false
+      return true
+    })
+  }, [files, fileFilter, fileSearch])
 
   return (
     <section className="space-y-3">

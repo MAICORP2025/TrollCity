@@ -197,6 +197,68 @@ export default function JailPage() {
   }, [user, isJailed]);
 
   useEffect(() => {
+    if (!user || !isJailed) return;
+
+    const channel = supabase
+      .channel(`inmate-messages:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'inmate_messages',
+          filter: `inmate_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as any;
+          if (newMsg.sender_id === user.id) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [
+                ...prev,
+                {
+                  id: newMsg.id,
+                  sender_id: newMsg.sender_id,
+                  sender_username: profile?.username || 'You',
+                  message: newMsg.message,
+                  created_at: newMsg.created_at,
+                  is_read: false,
+                },
+              ];
+            });
+          } else {
+            supabase
+              .from('user_profiles')
+              .select('username')
+              .eq('id', newMsg.sender_id)
+              .single()
+              .then(({ data: sender }) => {
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === newMsg.id)) return prev;
+                  return [
+                    ...prev,
+                    {
+                      id: newMsg.id,
+                      sender_id: newMsg.sender_id,
+                      sender_username: sender?.username || 'Unknown',
+                      message: newMsg.message,
+                      created_at: newMsg.created_at,
+                      is_read: false,
+                    },
+                  ];
+                });
+              });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, isJailed, profile?.username]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 

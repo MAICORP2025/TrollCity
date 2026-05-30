@@ -37,6 +37,17 @@ const checkStaffAccessFallback = (profileData: any): boolean => {
   const is_pastor = profileData?.is_pastor === true;
   const is_auctioneer = profileData?.is_auctioneer === true;
   const is_moderator = profileData?.is_moderator === true;
+  const is_ceo_assistant = profileData?.is_ceo_assistant === true;
+  const is_noah_assistant = profileData?.is_noah_assistant === true;
+  const is_agency_hr = profileData?.is_agency_hr === true;
+  const is_agency_hr_manager = profileData?.is_agency_hr_manager === true;
+  const is_journalist = profileData?.is_journalist === true;
+  const is_tcnn_news_caster = profileData?.is_tcnn_news_caster === true;
+  const is_tcnn_chief_news_caster = profileData?.is_tcnn_chief_news_caster === true;
+  const is_troller = profileData?.is_troller === true;
+  const is_troll_family_leader = profileData?.is_troll_family_leader === true;
+  const is_agency_leader = profileData?.is_agency_leader === true;
+  const is_noah_admin = profileData?.is_noah_admin === true;
   const has_organization = !!profileData?.organization_id;
 
   return !!(
@@ -54,6 +65,17 @@ const checkStaffAccessFallback = (profileData: any): boolean => {
     role === 'pastor' ||
     role === 'auctioneer' ||
     role === 'moderator' ||
+    role === 'ceo_assistant' ||
+    role === 'noah_assistant' ||
+    role === 'agency_hr' ||
+    role === 'agency_hr_manager' ||
+    role === 'journalist' ||
+    role === 'tcnn_news_caster' ||
+    role === 'tcnn_chief_news_caster' ||
+    role === 'troller' ||
+    role === 'troll_family_leader' ||
+    role === 'agency_leader' ||
+    role === 'noah_admin' ||
     // Boolean flag checks
     is_admin ||
     is_ceo ||
@@ -67,6 +89,17 @@ const checkStaffAccessFallback = (profileData: any): boolean => {
     is_pastor ||
     is_auctioneer ||
     is_moderator ||
+    is_ceo_assistant ||
+    is_noah_assistant ||
+    is_agency_hr ||
+    is_agency_hr_manager ||
+    is_journalist ||
+    is_tcnn_news_caster ||
+    is_tcnn_chief_news_caster ||
+    is_troller ||
+    is_troll_family_leader ||
+    is_agency_leader ||
+    is_noah_admin ||
     // Organization members
     has_organization
   );
@@ -92,17 +125,26 @@ export const TeamMeetingRoom: React.FC = () => {
       if (staffError) {
         console.error('Error getting staff users for notifications:', staffError);
         // Fallback: get users with staff roles manually
-        const { data: fallbackUsers, error: fallbackError } = await supabase
+        const { data: staffFallbackUsers, error: fallbackError } = await supabase
           .from('user_profiles')
           .select('id')
-          .or('role.eq.admin,role.eq.lead_troll_officer,role.eq.troll_officer,role.eq.secretary,role.eq.prosecutor,role.eq.judge,role.eq.attorney,role.eq.pastor,role.eq.auctioneer,role.eq.moderator,is_admin.eq.true,is_lead_officer.eq.true,is_troll_officer.eq.true,is_officer.eq.true,is_secretary.eq.true,is_prosecutor.eq.true,is_judge.eq.true,is_attorney.eq.true,is_pastor.eq.true,is_auctioneer.eq.true,is_moderator.eq.true');
+          .or('role.eq.admin,role.eq.lead_troll_officer,role.eq.troll_officer,role.eq.officer,role.eq.secretary,role.eq.prosecutor,role.eq.judge,role.eq.attorney,role.eq.pastor,role.eq.auctioneer,role.eq.moderator,role.eq.ceo,role.eq.ceo_assistant,role.eq.noah_assistant,role.eq.agency_hr,role.eq.agency_hr_manager,role.eq.journalist,role.eq.tcnn_news_caster,role.eq.tcnn_chief_news_caster,role.eq.troller,role.eq.troll_family_leader,role.eq.agency_leader,role.eq.noah_admin,is_admin.eq.true,is_ceo.eq.true,is_lead_officer.eq.true,is_troll_officer.eq.true,is_officer.eq.true,is_secretary.eq.true,is_prosecutor.eq.true,is_judge.eq.true,is_attorney.eq.true,is_pastor.eq.true,is_auctioneer.eq.true,is_moderator.eq.true,is_ceo_assistant.eq.true,is_noah_assistant.eq.true,is_agency_hr.eq.true,is_agency_hr_manager.eq.true,is_journalist.eq.true,is_tcnn_news_caster.eq.true,is_tcnn_chief_news_caster.eq.true,is_troller.eq.true,is_troll_family_leader.eq.true,is_agency_leader.eq.true,is_noah_admin.eq.true');
 
-        if (fallbackError) {
-          console.error('Error in fallback staff query:', fallbackError);
+        // Also get organization members
+        const { data: orgFallbackUsers, error: orgError } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .not('organization_id', 'is', null);
+
+        if (fallbackError || orgError) {
+          console.error('Error in fallback staff query:', fallbackError || orgError);
           return;
         }
 
-        const staffIds = fallbackUsers?.map(user => user.id) || [];
+        const staffIdsSet = new Set<string>();
+        staffFallbackUsers?.forEach((u: any) => staffIdsSet.add(u.id));
+        orgFallbackUsers?.forEach((u: any) => staffIdsSet.add(u.id));
+        const staffIds = Array.from(staffIdsSet);
         await sendNotificationsToStaff(staffIds, meetingId);
       } else {
         const staffIds = staffUsers?.map((user: any) => user.id) || [];
@@ -125,14 +167,13 @@ export const TeamMeetingRoom: React.FC = () => {
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
-          type: 'team_meeting',
+          type: 'team_meeting_started',
           title: `Team Meeting: ${meeting?.title || 'Staff Meeting'}`,
           message: `A team meeting has started. Click to join.`,
           metadata: {
-            meetingId,
-            meetingTitle: meeting?.title,
-            link: `/team-meeting/${meetingId}`,
-            expiresAt: null // Link remains active until meeting ends
+            meeting_id: meetingId,
+            meeting_title: meeting?.title,
+            action_url: `/meeting/${meetingId}`
           },
           targetUserIds: staffIds
         })
@@ -397,6 +438,45 @@ export const TeamMeetingRoom: React.FC = () => {
         supabase.removeChannel(channel);
       };
     }, [meetingId, meeting?.status]);
+
+  // Subscribe to team meeting notifications in real-time
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const notificationChannel = supabase
+      .channel(`team-meeting-notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const newNotification = payload.new as any;
+          if (newNotification?.type === 'team_meeting_started') {
+            // Show in-app notification for team meeting
+            toast.info(newNotification.title || 'Team Meeting Started', {
+              action: {
+                label: 'Join',
+                onClick: () => {
+                  if (newNotification.metadata?.meeting_id) {
+                    navigate(`/meeting/${newNotification.metadata.meeting_id}`);
+                  }
+                }
+              },
+              duration: 15000,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(notificationChannel);
+    };
+  }, [user?.id, navigate]);
 
   // Use Agora room for video/audio
   const {

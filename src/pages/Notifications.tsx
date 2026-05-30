@@ -194,6 +194,7 @@ function getNotificationPriority(type: string, metadata?: any): NotificationPrio
     'court_summon',
     'marketplace_order_fulfillment_required',
     'team_meeting_scheduled',
+    'team_meeting_started',
     'contract_assigned',
     'contract_signature_required',
   ])
@@ -237,6 +238,7 @@ function getNotificationCategory(type: string, metadata?: any): NotificationCate
       'appeal_result',
       'appeal_submitted',
       'appeal_decision',
+      'inmate_message_received',
     ].includes(type)
   ) {
     return 'jail'
@@ -495,13 +497,19 @@ function resolveNotificationDestination(
         label: 'Open Tromail',
       }
 
-    case 'team_meeting_scheduled':
-    case 'team_meeting_updated':
-    case 'meeting_invite':
-      return {
-        route: meetingId ? withQuery('/rtcadminmonitor', { tab: 'team-meetings', meeting: meetingId }) : '/rtcadminmonitor?tab=team-meetings',
-        label: 'Open team meeting',
-      }
+case 'team_meeting_scheduled':
+     case 'team_meeting_updated':
+     case 'meeting_invite':
+       return {
+         route: meetingId ? withQuery('/rtcadminmonitor', { tab: 'team-meetings', meeting: meetingId }) : '/rtcadminmonitor?tab=team-meetings',
+         label: 'Open team meeting',
+       }
+
+     case 'team_meeting_started':
+       return {
+         route: meetingId ? `/meeting/${meetingId}` : '/admin/meetings',
+         label: 'Join meeting',
+       }
 
     case 'contract_assigned':
     case 'contract_signature_required':
@@ -621,6 +629,12 @@ function resolveNotificationDestination(
       return {
         route: caseId ? withQuery('/attorney', { case: caseId }) : '/attorney',
         label: 'Open court case',
+      }
+
+    case 'inmate_message_received':
+      return {
+        route: '/jail',
+        label: 'Open jail messages',
       }
 
     case 'officer_update':
@@ -982,17 +996,19 @@ export default function Notifications() {
     if (category === 'admin') return <Shield className="h-5 w-5 text-cyan-300" />
 
     switch (type) {
-      case 'stream_live':
-      case 'broadcast_live':
-      case 'pod_live':
-      case 'podcast_live':
-      case 'user_live':
-      case 'followed_user_live':
-      case 'battle_started':
-      case 'random_battle_started':
-      case 'family_battle_started':
-      case 'live_auction_started':
-        return <Video className="h-5 w-5 text-pink-300" />
+case 'stream_live':
+       case 'broadcast_live':
+       case 'pod_live':
+       case 'podcast_live':
+       case 'user_live':
+       case 'followed_user_live':
+       case 'battle_started':
+       case 'random_battle_started':
+       case 'family_battle_started':
+       case 'live_auction_started':
+       case 'team_meeting_started':
+       case 'team_meeting_scheduled':
+         return <Video className="h-5 w-5 text-pink-300" />
 
       case 'join_approved':
         return <CheckCircle className="h-5 w-5 text-emerald-300" />
@@ -1007,16 +1023,19 @@ export default function Notifications() {
       case 'stream.ban':
         return <Gavel className="h-5 w-5 text-red-300" />
 
-      case 'arrest':
-      case 'sentencing':
-      case 'jail_sentence':
-      case 'bond_request':
-      case 'bond_posted':
-      case 'release':
-      case 'court_summon':
-      case 'attorney_hired':
-      case 'court_date':
-        return <Gavel className="h-5 w-5 text-amber-300" />
+    case 'arrest':
+    case 'sentencing':
+    case 'jail_sentence':
+    case 'bond_request':
+    case 'bond_posted':
+    case 'release':
+    case 'court_summon':
+    case 'attorney_hired':
+    case 'court_date':
+      return <Gavel className="h-5 w-5 text-amber-300" />
+
+    case 'inmate_message_received':
+      return <MessageCircle className="h-5 w-5 text-cyan-300" />
 
       case 'new_follower':
         return <User className="h-5 w-5 text-blue-300" />

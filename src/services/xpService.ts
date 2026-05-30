@@ -37,8 +37,8 @@ export const xpService = {
        // If amount is 0, we might want to skip or proceed. Let's proceed with 0.
     }
 
-    // Check for Double XP perk and apply multiplier
-    const xpMultiplier = await getXPMultiplier(userId);
+    // Check for active XP perks and apply multiplier
+    const xpMultiplier = await getXPMultiplier(userId, source);
     const finalAmount = safeAmount * xpMultiplier;
 
     const { data, error } = await supabase.rpc('grant_xp', {

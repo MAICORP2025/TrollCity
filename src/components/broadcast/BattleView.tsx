@@ -161,6 +161,15 @@ const LiveKitVideoPlayer = ({
         videoElement.addEventListener('loadedmetadata', handleLoaded);
         
         containerRef.current.appendChild(videoElement);
+
+        // Mirror front-camera video so remote viewers see natural orientation
+        const mediaTrack = videoTrack?.mediaStreamTrack;
+        const trackSettings = mediaTrack ? (mediaTrack.getSettings?.() || {}) : {};
+        const isFrontCamera = (trackSettings as any).facingMode !== 'environment';
+        if (containerRef.current) {
+          containerRef.current.style.transform = isFrontCamera ? 'scaleX(-1)' : '';
+        }
+
         console.log('[LiveKitVideoPlayer] attach() called successfully');
 
         // Inspect injected video after LiveKit has time to inject it

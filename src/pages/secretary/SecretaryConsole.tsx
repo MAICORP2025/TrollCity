@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, AlertTriangle, ChevronRight, ClipboardList, Crown, LayoutDashboard, LogOut, Shield } from 'lucide-react'
 import { navigation } from './navigationConfig.tsx'
+import { supabase } from '../../lib/supabase'
 
 import { useAuthStore } from '../../lib/store'
 import { usePresidentSystem } from '../../hooks/usePresidentSystem'
@@ -28,7 +29,8 @@ import StaffManagement from '../admin/components/StaffManagement'
 import SecretaryDashboard from '../president/SecretaryDashboard'
 import NeighborApprovals from './components/NeighborApprovals'
 import CityAdsManager from './components/CityAdsManager'
-import EmpirePartnerAdminPanel from './components/EmpirePartnerAdminPanel'
+import SecretaryCalendar from './components/SecretaryCalendar'
+import SecretaryOwnDashboard from './components/SecretaryOwnDashboard'
 
 /* ================================
    Types
@@ -53,10 +55,11 @@ type View =
   | 'elections'
   | 'proposals'
   | 'neighbors'
-  | 'partners'
   | 'ads'
   | 'staff'
   | 'payout_control'
+  | 'calendar'
+  | 'secretary_dashboard'
 
 /* ================================
    Main Component
@@ -102,28 +105,53 @@ export default function ExecutiveOperationsConsole() {
      Dashboard Stats
   ================================ */
 
+  const [intakeCount, setIntakeCount] = useState(0)
+  const [alertCount, setAlertCount] = useState(0)
+
+  // Fetch real counts for overview stats
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const [intakeRes, alertsRes] = await Promise.all([
+          supabase.from('executive_intake').select('id', { count: 'exact', head: true }).in('status', ['new', 'in_progress']),
+          supabase.from('critical_alerts').select('id', { count: 'exact', head: true }).eq('status', 'active')
+        ])
+        if (intakeRes.count != null) setIntakeCount(intakeRes.count)
+        if (alertsRes.count != null) setAlertCount(alertsRes.count)
+      } catch (err) {
+        console.error('Error fetching overview counts:', err)
+      }
+    }
+    fetchCounts()
+    const interval = setInterval(fetchCounts, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   const dashboardStats = useMemo(
     () => [
       {
         label: 'Open Intake',
-        value: '24',
+        value: String(intakeCount),
         icon: <ClipboardList className="w-5 h-5" />,
-        color: 'text-blue-400'
+        color: 'text-blue-400',
+        view: 'intake_queue' as View
       },
       {
         label: 'Critical Alerts',
-        value: '3',
+        value: String(alertCount),
         icon: <AlertTriangle className="w-5 h-5" />,
-        color: 'text-red-400'
+        color: 'text-red-400',
+        view: 'alerts' as View
       },
       {
         label: 'Active Elections',
         value: currentElection ? '1' : '0',
         icon: <Crown className="w-5 h-5" />,
-        color: 'text-yellow-400'
+        color: 'text-yellow-400',
+        view: 'elections' as View
       }
     ],
-    [currentElection]
+    [currentElection, intakeCount, alertCount]
   )
 
   /* ================================
@@ -150,19 +178,25 @@ export default function ExecutiveOperationsConsole() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {dashboardStats.map((stat) => (
-                <div
+                <button
                   key={stat.label}
+                  onClick={() => stat.view && setActiveView(stat.view)}
                   className="
                     bg-slate-900
                     border border-slate-800
                     rounded-2xl
                     p-5
+                    text-left
+                    hover:border-slate-600
+                    hover:bg-slate-800/80
+                    transition-all
+                    cursor-pointer
                   "
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div className={stat.color}>
                       {stat.icon}
-                    </div>
+                    </div>\                    <ChevronRight className="w-4 h-4 text-slate-600" />
                   </div>
 
                   <div className="text-3xl font-bold text-white">
@@ -172,7 +206,7 @@ export default function ExecutiveOperationsConsole() {
                   <div className="text-sm text-slate-400 mt-1">
                     {stat.label}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
 
@@ -256,17 +290,17 @@ export default function ExecutiveOperationsConsole() {
       case 'neighbors':
         return <NeighborApprovals />
 
-      case 'partners':
-        return <EmpirePartnerAdminPanel />
-
       case 'ads':
         return <CityAdsManager />
 
       case 'staff':
         return <StaffManagement />
 
-      case 'payout_control':
-        return <SecretaryPayoutControl />
+      case 'calendar':
+        return <SecretaryCalendar />
+
+      case 'secretary_dashboard':
+        return <SecretaryOwnDashboard />
 
       default:
         return null

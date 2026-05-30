@@ -2,7 +2,7 @@ import React, { useCallback, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { useXPStore } from '@/stores/useXPStore'
 import { getLevelName } from '@/lib/xp'
-import { XP_RATES, PERKS, calculateNextLevelXp, getLevelUpReward } from '@/config/levelSystem'
+import { getUnlockedPerks, getUpcomingPerks, calculateNextLevelXp, getLevelUpReward } from '@/config/levelSystem'
 import { Star, Shield, Zap, Gift, Crown, Radio, MessageCircle, Music, Palette } from 'lucide-react'
 import { trollCityTheme } from '@/styles/trollCityTheme'
 
@@ -18,20 +18,8 @@ export default function LevelSystemShowcase({ className }: LevelSystemShowcasePr
   // Format number with commas
   const formatNumber = (num: number) => num.toLocaleString()
 
-  // XP rates and perk data for the upcoming-milestone display (1-50 legacy tier system retained)
-  const currentXpTotalForPerks = profile?.xp || 0
-  const currentLevelForPerks = level >= 1 ? level : (profile?.level || 1)
-  const nextLevelXpForPerks = profile?.next_level_xp || calculateNextLevelXp(currentLevelForPerks)
-  const xpNeededForPerks = Math.max(0, nextLevelXpForPerks - currentXpTotalForPerks)
-
-  // Get upcoming legacy perks (for multi-level-ahead preview)
-  const getAvailablePerks = useCallback(() => {
-    if (!profile) return []
-    const currentDisplayLevel = Math.min(currentLevelForPerks, 50) // cap to 1-50 perk tier
-    return PERKS
-      .filter(perk => perk.levelRequired >= currentDisplayLevel && perk.levelRequired <= currentDisplayLevel + 3)
-      .sort((a, b) => a.levelRequired - b.levelRequired)
-  }, [profile])
+  const unlockedPerks = getUnlockedPerks(level)
+  const upcomingPerks = getUpcomingPerks(level)
 
   // Scale reward for 1-2000 level range (mirrors the sidebar xpStore tier formula)
   const getRewardForLevel = useCallback((targetLevel: number) => {
@@ -74,7 +62,7 @@ export default function LevelSystemShowcase({ className }: LevelSystemShowcasePr
     )
   }
 
-  const availablePerks = getAvailablePerks()
+  const availablePerks = upcomingPerks
   const nextLevelReward = getRewardForLevel(level + 1)
   const progressPercentage = Math.min((progress || 0), 100)
   const bonusCoins = xpToNext ? Math.ceil(xpToNext * 0.1) : 0
@@ -126,6 +114,45 @@ export default function LevelSystemShowcase({ className }: LevelSystemShowcasePr
           <span className="text-yellow-300">+{formatNumber(nextLevelReward.coins)} Coins</span>
         </div>
       </div>
+
+      {/* Unlocked Perks */}
+      {unlockedPerks.length > 0 && (
+        <>
+          <div className="flex items-center justify-between text-xs text-slate-400 pt-2">
+            <span>Unlocked Perks:</span>
+            <span>+{unlockedPerks.length} Active</span>
+          </div>
+          <div className="space-y-2">
+            {unlockedPerks.slice(-3).map((perk) => (
+              <div key={perk.id} className="flex items-center gap-2 px-2 py-1.5 bg-slate-800/30 rounded hover:bg-slate-800/50 transition-colors cursor-default">
+                {perk.icon && (
+                  <div className="w-5 h-5 flex items-center justify-center text-[12px]">
+                    {React.createElement(perk.icon, { className: 'w-4 h-4' })}
+                  </div>
+                )}
+                <div className="flex-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium">{perk.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded
+                      ${perk.tier === 'citizen' ? 'bg-blue-600/20 text-blue-300' :
+                        perk.tier === 'influencer' ? 'bg-purple-600/20 text-purple-300' :
+                        perk.tier === 'legend' ? 'bg-yellow-600/20 text-yellow-300' :
+                        'bg-red-600/20 text-red-300'
+                      }
+                    `}>
+                      {perk.tier}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 line-clamp-1">{perk.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {unlockedPerks.length > 3 && (
+            <div className="text-[10px] text-slate-500">Showing the latest 3 unlocked perks. Visit your profile to view all active rewards.</div>
+          )}
+        </>
+      )}
 
       {/* Upcoming Perks */}
       {availablePerks.length > 0 && (

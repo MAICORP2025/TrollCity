@@ -9,23 +9,39 @@ import AgoraRTC, {
 import {
   AlertCircle,
   ArrowLeft,
+  BadgeCheck,
   Bell,
+  CalendarDays,
   CheckCircle,
+  ChevronRight,
   Clock,
   Coins,
+  Eye,
   Flag,
   Gavel,
+  Heart,
   Loader2,
+  Lock,
   Maximize2,
+  Megaphone,
+  MessageCircle,
   Mic,
   MicOff,
+  Package,
+  Send,
+  Share2,
   Shield,
+  SlidersHorizontal,
+  Sparkles,
+  Store,
+  Truck,
   Users,
   Video,
   VideoOff,
   Volume2,
   VolumeX,
   XCircle,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -124,10 +140,20 @@ interface PlaceBidResult {
 }
 
 const MIN_COINS_TO_BID = 100
-
-// Keeps React dev StrictMode from double-joining the same Agora channel/UID.
-// StrictMode can mount, start join, cleanup, then mount again before Agora finishes leaving.
 const GLOBAL_AGORA_JOIN_LOCKS = new Set<string>()
+
+const CATEGORY_CHIPS = [
+  'All',
+  'Collectibles',
+  'Trading Cards',
+  'Art & Toys',
+  'Streetwear',
+  'Memes',
+  'Gaming',
+  'Tech',
+  'Sport Cards',
+  'Electronics',
+]
 
 function formatCoins(value?: number | null) {
   return Number(value || 0).toLocaleString()
@@ -137,7 +163,6 @@ function getDisplayName(profile?: UserProfile | null) {
   return profile?.username || profile?.display_name || 'Troll Citizen'
 }
 
-// DB still has livekit_room_name from the old system; auctions now reuse it only as the Agora channel name.
 function getAgoraChannelName(show: AuctionShow) {
   return show.livekit_room_name || `auction-${show.id}`
 }
@@ -179,6 +204,31 @@ function logAgoraError(scope: string, error: any) {
   return message
 }
 
+function getBidderName(bid?: AuctionBid | null) {
+  return bid?.bidder?.username || bid?.bidder?.display_name || 'Anonymous'
+}
+
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .map((part) => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+function timeAgo(value?: string | null) {
+  if (!value) return 'now'
+  const diff = Math.max(0, Date.now() - new Date(value).getTime())
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 10) return 'Just now'
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
+}
+
 export default function LiveAuctionRoom() {
   const { showId } = useParams<{ showId: string }>()
   const navigate = useNavigate()
@@ -192,11 +242,12 @@ export default function LiveAuctionRoom() {
 
   const [loading, setLoading] = useState(true)
   const [viewerCount, setViewerCount] = useState(0)
-  const [selectedTab, setSelectedTab] = useState<'bids' | 'info' | 'lot'>('bids')
+  const [selectedTab, setSelectedTab] = useState<'chat' | 'bids' | 'info' | 'lot'>('chat')
 
   const [bidAmount, setBidAmount] = useState('')
   const [bidStatus, setBidStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [bidError, setBidError] = useState('')
+  const [chatDraft, setChatDraft] = useState('')
 
   const [isMuted, setIsMuted] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -205,6 +256,9 @@ export default function LiveAuctionRoom() {
   const [auctioneerConnecting, setAuctioneerConnecting] = useState(false)
   const [agoraConnected, setAgoraConnected] = useState(false)
   const [remoteReady, setRemoteReady] = useState(false)
+
+  // Display text (announcement from auctioneer)
+  const [displayText, setDisplayText] = useState<string>('')
 
   const stageRef = useRef<HTMLDivElement | null>(null)
   const localVideoRef = useRef<HTMLDivElement | null>(null)
@@ -228,6 +282,11 @@ export default function LiveAuctionRoom() {
     if (!currentLot) return 0
     const current = Number(currentLot.current_highest_bid || 0)
     return current > 0 ? current + Number(currentLot.bid_increment || 100) : Number(currentLot.starting_bid || 0)
+  }, [currentLot])
+
+  const currentBid = useMemo(() => {
+    if (!currentLot) return 0
+    return Number(currentLot.current_highest_bid || currentLot.starting_bid || 0)
   }, [currentLot])
 
   const canBid = Boolean(
@@ -369,7 +428,8 @@ export default function LiveAuctionRoom() {
           ended_at,
           livekit_room_name,
           auctioneer_id,
-          current_lot_id
+          current_lot_id,
+          display_text
         `)
         .eq('id', showId)
         .maybeSingle()
@@ -384,6 +444,7 @@ export default function LiveAuctionRoom() {
 
       const nextShow = data as AuctionShow
       setShow(nextShow)
+      setDisplayText((data as any).display_text || '')
 
       if (nextShow.status !== 'live') {
         toast.error('This auction is not currently live')
@@ -550,7 +611,6 @@ export default function LiveAuctionRoom() {
     const agoraKey = `${channelName}:${uid}:auctioneer`
 
     if (activeAgoraKeyRef.current === agoraKey || agoraConnectingRef.current || agoraJoinedRef.current || agoraClientRef.current) return
-
     if (GLOBAL_AGORA_JOIN_LOCKS.has(agoraKey)) return
 
     GLOBAL_AGORA_JOIN_LOCKS.add(agoraKey)
@@ -725,6 +785,12 @@ export default function LiveAuctionRoom() {
     }
   }, [])
 
+  const sendChatPlaceholder = useCallback(() => {
+    if (!chatDraft.trim()) return
+    toast.info('Auction chat wiring comes next. Bid system is already live.')
+    setChatDraft('')
+  }, [chatDraft])
+
   useEffect(() => {
     void fetchShow()
   }, [fetchShow])
@@ -746,6 +812,20 @@ export default function LiveAuctionRoom() {
         { event: 'INSERT', schema: 'public', table: 'auction_bids' },
         async () => {
           await fetchLiveState()
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'auction_shows',
+          filter: `id=eq.${showId}`,
+        },
+        (payload: any) => {
+          if (payload.new?.display_text !== undefined) {
+            setDisplayText(payload.new.display_text || '')
+          }
         }
       )
       .on('presence', { event: 'sync' }, () => {
@@ -795,13 +875,14 @@ export default function LiveAuctionRoom() {
   }, [cleanupAgora, connectViewerAgora, isAuctioneer, show, user?.id])
 
   const upcomingLots = lots.filter((lot) => lot.status === 'upcoming' || lot.status === 'queued' || lot.status === 'scheduled')
+  const visibleNextLots = upcomingLots.length > 0 ? upcomingLots : lots.filter((lot) => lot.id !== currentLot?.id).slice(0, 6)
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#02030a] text-white">
-        <div className="text-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#07091a] text-white">
+        <div className="rounded-[2rem] border border-cyan-400/20 bg-white/[0.04] px-10 py-8 text-center shadow-[0_0_60px_rgba(34,211,238,0.18)] backdrop-blur-xl">
           <Loader2 className="mx-auto h-12 w-12 animate-spin text-cyan-300" />
-          <p className="mt-4 text-slate-400">Loading auction room...</p>
+          <p className="mt-4 text-sm font-black uppercase tracking-[0.25em] text-cyan-100">Loading auction room</p>
         </div>
       </div>
     )
@@ -809,7 +890,7 @@ export default function LiveAuctionRoom() {
 
   if (!show) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#02030a] text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[#07091a] text-white">
         <div className="text-center">
           <Gavel className="mx-auto mb-4 h-16 w-16 text-slate-600" />
           <p className="text-slate-400">Auction not found</p>
@@ -819,45 +900,113 @@ export default function LiveAuctionRoom() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#02030a] text-white">
+    <div className="relative min-h-screen overflow-hidden bg-[#08091c] text-white">
       <div className="pointer-events-none fixed inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.18),transparent_30%),linear-gradient(135deg,rgba(2,6,23,0.98),rgba(8,13,30,0.98))]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.08)_1px,transparent_1px)] bg-[size:44px_44px] opacity-20" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.20),transparent_34%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(236,72,153,0.16),transparent_36%),linear-gradient(135deg,#08091c,#11122b_48%,#0b1024)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.07)_1px,transparent_1px)] bg-[size:44px_44px] opacity-25" />
+        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-cyan-400/10 to-transparent" />
       </div>
 
-      <div className="relative z-10 border-b border-cyan-400/20 bg-black/45 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/auctions')} className="rounded-xl border border-cyan-400/20 bg-white/5 p-2 transition hover:bg-cyan-400/10">
-              <ArrowLeft className="h-5 w-5 text-cyan-300" />
+      <header className="relative z-20 border-b border-cyan-300/15 bg-[#07091a]/80 backdrop-blur-2xl">
+        <div className="mx-auto flex max-w-[1920px] items-center justify-between px-4 py-3 lg:px-7">
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() => navigate('/auctions')}
+              className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-100 transition hover:bg-cyan-400/20"
+            >
+              <ArrowLeft className="h-5 w-5" />
             </button>
 
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="animate-pulse rounded-md bg-red-500 px-2 py-1 text-xs font-black tracking-wide">LIVE AUCTION</span>
-                <span className="flex items-center gap-1 text-sm font-bold text-cyan-300">
-                  <Users className="h-4 w-4" />
-                  {viewerCount} watching
-                </span>
+            <button
+              onClick={() => navigate('/')}
+              className="group flex items-center gap-3"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_25px_rgba(34,211,238,0.18)]">
+                <Gavel className="h-5 w-5 text-cyan-200" />
               </div>
-              <h1 className="text-lg font-black sm:text-xl">{show.title}</h1>
+              <div>
+                <p className="bg-gradient-to-r from-cyan-200 via-sky-200 to-purple-200 bg-clip-text text-xl font-black uppercase tracking-[0.25em] text-transparent">
+                  Troll City
+                </p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-500">Live Auctions</p>
+              </div>
+            </button>
+
+            <nav className="hidden items-center gap-1 xl:flex">
+              {['Live Auction', 'Marketplace', 'Troll Coins', 'How It Works', 'Community'].map((item) => (
+                <button
+                  key={item}
+                  className={`rounded-2xl px-4 py-2 text-sm font-bold transition ${
+                    item === 'Live Auction'
+                      ? 'bg-cyan-400/10 text-cyan-100 shadow-[inset_0_-2px_0_rgba(34,211,238,0.7)]'
+                      : 'text-slate-400 hover:bg-white/[0.05] hover:text-white'
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-3 rounded-2xl border border-cyan-300/15 bg-black/35 px-4 py-2 md:flex">
+              <Coins className="h-5 w-5 text-yellow-300" />
+              <div>
+                <p className="text-sm font-black">{formatCoins(userProfile?.troll_coins || 0)}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Troll Coins</p>
+              </div>
+            </div>
+
+            <button className="rounded-2xl border border-cyan-400/20 bg-white/[0.04] p-2.5 text-cyan-100 hover:bg-cyan-400/10">
+              <Bell className="h-5 w-5" />
+            </button>
+
+            <button className="rounded-2xl border border-purple-400/20 bg-white/[0.04] p-2.5 text-purple-100 hover:bg-purple-400/10">
+              <Shield className="h-5 w-5" />
+            </button>
+
+            <div className="hidden items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 lg:flex">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 text-sm font-black">
+                {getInitials(profile?.username || user?.email || 'TC')}
+              </div>
+              <div>
+                <p className="text-sm font-black">{profile?.username || user?.email || 'Guest'}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-purple-200">Viewer</p>
+              </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button className="rounded-xl border border-cyan-400/20 bg-white/5 p-2 transition hover:bg-cyan-400/10">
-              <Bell className="h-5 w-5 text-cyan-200" />
-            </button>
-            <button className="rounded-xl border border-purple-400/20 bg-white/5 p-2 transition hover:bg-purple-400/10">
-              <Shield className="h-5 w-5 text-purple-200" />
-            </button>
-          </div>
         </div>
-      </div>
 
-      <main className="relative z-10 mx-auto grid max-w-7xl grid-cols-1 gap-4 p-4 lg:grid-cols-3">
-        <section className="space-y-4 lg:col-span-2">
-          <div ref={stageRef} className="relative aspect-video overflow-hidden rounded-3xl border border-cyan-400/25 bg-black shadow-[0_0_45px_rgba(34,211,238,0.16)]">
+        <div className="mx-auto flex max-w-[1920px] items-center justify-between gap-4 overflow-x-auto px-4 pb-3 lg:px-7">
+          <div className="flex min-w-max items-center gap-3">
+            {CATEGORY_CHIPS.map((category) => (
+              <button
+                key={category}
+                className={`rounded-2xl border px-5 py-2 text-xs font-black transition ${
+                  category === 'All' || category === show.category
+                    ? 'border-cyan-300/40 bg-cyan-400/10 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.16)]'
+                    : 'border-white/10 bg-white/[0.035] text-slate-300 hover:border-cyan-300/30 hover:text-cyan-100'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+
+          <button className="hidden min-w-max items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-slate-200 hover:border-cyan-300/30 lg:flex">
+            <CalendarDays className="h-4 w-4 text-cyan-200" />
+            Calendar
+            <ChevronRight className="h-4 w-4 text-slate-500" />
+          </button>
+        </div>
+      </header>
+
+      <main className="relative z-10 mx-auto grid max-w-[1920px] grid-cols-1 gap-5 p-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.72fr)] xl:grid-cols-[minmax(0,1.05fr)_560px_510px] lg:p-7">
+        <section className="space-y-5">
+          <div
+            ref={stageRef}
+            className="relative aspect-video overflow-hidden rounded-[1.75rem] border border-cyan-300/20 bg-black shadow-[0_0_50px_rgba(34,211,238,0.16)]"
+          >
             {isAuctioneer ? (
               <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-cyan-950/25 to-purple-950/25">
                 <div ref={localVideoRef} className="absolute inset-0 h-full w-full bg-black" />
@@ -909,156 +1058,92 @@ export default function LiveAuctionRoom() {
                 <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
                 LIVE
               </span>
-              <span className="flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-black/70 px-3 py-1.5 text-sm text-cyan-100">
-                <Users className="h-4 w-4" />
-                {viewerCount}
+              <span className="flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-black/70 px-3 py-1.5 text-sm font-bold text-cyan-100">
+                <Eye className="h-4 w-4" />
+                {formatCoins(viewerCount)}
               </span>
             </div>
 
-            {currentLot?.countdown_end_at && (
-              <div className="absolute bottom-4 left-4">
-                <div
-                  className={`rounded-2xl border px-4 py-2 font-mono text-2xl font-black ${
-                    new Date(currentLot.countdown_end_at).getTime() - Date.now() < 10000
-                      ? 'animate-pulse border-red-300 bg-red-500 text-white'
-                      : 'border-cyan-300/25 bg-black/75 text-cyan-200'
-                  }`}
-                >
-                  <Clock className="mr-2 inline h-5 w-5" />
-                  {formatCountdown(currentLot.countdown_end_at)}
-                </div>
-              </div>
-            )}
-
-            {!isAuctioneer && (
-              <div className="absolute bottom-4 right-4 flex gap-2">
-                <button onClick={toggleViewerAudio} className="rounded-xl border border-white/10 bg-black/70 p-3 hover:bg-black/50">
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </button>
-                <button onClick={handleFullscreen} className="rounded-xl border border-white/10 bg-black/70 p-3 hover:bg-black/50">
-                  <Maximize2 className="h-5 w-5" />
-                  <span className="sr-only">{isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {currentLot ? (
-            <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl">
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">Current Lot</p>
-                  <h2 className="mt-1 text-2xl font-black">{currentLot.title}</h2>
-                  {currentLot.description && <p className="mt-2 line-clamp-3 text-sm text-slate-300">{currentLot.description}</p>}
-                </div>
-                <span className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-200">
-                  {currentLot.status.toUpperCase()}
-                </span>
-              </div>
-
-              {currentLot.image_url && (
-                <img src={currentLot.image_url} alt={currentLot.title} className="mb-4 h-56 w-full rounded-2xl border border-white/10 object-cover" />
-              )}
-
-              <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Stat label="Starting Bid" value={`${formatCoins(currentLot.starting_bid)} TC`} />
-                <Stat label="Bid Increment" value={`${formatCoins(currentLot.bid_increment)} TC`} />
-                <Stat label="Reserve" value={currentLot.reserve_price ? `${formatCoins(currentLot.reserve_price)} TC` : 'None'} />
-                <Stat label="Quantity" value={currentLot.quantity || 1} />
-              </div>
-
-              <div className="rounded-3xl border border-yellow-300/30 bg-gradient-to-r from-yellow-500/15 via-cyan-500/10 to-purple-500/15 p-5 text-center">
-                <p className="text-sm font-bold text-cyan-200">Current Highest Bid</p>
-                <div className="mt-1 flex items-center justify-center gap-2">
-                  <Coins className="h-9 w-9 text-yellow-300" />
-                  <span className="text-5xl font-black">{formatCoins(currentLot.current_highest_bid || currentLot.starting_bid)}</span>
-                </div>
-                <p className="mt-2 text-xs text-slate-400">Next minimum bid: {formatCoins(minimumBid)} coins</p>
-              </div>
+            <div className="absolute left-4 top-16 max-w-[70%]">
+              <p className="rounded-2xl border border-white/10 bg-black/65 px-4 py-2 text-sm font-black text-white backdrop-blur-md">
+                {show.title}
+              </p>
             </div>
-          ) : (
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-10 text-center">
-              <Gavel className="mx-auto mb-4 h-12 w-12 text-slate-600" />
-              <p className="text-slate-400">No lot currently active</p>
-            </div>
-          )}
 
-          {currentLot?.status === 'live' && !isAuctioneer && (
-            <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 backdrop-blur-xl">
-              <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div className="flex items-center gap-3">
-                  <Coins className="h-6 w-6 text-yellow-300" />
-                  <span className="font-bold">Your Balance: {formatCoins(userProfile?.troll_coins)} coins</span>
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent p-4">
+              <div className="h-1 overflow-hidden rounded-full bg-white/15">
+                <div className="h-full w-[82%] rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-pink-500" />
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-sm font-bold">
+                  <Volume2 className="h-4 w-4 text-cyan-200" />
+                  <span className="text-white">LIVE</span>
                 </div>
 
-                {canBid ? (
-                  <span className="flex items-center gap-1 text-sm font-bold text-cyan-300">
-                    <CheckCircle className="h-4 w-4" /> Eligible to bid
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-sm font-bold text-red-300">
-                    <XCircle className="h-4 w-4" /> Need {formatCoins(MIN_COINS_TO_BID)}+ coins
-                  </span>
+                {!isAuctioneer && (
+                  <div className="flex gap-2">
+                    <button onClick={toggleViewerAudio} className="rounded-xl border border-white/10 bg-black/70 p-3 hover:bg-black/50">
+                      {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                    </button>
+                    <button onClick={handleFullscreen} className="rounded-xl border border-white/10 bg-black/70 p-3 hover:bg-black/50">
+                      <Maximize2 className="h-5 w-5" />
+                      <span className="sr-only">{isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</span>
+                    </button>
+                  </div>
                 )}
               </div>
+            </div>
+          </div>
 
-              <div className="mb-3 grid grid-cols-3 gap-2">
-                {[100, 500, 1000].map((amount) => (
-                  <button key={amount} onClick={() => quickBid(amount)} className="rounded-2xl border border-cyan-400/15 bg-black/35 py-3 font-black hover:bg-cyan-400/10">
-                    +{formatCoins(amount)}
-                  </button>
-                ))}
+          {/* Display Text / Announcement Panel — visible to all viewers */}
+          {displayText && (
+            <div className="rounded-[1.75rem] border border-cyan-300/20 bg-gradient-to-br from-[#0c1a32]/90 to-[#0a1628]/90 p-5 shadow-[0_0_35px_rgba(34,211,238,0.1)] backdrop-blur-xl">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-400/10">
+                  <Megaphone className="h-4 w-4 text-cyan-300" />
+                </div>
+                <h3 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-200">Auctioneer Announcement</h3>
+                <span className="ml-auto flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                  Live
+                </span>
               </div>
-
-              <div className="flex gap-3">
-                <div className="relative flex-1">
-                  <input
-                    type="number"
-                    value={bidAmount}
-                    onChange={(event) => setBidAmount(event.target.value)}
-                    placeholder={`Min: ${formatCoins(minimumBid)}`}
-                    className="w-full rounded-2xl border border-cyan-400/20 bg-black/45 px-4 py-4 pr-16 text-lg text-white outline-none focus:border-cyan-300"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-500">coins</span>
-                </div>
-                <button
-                  onClick={placeBid}
-                  disabled={!bidAmount || !canBid}
-                  className="rounded-2xl bg-gradient-to-r from-cyan-500 to-purple-500 px-6 py-4 font-black shadow-[0_0_25px_rgba(34,211,238,0.25)] hover:from-cyan-400 hover:to-purple-400 disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-400 sm:px-8"
-                >
-                  Place Bid
-                </button>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
+                {displayText}
               </div>
-
-              {bidStatus === 'success' && (
-                <div className="mt-3 flex items-center gap-2 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 p-3 text-cyan-200">
-                  <CheckCircle className="h-5 w-5" />
-                  Bid accepted!
-                </div>
-              )}
-
-              {bidStatus === 'error' && (
-                <div className="mt-3 flex items-center gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-red-200">
-                  <AlertCircle className="h-5 w-5" />
-                  {bidError}
-                </div>
-              )}
             </div>
           )}
 
-          {upcomingLots.length > 0 && (
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-              <h3 className="mb-3 text-lg font-black">Upcoming Lots</h3>
-              <div className="space-y-2">
-                {upcomingLots.map((lot, index) => (
-                  <div key={lot.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-3">
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-400/10 text-sm font-black text-cyan-200">
-                        {index + 1}
-                      </span>
-                      <span className="font-bold">{lot.title}</span>
+          <CurrentLotCard currentLot={currentLot} show={show} />
+
+          <HostCard show={show} bids={bids} />
+
+          {visibleNextLots.length > 0 && (
+            <div className="rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.04] p-4 shadow-[0_0_30px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-cyan-100">Next Lots</h3>
+                <button className="flex items-center gap-1 text-sm font-bold text-cyan-300 hover:text-cyan-100">
+                  View All Lots
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+                {visibleNextLots.slice(0, 5).map((lot) => (
+                  <div key={lot.id} className="group overflow-hidden rounded-2xl border border-white/10 bg-black/30 transition hover:border-cyan-300/30">
+                    <div className="aspect-square bg-slate-900">
+                      {lot.image_url ? (
+                        <img src={lot.image_url} alt={lot.title} className="h-full w-full object-cover transition group-hover:scale-105" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-950/40 to-purple-950/40">
+                          <Package className="h-10 w-10 text-cyan-200/50" />
+                        </div>
+                      )}
                     </div>
-                    <span className="text-sm font-bold text-yellow-300">Starting: {formatCoins(lot.starting_bid)}</span>
+                    <div className="p-3">
+                      <p className="truncate text-xs font-black text-white">{lot.title}</p>
+                      <p className="mt-1 text-xs font-bold text-cyan-300">Starts in {formatCoins(lot.starting_bid)} TC</p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1066,25 +1151,210 @@ export default function LiveAuctionRoom() {
           )}
         </section>
 
-        <aside className="space-y-4">
-          <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 backdrop-blur-xl">
-            <h3 className="mb-3 text-lg font-black">Auction Details</h3>
-            <div className="space-y-3">
-              <Info label="Show Title" value={show.title} />
-              {show.category && (
-                <div className="flex items-center gap-2 text-sm text-slate-300">
-                  <Gavel className="h-4 w-4 text-cyan-300" />
-                  <span>{show.category}</span>
+        <section className="space-y-5 xl:block">
+          <div className="rounded-[1.75rem] border border-cyan-300/20 bg-[#0c1329]/80 p-5 shadow-[0_0_45px_rgba(34,211,238,0.14)] backdrop-blur-2xl">
+            <div className="rounded-[1.35rem] border border-cyan-300/25 bg-gradient-to-br from-cyan-400/10 via-blue-500/10 to-purple-500/10 p-5">
+              <p className="text-center text-sm font-black uppercase tracking-[0.2em] text-slate-300">Current Bid</p>
+
+              <div className="mt-4 flex items-center justify-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-yellow-300/25 bg-yellow-400/10">
+                  <Coins className="h-8 w-8 text-yellow-300" />
+                </div>
+                <div>
+                  <p className="bg-gradient-to-r from-cyan-200 via-sky-300 to-blue-300 bg-clip-text text-6xl font-black leading-none text-transparent">
+                    {formatCoins(currentBid)}
+                  </p>
+                  <p className="mt-1 text-center text-sm font-black uppercase tracking-[0.22em] text-cyan-300">Troll Coins</p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-white/10 bg-black/35 px-4 py-4 text-center">
+                <div className="flex items-center justify-center gap-4 font-mono text-3xl font-black text-slate-200">
+                  <Clock className="h-7 w-7 text-cyan-300" />
+                  <span>{currentLot?.countdown_end_at ? formatCountdown(currentLot.countdown_end_at) : '0:00'}</span>
+                </div>
+                <p className="mt-2 text-xs font-medium text-slate-400">Auction ends soon. Stay in it to win it.</p>
+              </div>
+
+              <div className="mt-5 text-center">
+                <p className="text-xs font-bold text-slate-400">Minimum Next Bid</p>
+                <p className="mt-1 text-2xl font-black text-white">
+                  <Coins className="mr-2 inline h-5 w-5 text-yellow-300" />
+                  {formatCoins(minimumBid)}
+                </p>
+              </div>
+
+              {!isAuctioneer && (
+                <>
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {[100, 250, 500].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => quickBid(amount)}
+                        disabled={!canBid}
+                        className="rounded-2xl border border-cyan-300/20 bg-black/35 px-3 py-3 text-left transition hover:border-cyan-300/45 hover:bg-cyan-400/10 disabled:opacity-50"
+                      >
+                        <p className="text-lg font-black text-cyan-100">+{formatCoins(amount)}</p>
+                        <p className="text-xs text-slate-400">{formatCoins(minimumBid + amount)}</p>
+                      </button>
+                    ))}
+
+                    <div className="rounded-2xl border border-purple-300/20 bg-black/35 px-3 py-3">
+                      <input
+                        type="number"
+                        value={bidAmount}
+                        onChange={(event) => setBidAmount(event.target.value)}
+                        placeholder="Custom"
+                        className="w-full bg-transparent text-sm font-black text-white outline-none placeholder:text-slate-500"
+                      />
+                      <p className="mt-1 text-xs text-slate-500">coins</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={placeBid}
+                    disabled={!bidAmount || !canBid}
+                    className="mt-5 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-500 px-6 py-4 text-lg font-black uppercase tracking-[0.18em] text-white shadow-[0_0_30px_rgba(34,211,238,0.22)] transition hover:scale-[1.01] hover:from-purple-500 hover:to-cyan-400 disabled:cursor-not-allowed disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-400"
+                  >
+                    Place Bid
+                    <ChevronRight className="h-6 w-6" />
+                  </button>
+
+                  <div className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-cyan-200">
+                    <Coins className="h-4 w-4 text-yellow-300" />
+                    Bid with Troll Coins
+                  </div>
+
+                  <p className="mt-3 text-center text-sm text-slate-400">
+                    You have <span className="font-black text-white">{formatCoins(userProfile?.troll_coins || 0)}</span> Troll Coins.
+                  </p>
+
+                  {bidStatus === 'success' && (
+                    <div className="mt-4 flex items-center gap-2 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 p-3 text-cyan-200">
+                      <CheckCircle className="h-5 w-5" />
+                      Bid accepted!
+                    </div>
+                  )}
+
+                  {bidStatus === 'error' && (
+                    <div className="mt-4 flex items-center gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-red-200">
+                      <AlertCircle className="h-5 w-5" />
+                      {bidError}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <ActionButton icon={<Heart className="h-4 w-4" />} label="Watchlist" value="245" />
+              <ActionButton icon={<Share2 className="h-4 w-4" />} label="Share" />
+              <ActionButton icon={<Flag className="h-4 w-4" />} label="Report" danger />
+            </div>
+          </div>
+        </section>
+
+        <aside className="space-y-5 lg:col-span-2 xl:col-span-1">
+          <div className="overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.04] shadow-[0_0_35px_rgba(34,211,238,0.10)] backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-cyan-200" />
+                <h3 className="font-black">Live Chat</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-2 text-sm text-slate-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  {formatCoins(viewerCount)} online
+                </span>
+                <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+              </div>
+            </div>
+
+            <div className="max-h-[280px] space-y-3 overflow-y-auto p-4">
+              {bids.slice(0, 5).map((bid) => {
+                const name = getBidderName(bid)
+                return (
+                  <div key={`chat-${bid.id}`} className="flex gap-3">
+                    <BidAvatar name={name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-black text-white">{name}</p>
+                        <p className="text-xs text-slate-500">{new Date(bid.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                      </div>
+                      <p className="text-sm text-slate-300">
+                        Bid <span className="font-black text-yellow-300">{formatCoins(bid.bid_amount)}</span> coins 🔥
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {bids.length === 0 && (
+                <div className="py-8 text-center">
+                  <MessageCircle className="mx-auto mb-3 h-10 w-10 text-slate-600" />
+                  <p className="text-sm text-slate-500">No live messages yet.</p>
                 </div>
               )}
-              <Info label="Video Route" value={isAuctioneer ? 'Agora Publisher' : 'Agora Viewer'} />
-              <Info label="Agora Channel" value={getAgoraChannelName(show)} />
+            </div>
+
+            <div className="flex gap-2 border-t border-white/10 p-4">
+              <input
+                value={chatDraft}
+                onChange={(event) => setChatDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') sendChatPlaceholder()
+                }}
+                placeholder="Say something..."
+                className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/40"
+              />
+              <button
+                onClick={sendChatPlaceholder}
+                className="rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 px-5 py-3 text-sm font-black text-white"
+              >
+                <Send className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-xl">
+          <div className="overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.04] shadow-[0_0_35px_rgba(34,211,238,0.10)] backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <h3 className="font-black">Bid History</h3>
+              <button onClick={() => setSelectedTab('bids')} className="text-sm font-bold text-cyan-300 hover:text-cyan-100">
+                View All
+              </button>
+            </div>
+
+            <div className="max-h-[280px] space-y-2 overflow-y-auto p-4">
+              {bids.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">No bids yet</p>
+              ) : (
+                bids.slice(0, 7).map((bid) => {
+                  const name = getBidderName(bid)
+                  return (
+                    <div key={bid.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-3">
+                      <div className="flex items-center gap-3">
+                        <BidAvatar name={name} />
+                        <p className="text-sm font-black text-white">{name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-black text-yellow-300">
+                          <Coins className="mr-1 inline h-4 w-4" />
+                          {formatCoins(bid.bid_amount)}
+                        </p>
+                        <p className="text-xs text-slate-500">{timeAgo(bid.created_at)}</p>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          <TrustSafetyPanel />
+
+          <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.04] backdrop-blur-xl">
             <div className="flex border-b border-white/10">
-              {(['bids', 'info', 'lot'] as const).map((tab) => (
+              {(['chat', 'bids', 'info', 'lot'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setSelectedTab(tab)}
@@ -1097,38 +1367,13 @@ export default function LiveAuctionRoom() {
               ))}
             </div>
 
-            {selectedTab === 'bids' && (
-              <div className="max-h-96 space-y-2 overflow-y-auto p-3">
-                {bids.length === 0 ? (
-                  <p className="py-6 text-center text-slate-500">No bids yet</p>
-                ) : (
-                  bids.map((bid) => {
-                    const name = bid.bidder?.username || bid.bidder?.display_name || 'Anonymous'
-                    return (
-                      <div key={bid.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 font-black">
-                            {name.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold">{name}</p>
-                            <p className="text-xs text-slate-500">{new Date(bid.created_at).toLocaleTimeString()}</p>
-                          </div>
-                        </div>
-                        <span className="font-black text-yellow-300">{formatCoins(bid.bid_amount)}</span>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            )}
-
             {selectedTab === 'info' && (
               <div className="space-y-3 p-4">
-                <Info label="Current Lot" value={currentLot?.title || 'None'} />
-                <Info label="Minimum Increment" value={`${formatCoins(currentLot?.bid_increment)} coins`} />
-                <Info label="Total Lots" value={lots.length} />
-                <Info label="Logged In As" value={getDisplayName(userProfile)} />
+                <InfoRow label="Show Title" value={show.title} />
+                <InfoRow label="Category" value={show.category || 'Live Auction'} />
+                <InfoRow label="Video Route" value={isAuctioneer ? 'Agora Publisher' : 'Agora Viewer'} />
+                <InfoRow label="Agora Channel" value={getAgoraChannelName(show)} />
+                <InfoRow label="Logged In As" value={getDisplayName(userProfile)} />
               </div>
             )}
 
@@ -1151,17 +1396,175 @@ export default function LiveAuctionRoom() {
                 ))}
               </div>
             )}
-          </div>
 
-          <button
-            onClick={() => toast.info('Report feature coming soon')}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20"
-          >
-            <Flag className="h-4 w-4" />
-            Report Issue
-          </button>
+            {(selectedTab === 'chat' || selectedTab === 'bids') && (
+              <div className="p-4 text-center text-sm text-slate-500">
+                Use the main {selectedTab === 'chat' ? 'Live Chat' : 'Bid History'} panel above.
+              </div>
+            )}
+          </div>
         </aside>
       </main>
+    </div>
+  )
+}
+
+function CurrentLotCard({ currentLot, show }: { currentLot: AuctionLot | null; show: AuctionShow }) {
+  if (!currentLot) {
+    return (
+      <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-10 text-center backdrop-blur-xl">
+        <Gavel className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+        <p className="text-slate-400">No lot currently active</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-[1.75rem] border border-cyan-400/20 bg-white/[0.04] p-4 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+      <div className="grid gap-4 md:grid-cols-[270px_1fr]">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/35">
+          {currentLot.image_url ? (
+            <img src={currentLot.image_url} alt={currentLot.title} className="h-full min-h-[220px] w-full object-cover" />
+          ) : (
+            <div className="flex h-full min-h-[220px] w-full items-center justify-center bg-gradient-to-br from-cyan-950/40 to-purple-950/40">
+              <Package className="h-16 w-16 text-cyan-200/50" />
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col justify-between">
+          <div>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-purple-300/30 bg-purple-400/15 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-purple-100">
+                Featured Lot
+              </span>
+              <span className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">
+                {currentLot.status}
+              </span>
+            </div>
+
+            <h2 className="text-2xl font-black text-white">{currentLot.title}</h2>
+            <p className="mt-1 text-sm font-bold text-slate-400">{show.category || 'Live Auction'}</p>
+
+            {currentLot.description && (
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-300">
+                {currentLot.description}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="Condition" value={currentLot.condition || 'Verified'} />
+            <Stat label="Starting Bid" value={`${formatCoins(currentLot.starting_bid)} TC`} />
+            <Stat label="Increment" value={`${formatCoins(currentLot.bid_increment)} TC`} />
+            <Stat label="Quantity" value={currentLot.quantity || 1} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HostCard({ show, bids }: { show: AuctionShow; bids: AuctionBid[] }) {
+  return (
+    <div className="rounded-[1.75rem] border border-purple-300/20 bg-white/[0.04] p-4 backdrop-blur-xl">
+      <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
+        <div className="flex items-center gap-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-cyan-300/30 bg-gradient-to-br from-cyan-500 to-purple-600 text-lg font-black shadow-[0_0_25px_rgba(34,211,238,0.18)]">
+            TC
+          </div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">Host / Auctioneer</p>
+            <h3 className="text-xl font-black">Troll City Auctioneer</h3>
+            <p className="text-sm text-slate-400">{show.title}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <MiniMetric icon={<Sparkles className="h-4 w-4 text-yellow-300" />} label="Rating" value="4.9" />
+          <MiniMetric icon={<Store className="h-4 w-4 text-cyan-300" />} label="Lots" value={bids.length || 0} />
+          <MiniMetric icon={<Zap className="h-4 w-4 text-purple-300" />} label="Live" value="Now" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TrustSafetyPanel() {
+  const items = [
+    {
+      icon: <Lock className="h-7 w-7 text-cyan-300" />,
+      title: 'Secure Payments',
+      text: 'Protected by Troll Coins',
+    },
+    {
+      icon: <BadgeCheck className="h-7 w-7 text-cyan-300" />,
+      title: 'Verified Sellers',
+      text: 'Identity and item reviewed',
+    },
+    {
+      icon: <Sparkles className="h-7 w-7 text-cyan-300" />,
+      title: 'Fair Auctions',
+      text: 'Real-time transparent bidding',
+    },
+    {
+      icon: <Truck className="h-7 w-7 text-cyan-300" />,
+      title: 'Fast Delivery',
+      text: 'Shipping handled by seller',
+    },
+  ]
+
+  return (
+    <div className="rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.04] p-5 backdrop-blur-xl">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-100">Trust & Safety</p>
+      <h3 className="mt-1 font-black text-white">Our Promise to You</h3>
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        {items.map((item) => (
+          <div key={item.title} className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/15 bg-cyan-400/10">
+              {item.icon}
+            </div>
+            <p className="text-sm font-black text-white">{item.title}</p>
+            <p className="mt-1 text-xs text-slate-500">{item.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ActionButton({
+  icon,
+  label,
+  value,
+  danger,
+}: {
+  icon: React.ReactNode
+  label: string
+  value?: string
+  danger?: boolean
+}) {
+  return (
+    <button
+      onClick={() => toast.info(`${label} feature coming soon`)}
+      className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-black transition ${
+        danger
+          ? 'border-red-400/25 bg-red-500/10 text-red-200 hover:bg-red-500/20'
+          : 'border-white/10 bg-black/30 text-slate-200 hover:border-cyan-300/30 hover:bg-cyan-400/10'
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+      {value && <span className="rounded-lg bg-white/10 px-2 py-0.5 text-xs text-slate-300">{value}</span>}
+    </button>
+  )
+}
+
+function BidAvatar({ name }: { name: string }) {
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-300/20 bg-gradient-to-br from-cyan-400 to-purple-600 text-xs font-black text-white">
+      {getInitials(name)}
     </div>
   )
 }
@@ -1175,11 +1578,31 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   )
 }
 
-function Info({ label, value }: { label: string; value: string | number }) {
+function MiniMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/35 p-3 text-center">
+      <div className="mx-auto mb-1 flex h-8 w-8 items-center justify-center rounded-xl bg-white/5">
+        {icon}
+      </div>
+      <p className="font-black text-white">{value}</p>
+      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+    </div>
+  )
+}
+
+function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="break-words font-bold">{value}</p>
+      <p className="break-words font-bold text-white">{value}</p>
     </div>
   )
 }

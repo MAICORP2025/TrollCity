@@ -102,21 +102,24 @@ export function useCoins() {
 
        const currentProfile = useAuthStore.getState().profile
        // Get balance from database first, fall back to local store
-       // This ensures we always use the most recent balance from the database
-       const dbBalance = profileData?.troll_coins ?? null
-       const localBalance = currentProfile?.troll_coins ?? null
+       const dbBalance = Number(profileData?.troll_coins ?? 0)
+       const localBalance = Number(currentProfile?.troll_coins ?? 0)
+       const dbPaidBalance = Number(profileData?.paid_coins ?? 0)
+       const localPaidBalance = Number(currentProfile?.paid_coins ?? 0)
+       const dbFreeBalance = Number(profileData?.free_coins ?? 0)
+       const localFreeBalance = Number(currentProfile?.free_coins ?? 0)
        
-       // Use database balance if available, otherwise use local balance
-       const paidBalance = dbBalance !== null ? dbBalance : (localBalance ?? 0)
+       const paidBalance = profileData?.paid_coins ?? currentProfile?.paid_coins ?? 0
        
-       // Only use optimistic balance if it's less than or equal to the database balance
-       // (optimistic deductions should be reflected immediately)
        const mergedPaid =
          optimisticUntil && Date.now() < optimisticUntil && (optimisticTroll ?? 0) > 0 && (optimisticTroll ?? 0) <= paidBalance
            ? (optimisticTroll as number)
-           : paidBalance
+           : profileData?.troll_coins ?? currentProfile?.troll_coins ?? 0
        
-       console.log('[refreshCoins] Balance sync:', { dbBalance, localBalance, paidBalance, mergedPaid })
+       if (import.meta.env.DEV) {
+         console.debug('[refreshCoins] Balance sync:', { dbBalance, localBalance, dbPaidBalance, localPaidBalance, dbFreeBalance, localFreeBalance, mergedPaid })
+       }
+
        const nextTotals = {
          total_earned_coins:
            profileData?.total_earned_coins ??
@@ -128,42 +131,59 @@ export function useCoins() {
            0,
        }
 
-        const nextBalances = {
-          troll_coins: mergedPaid,
-          paid_coins: profileData?.paid_coins ?? currentProfile?.paid_coins ?? 0,
-          total_earned_coins: nextTotals.total_earned_coins,
-          total_spent_coins: nextTotals.total_spent_coins,
-          battle_crowns: profileData?.battle_crowns ?? currentProfile?.battle_crowns ?? 0,
-          cashout_coins: profileData?.cashout_coins ?? currentProfile?.cashout_coins ?? 0,
-          cashout_reserved_coins: profileData?.cashout_reserved_coins ?? currentProfile?.cashout_reserved_coins ?? 0,
-        }
+       const nextBalances = {
+         troll_coins: mergedPaid,
+         paid_coins: profileData?.paid_coins ?? currentProfile?.paid_coins ?? 0,
+         total_earned_coins: nextTotals.total_earned_coins,
+         total_spent_coins: nextTotals.total_spent_coins,
+         battle_crowns: profileData?.battle_crowns ?? currentProfile?.battle_crowns ?? 0,
+         cashout_coins: profileData?.cashout_coins ?? currentProfile?.cashout_coins ?? 0,
+         cashout_reserved_coins: profileData?.cashout_reserved_coins ?? currentProfile?.cashout_reserved_coins ?? 0,
+       }
 
-       setBalances((prev) => {
-         const isSame =
-           prev.troll_coins === nextBalances.troll_coins &&
-           prev.paid_coins === nextBalances.paid_coins &&
-           prev.total_earned_coins === nextBalances.total_earned_coins &&
-           prev.total_spent_coins === nextBalances.total_spent_coins
+       const balancesChanged =
+         balances.troll_coins !== nextBalances.troll_coins ||
+         balances.paid_coins !== nextBalances.paid_coins ||
+         balances.total_earned_coins !== nextBalances.total_earned_coins ||
+         balances.total_spent_coins !== nextBalances.total_spent_coins ||
+         balances.battle_crowns !== nextBalances.battle_crowns ||
+         balances.cashout_coins !== nextBalances.cashout_coins ||
+         balances.cashout_reserved_coins !== nextBalances.cashout_reserved_coins
 
-         return isSame ? prev : nextBalances
-       })
+       if (balancesChanged) {
+         setBalances(nextBalances)
+       }
 
        if (currentProfile) {
          const profileNeedsUpdate =
            currentProfile.troll_coins !== mergedPaid ||
-           currentProfile.total_earned_coins !== nextTotals.total_earned_coins ||
-           currentProfile.total_spent_coins !== nextTotals.total_spent_coins
+           currentProfile.paid_coins !== nextBalances.paid_coins ||
+           currentProfile.free_coins !== Number(profileData?.free_coins ?? currentProfile.free_coins ?? 0)
 
-           if (profileNeedsUpdate) {
-             const updatedProfile: UserProfile = {
-               ...currentProfile,
-               troll_coins: mergedPaid as number,
-               total_earned_coins: nextTotals.total_earned_coins,
-               total_spent_coins: nextTotals.total_spent_coins,
-               battle_crowns: profileData?.battle_crowns ?? currentProfile?.battle_crowns ?? 0,
-             }
-             useAuthStore.getState().setProfile(updatedProfile)
+         const sameCoins =
+           dbBalance === localBalance &&
+           dbPaidBalance === localPaidBalance &&
+           dbFreeBalance === localFreeBalance &&
+           !balancesChanged
+
+         if (!profileNeedsUpdate || sameCoins) {
+           if (import.meta.env.DEV) {
+             console.debug('[refreshCoins] No coin state change, skipping auth update')
            }
+         } else {
+           const updatedProfile: UserProfile = {
+             ...currentProfile,
+             troll_coins: mergedPaid as number,
+             paid_coins: nextBalances.paid_coins,
+             total_earned_coins: nextTotals.total_earned_coins,
+             total_spent_coins: nextTotals.total_spent_coins,
+             battle_crowns: nextBalances.battle_crowns,
+             cashout_coins: nextBalances.cashout_coins,
+             cashout_reserved_coins: nextBalances.cashout_reserved_coins,
+           }
+
+           useAuthStore.getState().setProfile(updatedProfile)
+         }
        }
        if (optimisticUntil && Date.now() < optimisticUntil && (mergedPaid as number) >= (optimisticTroll ?? 0)) {
          setOptimisticUntil(null)
@@ -272,7 +292,7 @@ export function useCoins() {
     refreshCoins()
 
     const coinChannel = supabase
-      .channel('coin-balance-updates')
+      .channel(`coin-balance-updates:${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -288,7 +308,7 @@ export function useCoins() {
       .subscribe()
 
     const profileChannel = supabase
-      .channel('profile-balance-updates')
+      .channel(`profile-balance-updates:${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -364,7 +384,8 @@ export function useCoins() {
       supabase.removeChannel(coinChannel)
       supabase.removeChannel(profileChannel)
     }
-  }, [user?.id, refreshCoins, optimisticUntil, optimisticTroll, balances.troll_coins])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   const optimisticCredit = useCallback((delta: number) => {
     if (!user?.id) return

@@ -92,6 +92,20 @@ export const supabaseRealtimeCounters = {
   },
 }
 
+export async function doesUserProfileExist(userId: string): Promise<boolean> {
+  if (!userId) {
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle()
+
+  return !error && !!data?.id
+}
+
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
   ;(window as any).__TROLLCITY_SUPABASE_REALTIME_DEBUG__ = {
     get created() {
@@ -124,6 +138,9 @@ export const PLATFORM_OPTIONS = [
 export type Platform = typeof PLATFORM_OPTIONS[number]['value'];
 
 export interface UserProfile {
+  name: string
+  is_agency_hr: boolean
+  is_agency_hr_manager: any
   is_superadmin: boolean
   id: string
   username: string
@@ -145,7 +162,9 @@ export interface UserProfile {
   coin_multiplier?: number
   troll_coins: number
   hype_coins: number
+  paid_coin_balance?: number
   paid_coins?: number
+  free_coin_balance?: number
   cashout_coins?: number
   cashout_reserved_coins?: number
   reserved_troll_coins?: number
@@ -305,7 +324,6 @@ export interface UserProfile {
   is_prosecutor?: boolean
   is_judge?: boolean
   is_attorney?: boolean
-  is_moderator?: boolean
   is_auctioneer?: boolean
 
   // Profile view price
@@ -789,7 +807,7 @@ export const hasPermission = (profile: UserProfile | null, permission: Permissio
 // Enhanced role checking with multiple validation methods
 export const hasRole = (
   profile: UserProfile | null,
-  requiredRoles: UserRole | UserRole[],
+  requiredRoles: UserRole | string | UserRole[] | string[],
   options: {
     allowAdminOverride?: boolean
   } = {}
@@ -816,6 +834,30 @@ export const hasRole = (
   
   // Direct role match
   if (roles.includes(profile.role as UserRole)) {
+    return true
+  }
+
+  // Legacy boolean-based staff roles
+  const booleanRoleChecks: Record<string, boolean | undefined> = {
+    prosecutor: profile.is_prosecutor,
+    attorney: profile.is_attorney,
+    judge: profile.is_judge,
+    secretary: profile.is_secretary,
+    ceo: profile.is_ceo,
+    auctioneer: profile.is_auctioneer,
+    // moderator: profile.is_moderator, // column does not exist
+    officer: profile.is_officer,
+    journalist: (profile as any).is_journalist,
+    tcnn_news_caster: (profile as any).is_news_caster,
+    tcnn_chief_news_caster: (profile as any).is_chief_news_caster,
+    agency_hr: (profile as any).is_agency_hr,
+    agency_hr_manager: (profile as any).is_agency_hr_manager,
+    agency_leader: (profile as any).is_agency_leader,
+    ceo_assistant: (profile as any).is_ceo_assistant,
+    noah_assistant: (profile as any).is_noah_assistant,
+  }
+
+  if (Object.entries(booleanRoleChecks).some(([roleName, hasFlag]) => hasFlag && roles.includes(roleName as UserRole))) {
     return true
   }
 

@@ -17,15 +17,15 @@ interface PayoutRun {
 }
 
 interface PayoutItem {
-  id: string;
-  user_id: string;
-  paypal_email: string;
-  amount_coins: number;
-  amount_usd: number;
-  status: string;
-  paypal_payout_item_id: string | null;
-  failure_reason: string | null;
-  user_profiles?: { username: string };
+  id: string
+  user_id: string
+  paypal_email: string
+  amount_coins: number
+  amount_usd: number
+  status: string
+  paypal_payout_item_id: string | null
+  failure_reason: string | null
+  user_profiles?: { username: string }
 }
 
 interface PayoutWindowStatus {

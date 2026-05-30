@@ -36,6 +36,8 @@ export const COIN_PACKAGES: CoinPackage[] = [
   { id: 'pkg-15000', coins: 15000, usdPrice: 150.00, label: 'Platinum Pack', description: '15,000 Coins' },
   { id: 'pkg-25000', coins: 25000, usdPrice: 250.00, label: 'Diamond Pack', description: '25,000 Coins' },
   { id: 'pkg-50000', coins: 50000, usdPrice: 500.00, label: 'Legendary Pack', description: '50,000 Coins' },
+  { id: 'pkg-75000', coins: 75000, usdPrice: 750.00, label: 'Empire Pack', description: '75,000 Coins' },
+  { id: 'pkg-100000', coins: 100000, usdPrice: 1000.00, label: 'Titan Pack', description: '100,000 Coins' },
 ];
 
 // Exchange rate: 100 coins per $1 (all packages)

@@ -15,10 +15,12 @@ import {
   Gavel,
   Loader2,
   Maximize2,
+  Megaphone,
   Mic,
   MicOff,
   Pause,
   Play,
+  Send,
   Shield,
   Users,
   Video,
@@ -91,6 +93,13 @@ export default function AuctioneerDashboard() {
   const [auctioneerCamOn, setAuctioneerCamOn] = useState(true)
   const [auctioneerConnecting, setAuctioneerConnecting] = useState(false)
   const [agoraConnected, setAgoraConnected] = useState(false)
+
+  // Display text (announcement) state
+  const [displayText, setDisplayText] = useState('')
+  const [displayTextDraft, setDisplayTextDraft] = useState('')
+  const [savingDisplayText, setSavingDisplayText] = useState(false)
+  const [displayTextSaved, setDisplayTextSaved] = useState(false)
+  const MAX_DISPLAY_LENGTH = 5000
 
   const localVideoRef = useRef<HTMLDivElement | null>(null)
   const agoraClientRef = useRef<IAgoraRTCClient | null>(null)
@@ -206,7 +215,13 @@ export default function AuctioneerDashboard() {
         supabase.from('auction_shows').select('*').eq('id', showId).maybeSingle(),
         supabase.from('auction_lots').select('*').eq('auction_show_id', showId).order('queue_position'),
       ])
-      if (showRes.data) setShow(showRes.data)
+      if (showRes.data) {
+        setShow(showRes.data)
+        // Initialize display text from show data
+        const text = (showRes.data as any).display_text || ''
+        setDisplayText(text)
+        setDisplayTextDraft(text)
+      }
       if (lotsRes.data) setLots(lotsRes.data)
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -220,6 +235,32 @@ export default function AuctioneerDashboard() {
     const interval = setInterval(fetchData, 3000)
     return () => clearInterval(interval)
   }, [fetchData])
+
+  // Realtime subscription for display_text changes
+  useEffect(() => {
+    if (!showId) return
+    const channel = supabase
+      .channel(`auction-dashboard-display:${showId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'auction_shows',
+          filter: `id=eq.${showId}`,
+        },
+        (payload: any) => {
+          if (payload.new?.display_text !== undefined) {
+            setDisplayText(payload.new.display_text || '')
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [showId])
 
   useEffect(() => {
     if (show && user?.id && isAuctioneer && show.status === 'live') {
@@ -270,6 +311,29 @@ export default function AuctioneerDashboard() {
       toast.error(error.message || 'Failed to end show')
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  // Save display text — pushes to all viewers in real-time
+  const saveDisplayText = async () => {
+    if (!showId) return
+    const trimmed = displayTextDraft.slice(0, MAX_DISPLAY_LENGTH)
+    setSavingDisplayText(true)
+    setDisplayTextSaved(false)
+    try {
+      const { error } = await supabase
+        .from('auction_shows')
+        .update({ display_text: trimmed, updated_at: new Date().toISOString() })
+        .eq('id', showId)
+      if (error) throw error
+      setDisplayText(trimmed)
+      setDisplayTextSaved(true)
+      toast.success('Announcement updated — all viewers can see it now')
+      setTimeout(() => setDisplayTextSaved(false), 3000)
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update announcement')
+    } finally {
+      setSavingDisplayText(false)
     }
   }
 
@@ -408,6 +472,56 @@ export default function AuctioneerDashboard() {
               <span className="flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-black/70 px-3 py-1.5 text-sm text-cyan-100">
                 <Users className="h-4 w-4" /> {upcomingLots.length + (currentLot ? 1 : 0)} lots
               </span>
+            </div>
+          </div>
+
+          {/* Display Text Editor — Auctioneer Announcement Panel */}
+          <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-cyan-300" />
+                <h3 className="text-lg font-black text-white">On-Screen Announcement</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-xs font-bold ${displayTextDraft.length > MAX_DISPLAY_LENGTH ? 'text-red-400' : 'text-slate-500'}`}>
+                  {displayTextDraft.length.toLocaleString()}/{MAX_DISPLAY_LENGTH.toLocaleString()}
+                </span>
+                {displayTextSaved && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-emerald-300">
+                    <CheckCircle className="h-3.5 w-3.5" /> Live
+                  </span>
+                )}
+              </div>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">
+              This text is displayed to all bidders in real-time. Write rules, lot descriptions, special instructions, or anything you want viewers to see.
+            </p>
+            <textarea
+              value={displayTextDraft}
+              onChange={(e) => setDisplayTextDraft(e.target.value.slice(0, MAX_DISPLAY_LENGTH))}
+              placeholder="Type your announcement here... (e.g. 'Welcome to tonight's auction! All items ship within 3-5 business days. Minimum bid increment is 500 coins.')"
+              className="w-full rounded-2xl border border-cyan-300/15 bg-black/40 px-4 py-3 text-sm leading-relaxed text-white placeholder:text-slate-600 outline-none transition focus:border-cyan-300/40 focus:ring-2 focus:ring-cyan-300/15"
+              rows={5}
+              maxLength={MAX_DISPLAY_LENGTH}
+            />
+            <div className="mt-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {displayTextDraft !== displayText && (
+                  <span className="text-xs font-bold text-amber-300">Unsaved changes</span>
+                )}
+              </div>
+              <button
+                onClick={saveDisplayText}
+                disabled={savingDisplayText || displayTextDraft === displayText}
+                className="inline-flex items-center gap-2 rounded-xl border border-cyan-200/40 bg-cyan-300 px-5 py-2.5 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(34,211,238,0.25)] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingDisplayText ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {savingDisplayText ? 'Publishing...' : 'Publish to Viewers'}
+              </button>
             </div>
           </div>
 
