@@ -73,9 +73,9 @@ export function useLiveKitRoom({
   const isLiveKitConfigured = !!getLiveKitUrl() && !!getLiveKitApiKey();
 
   // Fetch LiveKit token via edge function
-  const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string, isPublisherOverride?: boolean) => {
+  const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string, isPublisherOverride?: boolean, metadataOverride?: string) => {
     const isPublisher = typeof isPublisherOverride === 'boolean' ? isPublisherOverride : publish;
-    const requestBody = {
+    const requestBody: Record<string, any> = {
       room: roomName,
       roomName,
       identity: identity || userId,
@@ -83,6 +83,9 @@ export function useLiveKitRoom({
       role: isPublisher ? 'publisher' : 'audience',
       isHost: isPublisher && roomType === 'pod' ? true : undefined,
     };
+    if (metadataOverride) {
+      requestBody.metadata = metadataOverride;
+    }
 
     const requestDetails = {
       roomName,
@@ -663,6 +666,76 @@ export function useLiveKitRoom({
     setLocalVideoTrack(null)
   }, [])
 
+  // Publish local camera/mic tracks to the existing room without reconnecting.
+  // Used when a viewer joins a seat — the room stays connected to keep broadcaster tracks.
+  const publishLocalTracks = useCallback(async () => {
+    const room = roomRef.current
+    if (!room || room.state !== 'connected') {
+      console.warn('[useLiveKitRoom] publishLocalTracks: room not connected')
+      return
+    }
+
+    let audioTrack = localAudioTrackRef.current
+    let videoTrack = localVideoTrackRef.current
+
+    try {
+      if (!audioTrack) {
+        audioTrack = await createLocalAudioTrack()
+        localAudioTrackRef.current = audioTrack
+        setLocalAudioTrack(audioTrack)
+      }
+
+      if (!videoTrack && !audioOnly) {
+        const { createLocalVideoTrack: createVideo } = await import('livekit-client')
+        videoTrack = await createVideo({ ...videoPreset, facingMode: 'user' })
+        localVideoTrackRef.current = videoTrack
+        setLocalVideoTrack(videoTrack)
+      }
+
+      await room.localParticipant.publishTrack(audioTrack)
+      if (videoTrack) {
+        await room.localParticipant.publishTrack(videoTrack)
+      }
+
+      setIsPublishing(true)
+      console.log('[useLiveKitRoom] publishLocalTracks: tracks published')
+    } catch (err) {
+      console.error('[useLiveKitRoom] publishLocalTracks error:', err)
+      onError?.(err)
+    }
+  }, [audioOnly, videoPreset, onError])
+
+  // Unpublish only local camera/mic tracks. Does NOT disconnect the room.
+  // Used when a viewer leaves a seat — broadcaster tracks stay subscribed.
+  const unpublishLocalTracks = useCallback(async () => {
+    const room = roomRef.current
+    if (!room) return
+
+    try {
+      const audioTrack = localAudioTrackRef.current
+      const videoTrack = localVideoTrackRef.current
+
+      if (audioTrack) {
+        try { await room.localParticipant.unpublishTrack(audioTrack) } catch {}
+        try { audioTrack.stop() } catch {}
+        localAudioTrackRef.current = null
+        setLocalAudioTrack(null)
+      }
+
+      if (videoTrack) {
+        try { await room.localParticipant.unpublishTrack(videoTrack) } catch {}
+        try { videoTrack.stop() } catch {}
+        localVideoTrackRef.current = null
+        setLocalVideoTrack(null)
+      }
+
+      setIsPublishing(false)
+      console.log('[useLiveKitRoom] unpublishLocalTracks: tracks unpublished')
+    } catch (err) {
+      console.error('[useLiveKitRoom] unpublishLocalTracks error:', err)
+    }
+  }, [])
+
   const prewarmPublisherTracks = useCallback(async () => {
     if (prewarmCleanupTimerRef.current) {
       clearTimeout(prewarmCleanupTimerRef.current)
@@ -894,6 +967,8 @@ export function useLiveKitRoom({
     joinAsPublisher,
     joinAsAudience,
     leaveRoom,
+    publishLocalTracks,
+    unpublishLocalTracks,
     toggleCamera,
     toggleMicrophone,
     setMicEnabled,

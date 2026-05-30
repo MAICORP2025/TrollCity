@@ -845,18 +845,18 @@ const isActive = isStreamActive(stream)
    const hostName = getDisplayName(broadcasterProfile, 'Broadcaster')
    const { subscriberUsernames } = useSubscriberUsernames(hostId)
 
-   const roomId = useMemo(() => {
-    return String(getLiveKitRoomName(stream as Stream | null, streamId) || '')
-  }, [stream?.livekit_room_name, stream?.id, streamId])
+    const roomId = useMemo(() => {
+     return String(getLiveKitRoomName(stream as Stream | null, streamId) || '')
+   }, [stream?.livekit_room_name, stream?.id, streamId])
 
-   useEffect(() => {
-     if (!streamId || !user?.id) return;
-     if (isUserOnStage) {
-       viewerIdentityRef.current = String(user.id);
-     } else {
-       viewerIdentityRef.current = `viewer-${streamId}-${user.id}`;
-     }
-   }, [streamId, user?.id, isUserOnStage])
+    const viewerIdentity = useMemo(() => {
+      if (!streamId || !user?.id) return '';
+      return `viewer-${streamId}-${user.id}`;
+    }, [streamId, user?.id])
+
+    useEffect(() => {
+      viewerIdentityRef.current = viewerIdentity
+    }, [viewerIdentity])
 
   const audienceName = useMemo(() => {
     return user
@@ -878,17 +878,19 @@ const isActive = isStreamActive(stream)
       localAudioTrack,
       isPublishing,
       joinAsAudience,
-      joinAsPublisher,
       leaveRoom: leaveLiveKitRoom,
+      publishLocalTracks,
+      unpublishLocalTracks,
       setMicEnabled,
       getMicEnabled,
     } = useLiveKitRoom({
       roomId,
       roomType: 'broadcast',
-      role: isUserOnStage ? 'publisher' : 'viewer',
-      publish: isUserOnStage,
+      role: 'viewer',
+      publish: false,
       audioOnly: false,
       userName: audienceName,
+      identity: viewerIdentity,
       onUserJoined: noopCallback,
       onUserLeft: noopCallback,
       onError: handleLiveKitError,
