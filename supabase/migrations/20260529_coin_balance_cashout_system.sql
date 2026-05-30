@@ -1,15 +1,11 @@
 -- ============================================================
--- Coin Balance Cashout System Migration
+-- Coin Balance Cashout System - Core Functions & Updates
 -- Date: 2026-05-29
 -- Purpose:
---   1. All roles except Troller earn coins from working that are
---      added to troll_coins balance and are fully cashable.
---   2. On Thursday, all working-earned coins are auto-converted
---      to cashout-eligible (moved into troll_coins balance).
---   3. On Friday, users request cashout from wallet page.
---      Cashout requests go to CEO Assistant and Noah Assistant
---      dashboards, then to Admin Operations & Control Deck payout tab.
---   4. Admin sees payout provider type and user tag when processing.
+--   1. Enable Friday cashout requests from wallet page
+--   2. Use only cashout_coins (escrow) for payout eligibility
+--   3. Track ID uploads with 30-day reupload exemption
+--   4. Route requests through assistant review to admin
 -- ============================================================
 
 -- ============================================================
@@ -225,7 +221,8 @@ CREATE OR REPLACE FUNCTION public.request_friday_cashout(
     p_coins_to_redeem BIGINT,
     p_provider_type TEXT,
     p_provider_username TEXT,
-    p_user_tag TEXT DEFAULT NULL
+    p_user_tag TEXT DEFAULT NULL,
+    p_id_verification_url TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -239,6 +236,7 @@ DECLARE
     v_fee_amount NUMERIC(12,2) := 0;
     v_net_amount NUMERIC(12,2);
     v_payout_id UUID;
+    v_last_approved_at TIMESTAMPTZ;
     v_now TIMESTAMPTZ := NOW();
 BEGIN
     -- Get user profile
@@ -255,18 +253,40 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'Trollers do not earn coins and cannot request cashouts.');
     END IF;
 
-    -- Check Friday restriction (cashouts only on Friday)
-    IF EXTRACT(ISODOW FROM v_now) != 5 THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Cashout requests are only available on Fridays.');
+    -- Check weekend restriction (cashouts only on Fri/Sat/Sun)
+    IF NOT (EXTRACT(ISODOW FROM v_now AT TIME ZONE 'America/Denver') IN (5, 6, 7)) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Cashout requests are only available on Fridays, Saturdays, and Sundays.');
     END IF;
 
-    -- Check available troll_coins balance
-    v_available_coins := COALESCE(v_user.troll_coins, 0) - COALESCE(v_user.reserved_troll_coins, 0);
+    -- Check payout time window (1:00 AM - 7:00 PM Mountain Time)
+    IF NOT (EXTRACT(HOUR FROM v_now AT TIME ZONE 'America/Denver') BETWEEN 1 AND 18) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Cashout requests are only accepted between 1:00 AM and 7:00 PM Mountain Time on weekends.');
+    END IF;
+
+    -- Require ID upload for first cashout or when last approved payout is older than 30 days
+    IF p_id_verification_url IS NULL THEN
+        SELECT created_at INTO v_last_approved_at
+        FROM public.payout_requests
+        WHERE user_id = p_user_id
+          AND status IN ('approved', 'completed')
+        ORDER BY created_at DESC
+        LIMIT 1;
+
+        IF NOT FOUND OR v_last_approved_at < (v_now - INTERVAL '30 days') THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Please upload a government-issued ID. Once you have an approved payout, you may skip ID upload for 30 days.'
+            );
+        END IF;
+    END IF;
+
+    -- Check available cashout_coins balance (only coins in cashout escrow are eligible for payout)
+    v_available_coins := COALESCE(v_user.cashout_coins, 0) - COALESCE(v_user.cashout_reserved_coins, 0);
 
     IF v_available_coins < p_coins_to_redeem THEN
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'Insufficient troll coin balance.',
+            'error', 'Insufficient cashout coin balance. Please move eligible coins to Cashout Escrow first.',
             'available_coins', v_available_coins,
             'requested', p_coins_to_redeem
         );
@@ -297,9 +317,9 @@ BEGIN
     v_fee_amount := ROUND(p_coins_to_redeem * 0.029, 0);
     v_net_amount := v_cash_amount;
 
-    -- Reserve the coins
+    -- Reserve the coins in cashout escrow
     UPDATE public.user_profiles
-    SET reserved_troll_coins = COALESCE(reserved_troll_coins, 0) + p_coins_to_redeem,
+    SET cashout_reserved_coins = COALESCE(cashout_reserved_coins, 0) + p_coins_to_redeem,
         updated_at = v_now
     WHERE id = p_user_id;
 
@@ -313,6 +333,8 @@ BEGIN
         provider_type,
         provider_username,
         user_tag,
+        id_verification_url,
+        id_verification_uploaded_at,
         created_at,
         updated_at
     ) VALUES (
@@ -324,6 +346,8 @@ BEGIN
         p_provider_type,
         p_provider_username,
         p_user_tag,
+        p_id_verification_url,
+        CASE WHEN p_id_verification_url IS NOT NULL THEN v_now ELSE NULL END,
         v_now,
         v_now
     ) RETURNING id INTO v_payout_id;
@@ -342,9 +366,9 @@ BEGIN
         p_user_id,
         'cashout_request',
         -p_coins_to_redeem,
-        'troll_coins',
-        'Friday cashout request submitted',
-        v_user.troll_coins - p_coins_to_redeem,
+        'cashout_coins',
+        'Friday cashout request submitted (deducted from cashout escrow)',
+        v_user.cashout_coins - p_coins_to_redeem,
         jsonb_build_object(
             'payout_request_id', v_payout_id,
             'provider_type', p_provider_type,
@@ -355,9 +379,9 @@ BEGIN
         v_now
     );
 
-    -- Deduct from troll_coins
+    -- Deduct from cashout_coins (users move earned coins into this escrow)
     UPDATE public.user_profiles
-    SET troll_coins = GREATEST(0, COALESCE(troll_coins, 0) - p_coins_to_redeem),
+    SET cashout_coins = GREATEST(0, COALESCE(cashout_coins, 0) - p_coins_to_redeem),
         updated_at = v_now
     WHERE id = p_user_id;
 
@@ -384,7 +408,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.request_friday_cashout(UUID, BIGINT, TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.request_friday_cashout(UUID, BIGINT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- ============================================================
 -- 6. Create function for assistant to forward payout to admin
@@ -509,9 +533,9 @@ BEGIN
             updated_at = NOW()
         WHERE id = p_payout_id;
 
-        -- Release reserved coins
+        -- Release reserved cashout coins
         UPDATE public.user_profiles
-        SET reserved_troll_coins = GREATEST(0, COALESCE(reserved_troll_coins, 0) - v_payout.coin_amount),
+        SET cashout_reserved_coins = GREATEST(0, COALESCE(cashout_reserved_coins, 0) - v_payout.coin_amount),
             updated_at = NOW()
         WHERE id = v_payout.user_id;
 
@@ -531,10 +555,10 @@ BEGIN
             RETURN jsonb_build_object('success', false, 'error', 'Cannot reject payout in current status.');
         END IF;
 
-        -- Return reserved coins to user
+        -- Return reserved coins to cashout escrow
         UPDATE public.user_profiles
-        SET reserved_troll_coins = GREATEST(0, COALESCE(reserved_troll_coins, 0) - v_payout.coin_amount),
-            troll_coins = COALESCE(troll_coins, 0) + v_payout.coin_amount,
+        SET cashout_reserved_coins = GREATEST(0, COALESCE(cashout_reserved_coins, 0) - v_payout.coin_amount),
+            cashout_coins = COALESCE(cashout_coins, 0) + v_payout.coin_amount,
             updated_at = NOW()
         WHERE id = v_payout.user_id;
 

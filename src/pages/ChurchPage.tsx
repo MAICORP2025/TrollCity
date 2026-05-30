@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BookOpen,
   Calendar,
@@ -11,85 +11,107 @@ import {
   Shield,
   Sparkles,
   XCircle,
-} from 'lucide-react'
+  Radio,
+  Video,
+  UsersRound,
+  Play,
+} from 'lucide-react';
 
-import { useAuthStore } from '@/lib/store'
-import { supabase } from '@/lib/supabase'
-import DailyPassage from '@/components/church/DailyPassage'
-import PrayerFeed from '@/components/church/PrayerFeed'
+import { useAuthStore } from '@/lib/store';
+import { supabase } from '@/lib/supabase';
+import DailyPassage from '@/components/church/DailyPassage';
+import PrayerFeed from '@/components/church/PrayerFeed';
+
+interface LiveSession {
+  id: string;
+  pastor_id: string;
+  room_name: string;
+  sermon_title: string | null;
+  scripture_reference: string | null;
+  viewer_count: number;
+  attendee_count: number;
+  started_at: string | null;
+  user_profiles: {
+    username: string;
+    avatar_url: string;
+  };
+}
 
 const pageBg =
-  'min-h-screen bg-[radial-gradient(circle_at_top,#8B5A2B22,transparent_34%),linear-gradient(135deg,#120A05_0%,#2A1408_42%,#3A1C0A_100%)] px-4 pb-24 pt-24 text-[#FFF8E7] md:px-8'
+  'min-h-screen bg-[radial-gradient(circle_at_top,#8B5A2B22,transparent_34%),linear-gradient(135deg,#120A05_0%,#2A1408_42%,#3A1C0A_100%)] px-4 pb-24 pt-24 text-[#FFF8E7] md:px-8';
 
 const panel =
-  'rounded-[2rem] border border-[#D6B36A]/25 bg-[#1C0F08]/80 shadow-[0_0_45px_rgba(214,179,106,0.12)] backdrop-blur-xl'
+  'rounded-[2rem] border border-[#D6B36A]/25 bg-[#1C0F08]/80 shadow-[0_0_45px_rgba(214,179,106,0.12)] backdrop-blur-xl';
 
 const card =
-  'rounded-2xl border border-[#D6B36A]/20 bg-[#241208]/75 shadow-[0_0_28px_rgba(214,179,106,0.08)] backdrop-blur-xl'
+  'rounded-2xl border border-[#D6B36A]/20 bg-[#241208]/75 shadow-[0_0_28px_rgba(214,179,106,0.08)] backdrop-blur-xl';
 
 const goldButton =
-  'rounded-xl border border-[#F6D98B]/40 bg-[#D6B36A] px-4 py-2 text-sm font-black text-[#1C0F08] shadow-[0_0_24px_rgba(214,179,106,0.22)] transition hover:bg-[#F6D98B]'
+  'rounded-xl border border-[#F6D98B]/40 bg-[#D6B36A] px-4 py-2 text-sm font-black text-[#1C0F08] shadow-[0_0_24px_rgba(214,179,106,0.22)] transition hover:bg-[#F6D98B]';
 
 export default function ChurchPage() {
-  const { profile } = useAuthStore()
-  const navigate = useNavigate()
+  const { profile } = useAuthStore();
+  const navigate = useNavigate();
 
-  const [isOpen, setIsOpen] = useState(false)
-  const [isSunday, setIsSunday] = useState(false)
-  const [isCancelled, setIsCancelled] = useState(false)
-  const [timeUntilOpen, setTimeUntilOpen] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [_pastorId, setPastorId] = useState<string | null>(null)
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSunday, setIsSunday] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
+  const [timeUntilOpen, setTimeUntilOpen] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [_pastorId, setPastorId] = useState<string | null>(null);
+
+  const [liveSession, setLiveSession] = useState<LiveSession | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
 
   const checkTime = useCallback(() => {
-    const now = new Date()
-    const day = now.getDay()
-    const hours = now.getHours()
+    const now = new Date();
+    const day = now.getDay();
+    const hours = now.getHours();
 
-    const sunday = day === 0
-    const openNow = sunday && hours >= 13 && hours < 15
+    const sunday = day === 0;
+    const openNow = sunday && hours >= 13 && hours < 15;
 
-    setIsSunday(sunday)
-    setIsOpen(openNow)
+    setIsSunday(sunday);
+    setIsOpen(openNow);
 
     if (!openNow) {
-      const nextOpen = new Date(now)
-      nextOpen.setHours(13, 0, 0, 0)
+      const nextOpen = new Date(now);
+      nextOpen.setHours(13, 0, 0, 0);
 
-      let daysUntilSunday = (7 - day) % 7
+      let daysUntilSunday = (7 - day) % 7;
 
       if (day === 0) {
-        if (hours >= 15) daysUntilSunday = 7
-        if (hours < 13) daysUntilSunday = 0
+        if (hours >= 15) daysUntilSunday = 7;
+        if (hours < 13) daysUntilSunday = 0;
       }
 
-      nextOpen.setDate(now.getDate() + daysUntilSunday)
+      nextOpen.setDate(now.getDate() + daysUntilSunday);
 
-      const diff = nextOpen.getTime() - now.getTime()
-      const daysLeft = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const hoursLeft = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-      const minutesLeft = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const diff = nextOpen.getTime() - now.getTime();
+      const daysLeft = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hoursLeft = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutesLeft = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-      setTimeUntilOpen(`${daysLeft > 0 ? `${daysLeft}d ` : ''}${hoursLeft}h ${minutesLeft.toString().padStart(2, '0')}m`)
+      setTimeUntilOpen(`${daysLeft > 0 ? `${daysLeft}d ` : ''}${hoursLeft}h ${minutesLeft.toString().padStart(2, '0')}m`);
     }
 
-    setLoading(false)
-  }, [])
+    setLoading(false);
+  }, []);
 
   const fetchActivePastor = useCallback(async () => {
-    setIsCancelled(false)
+    setIsCancelled(false);
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split('T')[0];
 
     const { data: notes } = await supabase
       .from('church_sermon_notes')
       .select('pastor_id')
       .eq('date', today)
-      .maybeSingle()
+      .maybeSingle();
 
     if (notes?.pastor_id) {
-      setPastorId(notes.pastor_id)
-      return
+      setPastorId(notes.pastor_id);
+      return;
     }
 
     const { data: pastor } = await supabase
@@ -97,11 +119,11 @@ export default function ChurchPage() {
       .select('id')
       .eq('is_pastor', true)
       .limit(1)
-      .maybeSingle()
+      .maybeSingle();
 
     if (pastor?.id) {
-      setPastorId(pastor.id)
-      return
+      setPastorId(pastor.id);
+      return;
     }
 
     const { data: admin } = await supabase
@@ -109,35 +131,76 @@ export default function ChurchPage() {
       .select('id')
       .eq('role', 'admin')
       .limit(1)
-      .maybeSingle()
+      .maybeSingle();
 
     if (admin?.id) {
-      setPastorId(admin.id)
-      return
+      setPastorId(admin.id);
+      return;
     }
 
-    setIsCancelled(true)
-    setIsOpen(false)
-  }, [])
+    setIsCancelled(true);
+    setIsOpen(false);
+  }, []);
+
+  const fetchLiveSession = useCallback(async () => {
+    setSessionLoading(true);
+    try {
+      const { data } = await supabase
+        .from('church_live_sessions')
+        .select(`
+          id,
+          pastor_id,
+          room_name,
+          sermon_title,
+          scripture_reference,
+          viewer_count,
+          attendee_count,
+          started_at,
+          user_profiles:pastor_id (username, avatar_url)
+        `)
+        .eq('status', 'live')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setLiveSession(data as any || null);
+    } catch (err) {
+      console.error('Error fetching live session:', err);
+      setLiveSession(null);
+    } finally {
+      setSessionLoading(false);
+    }
+  }, []);
+
+  const handleOpenLivePage = () => {
+    if (!liveSession?.id) return;
+    navigate(`/church/live/${liveSession.id}`);
+  };
 
   useEffect(() => {
-    checkTime()
-    const interval = window.setInterval(checkTime, 60_000)
-    return () => window.clearInterval(interval)
-  }, [checkTime])
+    checkTime();
+    const interval = window.setInterval(checkTime, 60_000);
+    return () => window.clearInterval(interval);
+  }, [checkTime]);
 
   useEffect(() => {
     if (isSunday && isOpen) {
-      void fetchActivePastor()
+      void fetchActivePastor();
     }
-  }, [isSunday, isOpen, fetchActivePastor])
+  }, [isSunday, isOpen, fetchActivePastor]);
+
+  useEffect(() => {
+    fetchLiveSession();
+    const interval = window.setInterval(fetchLiveSession, 15000);
+    return () => window.clearInterval(interval);
+  }, [fetchLiveSession]);
 
   if (!profile || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#120A05] text-[#F6D98B]">
         <Loader2 className="h-10 w-10 animate-spin" />
       </div>
-    )
+    );
   }
 
   return (
@@ -174,7 +237,48 @@ export default function ChurchPage() {
           </div>
         </header>
 
-        {isSunday && isOpen && (
+        {/* Live Church Session Viewer */}
+        {liveSession && (
+          <section className={`${panel} relative overflow-hidden p-6`}>
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
+
+            <div className="flex flex-col items-center gap-4 text-center md:flex-row md:text-left">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-red-400/35 bg-red-900/20">
+                <div className="relative">
+                  <Radio className="h-8 w-8 text-red-400" />
+                  <span className="absolute -right-1 -top-1 flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex-1">
+                <h2 className="text-xl font-black text-[#FFF8E7]">
+                  {liveSession.sermon_title || 'Sunday Service'} — LIVE NOW
+                </h2>
+                {liveSession.scripture_reference && (
+                  <p className="mt-1 text-sm text-[#D6B36A]">
+                    Scripture: {liveSession.scripture_reference}
+                  </p>
+                )}
+                <p className="mt-1 text-sm text-[#E8D7B0]/60">
+                  Pastor: {liveSession.user_profiles?.username || 'Pastor'} • {liveSession.attendee_count} attending
+                </p>
+              </div>
+
+              <button
+                onClick={handleOpenLivePage}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#F6D98B]/40 bg-[#D6B36A] px-6 py-3 text-sm font-black text-[#1C0F08] shadow-[0_0_24px_rgba(214,179,106,0.22)] transition hover:bg-[#F6D98B]"
+              >
+                <Play className="h-4 w-4" />
+                Join Service
+              </button>
+            </div>
+          </section>
+        )}
+
+        {isSunday && isOpen && !liveSession && (
           <section className={`${panel} relative overflow-hidden p-6 text-center`}>
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#F6D98B] to-transparent" />
 
@@ -182,9 +286,9 @@ export default function ChurchPage() {
               <Gift className="h-7 w-7 text-[#F6D98B]" />
             </div>
 
-            <h2 className="text-2xl font-black text-[#FFF8E7]">Sunday Service is Live</h2>
+            <h2 className="text-2xl font-black text-[#FFF8E7]">Sunday Service Window Open</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[#E8D7B0]/75">
-              Join the pastor and community for the weekly gathering. Offerings and prayer requests are open during service.
+              The service window is open. A pastor can start a live broadcast. Check back for live video and audio.
             </p>
           </section>
         )}
@@ -249,7 +353,7 @@ export default function ChurchPage() {
         </div>
       </main>
     </div>
-  )
+  );
 }
 
 function ChurchStatus({
@@ -257,9 +361,9 @@ function ChurchStatus({
   isOpen,
   timeUntilOpen,
 }: {
-  isCancelled: boolean
-  isOpen: boolean
-  timeUntilOpen: string
+  isCancelled: boolean;
+  isOpen: boolean;
+  timeUntilOpen: string;
 }) {
   if (isCancelled) {
     return (
@@ -267,7 +371,7 @@ function ChurchStatus({
         <XCircle className="h-4 w-4" />
         Church is Cancelled
       </div>
-    )
+    );
   }
 
   if (isOpen) {
@@ -277,9 +381,9 @@ function ChurchStatus({
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#F6D98B] opacity-75" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#F6D98B]" />
         </span>
-        Sunday Service Live
+        Sunday Service Window Open
       </div>
-    )
+    );
   }
 
   return (
@@ -287,7 +391,7 @@ function ChurchStatus({
       <Clock className="h-4 w-4 text-[#F6D98B]" />
       Closed • Opens in {timeUntilOpen}
     </div>
-  )
+  );
 }
 
 function InfoCard({
@@ -296,10 +400,10 @@ function InfoCard({
   children,
   center,
 }: {
-  title: string
-  icon: React.ReactNode
-  children: React.ReactNode
-  center?: boolean
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  center?: boolean;
 }) {
   return (
     <div className={`${card} p-5 ${center ? 'text-center' : ''}`}>
@@ -309,7 +413,7 @@ function InfoCard({
       </h3>
       <div className="space-y-3 text-sm text-[#E8D7B0]/75">{children}</div>
     </div>
-  )
+  );
 }
 
 function InfoRow({ icon, text }: { icon: React.ReactNode; text: string }) {
@@ -318,5 +422,5 @@ function InfoRow({ icon, text }: { icon: React.ReactNode; text: string }) {
       <span className="mt-0.5 shrink-0 text-[#F6D98B]">{icon}</span>
       <span>{text}</span>
     </div>
-  )
+  );
 }

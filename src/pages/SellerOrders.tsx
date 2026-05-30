@@ -21,7 +21,9 @@ interface PurchaseOrder {
   seller_id: string;
   item_id: string;
   price_paid: number;
-  purchased_at: string;
+  purchased_at?: string;
+  purchase_date?: string;
+  created_at?: string;
   status: OrderStatus;
   shipping_carrier: string | null;
   tracking_number: string | null;
@@ -36,6 +38,7 @@ interface PurchaseOrder {
   item_name?: string;
   item_image?: string;
   buyer_name?: string;
+  source?: string;
 }
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: string }> = {
@@ -47,6 +50,10 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: str
   completed: { label: 'Completed', color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
   cancelled: { label: 'Cancelled', color: 'text-red-400', bg: 'bg-red-400/10' },
   refunded: { label: 'Refunded', color: 'text-gray-400', bg: 'bg-gray-400/10' },
+};
+
+const getOrderDate = (order: Partial<PurchaseOrder>) => {
+  return order.purchased_at || order.purchase_date || order.created_at || new Date().toISOString();
 };
 
 const CARRIERS: { id: ShippingCarrier; name: string }[] = [
@@ -85,6 +92,7 @@ export default function SellerOrders() {
       if (error) throw error;
 
       const enriched = await Promise.all((data || []).map(async (order: any) => {
+        const item_date = getOrderDate(order);
         let item_name = 'Item';
         let item_image = '';
         let buyer_name = 'Buyer';
@@ -110,7 +118,7 @@ export default function SellerOrders() {
           if (buyer) buyer_name = buyer.username;
         }
 
-        return { ...order, item_name, item_image, buyer_name };
+        return { ...order, item_name, item_image, buyer_name, purchased_at: item_date };
       }));
 
       setOrders(enriched);

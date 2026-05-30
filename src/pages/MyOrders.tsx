@@ -19,7 +19,9 @@ interface PurchaseOrder {
   seller_id: string;
   item_id: string;
   price_paid: number;
-  purchased_at: string;
+  purchased_at?: string;
+  purchase_date?: string;
+  created_at?: string;
   status: OrderStatus;
   shipping_carrier: string | null;
   tracking_number: string | null;
@@ -34,6 +36,7 @@ interface PurchaseOrder {
   item_name?: string;
   item_image?: string;
   seller_name?: string;
+  source?: string;
 }
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: string }> = {
@@ -45,6 +48,10 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: str
   completed: { label: 'Completed', color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
   cancelled: { label: 'Cancelled', color: 'text-red-400', bg: 'bg-red-400/10' },
   refunded: { label: 'Refunded', color: 'text-gray-400', bg: 'bg-gray-400/10' },
+};
+
+const getOrderDate = (order: Partial<PurchaseOrder>) => {
+  return order.purchased_at || order.purchase_date || order.created_at || new Date().toISOString();
 };
 
 export default function MyOrders() {
@@ -70,11 +77,11 @@ export default function MyOrders() {
 
       // Enrich with item and seller data
       const enriched = await Promise.all((data || []).map(async (order: any) => {
+        const item_date = getOrderDate(order);
         let item_name = 'Item';
         let item_image = '';
         let seller_name = 'Seller';
 
-        // Fetch item details
         if (order.item_id) {
           const { data: item } = await supabase
             .from('marketplace_items')
@@ -87,7 +94,6 @@ export default function MyOrders() {
           }
         }
 
-        // Fetch seller name
         if (order.seller_id) {
           const { data: seller } = await supabase
             .from('user_profiles')
@@ -97,10 +103,75 @@ export default function MyOrders() {
           if (seller) seller_name = seller.username;
         }
 
-        return { ...order, item_name, item_image, seller_name };
+        return { ...order, item_name, item_image, seller_name, purchased_at: item_date };
       }));
 
-      setOrders(enriched);
+      const { data: auctionWins, error: auctionError } = await supabase
+        .from('auction_lots')
+        .select(`
+          id,
+          title,
+          image_url,
+          current_highest_bid,
+          starting_bid,
+          winner_user_id,
+          auction_show_id,
+          auction_shows!inner(
+            id,
+            title,
+            auctioneer_id,
+            auctioneer:auctioneer_profiles(
+              user_id,
+              user_profiles!inner(
+                id,
+                username,
+                avatar_url
+              )
+            )
+          )
+        `)
+        .eq('winner_user_id', user.id)
+        .eq('status', 'sold')
+        .order('queue_position', { ascending: true });
+
+      if (auctionError) throw auctionError;
+
+      const auctionOrderItems = (auctionWins || [])
+        .filter((aw: any) => !enriched.some((order) => order.item_id === aw.id))
+        .map((aw: any) => {
+          const show = aw.auction_shows;
+          const auctioneerProfile = show?.auctioneer?.user_profiles;
+          return {
+            id: `auction-${aw.id}`,
+            buyer_id: user.id,
+            seller_id: show?.auctioneer_id || auctioneerProfile?.id || '',
+            item_id: aw.id,
+            price_paid: aw.current_highest_bid || aw.starting_bid || 0,
+            status: 'completed' as OrderStatus,
+            shipping_carrier: null,
+            tracking_number: null,
+            tracking_url: null,
+            shipped_at: null,
+            delivered_at: null,
+            shipping_name: null,
+            shipping_address: null,
+            shipping_city: null,
+            shipping_state: null,
+            shipping_zip: null,
+            created_at: getOrderDate(aw),
+            purchased_at: getOrderDate(aw),
+            item_name: aw.title,
+            item_image: aw.image_url || '',
+            seller_name: auctioneerProfile?.username || 'Auctioneer',
+            source: 'auction',
+          } as PurchaseOrder;
+        });
+
+      const allOrders = [...enriched, ...auctionOrderItems].sort(
+        (a, b) => new Date(getOrderDate(b)).getTime() - new Date(getOrderDate(a)).getTime()
+      );
+
+      setOrders(allOrders);
       const targetOrder = searchParams.get('order');
       if (targetOrder) setExpandedOrder(targetOrder);
     } catch (err) {

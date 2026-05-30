@@ -28,6 +28,8 @@ export default function BackgroundCheckView({ userId }: BackgroundCheckViewProps
   const [creditScore, setCreditScore] = useState<number>(0);
   const [jailRecords, setJailRecords] = useState<JailRecord[]>([]);
   const [reportRecords, setReportRecords] = useState<ReportRecord[]>([]);
+  const [licenseRecord, setLicenseRecord] = useState<any | null>(null);
+  const [homeownersInsurance, setHomeownersInsurance] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -71,6 +73,34 @@ export default function BackgroundCheckView({ userId }: BackgroundCheckViewProps
         created_at: row.created_at,
         status: row.status || 'pending',
       })));
+
+      // Fetch driver's license / license records
+      try {
+        const { data: licenseData } = await supabase
+          .from('user_licenses')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+        setLicenseRecord(licenseData || null);
+      } catch (licErr) {
+        console.warn('[BackgroundCheck] license fetch failed', licErr);
+        setLicenseRecord(null);
+      }
+
+      // Fetch homeowners insurance
+      try {
+        const { data: homeIns } = await supabase
+          .from('homeowners_insurances')
+          .select('*')
+          .eq('user_id', userId)
+          .order('expires_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setHomeownersInsurance(homeIns || null);
+      } catch (insErr) {
+        console.warn('[BackgroundCheck] homeowners insurance fetch failed', insErr);
+        setHomeownersInsurance(null);
+      }
     } catch (error) {
       console.error('[BackgroundCheck] Error fetching data:', error);
     } finally {
@@ -249,6 +279,30 @@ export default function BackgroundCheckView({ userId }: BackgroundCheckViewProps
               {reportRecords.length}
             </div>
             <div className="text-xs text-gray-500">Reports</div>
+          </div>
+          <div className="text-center p-3 bg-black/30 rounded-lg">
+            <div className={`text-2xl font-bold ${licenseRecord && (licenseRecord.status === 'active' || licenseRecord.status === 'valid') ? 'text-emerald-300' : 'text-zinc-400'}`}>
+              {licenseRecord ? (licenseRecord.status || 'unknown') : 'no'}
+            </div>
+            <div className="text-xs text-gray-500">License</div>
+          </div>
+        </div>
+      </div>
+      {/* License & Insurance Details */}
+      <div className={`${trollCityTheme?.backgrounds?.card || 'bg-slate-800'} border border-white/10 rounded-xl p-6`}> 
+        <h3 className="text-lg font-bold text-white mb-3">License & Insurance</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-lg p-3 bg-black/30">
+            <div className="text-sm text-zinc-400">Driver License</div>
+            <div className="mt-2 font-bold text-white">{licenseRecord ? (licenseRecord.status || 'Unknown') : 'None'}</div>
+            {licenseRecord?.issued_at && <div className="text-xs text-gray-400">Issued: {new Date(licenseRecord.issued_at).toLocaleDateString()}</div>}
+            {licenseRecord?.expires_at && <div className="text-xs text-gray-400">Expires: {new Date(licenseRecord.expires_at).toLocaleDateString()}</div>}
+          </div>
+          <div className="rounded-lg p-3 bg-black/30">
+            <div className="text-sm text-zinc-400">Homeowners Insurance</div>
+            <div className="mt-2 font-bold text-white">{homeownersInsurance ? 'Active' : 'None'}</div>
+            {homeownersInsurance?.expires_at && <div className="text-xs text-gray-400">Expires: {new Date(homeownersInsurance.expires_at).toLocaleDateString()}</div>}
+            {homeownersInsurance?.house_id && <div className="text-xs text-gray-400">House: {String(homeownersInsurance.house_id).slice(0,8)}</div>}
           </div>
         </div>
       </div>

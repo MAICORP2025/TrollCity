@@ -157,13 +157,12 @@ export function isFriday(): boolean {
 }
 
 export function isCashoutWindowOpen(): boolean {
-  if (!isFriday()) return false;
-
   const now = new Date();
   const mtDateString = now.toLocaleString("en-US", { timeZone: "America/Denver" });
   const mtDate = new Date(mtDateString);
+  const day = mtDate.getDay();
   const hour = mtDate.getHours();
 
-  // Friday 2 PM - 3 PM MST (hour 14)
-  return hour === 14;
+  // Weekend payout window: Friday, Saturday, or Sunday between 1 AM and 7 PM Mountain Time
+  return [5, 6, 0].includes(day) && hour >= 1 && hour < 19;
 }

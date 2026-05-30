@@ -87,7 +87,7 @@ const SERVICE_CATEGORIES = [
   { id: 'other', label: 'Other', icon: '🔨' },
 ]
 
-type ActiveTab = 'marketplace' | 'vehicles' | 'services'
+type ActiveTab = 'marketplace' | 'vehicles' | 'services' | 'shop_items'
 type SortBy = 'newest' | 'price_low' | 'price_high' | 'distance'
 
 interface BaseListing {
@@ -130,6 +130,10 @@ interface BaseListing {
     avatar_url?: string
   }
   distance_km?: number
+  is_shop_item?: boolean
+  shop_id?: string
+  shop_name?: string
+  stock_quantity?: number
 }
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -175,12 +179,16 @@ function offsetCoordinate(lat: number, lon: number, distanceKm = 1.6) {
   }
 }
 
-function RecenterControl({ userLocation }: { userLocation: { lat: number; lon: number } }) {
+function RecenterControl({ location }: { location: { lat: number; lon: number } }) {
   const map = useMap()
+  const hasCentered = useRef(false)
 
   useEffect(() => {
-    map.setView([userLocation.lat, userLocation.lon], 13)
-  }, [map, userLocation.lat, userLocation.lon])
+    if (!hasCentered.current) {
+      map.setView([location.lat, location.lon], 13)
+      hasCentered.current = true
+    }
+  }, [map, location.lat, location.lon])
 
   return null
 }
@@ -216,10 +224,13 @@ export default function Trollifieds() {
   const [marketplaceItems, setMarketplaceItems] = useState<BaseListing[]>([])
   const [vehicleListings, setVehicleListings] = useState<BaseListing[]>([])
   const [services, setServices] = useState<BaseListing[]>([])
+  const [shopItems, setShopItems] = useState<BaseListing[]>([])
 
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null)
+  // Obfuscated location for map display — offsets real location by ~1 mile for privacy
+  const [displayLocation, setDisplayLocation] = useState<{ lat: number; lon: number } | null>(null)
   const [mapCenter, setMapCenter] = useState<[number, number]>([39.8283, -98.5795])
-  const [mapRadius, setMapRadius] = useState(1.6)
+  const [mapRadius, setMapRadius] = useState(16)
 
   const [messageModal, setMessageModal] = useState<{
     open: boolean
@@ -266,28 +277,36 @@ export default function Trollifieds() {
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      setUserLocation({ lat: 39.8283, lon: -98.5795 })
+      const fallback = { lat: 39.8283, lon: -98.5795 }
+      setUserLocation(fallback)
+      setDisplayLocation(offsetCoordinate(fallback.lat, fallback.lon, 1.6))
       return
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({
+        const real = {
           lat: position.coords.latitude,
           lon: position.coords.longitude,
-        })
+        }
+        setUserLocation(real)
+        // Offset by ~1 mile (1.6 km) so the user's real location is never shown
+        setDisplayLocation(offsetCoordinate(real.lat, real.lon, 1.6))
       },
       () => {
-        setUserLocation({ lat: 39.8283, lon: -98.5795 })
+        const fallback = { lat: 39.8283, lon: -98.5795 }
+        setUserLocation(fallback)
+        setDisplayLocation(offsetCoordinate(fallback.lat, fallback.lon, 1.6))
       }
     )
   }, [])
 
   useEffect(() => {
-    if (userLocation) {
-      setMapCenter([userLocation.lat, userLocation.lon])
+    // Use the obfuscated display location for the map center
+    if (displayLocation) {
+      setMapCenter([displayLocation.lat, displayLocation.lon])
     }
-  }, [userLocation])
+  }, [displayLocation])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -379,6 +398,72 @@ export default function Trollifieds() {
           }))
         )
       }
+
+      // Load shop_items from all active shops — these are the Marketplace seller listings
+      // that should appear on the Trollifieds map for everyone to discover
+      if (activeTab === 'shop_items') {
+        const { data: shopsData, error: shopsError } = await supabase
+          .from('trollcity_shops')
+          .select(`
+            id,
+            name,
+            owner_id,
+            owner:user_profiles!owner_id(id, username, avatar_url)
+          `)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(100)
+
+        if (shopsError) throw shopsError
+
+        const allShopItems: BaseListing[] = []
+
+        for (const shop of shopsData || []) {
+          let itemsQuery = supabase
+            .from('shop_items')
+            .select('*')
+            .eq('shop_id', shop.id)
+            .order('created_at', { ascending: false })
+            .limit(50)
+
+          if (searchQuery.trim()) {
+            itemsQuery = itemsQuery.ilike('name', `%${searchQuery.trim()}%`)
+          }
+
+          const { data: itemsData, error: itemsError } = await itemsQuery
+          if (itemsError) {
+            console.error(`Error loading items for shop ${shop.id}:`, itemsError)
+            continue
+          }
+
+          for (const item of itemsData || []) {
+            allShopItems.push({
+              id: `shop_${item.id}`,
+              title: item.name,
+              description: item.description,
+              price_coins: item.price,
+              category: item.category || 'other',
+              image_url: item.image_url || item.thumbnail_url,
+              images: item.image_url ? [item.image_url] : [],
+              status: 'active',
+              created_at: item.created_at,
+              seller_id: shop.owner_id,
+              seller: shop.owner,
+              // Shop items don't have lat/lon — they appear as shop-level pins
+              latitude: undefined,
+              longitude: undefined,
+              city: undefined,
+              state: undefined,
+              is_shop_item: true,
+              shop_id: shop.id,
+              shop_name: shop.name,
+              stock_quantity: item.stock_quantity,
+            } as BaseListing & { is_shop_item?: boolean; shop_id?: string; shop_name?: string; stock_quantity?: number })
+          }
+        }
+
+        setShopItems(allShopItems)
+      }
     } catch (error: any) {
       console.error('Error loading Trollifieds:', error)
       toast.error(error.message || 'Failed to load listings')
@@ -392,12 +477,15 @@ export default function Trollifieds() {
   }, [loadData])
 
   useEffect(() => {
-    const tableName =
-      activeTab === 'marketplace'
-        ? 'marketplace_items'
-        : activeTab === 'vehicles'
-          ? 'vehicle_listings'
-          : 'service_listings'
+    const tableMap: Record<string, string> = {
+      marketplace: 'marketplace_items',
+      vehicles: 'vehicle_listings',
+      services: 'service_listings',
+      shop_items: 'shop_items',
+    }
+
+    const tableName = tableMap[activeTab]
+    if (!tableName) return
 
     const channel = supabase
       .channel(`trollifieds_${activeTab}`)
@@ -414,8 +502,9 @@ export default function Trollifieds() {
   const activeItems = useMemo(() => {
     if (activeTab === 'marketplace') return [...marketplaceItems]
     if (activeTab === 'vehicles') return [...vehicleListings]
+    if (activeTab === 'shop_items') return [...shopItems]
     return [...services]
-  }, [activeTab, marketplaceItems, vehicleListings, services])
+  }, [activeTab, marketplaceItems, vehicleListings, services, shopItems])
 
   const filteredItems = useMemo(() => {
     let items = [...activeItems]
@@ -434,6 +523,7 @@ export default function Trollifieds() {
       })
     }
 
+    // Use the real userLocation for distance calculations (not the obfuscated display location)
     if (userLocation) {
       items = items.map((item) => {
         if (!item.latitude || !item.longitude) return item
@@ -465,29 +555,42 @@ export default function Trollifieds() {
     return items
   }, [activeItems, searchQuery, sortBy, userLocation])
 
-  const mapItems = useMemo(() => {
-    if (!userLocation) return []
+  // Map items: show ALL listings that have coordinates from every listing type
+  // (marketplace_items, vehicles, services) — shop items don't have lat/lon
+  // Use displayLocation (obfuscated) for the map radius filter so the user's real location stays private
+  const allListingsWithCoords = useMemo(() => {
+    return [
+      ...marketplaceItems,
+      ...vehicleListings,
+      ...services,
+    ].filter((item) => item.latitude && item.longitude)
+  }, [marketplaceItems, vehicleListings, services])
 
-    return filteredItems
-      .filter((item) => item.latitude && item.longitude)
+  const mapItems = useMemo(() => {
+    const loc = displayLocation || userLocation
+    if (!loc) return []
+
+    return allListingsWithCoords
       .filter((item) => {
         const distance = calculateDistance(
-          userLocation.lat,
-          userLocation.lon,
+          loc.lat,
+          loc.lon,
           Number(item.latitude),
           Number(item.longitude)
         )
 
         return distance <= mapRadius
       })
-  }, [filteredItems, mapRadius, userLocation])
+  }, [allListingsWithCoords, mapRadius, displayLocation, userLocation])
 
   const categoryList =
     activeTab === 'marketplace'
       ? MARKETPLACE_CATEGORIES
       : activeTab === 'services'
         ? SERVICE_CATEGORIES
-        : [{ id: 'all', label: 'All Makes', icon: '🚗' }]
+        : activeTab === 'shop_items'
+          ? [{ id: 'all', label: 'All Shops', icon: '🏪' }]
+          : [{ id: 'all', label: 'All Makes', icon: '🚗' }]
 
   const openCreateModal = (type: ActiveTab) => {
     if (!user) {
@@ -597,7 +700,8 @@ export default function Trollifieds() {
       return
     }
 
-    if (!userLocation) {
+    // Shop items don't require geolocation — they're tied to the seller's shop
+    if (createModal.type !== 'shop_items' && !userLocation) {
       toast.error('Location is required for local listings')
       return
     }
@@ -685,6 +789,7 @@ export default function Trollifieds() {
   }
 
   const getSellerName = (item: BaseListing) => {
+    if (item.is_shop_item) return item.seller?.username || item.owner?.username || 'Shop Seller'
     return item.seller?.username || item.owner?.username || 'Unknown'
   }
 
@@ -733,12 +838,13 @@ export default function Trollifieds() {
               </h1>
 
               <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
-                Local listings, vehicles, and services powered by Troll Coins, USD pricing, boosted posts, private messaging, and privacy-safe map discovery.
+                Local listings, shop items, vehicles, and services powered by Troll Coins, USD pricing, boosted posts, private messaging, and privacy-safe map discovery.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <StatCard icon={ShoppingBag} label="Listings" value={filteredItems.length} />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+              <StatCard icon={ShoppingBag} label="Listings" value={marketplaceItems.length} />
+              <StatCard icon={Store} label="Shop Items" value={shopItems.length} />
               <StatCard icon={Car} label="Vehicles" value={vehicleListings.length} />
               <StatCard icon={Wrench} label="Services" value={services.length} />
               <StatCard icon={Zap} label="Boosts" value="Live" pink />
@@ -788,6 +894,7 @@ export default function Trollifieds() {
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex gap-2 overflow-x-auto">
                 <TabButton active={activeTab === 'marketplace'} icon={ShoppingBag} label="Marketplace" onClick={() => { setActiveTab('marketplace'); setCategory(null) }} />
+                <TabButton active={activeTab === 'shop_items'} icon={Store} label="Shop Items" onClick={() => { setActiveTab('shop_items'); setCategory(null) }} />
                 <TabButton active={activeTab === 'vehicles'} icon={Car} label="Vehicles" onClick={() => { setActiveTab('vehicles'); setCategory(null) }} />
                 <TabButton active={activeTab === 'services'} icon={Wrench} label="Services" onClick={() => { setActiveTab('services'); setCategory(null) }} />
               </div>
@@ -858,12 +965,21 @@ export default function Trollifieds() {
           <>
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <p className="text-sm font-bold text-slate-400">
-                {filteredItems.length} {activeTab === 'marketplace' ? 'items' : activeTab === 'vehicles' ? 'vehicles' : 'services'} found
+                {filteredItems.length}{' '}
+                {activeTab === 'marketplace'
+                  ? 'items'
+                  : activeTab === 'vehicles'
+                    ? 'vehicles'
+                    : activeTab === 'shop_items'
+                      ? 'shop items'
+                      : 'services'}{' '}
+                found
               </p>
-              {userLocation && (
+              {displayLocation && (
                 <p className="flex items-center gap-2 text-sm text-cyan-300">
                   <MapPin className="h-4 w-4" />
                   Nearby discovery enabled
+                  <span className="text-xs text-slate-500">(location offset for privacy)</span>
                 </p>
               )}
             </div>
@@ -902,7 +1018,8 @@ export default function Trollifieds() {
                       Nearby Listings Map
                     </h2>
                     <p className="mt-1 text-sm text-slate-400">
-                      Showing {mapItems.length} listing{mapItems.length === 1 ? '' : 's'} within {mapRadius.toFixed(1)} km.
+                      Showing {mapItems.length} listing{mapItems.length === 1 ? '' : 's'} within {kmToMiles(mapRadius).toFixed(1)} mi.
+                      <span className="text-xs text-slate-500 ml-2">(includes marketplace, vehicles & services)</span>
                     </p>
                   </div>
 
@@ -928,9 +1045,10 @@ export default function Trollifieds() {
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
 
-                    {userLocation && (
-                      <Marker position={[userLocation.lat, userLocation.lon]} icon={userLocationIcon}>
-                        <Popup>Your approximate area</Popup>
+                    {/* User marker uses obfuscated display location — real location is never shown */}
+                    {displayLocation && (
+                      <Marker position={[displayLocation.lat, displayLocation.lon]} icon={userLocationIcon}>
+                        <Popup>Your approximate area (offset for privacy)</Popup>
                       </Marker>
                     )}
 
@@ -949,9 +1067,9 @@ export default function Trollifieds() {
                               <p className="font-bold">{item.title}</p>
                               <p>{getPriceDisplay(item)}</p>
                               <p className="text-xs">{item.city}, {item.state}</p>
-                              {userLocation && (
+                              {displayLocation && (
                                 <p className="text-xs">
-                                  {kmToMiles(calculateDistance(userLocation.lat, userLocation.lon, item.latitude, item.longitude)).toFixed(2)} miles away
+                                  {kmToMiles(calculateDistance(displayLocation.lat, displayLocation.lon, item.latitude, item.longitude)).toFixed(2)} miles away
                                 </p>
                               )}
                             </div>
@@ -960,7 +1078,7 @@ export default function Trollifieds() {
                       ) : null
                     )}
 
-                    {userLocation && <RecenterControl userLocation={userLocation} />}
+                    {displayLocation && <RecenterControl location={displayLocation} />}
                   </MapContainer>
                 </div>
               </section>
@@ -1247,6 +1365,11 @@ function ListingCard({
 
         <div className="absolute left-3 top-3 flex flex-wrap gap-1">
           <PremiumBadges item={item} />
+          {item.is_shop_item && (
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-400/30">
+              🏪 Shop
+            </span>
+          )}
         </div>
 
         {item.condition && (
@@ -1270,8 +1393,19 @@ function ListingCard({
 
         <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500">
           <span className="flex min-w-0 items-center gap-1 truncate">
-            <MapPin className="h-3 w-3 shrink-0" />
-            {item.city}, {item.state}
+            {item.is_shop_item ? (
+              <>
+                <Store className="h-3 w-3 shrink-0" />
+                {item.shop_name || 'Shop Item'}
+              </>
+            ) : item.city ? (
+              <>
+                <MapPin className="h-3 w-3 shrink-0" />
+                {item.city}, {item.state}
+              </>
+            ) : (
+              <span className="text-slate-600">Location hidden</span>
+            )}
           </span>
           <span className="flex shrink-0 items-center gap-1">
             <Clock className="h-3 w-3" />

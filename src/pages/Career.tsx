@@ -7,6 +7,7 @@ import {
   Briefcase,
   Search,
   Shield,
+  Church,
   Video,
   FileText,
   Star,
@@ -196,6 +197,16 @@ const jobPositions: JobPosition[] = [
     benefits: ['Admin assistant role', 'Potential weekly role perk from Treasury', 'Assigned to Noah Admin support'],
     icon: Briefcase,
     color: 'from-purple-500 to-cyan-500',
+  },
+  {
+    id: 'pastor',
+    title: 'Pastor',
+    department: 'Troll Church',
+    description: 'Lead spiritual services, provide guidance and pastoral care to the community, and officiate church events.',
+    requirements: ['Strong communication skills', 'Commitment to community support', 'Good community standing'],
+    benefits: ['Pastor badge', 'Access to Pastor Dashboard', 'Church broadcast capabilities', 'Pastoral chat channels'],
+    icon: Church,
+    color: 'from-green-500 to-emerald-500',
   },
 ]
 

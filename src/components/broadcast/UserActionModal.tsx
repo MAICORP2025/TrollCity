@@ -143,7 +143,7 @@ export default function UserActionModal({
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         const { data: currentUserProfile } = await supabase
             .from('user_profiles')
-            .select('role')
+            .select('role, is_admin, is_troll_officer')
             .eq('id', currentUser?.id)
             .maybeSingle();
             
@@ -200,7 +200,7 @@ export default function UserActionModal({
           const { data: { user: currentUser } } = await supabase.auth.getUser();
           const { data: currentUserProfile } = await supabase
               .from('user_profiles')
-              .select('role, troll_role')
+              .select('role, troll_role, is_admin, is_troll_officer, is_lead_officer')
               .eq('id', currentUser?.id)
               .maybeSingle();
               
@@ -517,20 +517,20 @@ const handleViewProfile = () => {
             </div>
           </div>
 
-          {onKickStage && (isHost || isModerator) && (
-            <button 
-              onClick={() => {
-                if (confirm("Remove this user from the stage?")) {
-                  onKickStage();
-                  onClose();
-                }
-              }}
-              className="flex items-center gap-2 w-full p-3 hover:bg-white/10 rounded-lg transition-colors text-left text-orange-400"
-            >
-              <Ban size={20} />
-              <span>Remove from Stage</span>
-            </button>
-          )}
+          {onKickStage && hasModActions && (
+              <button 
+                onClick={() => {
+                  if (confirm("Remove this user from the stage?")) {
+                    onKickStage();
+                    onClose();
+                  }
+                }}
+                className="flex items-center gap-2 w-full p-3 hover:bg-white/10 rounded-lg transition-colors text-left text-orange-400"
+              >
+                <Ban size={20} />
+                <span>Remove from Stage</span>
+              </button>
+            )}
 
           {/* Standard Actions (Available to everyone, but filtered by role requirements) */}
           <div className="space-y-2 pt-2 border-t border-white/10 mt-2">

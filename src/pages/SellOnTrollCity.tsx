@@ -4,6 +4,8 @@ import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { Store, ShoppingCart, ShoppingBag, Car, Coins, DollarSign, Truck, FileText, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Plus, Edit, Trash, Package, Wrench, Eye, EyeOff } from 'lucide-react'
+import VehicleListingForm from '../components/sell/VehicleListingForm'
+import BusinessProfileForm from '../components/sell/BusinessProfileForm'
 
 export default function SellOnTrollCity() {
   console.log('🛍️ SellOnTrollCity component rendering');
@@ -19,6 +21,10 @@ export default function SellOnTrollCity() {
   const [existingApplication, setExistingApplication] = useState<any>(null)
   const isVerifiedSeller = existingApplication?.status === 'approved'
   const [products, setProducts] = useState<any[]>([])
+  const [vehicleListings, setVehicleListings] = useState<any[]>([])
+  const [vehicleLoading, setVehicleLoading] = useState(false)
+  const [businessProfile, setBusinessProfile] = useState<any>(null)
+  const [businessLoading, setBusinessLoading] = useState(false)
 
   
   // Seller application form state
@@ -46,6 +52,43 @@ export default function SellOnTrollCity() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deletingShop, setDeletingShop] = useState(false)
 
+  const loadVehicleListings = useCallback(async () => {
+    if (!user) return
+    setVehicleLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('vehicle_listings')
+        .select('*')
+        .eq('seller_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setVehicleListings(data || [])
+    } catch (error: any) {
+      console.error('Error loading vehicle listings:', error)
+    } finally {
+      setVehicleLoading(false)
+    }
+  }, [user])
+
+  const loadBusinessProfile = useCallback(async () => {
+    if (!user) return
+    setBusinessLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('business_profiles')
+        .select('*')
+        .eq('owner_id', user.id)
+        .maybeSingle()
+
+      if (error) throw error
+      setBusinessProfile(data)
+    } catch (error: any) {
+      console.error('Error loading business profile:', error)
+    } finally {
+      setBusinessLoading(false)
+    }
+  }, [user])
 
   const loadShop = useCallback(async () => {
     setLoading(true)
@@ -94,8 +137,10 @@ export default function SellOnTrollCity() {
       setProducts(productsData || [])
     }
 
+    await Promise.all([loadVehicleListings(), loadBusinessProfile()])
+
     setLoading(false)
-  }, [user])
+  }, [user, loadVehicleListings, loadBusinessProfile])
 
   useEffect(() => {
     if (!user) return
@@ -816,29 +861,62 @@ export default function SellOnTrollCity() {
 
             {/* Vehicle Listings */}
             {trollifiedsTab === 'vehicles' && (
-              <div className="grid lg:grid-cols-2 gap-6">
-                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+              <div className="grid lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
                   <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                     <Car className="w-5 h-5 text-blue-400" />
                     Create Vehicle Listing
                   </h2>
                   <p className="text-gray-400 text-sm mb-4">
-                    List vehicles for sale in the Trollifieds marketplace
+                    List vehicles for sale in the Trollifieds marketplace. Upload all required verification photos and condition details.
                   </p>
-                  <div className="text-center py-8">
-                    <Car className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                    <p className="text-gray-400 mb-4">Create vehicle listings</p>
-                    <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg">
-                      Add Vehicle
-                    </button>
-                  </div>
+                  <VehicleListingForm user={user} onListingCreated={loadVehicleListings} />
                 </div>
+
                 <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
-                  <h2 className="text-xl font-semibold mb-4">Your Vehicle Listings</h2>
-                  <div className="text-center py-8 text-gray-500">
-                    <Car className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                    <p>No vehicle listings yet</p>
-                  </div>
+                  <h2 className="text-xl font-semibold mb-4">Your Vehicle Listings ({vehicleListings.length})</h2>
+                  {vehicleLoading ? (
+                    <div className="text-center py-8 text-gray-400">Loading your vehicle listings...</div>
+                  ) : vehicleListings.length > 0 ? (
+                    <div className="space-y-4">
+                      {vehicleListings.map((listing) => (
+                        <div key={listing.id} className="bg-[#0D0D0D] rounded-xl p-4 border border-[#2C2C2C]">
+                          <div className="flex items-start gap-3">
+                            {listing.images?.[0] ? (
+                              <img
+                                src={listing.images[0]}
+                                alt={listing.title || 'Vehicle photo'}
+                                className="w-16 h-16 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-blue-900/30 text-blue-300">
+                                <Car className="w-6 h-6" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-white text-sm truncate">
+                                {listing.title || `${listing.year || ''} ${listing.make || ''} ${listing.model || ''}`.trim()}
+                              </h3>
+                              <p className="text-gray-400 text-xs truncate">
+                                {listing.city ? `${listing.city}${listing.state ? `, ${listing.state}` : ''}` : 'Location not available'}
+                              </p>
+                              <p className="text-yellow-400 text-xs mt-2">
+                                {listing.price_coins ? `${listing.price_coins.toLocaleString()} coins` : ''}
+                                {listing.price_coins && listing.price_usd ? ' · ' : ''}
+                                {listing.price_usd ? `$${listing.price_usd.toLocaleString()}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Car className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                      <p>No vehicle listings yet</p>
+                      <p className="text-sm text-gray-400 mt-2">Create a vehicle listing using the form on the left.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -874,29 +952,50 @@ export default function SellOnTrollCity() {
 
             {/* Business Profile */}
             {trollifiedsTab === 'business' && (
-              <div className="grid lg:grid-cols-2 gap-6">
-                <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
+              <div className="grid lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
                   <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                     <Store className="w-5 h-5 text-purple-400" />
                     Business Profile
                   </h2>
                   <p className="text-gray-400 text-sm mb-4">
-                    Create a business profile to offer services in Trollifieds
+                    Create or update your business profile to offer services and make it easy for buyers to find you.
                   </p>
-                  <div className="text-center py-8">
-                    <Store className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                    <p className="text-gray-400 mb-4">Create your business profile</p>
-                    <button className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg">
-                      Create Business
-                    </button>
-                  </div>
+                  <BusinessProfileForm
+                    user={user}
+                    existingProfile={businessProfile}
+                    onProfileCreated={(profile) => setBusinessProfile(profile)}
+                  />
                 </div>
                 <div className="bg-[#1A1A1A] rounded-xl p-6 border border-[#2C2C2C]">
-                  <h2 className="text-xl font-semibold mb-4">Your Business</h2>
-                  <div className="text-center py-8 text-gray-500">
-                    <Store className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                    <p>No business profile yet</p>
-                  </div>
+                  <h2 className="text-xl font-semibold mb-4">Your Business Profile</h2>
+                  {businessLoading ? (
+                    <div className="text-center py-8 text-gray-400">Loading business profile...</div>
+                  ) : businessProfile ? (
+                    <div className="space-y-4">
+                      <div className="bg-[#0D0D0D] rounded-xl p-4 border border-[#2C2C2C]">
+                        <p className="text-gray-300 text-sm">{businessProfile.business_name}</p>
+                        <p className="text-gray-400 text-xs">{businessProfile.category || 'No category set'}</p>
+                      </div>
+                      <div className="bg-[#0D0D0D] rounded-xl p-4 border border-[#2C2C2C] space-y-2 text-sm text-gray-300">
+                        <p><span className="font-semibold text-white">Location:</span> {businessProfile.city || 'Unknown'}, {businessProfile.state || 'Unknown'}</p>
+                        <p><span className="font-semibold text-white">Email:</span> {businessProfile.email || 'Not provided'}</p>
+                        <p><span className="font-semibold text-white">Phone:</span> {businessProfile.phone || 'Not provided'}</p>
+                        {businessProfile.website && (
+                          <p><span className="font-semibold text-white">Website:</span> <a href={businessProfile.website} target="_blank" rel="noreferrer" className="text-cyan-300 underline">{businessProfile.website}</a></p>
+                        )}
+                        {businessProfile.description && (
+                          <p><span className="font-semibold text-white">About:</span> {businessProfile.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Store className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                      <p>No business profile yet</p>
+                      <p className="text-sm text-gray-400 mt-2">Fill out the form to create your business profile.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

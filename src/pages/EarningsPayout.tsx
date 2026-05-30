@@ -177,14 +177,14 @@ export default function EarningsPayout() {
       const mtDateString = now.toLocaleString("en-US", {timeZone: "America/Denver"});
       const mtDate = new Date(mtDateString);
       
-      const day = mtDate.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, ...
+      const day = mtDate.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat, 0=Sun
       const hour = mtDate.getHours();
       
-      // Fri (5), 14:00-14:59 (2 PM MST 1 hour window)
-      const isWindowOpen = day === 5 && hour === 14;
+      // Weekend payout window: Fri/Sat/Sun between 1:00 AM and 7:00 PM Mountain Time
+      const isWindowOpen = [5, 6, 0].includes(day) && hour >= 1 && hour < 19;
       
       if (!isWindowOpen) {
-          toast.error("Cashouts are only open Fridays between 2:00 PM - 3:00 PM MST.");
+          toast.error("Cashouts are only open Friday through Sunday between 1:00 AM - 7:00 PM MST.");
           return;
       }
 

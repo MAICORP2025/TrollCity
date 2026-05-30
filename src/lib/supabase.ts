@@ -138,6 +138,8 @@ export const PLATFORM_OPTIONS = [
 export type Platform = typeof PLATFORM_OPTIONS[number]['value'];
 
 export interface UserProfile {
+  trollmonds: number
+    display_name: string
   name: string
   is_agency_hr: boolean
   is_agency_hr_manager: any
@@ -855,6 +857,7 @@ export const hasRole = (
     agency_leader: (profile as any).is_agency_leader,
     ceo_assistant: (profile as any).is_ceo_assistant,
     noah_assistant: (profile as any).is_noah_assistant,
+    pastor: (profile as any).is_pastor,
   }
 
   if (Object.entries(booleanRoleChecks).some(([roleName, hasFlag]) => hasFlag && roles.includes(roleName as UserRole))) {

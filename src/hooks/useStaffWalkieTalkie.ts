@@ -108,6 +108,7 @@ export function useStaffWalkieTalkie({
     try {
       const uid = user?.id ? stableNumericUid(user.id) : Math.floor(Math.random() * 100000) + 1
       const role = String(profile?.role || '').trim().toLowerCase()
+      const pageNum = Number((profile as any)?.walkie_talkie_page || 0) || 0
 
       const { data, error: tokenError } = await supabase.functions.invoke('agora-walkie-token', {
         body: {
@@ -115,6 +116,7 @@ export function useStaffWalkieTalkie({
           userId: user?.id || 'anonymous',
           uid,
           role,
+          walkieTalkiePage: pageNum,
         },
       })
 

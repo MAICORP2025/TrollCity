@@ -286,12 +286,6 @@ export default function NavBubble() {
             requiresAuth: true,
           },
           {
-            label: 'Neighbors',
-            path: '/neighbors',
-            icon: Building2,
-            requiresAuth: true,
-          },
-          {
             label: 'Pool',
             path: '/pool',
             icon: Waves,

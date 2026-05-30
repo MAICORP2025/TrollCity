@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
-import { Layers, Clock, DollarSign, User, Calendar, ArrowRight } from 'lucide-react';
+import { Layers, Clock, DollarSign, User, Calendar, ArrowRight, Eye, X } from 'lucide-react';
+import { useAuthStore } from '../../lib/store';
+import { useNavigate } from 'react-router-dom';
 
 interface PayoutBatch {
   id: string;
@@ -27,6 +29,8 @@ interface PayoutRequest {
   user_tag?: string | null;
   forwarded_to_admin?: boolean;
   reviewed_by_assistant_username?: string | null;
+  id_verification_url?: string | null;
+  id_verification_uploaded_at?: string | null;
   requester: {
     username: string;
     display_name: string;
@@ -37,12 +41,16 @@ interface PayoutRequest {
 }
 
 const PayoutBatches = () => {
+  const navigate = useNavigate();
   const [batches, setBatches] = useState<PayoutBatch[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
   const [requests, setRequests] = useState<PayoutRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<PayoutRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const profile = useAuthStore((s) => s.profile);
+  const isAdminUser = Boolean(profile?.is_admin || profile?.role === 'admin' || profile?.is_superadmin);
 
   const fetchBatches = useCallback(async () => {
     setLoading(true);
@@ -154,13 +162,41 @@ const PayoutBatches = () => {
     }
   };
 
+  const openAndRunPayouts = async (batchId: string) => {
+    // Only allow admins to perform this action
+    if (!(profile?.is_admin || profile?.role === 'admin' || profile?.is_superadmin)) {
+      toast.error('Only admins can run live payouts');
+      return;
+    }
+
+    if (!window.confirm('This will OPEN the batch and immediately trigger live PayPal payouts. Continue?')) return;
+
+    try {
+      // mark batch as open first
+      const { error: updError } = await supabase
+        .from('payout_batches')
+        .update({ status: 'open' })
+        .eq('id', batchId);
+      if (updError) throw updError;
+
+      // small delay to ensure DB state consistency
+      await new Promise((r) => setTimeout(r, 600));
+
+      // then run the live payout
+      await processPayPalPayout(batchId);
+    } catch (err: any) {
+      console.error('Open & Run payouts error:', err);
+      toast.error(err?.message || 'Failed to open and run payouts');
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-white">Loading Payout Batches...</div>;
 
   return (
     <div className="p-6 max-w-7xl mx-auto text-white">
       <div className="flex items-center gap-3 mb-8">
         <Layers className="w-8 h-8 text-troll-green" />
-        <h1 className="text-3xl font-bold">Friday Payout Batches</h1>
+        <h1 className="text-3xl font-bold">Payout Batches</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -220,14 +256,16 @@ const PayoutBatches = () => {
                   </span>
                 </h2>
                 <div className="flex gap-2">
-                  {batches.find(b => b.id === selectedBatch)?.status === 'open' && (
-                    <button 
-                      onClick={() => processPayPalPayout(selectedBatch)}
+                  {isAdminUser && (
+                    <button
+                      onClick={() => openAndRunPayouts(selectedBatch!)}
                       disabled={processing}
-                      className="bg-troll-gold hover:bg-yellow-600 text-black px-4 py-1 rounded text-sm font-bold flex items-center gap-2"
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 rounded text-sm font-bold flex items-center gap-2"
                     >
                       <DollarSign className="w-4 h-4" />
-                      Send via PayPal API
+                      {batches.find(b => b.id === selectedBatch)?.status === 'open'
+                        ? 'Run Live PayPal Payouts'
+                        : 'Open & Run Payouts (Admin Live Test)'}
                     </button>
                   )}
                   <button 
@@ -259,6 +297,7 @@ const PayoutBatches = () => {
                         <th className="px-4 py-3">Cash</th>
                         <th className="px-4 py-3">Total</th>
                         <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Action</th>
                       </tr>
                     </thead>
                     <tbody className="text-sm">
@@ -316,15 +355,99 @@ const PayoutBatches = () => {
                           <td className="px-4 py-3">
                             <span className="text-[10px] font-bold uppercase text-gray-400">{req.status}</span>
                           </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedRequest(req);
+                              }}
+                              className="inline-flex items-center gap-2 rounded bg-purple-600 px-3 py-1 text-xs font-bold text-white hover:bg-purple-500 transition"
+                            >
+                              <Eye className="w-3 h-3" />
+                              Open
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {requests.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No requests in this batch</td>
+                          <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No requests in this batch</td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {selectedRequest && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+                  <div className="w-full max-w-3xl rounded-2xl border border-purple-700/50 bg-slate-950 text-white shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-purple-700/40 px-6 py-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-lg font-bold">
+                          <Eye className="w-5 h-5 text-purple-300" />
+                          Payout Request Details
+                        </div>
+                        <div className="text-sm text-slate-400">Request ID: {selectedRequest.id}</div>
+                      </div>
+                      <button
+                        onClick={() => setSelectedRequest(null)}
+                        className="rounded-full bg-white/5 p-2 text-slate-300 hover:bg-white/10"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-4 px-6 py-6">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-2xl bg-[#090A12] border border-purple-700/40 p-4">
+                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Requester</div>
+                          <div className="mt-2 text-white font-semibold">{selectedRequest.requester.display_name}</div>
+                          <div className="text-sm text-slate-400">@{selectedRequest.requester.username}</div>
+                          <div className="mt-3 text-xs text-slate-500">PayPal Email</div>
+                          <div className="text-sm text-slate-200 break-all">{selectedRequest.requester.payout_paypal_email || 'N/A'}</div>
+                        </div>
+                        <div className="rounded-2xl bg-[#090A12] border border-purple-700/40 p-4">
+                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Request Details</div>
+                          <div className="mt-2 text-sm text-slate-200">Coins: {selectedRequest.coin_amount.toLocaleString()}</div>
+                          <div className="text-sm text-slate-200">Cash: ${selectedRequest.cash_amount.toFixed(2)}</div>
+                          <div className="text-sm text-slate-200">Bonus: ${selectedRequest.bonus_amount.toFixed(2)}</div>
+                          <div className="text-sm text-slate-200">Status: {selectedRequest.status}</div>
+                          <div className="text-sm text-slate-200">Provider: {selectedRequest.provider_type ? `${selectedRequest.provider_type} / ${selectedRequest.provider_username}` : 'PayPal'}</div>
+                          <div className="text-sm text-slate-200">
+                            ID Verification: {selectedRequest.id_verification_url ? (
+                              <div className="space-y-1">
+                                <a href={selectedRequest.id_verification_url} target="_blank" rel="noopener noreferrer" className="text-troll-green-neon hover:underline">
+                                  View uploaded ID
+                                </a>
+                                {selectedRequest.id_verification_uploaded_at && (
+                                  <div className="text-xs text-slate-500">
+                                    Uploaded {new Date(selectedRequest.id_verification_uploaded_at).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </div>
+                            ) : 'Not uploaded'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-[#090A12] border border-purple-700/40 p-4">
+                        <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Additional</div>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                          <div className="rounded-2xl bg-slate-900/80 p-3">
+                            <div className="text-xs uppercase text-slate-500">User Tag</div>
+                            <div className="text-sm text-white">{selectedRequest.user_tag || '—'}</div>
+                          </div>
+                          <div className="rounded-2xl bg-slate-900/80 p-3">
+                            <div className="text-xs uppercase text-slate-500">Forwarded</div>
+                            <div className="text-sm text-white">{selectedRequest.forwarded_to_admin ? 'Yes' : 'No'}</div>
+                          </div>
+                          <div className="rounded-2xl bg-slate-900/80 p-3">
+                            <div className="text-xs uppercase text-slate-500">Created</div>
+                            <div className="text-sm text-white">{new Date(selectedRequest.created_at).toLocaleString()}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

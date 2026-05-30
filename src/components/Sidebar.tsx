@@ -10,8 +10,11 @@ import {
    Calendar,
    ChevronLeft,
    ChevronRight,
+   Church,
    Coins,
    Crown,
+   Database,
+   DollarSign,
    FileText,
    Gamepad2,
    Gavel,
@@ -26,8 +29,10 @@ import {
    MessageSquare,
    Newspaper,
    Package,
+   Phone,
    Radio,
    Scale,
+   Settings,
    Shield,
    ShoppingBag,
    Shuffle,
@@ -39,6 +44,7 @@ import {
    Video,
    Warehouse,
    Waves,
+   Zap,
  } from 'lucide-react'
 
 import CourtEntryModal from './CourtEntryModal'
@@ -132,6 +138,7 @@ export default function Sidebar() {
   const { isCollapsed, setCollapsed, expandGroup } = useSidebarStore()
   const isSidebarCollapsed = isCollapsed
   const setIsSidebarCollapsed = setCollapsed
+  const [sidebarView, setSidebarView] = useState<'main' | 'adminPages'>('main')
   const { isJailed } = useJailMode(profile?.id)
   const { isLocked: isBroadcastLockedDown } = useBroadcastLockdown()
 
@@ -144,6 +151,10 @@ export default function Sidebar() {
     role === 'attorney' ||
     trollRole === 'attorney'
   )
+
+  const isActivePath = (path: string, startsWith = false) => {
+    return startsWith ? location.pathname.startsWith(path) : location.pathname === path
+  }
 
   const canSeeAuctionStudio = Boolean(
     isApprovedAuctioneer ||
@@ -173,6 +184,17 @@ export default function Sidebar() {
   const isCEOAssistant = role === 'ceo_assistant' || trollRole === 'ceo_assistant' || (profile as any)?.is_ceo_assistant
   const isNoahAssistant = role === 'noah_assistant' || trollRole === 'noah_assistant' || (profile as any)?.is_noah_assistant
   const isNoahAdmin = role === 'noah_admin' || trollRole === 'noah_admin' || (profile as any)?.is_noah_admin
+
+  const showAdminPagesTab = Boolean(
+    isAdmin ||
+    isCEOAssistant ||
+    isNoahAssistant ||
+    canSeeSecretary ||
+    canSeeOfficer ||
+    canSeeProsecutorDashboard ||
+    profile?.role === UserRole.PRESIDENT ||
+    (profile as any)?.is_pastor
+  )
 
   const canSeeAgencyHRDashboard = Boolean(
     role === String(UserRole.AGENCY_HR_MANAGER) ||
@@ -481,209 +503,317 @@ export default function Sidebar() {
       )}
 
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 pb-6 overscroll-contain custom-scrollbar">
-    {jailedLocked ? (
-  <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
-    {!isSidebarCollapsed && (
-      <div className="col-span-2 space-y-4 rounded-2xl border border-red-500/25 bg-red-950/20 px-3 py-6 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-red-500/25 bg-red-500/10">
-          <Lock className="text-red-400" size={32} />
-        </div>
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-red-400">Access Restricted</p>
-          <p className="mt-1 text-[10px] text-gray-400">City services suspended while incarcerated.</p>
-        </div>
-      </div>
-    )}
-    {isBackgroundJailed && (
-      <GridItem collapsed={isSidebarCollapsed} icon={AlertTriangle} label="Appeal" to="/jail/appeal?active=false" active={isActive('/jail/appeal')} className="text-orange-300" tone="orange" />
-    )}
-    <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} tone="blue" />
-  </div>
-) : (
-          <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
-            <div className={isSidebarCollapsed ? 'col-span-1 mb-2' : 'col-span-2 mb-2'}>
-              {canBroadcast() ? (
-                <SafeLink
-                  to="/broadcast/setup"
-                  className={cx(
-                    'relative flex w-full items-center justify-center overflow-hidden rounded-2xl border border-cyan-200/35 bg-gradient-to-r from-purple-700 via-cyan-500 to-pink-600 font-black text-white shadow-[0_0_22px_rgba(45,212,191,0.30)] transition-all duration-300 hover:scale-[1.02] hover:from-purple-600 hover:via-cyan-400 hover:to-pink-500',
-                    isSidebarCollapsed ? 'h-14 p-3' : 'gap-3 p-3.5'
-                  )}
-                  title="Go Live"
-                >
-                  <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.28),transparent)] opacity-50" />
-                  <Video size={isSidebarCollapsed ? 22 : 20} className="relative z-10 text-white" />
-                  {!isSidebarCollapsed && (
-                    <div className="relative z-10 text-left leading-tight">
-                      <div className="text-sm uppercase tracking-wide">Go Live</div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/75">Start Broadcast</div>
-                    </div>
-                  )}
-                </SafeLink>
-              ) : (
-                <div
-                  className={cx(
-                    'flex w-full items-center justify-center rounded-2xl border border-white/10 bg-slate-800/55 font-black text-slate-400',
-                    isSidebarCollapsed ? 'h-14 p-3' : 'gap-3 p-3.5'
-                  )}
-                  title={isBroadcastLockedDown ? 'Broadcast locked down' : 'Broadcaster access required'}
-                >
-                  <Video size={isSidebarCollapsed ? 22 : 20} className="text-slate-500" />
-                  {!isSidebarCollapsed && (
-                    <div className="text-left leading-tight">
-                      <div className="text-sm uppercase tracking-wide">Go Live</div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                        {isBroadcastLockedDown ? 'Locked' : 'Broadcaster Only'}
-                      </div>
-                    </div>
-                  )}
+        {!isSidebarCollapsed && showAdminPagesTab && (
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setSidebarView('main')}
+              className={cx(
+                'rounded-2xl border px-3 py-2 text-sm font-semibold transition',
+                sidebarView === 'main'
+                  ? 'border-cyan-300 bg-slate-900 text-white'
+                  : 'border-white/10 bg-slate-950/70 text-slate-400 hover:border-white/20 hover:text-white'
+              )}
+            >
+              Main
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarView('adminPages')}
+              className={cx(
+                'rounded-2xl border px-3 py-2 text-sm font-semibold transition',
+                sidebarView === 'adminPages'
+                  ? 'border-cyan-300 bg-slate-900 text-white'
+                  : 'border-white/10 bg-slate-950/70 text-slate-400 hover:border-white/20 hover:text-white'
+              )}
+            >
+              All Pages
+            </button>
+          </div>
+        )}
+
+        {sidebarView === 'main' ? (
+          jailedLocked ? (
+            <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
+              {!isSidebarCollapsed && (
+                <div className="col-span-2 space-y-4 rounded-2xl border border-red-500/25 bg-red-950/20 px-3 py-6 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-red-500/25 bg-red-500/10">
+                    <Lock className="text-red-400" size={32} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-red-400">Access Restricted</p>
+                    <p className="mt-1 text-[10px] text-gray-400">City services suspended while incarcerated.</p>
+                  </div>
                 </div>
               )}
+              {isBackgroundJailed && (
+                <GridItem collapsed={isSidebarCollapsed} icon={AlertTriangle} label="Appeal" to="/jail/appeal?active=false" active={isActive('/jail/appeal')} className="text-orange-300" tone="orange" />
+              )}
+              <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} tone="blue" />
             </div>
+          ) : (
+            <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
+              <div className={isSidebarCollapsed ? 'col-span-1 mb-2' : 'col-span-2 mb-2'}>
+                {canBroadcast() ? (
+                  <SafeLink
+                    to="/broadcast/setup"
+                    className={cx(
+                      'relative flex w-full items-center justify-center overflow-hidden rounded-2xl border border-cyan-200/35 bg-gradient-to-r from-purple-700 via-cyan-500 to-pink-600 font-black text-white shadow-[0_0_22px_rgba(45,212,191,0.30)] transition-all duration-300 hover:scale-[1.02] hover:from-purple-600 hover:via-cyan-400 hover:to-pink-500',
+                      isSidebarCollapsed ? 'h-14 p-3' : 'gap-3 p-3.5'
+                    )}
+                    title="Go Live"
+                  >
+                    <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.28),transparent)] opacity-50" />
+                    <Video size={isSidebarCollapsed ? 22 : 20} className="relative z-10 text-white" />
+                    {!isSidebarCollapsed && (
+                      <div className="relative z-10 text-left leading-tight">
+                        <div className="text-sm uppercase tracking-wide">Go Live</div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/75">Start Broadcast</div>
+                      </div>
+                    )}
+                  </SafeLink>
+                ) : (
+                  <div
+                    className={cx(
+                      'flex w-full items-center justify-center rounded-2xl border border-white/10 bg-slate-800/55 font-black text-slate-400',
+                      isSidebarCollapsed ? 'h-14 p-3' : 'gap-3 p-3.5'
+                    )}
+                    title={isBroadcastLockedDown ? 'Broadcast locked down' : 'Broadcaster access required'}
+                  >
+                    <Video size={isSidebarCollapsed ? 22 : 20} className="text-slate-500" />
+                    {!isSidebarCollapsed && (
+                      <div className="text-left leading-tight">
+                        <div className="text-sm uppercase tracking-wide">Go Live</div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                          {isBroadcastLockedDown ? 'Locked' : 'Broadcaster Only'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            <SectionTitle title="City Core" collapsed={isSidebarCollapsed} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Home} label="Home" to="/home" active={isActive('/home')} highlight={isUpdated('/home')} onClick={() => markAsViewed('/home')} tone="purple" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Buy Coins" to="/store" active={isActive('/store')} highlight={isUpdated('/store')} onClick={() => markAsViewed('/store')} tone="green" glow="green" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Live Auctions" to="/auctions" active={isActive('/auctions')} highlight={isUpdated('/auctions')} onClick={() => markAsViewed('/auctions')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} highlight={isUpdated('/troll-court')} onClick={() => markAsViewed('/troll-court')} tone="purple" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighbors" to="/neighbors" active={isActive('/neighbors')} highlight={isUpdated('/neighbors')} onClick={() => markAsViewed('/neighbors')} className="text-blue-400" tone="blue" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighborhood" to="/neighborhood-setup" active={isActive('/neighborhood-setup')} highlight={isUpdated('/neighborhood-setup')} onClick={() => markAsViewed('/neighborhood-setup')} className="text-cyan-400" tone="cyan" />
-            <GridItem collapsed={isSidebarCollapsed} icon={MessageSquare} label="TCPS" to="/tcps" active={isActive('/tcps') || isActive('/messages')} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} tone="cyan" />
+              <SectionTitle title="City Core" collapsed={isSidebarCollapsed} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Home} label="Home" to="/home" active={isActive('/home')} highlight={isUpdated('/home')} onClick={() => markAsViewed('/home')} tone="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Buy Coins" to="/store" active={isActive('/store')} highlight={isUpdated('/store')} onClick={() => markAsViewed('/store')} tone="green" glow="green" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Live Auctions" to="/auctions" active={isActive('/auctions')} highlight={isUpdated('/auctions')} onClick={() => markAsViewed('/auctions')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} highlight={isUpdated('/troll-court')} onClick={() => markAsViewed('/troll-court')} tone="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighborhood" to="/neighborhood-setup" active={isActive('/neighborhood-setup')} highlight={isUpdated('/neighborhood-setup')} onClick={() => markAsViewed('/neighborhood-setup')} className="text-cyan-400" tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={MessageSquare} label="TCPS" to="/tcps" active={isActive('/tcps') || isActive('/messages')} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} tone="cyan" />
 
-            <SectionTitle title="City Services" collapsed={isSidebarCollapsed} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Advertise" to="/city-registry/advertise" active={isActive('/city-registry/advertise')} highlight={isUpdated('/city-registry/advertise')} onClick={() => markAsViewed('/city-registry/advertise')} tone="pink" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Appeals" to="/city-registry" active={isActive('/city-registry')} highlight={isUpdated('/city-registry')} onClick={() => markAsViewed('/city-registry')} tone="purple" />
-            {((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin || role === 'superadmin' || (profile as any)?.is_superadmin) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Newspaper} label="TCNN" to="/tcnn/dashboard" active={location.pathname.startsWith('/tcnn/dashboard')} highlight={isUpdated('/tcnn/dashboard')} onClick={() => markAsViewed('/tcnn/dashboard')} className="text-blue-400" tone="blue" />
-            )}
-            {canSeeAttorneyDashboard && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Attorney" to="/attorney" active={isActive('/attorney')} highlight={isUpdated('/attorney')} onClick={() => markAsViewed('/attorney')} className="text-cyan-200" tone="cyan" />
-            )}
-{canSeeAuctionStudio && (
-  <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Auction Studio" to="/auctions/studio" active={location.pathname.startsWith('/auctions/studio')} highlight={isUpdated('/auctions/studio')} onClick={() => markAsViewed('/auctions/studio')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
-)}
-            <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Credit" to="/credit-scores" active={isActive('/credit-scores')} highlight={isUpdated('/credit-scores')} onClick={() => markAsViewed('/credit-scores')} tone="green" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Shuffle} label="Creator" to="/creator-switch" active={isActive('/creator-switch')} highlight={isUpdated('/creator-switch')} onClick={() => markAsViewed('/creator-switch')} tone="purple" />
-             {canSeeCourt && (
-               <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Dockets" to="/admin/court-dockets" active={location.pathname.startsWith('/admin/court-dockets')} highlight={isUpdated('/admin/court-dockets')} onClick={() => markAsViewed('/admin/court-dockets')} className="text-pink-300" tone="pink" />
-             )}
+              <SectionTitle title="City Services" collapsed={isSidebarCollapsed} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Advertise" to="/city-registry/advertise" active={isActive('/city-registry/advertise')} highlight={isUpdated('/city-registry/advertise')} onClick={() => markAsViewed('/city-registry/advertise')} tone="pink" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Appeals" to="/city-registry" active={isActive('/city-registry')} highlight={isUpdated('/city-registry')} onClick={() => markAsViewed('/city-registry')} tone="purple" />
+              {((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin || role === 'superadmin' || (profile as any)?.is_superadmin) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Newspaper} label="TCNN" to="/tcnn/dashboard" active={location.pathname.startsWith('/tcnn/dashboard')} highlight={isUpdated('/tcnn/dashboard')} onClick={() => markAsViewed('/tcnn/dashboard')} className="text-blue-400" tone="blue" />
+              )}
+              {canSeeAttorneyDashboard && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Attorney" to="/attorney" active={isActive('/attorney')} highlight={isUpdated('/attorney')} onClick={() => markAsViewed('/attorney')} className="text-cyan-200" tone="cyan" />
+              )}
+              {canSeeAuctionStudio && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Auction Studio" to="/auctions/studio" active={location.pathname.startsWith('/auctions/studio')} highlight={isUpdated('/auctions/studio')} onClick={() => markAsViewed('/auctions/studio')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
+              )}
+              <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Credit" to="/credit-scores" active={isActive('/credit-scores')} highlight={isUpdated('/credit-scores')} onClick={() => markAsViewed('/credit-scores')} tone="green" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Shuffle} label="Creator" to="/creator-switch" active={isActive('/creator-switch')} highlight={isUpdated('/creator-switch')} onClick={() => markAsViewed('/creator-switch')} tone="purple" />
+              {canSeeCourt && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Dockets" to="/admin/court-dockets" active={location.pathname.startsWith('/admin/court-dockets')} highlight={isUpdated('/admin/court-dockets')} onClick={() => markAsViewed('/admin/court-dockets')} className="text-pink-300" tone="pink" />
+              )}
 
-<SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
+              <SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
               <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Podcast" to="/podcast" active={isActive('/podcast')} highlight={isUpdated('/podcast')} onClick={() => markAsViewed('/podcast')} className="text-purple-400" tone="purple" glow="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Insurance" to="/insurance" active={isActive('/insurance')} highlight={isUpdated('/insurance')} onClick={() => markAsViewed('/insurance')} className="text-cyan-300" tone="cyan" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} tone="purple" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Troll Family" to="/family/browse" active={isActive('/family/browse')} highlight={isUpdated('/family/browse')} onClick={() => markAsViewed('/family/browse')} className="text-pink-400" tone="pink" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="My Families" to={isFamilyMember ? "/family/home" : "/family/browse"} active={isActive('/family/home') || isActive('/family/browse')} highlight={isUpdated('/family/home')} onClick={() => markAsViewed('/family/home')} className="text-purple-400" tone="purple" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} highlight={isUpdated('/leaderboard')} onClick={() => markAsViewed('/leaderboard')} tone="purple" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Warehouse} label="Living" to="/living" active={isActive('/living')} highlight={isUpdated('/living')} onClick={() => markAsViewed('/living')} tone="cyan" />
-            {canAccessMaiClass && (
-              <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Mai Class" to="/mai-class" active={isActive('/mai-class')} highlight={isUpdated('/mai-class')} onClick={() => markAsViewed('/mai-class')} className="text-green-400" glow="green" tone="green" />
-            )}
-             <GridItem collapsed={isSidebarCollapsed} icon={Star} label="Mai Talent" to="/mai-talent" active={isActive('/mai-talent')} highlight={isUpdated('/mai-talent')} onClick={() => markAsViewed('/mai-talent')} className="text-pink-400" tone="pink" glow="pink" underConstruction={!isAdmin} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} highlight={isUpdated('/marketplace')} onClick={() => markAsViewed('/marketplace')} tone="purple" />
-            {canSeeAuctionStudio && (
-              <GridItem collapsed={isSidebarCollapsed} icon={List} label="My Shows" to="/auctions/my-shows" active={location.pathname.startsWith('/auctions/my-shows')} highlight={isUpdated('/auctions/my-shows')} onClick={() => markAsViewed('/auctions/my-shows')} className="text-green-400" tone="green" />
-            )}
-            <GridItem collapsed={isSidebarCollapsed} icon={Waves} label="Pool" to="/pool" active={isActive('/pool')} highlight={isUpdated('/pool')} onClick={() => markAsViewed('/pool')} className="text-cyan-400" tone="cyan" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} tone="green" />
-            <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Troll Church" to="/church" active={isActive('/church')} highlight={isUpdated('/church')} onClick={() => markAsViewed('/church')} tone="purple" />
-            <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
-            <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} tone="green" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} highlight={isUpdated('/troll-wheel')} onClick={() => markAsViewed('/troll-wheel')} className="text-cyan-300" tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} tone="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Troll Family" to="/family/browse" active={isActive('/family/browse')} highlight={isUpdated('/family/browse')} onClick={() => markAsViewed('/family/browse')} className="text-pink-400" tone="pink" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="My Families" to={isFamilyMember ? "/family/home" : "/family/browse"} active={isActive('/family/home') || isActive('/family/browse')} highlight={isUpdated('/family/home')} onClick={() => markAsViewed('/family/home')} className="text-purple-400" tone="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} highlight={isUpdated('/leaderboard')} onClick={() => markAsViewed('/leaderboard')} tone="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Warehouse} label="Living" to="/living" active={isActive('/living')} highlight={isUpdated('/living')} onClick={() => markAsViewed('/living')} tone="cyan" />
+              {canAccessMaiClass && (
+                <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Mai Class" to="/mai-class" active={isActive('/mai-class')} highlight={isUpdated('/mai-class')} onClick={() => markAsViewed('/mai-class')} className="text-green-400" glow="green" tone="green" />
+              )}
+              <GridItem collapsed={isSidebarCollapsed} icon={Star} label="Mai Talent" to="/mai-talent" active={isActive('/mai-talent')} highlight={isUpdated('/mai-talent')} onClick={() => markAsViewed('/mai-talent')} className="text-pink-400" tone="pink" glow="pink" underConstruction={!isAdmin} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} highlight={isUpdated('/marketplace')} onClick={() => markAsViewed('/marketplace')} tone="purple" />
+              {canSeeAuctionStudio && (
+                <GridItem collapsed={isSidebarCollapsed} icon={List} label="My Shows" to="/auctions/my-shows" active={location.pathname.startsWith('/auctions/my-shows')} highlight={isUpdated('/auctions/my-shows')} onClick={() => markAsViewed('/auctions/my-shows')} className="text-green-400" tone="green" />
+              )}
+              <GridItem collapsed={isSidebarCollapsed} icon={Waves} label="Pool" to="/pool" active={isActive('/pool')} highlight={isUpdated('/pool')} onClick={() => markAsViewed('/pool')} className="text-cyan-400" tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} highlight={isUpdated('/safety')} onClick={() => markAsViewed('/safety')} tone="green" />
+              <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Troll Church" to="/church" active={isActive('/church')} highlight={isUpdated('/church')} onClick={() => markAsViewed('/church')} tone="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Trollified" to="/trollifieds" active={isActive('/trollifieds')} highlight={isUpdated('/trollifieds')} onClick={() => markAsViewed('/trollifieds')} className="text-green-400" tone="green" underConstruction={!isAdmin} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Wallet" to="/wallet" active={isActive('/wallet')} highlight={isUpdated('/wallet')} onClick={() => markAsViewed('/wallet')} tone="green" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} highlight={isUpdated('/troll-wheel')} onClick={() => markAsViewed('/troll-wheel')} className="text-cyan-300" tone="cyan" />
 
-            <SectionTitle title="Control Room" collapsed={isSidebarCollapsed} />
-            {(canSeeOfficer || canSeeSecretary || profile?.role === UserRole.PRESIDENT || profile?.troll_role === UserRole.PRESIDENT || isAdmin) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Landmark} label="Government" to="/government" active={location.pathname === '/government'} highlight={isUpdated('/government')} onClick={() => markAsViewed('/government')} className="text-cyan-300" tone="cyan" />
-            )}
-            {canSeeInmates && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Inmates" to="/inmates" active={isActive('/inmates')} highlight={isUpdated('/inmates')} onClick={() => markAsViewed('/inmates')} className="text-red-300" tone="red" />
-            )}
-            {canAccessOrgDashboard && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Organization" to="/organization/dashboard" active={isActive('/organization/dashboard')} highlight={isUpdated('/organization/dashboard')} onClick={() => markAsViewed('/organization/dashboard')} className="text-purple-400" tone="purple" />
-            )}
-            <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="President" to="/president" active={isActive('/president')} highlight={isUpdated('/president')} onClick={() => markAsViewed('/president')} tone="purple" />
-            {(canSeeOfficer || canSeeSecretary || isAdmin) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Streams" to="/government/streams" active={location.pathname.startsWith('/government/streams')} highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')} className="text-red-400" tone="red" />
-            )}
-            {(isAdmin || profile?.role === UserRole.PRESIDENT || profile?.troll_role === UserRole.PRESIDENT) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Treasury" to="/president/treasury" active={isActive('/president/treasury')} highlight={isUpdated('/president/treasury')} onClick={() => markAsViewed('/president/treasury')} className="text-emerald-300" tone="green" />
-            )}
-            {(canSeeSecretary || isAdmin) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} className="text-cyan-200" tone="cyan" />
-            )}
-{isAdmin && (
-  <>
-    <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Coin Purchase Ledger" to="/admin/coinpurchase-ledger" active={location.pathname.startsWith('/admin/coinpurchase-ledger')} highlight={isUpdated('/admin/coinpurchase-ledger')} onClick={() => markAsViewed('/admin/coinpurchase-ledger')} className="text-cyan-300" tone="cyan" />
-    <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Startup Expense Tracker" to="/admin/startup-expense-tracker" active={location.pathname.startsWith('/admin/startup-expense-tracker')} highlight={isUpdated('/admin/startup-expense-tracker')} onClick={() => markAsViewed('/admin/startup-expense-tracker')} className="text-cyan-300" tone="cyan" />
-    <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Security Command" to="/admin/security-command-center" active={location.pathname.startsWith('/admin/security-command-center')} highlight={isUpdated('/admin/security-command-center')} onClick={() => markAsViewed('/admin/security-command-center')} className="text-cyan-300" tone="cyan" />
-  </>
-)}
-{canAccessNightWatch && (
-  <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Night Watch" to="/admin/night-watch" active={isActive('/admin/night-watch')} highlight={isUpdated('/admin/night-watch')} onClick={() => markAsViewed('/admin/night-watch')} className="text-cyan-300" tone="cyan" />
-)}
+              <SectionTitle title="Control Room" collapsed={isSidebarCollapsed} />
+              {(canSeeOfficer || canSeeSecretary || profile?.role === UserRole.PRESIDENT || profile?.troll_role === UserRole.PRESIDENT || isAdmin) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Landmark} label="Government" to="/government" active={location.pathname === '/government'} highlight={isUpdated('/government')} onClick={() => markAsViewed('/government')} className="text-cyan-300" tone="cyan" />
+              )}
+              {canSeeInmates && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Inmates" to="/inmates" active={isActive('/inmates')} highlight={isUpdated('/inmates')} onClick={() => markAsViewed('/inmates')} className="text-red-300" tone="red" />
+              )}
+              {canAccessOrgDashboard && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Organization" to="/organization/dashboard" active={isActive('/organization/dashboard')} highlight={isUpdated('/organization/dashboard')} onClick={() => markAsViewed('/organization/dashboard')} className="text-purple-400" tone="purple" />
+              )}
+              <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="President" to="/president" active={isActive('/president')} highlight={isUpdated('/president')} onClick={() => markAsViewed('/president')} tone="purple" />
+              {(canSeeOfficer || canSeeSecretary || isAdmin) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Streams" to="/government/streams" active={location.pathname.startsWith('/government/streams')} highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')} className="text-red-400" tone="red" />
+              )}
+              {(isAdmin || profile?.role === UserRole.PRESIDENT || profile?.troll_role === UserRole.PRESIDENT) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Treasury" to="/president/treasury" active={isActive('/president/treasury')} highlight={isUpdated('/president/treasury')} onClick={() => markAsViewed('/president/treasury')} className="text-emerald-300" tone="green" />
+              )}
+              {(canSeeSecretary || isAdmin) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} className="text-cyan-200" tone="cyan" />
+              )}
+              {isAdmin && (
+                <>
+                  <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Coin Purchase Ledger" to="/admin/coinpurchase-ledger" active={location.pathname.startsWith('/admin/coinpurchase-ledger')} highlight={isUpdated('/admin/coinpurchase-ledger')} onClick={() => markAsViewed('/admin/coinpurchase-ledger')} className="text-cyan-300" tone="cyan" />
+                  <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Startup Expense Tracker" to="/admin/startup-expense-tracker" active={location.pathname.startsWith('/admin/startup-expense-tracker')} highlight={isUpdated('/admin/startup-expense-tracker')} onClick={() => markAsViewed('/admin/startup-expense-tracker')} className="text-cyan-300" tone="cyan" />
+                  <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Security Command" to="/admin/security-command-center" active={location.pathname.startsWith('/admin/security-command-center')} highlight={isUpdated('/admin/security-command-center')} onClick={() => markAsViewed('/admin/security-command-center')} className="text-cyan-300" tone="cyan" />
+                </>
+              )}
+              {canAccessNightWatch && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Night Watch" to="/admin/night-watch" active={isActive('/admin/night-watch')} highlight={isUpdated('/admin/night-watch')} onClick={() => markAsViewed('/admin/night-watch')} className="text-cyan-300" tone="cyan" />
+              )}
 
-             {/* 📧 Tromail - Internal Role Email for approved roles */}
-             {canAccessTromail && canAccessTromail(profile) && (
-               <GridItem collapsed={isSidebarCollapsed} icon={Mail} label="Tromail" to="/tromail" active={isActive('/tromail')} highlight={isUpdated('/tromail')} onClick={() => markAsViewed('/tromail')} className="text-cyan-300" tone="cyan" />
-             )}
+              {/* 📧 Tromail - Internal Role Email for approved roles */}
+              {canAccessTromail && canAccessTromail(profile) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Mail} label="Tromail" to="/tromail" active={isActive('/tromail')} highlight={isUpdated('/tromail')} onClick={() => markAsViewed('/tromail')} className="text-cyan-300" tone="cyan" />
+              )}
 
-<SectionTitle title="Talent Offices" collapsed={isSidebarCollapsed} />
-             <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
-             <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Careers" to="/career" active={isActive('/career')} highlight={isUpdated('/career')} onClick={() => markAsViewed('/career')} className="text-purple-400" tone="purple" />
-             {canSeeAttorneyDashboard && (
-               <GridItem
-                 collapsed={isSidebarCollapsed}
-                 icon={Briefcase}
-                 label="Attorney"
-                 to="/attorney"
-                 active={isActive('/attorney')}
-                 highlight={isUpdated('/attorney')}
-                 onClick={() => markAsViewed('/attorney')}
-                 className="text-teal-300"
-                 tone="teal"
-               />
-             )}
-             {canSeeAuctionStudio && (
-               <GridItem
-                 collapsed={isSidebarCollapsed}
-                 icon={Gavel}
-                 label="Auction Studio"
-                 to="/auctions/studio"
-                 active={isActive('/auctions/studio')}
-                 highlight={isUpdated('/auctions/studio')}
-                 onClick={() => markAsViewed('/auctions/studio')}
-                 className="text-orange-300"
-                 tone="orange"
-               />
-             )}
-             {canSeeAgencyHRDashboard && (
-              <GridItem
-                collapsed={isSidebarCollapsed}
-                icon={Briefcase}
-                label="Agency HR"
-                to="/agency-hr-dashboard"
-                active={isActive('/agency-hr-dashboard')}
-                highlight={isUpdated('/agency-hr-dashboard')}
-                onClick={() => markAsViewed('/agency-hr-dashboard')}
-                className="text-cyan-200"
-                tone="cyan"
-               />
-             )}
+              <SectionTitle title="Talent Offices" collapsed={isSidebarCollapsed} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Careers" to="/career" active={isActive('/career')} highlight={isUpdated('/career')} onClick={() => markAsViewed('/career')} className="text-purple-400" tone="purple" />
+              {canSeeAttorneyDashboard && (
+                <GridItem
+                  collapsed={isSidebarCollapsed}
+                  icon={Briefcase}
+                  label="Attorney"
+                  to="/attorney"
+                  active={isActive('/attorney')}
+                  highlight={isUpdated('/attorney')}
+                  onClick={() => markAsViewed('/attorney')}
+                  className="text-teal-300"
+                  tone="teal"
+                />
+              )}
+              {canSeeAuctionStudio && (
+                <GridItem
+                  collapsed={isSidebarCollapsed}
+                  icon={Gavel}
+                  label="Auction Studio"
+                  to="/auctions/studio"
+                  active={isActive('/auctions/studio')}
+                  highlight={isUpdated('/auctions/studio')}
+                  onClick={() => markAsViewed('/auctions/studio')}
+                  className="text-orange-300"
+                  tone="orange"
+                />
+              )}
+              {canSeeAgencyHRDashboard && (
+                <GridItem
+                  collapsed={isSidebarCollapsed}
+                  icon={Briefcase}
+                  label="Agency HR"
+                  to="/agency-hr-dashboard"
+                  active={isActive('/agency-hr-dashboard')}
+                  highlight={isUpdated('/agency-hr-dashboard')}
+                  onClick={() => markAsViewed('/agency-hr-dashboard')}
+                  className="text-cyan-200"
+                  tone="cyan"
+                />
+              )}
 
-            <SectionTitle title="Support" collapsed={isSidebarCollapsed} />
-            <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} tone="blue" />
-            
-            <SectionTitle title="Dashboards" collapsed={isSidebarCollapsed} />
-            {(isCEOAssistant || isAdmin || isCEO) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="CEO Assistant Dashboard" to="/ceo-assistant-dashboard" active={isActive('/ceo-assistant-dashboard')} highlight={isUpdated('/ceo-assistant-dashboard')} onClick={() => markAsViewed('/ceo-assistant-dashboard')} tone="cyan" />
-            )}
-            {(isNoahAssistant || isAdmin || isNoahAdmin || isCEO) && (
-              <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Noah Assistant Dashboard" to="/noah-assistant-dashboard" active={isActive('/noah-assistant-dashboard')} highlight={isUpdated('/noah-assistant-dashboard')} onClick={() => markAsViewed('/noah-assistant-dashboard')} tone="purple" />
-            )}
-            {canSeeProsecutorDashboard && (
-              <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Prosecutor Dashboard" to="/prosecutor" active={isActive('/prosecutor')} highlight={isUpdated('/prosecutor')} onClick={() => markAsViewed('/prosecutor')} className="text-red-400" tone="red" />
-            )}
+              <SectionTitle title="Support" collapsed={isSidebarCollapsed} />
+              <GridItem collapsed={isSidebarCollapsed} icon={LifeBuoy} label="Support" to="/support" active={isActive('/support')} highlight={isUpdated('/support')} onClick={() => markAsViewed('/support')} tone="blue" />
+
+              <SectionTitle title="Dashboards" collapsed={isSidebarCollapsed} />
+              {(isCEOAssistant || isAdmin || isCEO) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="CEO Assistant Dashboard" to="/ceo-assistant-dashboard" active={isActive('/ceo-assistant-dashboard')} highlight={isUpdated('/ceo-assistant-dashboard')} onClick={() => markAsViewed('/ceo-assistant-dashboard')} tone="cyan" />
+              )}
+              {(isNoahAssistant || isAdmin || isNoahAdmin || isCEO) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Noah Assistant Dashboard" to="/noah-assistant-dashboard" active={isActive('/noah-assistant-dashboard')} highlight={isUpdated('/noah-assistant-dashboard')} onClick={() => markAsViewed('/noah-assistant-dashboard')} tone="purple" />
+              )}
+              {canSeeProsecutorDashboard && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Prosecutor Dashboard" to="/prosecutor" active={isActive('/prosecutor')} highlight={isUpdated('/prosecutor')} onClick={() => markAsViewed('/prosecutor')} className="text-red-400" tone="red" />
+              )}
+              {(profile?.is_pastor || role === 'pastor' || trollRole === 'pastor' || isAdmin) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Church} label="Pastor Dashboard" to="/church/pastor" active={isActive('/church/pastor')} highlight={isUpdated('/church/pastor')} onClick={() => markAsViewed('/church/pastor')} className="text-green-400" tone="green" />
+              )}
+            </div>
+          )
+        ) : (
+          <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
+            <SectionTitle title="Admin Library" collapsed={isSidebarCollapsed} />
+            <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Admin Dashboard" to="/admin" active={isActive('/admin')} highlight={isUpdated('/admin')} onClick={() => markAsViewed('/admin')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Admin Marketplace" to="/admin/marketplace" active={isActive('/admin/marketplace')} highlight={isUpdated('/admin/marketplace')} onClick={() => markAsViewed('/admin/marketplace')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Admin Earnings" to="/admin/earnings" active={isActive('/admin/earnings')} highlight={isUpdated('/admin/earnings')} onClick={() => markAsViewed('/admin/earnings')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Admin Finance" to="/admin/finance" active={isActive('/admin/finance')} highlight={isUpdated('/admin/finance')} onClick={() => markAsViewed('/admin/finance')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={DollarSign} label="Payments Dashboard" to="/admin/payments" active={isActive('/admin/payments')} highlight={isUpdated('/admin/payments')} onClick={() => markAsViewed('/admin/payments')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Economy Dashboard" to="/admin/economy" active={isActive('/admin/economy')} highlight={isUpdated('/admin/economy')} onClick={() => markAsViewed('/admin/economy')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Tax Review Panel" to="/admin/tax-reviews" active={isActive('/admin/tax-reviews')} highlight={isUpdated('/admin/tax-reviews')} onClick={() => markAsViewed('/admin/tax-reviews')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Tax Upload" to="/tax/upload" active={isActive('/tax/upload')} highlight={isUpdated('/tax/upload')} onClick={() => markAsViewed('/tax/upload')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={DollarSign} label="Payouts" to="/admin/payouts" active={isActive('/admin/payouts')} highlight={isUpdated('/admin/payouts')} onClick={() => markAsViewed('/admin/payouts')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Referral Bonuses" to="/admin/referrals" active={isActive('/admin/referrals')} highlight={isUpdated('/admin/referrals')} onClick={() => markAsViewed('/admin/referrals')} tone="pink" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Verified Users" to="/admin/verified-users" active={isActive('/admin/verified-users')} highlight={isUpdated('/admin/verified-users')} onClick={() => markAsViewed('/admin/verified-users')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Verification Review" to="/admin/verification" active={isActive('/admin/verification')} highlight={isUpdated('/admin/verification')} onClick={() => markAsViewed('/admin/verification')} tone="blue" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Applications" to="/admin/applications" active={isActive('/admin/applications')} highlight={isUpdated('/admin/applications')} onClick={() => markAsViewed('/admin/applications')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Policy Docs" to="/admin/docs/policies" active={isActive('/admin/docs/policies')} highlight={isUpdated('/admin/docs/policies')} onClick={() => markAsViewed('/admin/docs/policies')} tone="blue" />
+            <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Store Pricing" to="/admin/store-pricing" active={isActive('/admin/store-pricing')} highlight={isUpdated('/admin/store-pricing')} onClick={() => markAsViewed('/admin/store-pricing')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Lock} label="Cashout Manager" to="/admin/cashout-manager" active={isActive('/admin/cashout-manager')} highlight={isUpdated('/admin/cashout-manager')} onClick={() => markAsViewed('/admin/cashout-manager')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Security Command" to="/admin/security-command-center" active={isActive('/admin/security-command-center')} highlight={isUpdated('/admin/security-command-center')} onClick={() => markAsViewed('/admin/security-command-center')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Mobile Admin" to="/admin-mobile" active={isActive('/admin-mobile')} highlight={isUpdated('/admin-mobile')} onClick={() => markAsViewed('/admin-mobile')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Payment Logs" to="/admin/payment-logs" active={isActive('/admin/payment-logs')} highlight={isUpdated('/admin/payment-logs')} onClick={() => markAsViewed('/admin/payment-logs')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Settings} label="Admin Errors" to="/admin/errors" active={isActive('/admin/errors')} highlight={isUpdated('/admin/errors')} onClick={() => markAsViewed('/admin/errors')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Database} label="Database Backup" to="/admin/system/backup" active={isActive('/admin/system/backup')} highlight={isUpdated('/admin/system/backup')} onClick={() => markAsViewed('/admin/system/backup')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Settings} label="System Config" to="/admin/system/config" active={isActive('/admin/system/config')} highlight={isUpdated('/admin/system/config')} onClick={() => markAsViewed('/admin/system/config')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Zap} label="Load Lab" to="/admin/load-lab" active={isActive('/admin/load-lab')} highlight={isUpdated('/admin/load-lab')} onClick={() => markAsViewed('/admin/load-lab')} tone="orange" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Lock} label="Jail Management" to="/admin/jail-management" active={isActive('/admin/jail-management')} highlight={isUpdated('/admin/jail-management')} onClick={() => markAsViewed('/admin/jail-management')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="User Forms" to="/admin/user-forms" active={isActive('/admin/user-forms')} highlight={isUpdated('/admin/user-forms')} onClick={() => markAsViewed('/admin/user-forms')} tone="blue" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Trollmers Tournament" to="/admin/trollmers-tournament" active={isActive('/admin/trollmers-tournament')} highlight={isUpdated('/admin/trollmers-tournament')} onClick={() => markAsViewed('/admin/trollmers-tournament')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Officer Management" to="/admin/officer-management" active={isActive('/admin/officer-management')} highlight={isUpdated('/admin/officer-management')} onClick={() => markAsViewed('/admin/officer-management')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Role Management" to="/admin/role-management" active={isActive('/admin/role-management')} highlight={isUpdated('/admin/role-management')} onClick={() => markAsViewed('/admin/role-management')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Media Library" to="/admin/media-library" active={isActive('/admin/media-library')} highlight={isUpdated('/admin/media-library')} onClick={() => markAsViewed('/admin/media-library')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Announcements" to="/admin/announcements" active={isActive('/admin/announcements')} highlight={isUpdated('/admin/announcements')} onClick={() => markAsViewed('/admin/announcements')} tone="pink" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Mail} label="Send Notifications" to="/admin/send-notifications" active={isActive('/admin/send-notifications')} highlight={isUpdated('/admin/send-notifications')} onClick={() => markAsViewed('/admin/send-notifications')} tone="blue" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Export Data" to="/admin/export-data" active={isActive('/admin/export-data')} highlight={isUpdated('/admin/export-data')} onClick={() => markAsViewed('/admin/export-data')} tone="blue" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="User Search" to="/admin/user-search" active={isActive('/admin/user-search')} highlight={isUpdated('/admin/user-search')} onClick={() => markAsViewed('/admin/user-search')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Reports Queue" to="/admin/reports-queue" active={isActive('/admin/reports-queue')} highlight={isUpdated('/admin/reports-queue')} onClick={() => markAsViewed('/admin/reports-queue')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Video} label="Stream Monitor" to="/admin/stream-monitor" active={isActive('/admin/stream-monitor')} highlight={isUpdated('/admin/stream-monitor')} onClick={() => markAsViewed('/admin/stream-monitor')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Night Watch" to="/admin/night-watch" active={isActive('/admin/night-watch')} highlight={isUpdated('/admin/night-watch')} onClick={() => markAsViewed('/admin/night-watch')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Voting" to="/admin/voting" active={isActive('/admin/voting')} highlight={isUpdated('/admin/voting')} onClick={() => markAsViewed('/admin/voting')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Launch Trial" to="/admin/launch-trial" active={isActive('/admin/launch-trial')} highlight={isUpdated('/admin/launch-trial')} onClick={() => markAsViewed('/admin/launch-trial')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Store Pricing" to="/admin/store-pricing" active={isActive('/admin/store-pricing')} highlight={isUpdated('/admin/store-pricing')} onClick={() => markAsViewed('/admin/store-pricing')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Admin Errors" to="/admin/errors" active={isActive('/admin/errors')} highlight={isUpdated('/admin/errors')} onClick={() => markAsViewed('/admin/errors')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Banknote} label="Buckets" to="/admin/buckets" active={isActive('/admin/buckets')} highlight={isUpdated('/admin/buckets')} onClick={() => markAsViewed('/admin/buckets')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Grant Coins" to="/admin/grant-coins" active={isActive('/admin/grant-coins')} highlight={isUpdated('/admin/grant-coins')} onClick={() => markAsViewed('/admin/grant-coins')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Calendar} label="Create Schedule" to="/admin/create-schedule" active={isActive('/admin/create-schedule')} highlight={isUpdated('/admin/create-schedule')} onClick={() => markAsViewed('/admin/create-schedule')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Calendar} label="Officer Shifts" to="/admin/officer-shifts" active={isActive('/admin/officer-shifts')} highlight={isUpdated('/admin/officer-shifts')} onClick={() => markAsViewed('/admin/officer-shifts')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Referral Bonuses" to="/admin/referral-bonuses" active={isActive('/admin/referral-bonuses')} highlight={isUpdated('/admin/referral-bonuses')} onClick={() => markAsViewed('/admin/referral-bonuses')} tone="pink" />
+            <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Control Panel" to="/admin/control-panel" active={isActive('/admin/control-panel')} highlight={isUpdated('/admin/control-panel')} onClick={() => markAsViewed('/admin/control-panel')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Test Diagnostics" to="/admin/test-diagnostics" active={isActive('/admin/test-diagnostics')} highlight={isUpdated('/admin/test-diagnostics')} onClick={() => markAsViewed('/admin/test-diagnostics')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Lock} label="Reset Maintenance" to="/admin/reset-maintenance" active={isActive('/admin/reset-maintenance')} highlight={isUpdated('/admin/reset-maintenance')} onClick={() => markAsViewed('/admin/reset-maintenance')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Users} label="HR" to="/admin/hr" active={isActive('/admin/hr')} highlight={isUpdated('/admin/hr')} onClick={() => markAsViewed('/admin/hr')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Appeals" to="/admin/appeals" active={isActive('/admin/appeals')} highlight={isUpdated('/admin/appeals')} onClick={() => markAsViewed('/admin/appeals')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Calendar} label="Meetings" to="/admin/meetings" active={isActive('/admin/meetings')} highlight={isUpdated('/admin/meetings')} onClick={() => markAsViewed('/admin/meetings')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="RTC Admin Monitor" to="/rtcadminmonitor" active={isActive('/rtcadminmonitor')} highlight={isUpdated('/rtcadminmonitor')} onClick={() => markAsViewed('/rtcadminmonitor')} tone="teal" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="RFC" to="/rfc" active={isActive('/rfc')} highlight={isUpdated('/rfc')} onClick={() => markAsViewed('/rfc')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Changelog" to="/changelog" active={isActive('/changelog')} highlight={isUpdated('/changelog')} onClick={() => markAsViewed('/changelog')} tone="cyan" />
+
+            <SectionTitle title="Role Dashboards" collapsed={isSidebarCollapsed} />
+            <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="President Dashboard" to="/president/dashboard" active={isActive('/president/dashboard')} highlight={isUpdated('/president/dashboard')} onClick={() => markAsViewed('/president/dashboard')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary Console" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Government Streams" to="/government/streams" active={location.pathname.startsWith('/government/streams')} highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Officer Lounge" to="/officer/lounge" active={isActive('/officer/lounge')} highlight={isUpdated('/officer/lounge')} onClick={() => markAsViewed('/officer/lounge')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={AlertTriangle} label="Officer Moderation" to="/officer/moderation" active={isActive('/officer/moderation')} highlight={isUpdated('/officer/moderation')} onClick={() => markAsViewed('/officer/moderation')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Calendar} label="Officer Scheduling" to="/officer/scheduling" active={isActive('/officer/scheduling')} highlight={isUpdated('/officer/scheduling')} onClick={() => markAsViewed('/officer/scheduling')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Officer Dashboard" to="/officer/dashboard" active={isActive('/officer/dashboard')} highlight={isUpdated('/officer/dashboard')} onClick={() => markAsViewed('/officer/dashboard')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Lead Officer" to="/lead-officer" active={isActive('/lead-officer')} highlight={isUpdated('/lead-officer')} onClick={() => markAsViewed('/lead-officer')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Attorney" to="/attorney" active={isActive('/attorney')} highlight={isUpdated('/attorney')} onClick={() => markAsViewed('/attorney')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Prosecutor Dashboard" to="/prosecutor" active={isActive('/prosecutor')} highlight={isUpdated('/prosecutor')} onClick={() => markAsViewed('/prosecutor')} tone="red" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Church} label="Pastor Dashboard" to="/church/pastor" active={isActive('/church/pastor')} highlight={isUpdated('/church/pastor')} onClick={() => markAsViewed('/church/pastor')} tone="green" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Agency HR Dashboard" to="/agency-hr-dashboard" active={isActive('/agency-hr-dashboard')} highlight={isUpdated('/agency-hr-dashboard')} onClick={() => markAsViewed('/agency-hr-dashboard')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Organization Dashboard" to="/organization/dashboard" active={isActive('/organization/dashboard')} highlight={isUpdated('/organization/dashboard')} onClick={() => markAsViewed('/organization/dashboard')} tone="purple" />
+            <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="CEO Assistant Dashboard" to="/ceo-assistant-dashboard" active={isActive('/ceo-assistant-dashboard')} highlight={isUpdated('/ceo-assistant-dashboard')} onClick={() => markAsViewed('/ceo-assistant-dashboard')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Noah Assistant Dashboard" to="/noah-assistant-dashboard" active={isActive('/noah-assistant-dashboard')} highlight={isUpdated('/noah-assistant-dashboard')} onClick={() => markAsViewed('/noah-assistant-dashboard')} tone="purple" />
           </div>
         )}
       </div>

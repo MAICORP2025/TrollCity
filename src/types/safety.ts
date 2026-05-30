@@ -434,3 +434,92 @@ export interface GeolocationApiResponse {
   org?: string;
   asn?: string;
 }
+
+// ============================================================
+// TROLLIFIED MAP TYPES
+// ============================================================
+
+/**
+ * Obfuscated coordinate — a lat/lon that has been offset from the
+ * real user location by approximately 1 mile (1.6 km) in a random
+ * direction. Used for map display to protect user privacy.
+ */
+export interface ObfuscatedCoordinate {
+  lat: number;
+  lon: number
+  offset_km: number
+  original_lat: number
+  original_lon: number
+}
+
+/**
+ * A listing pin on the Trollifieds map.
+ * Can represent a marketplace_item, vehicle_listing, service_listing,
+ * or shop_item from the Troll City marketplace.
+ */
+export interface TrollifiedMapPin {
+  id: string
+  title: string
+  description?: string
+  price_coins?: number
+  price_usd?: number
+  category?: string
+  image_url?: string
+  latitude?: number
+  longitude?: number
+  city?: string
+  state?: string
+  seller_id?: string
+  seller_username?: string
+  seller_avatar_url?: string
+  listing_type: 'marketplace' | 'vehicle' | 'service' | 'shop_item'
+  shop_id?: string
+  shop_name?: string
+  is_featured?: boolean
+  is_pinned?: boolean
+  is_highlighted?: boolean
+  created_at: string
+  distance_km?: number
+}
+
+/**
+ * Configuration for the Trollifieds map view.
+ */
+export interface TrollifiedMapConfig {
+  center_lat: number
+  center_lon: number
+  zoom: number
+  radius_km: number
+  show_user_location: boolean
+  user_location_offset_km: number
+  filter_listing_types: Array<'marketplace' | 'vehicle' | 'service' | 'shop_item'>
+  filter_categories: string[]
+  sort_by: 'newest' | 'price_low' | 'price_high' | 'distance'
+}
+
+/**
+ * Default map configuration with privacy-safe user location offset.
+ */
+export const DEFAULT_TROLLIFIED_MAP_CONFIG: TrollifiedMapConfig = {
+  center_lat: 39.8283,
+  center_lon: -98.5795,
+  zoom: 13,
+  radius_km: 1.6,
+  show_user_location: true,
+  user_location_offset_km: 1.6,
+  filter_listing_types: ['marketplace', 'vehicle', 'service', 'shop_item'],
+  filter_categories: [],
+  sort_by: 'newest',
+}
+
+/**
+ * Result of obfuscating a user's location for map display.
+ * The real location is never exposed to other users.
+ */
+export interface LocationObfuscationResult {
+  display: { lat: number; lon: number }
+  real: { lat: number; lon: number }
+  offset_km: number
+  offset_miles: number
+  bearing_degrees: number
+}

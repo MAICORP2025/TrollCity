@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { BookOpen, Church } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -19,19 +19,23 @@ type DailyWord = {
 export default function DailyChurchNotification() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const hasShownTodayRef = useRef(false)
 
   useEffect(() => {
     if (!profile) return
 
     const enabled = profile.church_notifications_enabled !== false
-    if (!enabled) return
+    if (!enabled || location.pathname.startsWith('/church')) return
 
+    const today = new Date().toISOString().split('T')[0]
+    const lastSeenKey = `last_church_daily_word_notification_${today}`
+    if (hasShownTodayRef.current || localStorage.getItem(lastSeenKey) === 'seen') return
+
+    hasShownTodayRef.current = true
     let cancelled = false
 
     const loadDailyWordAndNotify = async () => {
-      const today = new Date().toISOString().split('T')[0]
-      const lastSeenKey = `last_church_daily_word_notification_${today}`
-
       if (localStorage.getItem(lastSeenKey) === 'seen') return
 
       try {
@@ -126,7 +130,7 @@ export default function DailyChurchNotification() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [profile, navigate])
+  }, [profile, location.pathname, navigate])
 
   return null
 }

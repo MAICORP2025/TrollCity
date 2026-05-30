@@ -10,10 +10,14 @@ Deno.serve(async (req) => {
   try {
     const { payoutRequestId, adminId, force = false } = await req.json()
     
-    // Only allow payouts on Fridays unless forced
-    const today = new Date().getDay()
-    if (today !== 5 && !force) {
-      throw new Error('Payouts are only processed on Fridays')
+    // Only allow payouts on Fridays, Saturdays, and Sundays between 1:00 AM and 7:00 PM MT unless forced
+    const now = new Date();
+    const mtDateString = now.toLocaleString('en-US', { timeZone: 'America/Denver' });
+    const mtDate = new Date(mtDateString);
+    const day = mtDate.getDay();
+    const hour = mtDate.getHours();
+    if (!([5, 6, 0].includes(day) && hour >= 1 && hour < 19) && !force) {
+      throw new Error('Payouts are only processed on Fridays, Saturdays, and Sundays between 1:00 AM and 7:00 PM MT');
     }
 
     if (!payoutRequestId) {

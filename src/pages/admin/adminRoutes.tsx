@@ -272,7 +272,7 @@ export const systemManagementRoutes: AdminRoute[] = [
     path: '/admin/payout-batches',
     component: PayoutBatches,
     roles: [UserRole.ADMIN, UserRole.SECRETARY],
-    description: 'Manage Friday payout batches',
+    description: 'Manage payout batches',
     icon: <DollarSign className="w-5 h-5 text-green-400" />,
     tileColor: 'text-green-400',
     tileBgColor: 'bg-green-500/10',

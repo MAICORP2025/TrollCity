@@ -39,7 +39,7 @@ export function useLiveKitRoom({
   publish = false,
   isAdmin = false,
   userName,
-  identity,
+  identity = '',
   initialAudioEnabled = true,
   onUserJoined,
   onUserLeft,
@@ -54,13 +54,16 @@ export function useLiveKitRoom({
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
 
-// Refs
-   const roomRef = useRef<Room | null>(null);
-   const joinedRef = useRef(false);
-   const localUserIdRef = useRef<string | null>(null);
-   const joiningRef = useRef(false); // Track joining state to prevent race conditions
-   const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
-   const localVideoTrackRef = useRef<LocalVideoTrack | null>(null);
+   // Refs
+    const roomRef = useRef<Room | null>(null);
+    const joinedRef = useRef(false);
+    const localUserIdRef = useRef<string | null>(null);
+    const joiningRef = useRef(false); // Track joining state to prevent race conditions
+    const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
+    const localVideoTrackRef = useRef<LocalVideoTrack | null>(null);
+    const prewarmedAudioTrackRef = useRef<LocalAudioTrack | null>(null);
+    const prewarmedVideoTrackRef = useRef<LocalVideoTrack | null>(null);
+    const prewarmCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get LiveKit credentials from environment
   const getLiveKitUrl = () => import.meta.env.VITE_LIVEKIT_URL;
@@ -70,21 +73,22 @@ export function useLiveKitRoom({
   const isLiveKitConfigured = !!getLiveKitUrl() && !!getLiveKitApiKey();
 
   // Fetch LiveKit token via edge function
-  const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string) => {
+  const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string, isPublisherOverride?: boolean) => {
+    const isPublisher = typeof isPublisherOverride === 'boolean' ? isPublisherOverride : publish;
     const requestBody = {
       room: roomName,
       roomName,
       identity: identity || userId,
       name: userName || 'User',
-      role: publish ? 'publisher' : 'audience',
-      isHost: publish && roomType === 'pod' ? true : undefined,
+      role: isPublisher ? 'publisher' : 'audience',
+      isHost: isPublisher && roomType === 'pod' ? true : undefined,
     };
 
     const requestDetails = {
       roomName,
       userId,
-      role: publish ? 'publisher' : 'audience',
-      isHost: publish && roomType === 'pod',
+      role: isPublisher ? 'publisher' : 'audience',
+      isHost: isPublisher && roomType === 'pod',
     };
 
     try {
@@ -158,9 +162,8 @@ export function useLiveKitRoom({
     try {
 // Audio track - always create for publishers
        const audioTrack = await createLocalAudioTrack();
-       await audioTrack.enable(); // Ensure audio is enabled by default
-       setLocalAudioTrack(audioTrack);
-       localAudioTrackRef.current = audioTrack;
+        setLocalAudioTrack(audioTrack);
+        localAudioTrackRef.current = audioTrack;
 
        let videoTrack: LocalVideoTrack | null = null
 
@@ -351,7 +354,6 @@ export function useLiveKitRoom({
           facingMode: 'user'
         },
         audioCaptureDefaults: {
-          ...AudioPresets.audio,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
@@ -387,7 +389,7 @@ export function useLiveKitRoom({
         }
       });
 
-      const token = await fetchToken(roomId, userId, userName);
+      const token = tokenOverride || await fetchToken(roomId, userId, userName, true);
       const url = getLiveKitUrl();
       const apiKey = getLiveKitApiKey();
 
@@ -403,19 +405,23 @@ export function useLiveKitRoom({
         throw new Error('Failed to get LiveKit token from server');
       }
 
-      audioTrack = await createLocalAudioTrack();
-      if (initialAudioEnabled) {
-        await audioTrack.enable();
-      } else {
-        await audioTrack.disable();
+      audioTrack = prewarmedAudioTrackRef.current || await createLocalAudioTrack();
+      prewarmedAudioTrackRef.current = null;
+      if (!initialAudioEnabled) {
+        await audioTrack.mute();
       }
 
       if (!audioOnly) {
-        const { createLocalVideoTrack } = await import('livekit-client');
-        videoTrack = await createLocalVideoTrack({
-          ...videoPreset,
-          facingMode: 'user'
-        });
+        if (prewarmedVideoTrackRef.current) {
+          videoTrack = prewarmedVideoTrackRef.current;
+          prewarmedVideoTrackRef.current = null;
+        } else {
+          const { createLocalVideoTrack } = await import('livekit-client');
+          videoTrack = await createLocalVideoTrack({
+            ...videoPreset,
+            facingMode: 'user'
+          });
+        }
       }
 
       setLocalAudioTrack(audioTrack);
@@ -423,19 +429,22 @@ export function useLiveKitRoom({
       localAudioTrackRef.current = audioTrack;
       localVideoTrackRef.current = videoTrack;
 
-      await room.connect(url, token, { name: roomId, identity: identity || userId });
-      await waitForRoomConnected(room, 5000);
+      await room.connect(url, token);
+      await waitForRoomConnected(room, 10000);
 
       await room.localParticipant.publishTrack(audioTrack);
       if (videoTrack) {
         await room.localParticipant.publishTrack(videoTrack);
       }
 
+      // Small delay to ensure tracks are fully published before marking connected
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       setIsConnected(true);
       setIsPublishing(true);
 
       const existingParticipants = room.remoteParticipants ? Array.from(room.remoteParticipants.values()) : [];
-      console.log('[useLiveKitRoom] Existing participants after connect:', existingParticipants.map(p => ({
+      console.log('[useLiveKitRoom] Existing participants after connect:', existingParticipants.map((p: any) => ({
         identity: p.identity,
         hasAudio: !!p.audioTrack,
         audioTrackSid: p.audioTrack?.sid
@@ -478,6 +487,8 @@ export function useLiveKitRoom({
       setLocalVideoTrack(null);
       localAudioTrackRef.current = null;
       localVideoTrackRef.current = null;
+      prewarmedAudioTrackRef.current = null;
+      prewarmedVideoTrackRef.current = null;
       joinedRef.current = false;
       setIsConnected(false);
       setIsPublishing(false);
@@ -487,7 +498,7 @@ export function useLiveKitRoom({
       onError?.(err);
       throw err;
     }
-  }, [roomId, videoPreset, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError, userName]);
+  }, [roomId, videoPreset, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError, userName, identity, audioOnly, initialAudioEnabled]);
 
   // Join as viewer (LiveKit)
   const joinAsAudience = useCallback(async (userId: string) => {
@@ -562,7 +573,7 @@ export function useLiveKitRoom({
       });
 
       // Get token
-      const token = await fetchToken(roomId, userId, userName);
+      const token = await fetchToken(roomId, userId, userName, false);
       const url = getLiveKitUrl();
       const apiKey = getLiveKitApiKey();
 
@@ -579,15 +590,12 @@ export function useLiveKitRoom({
       }
 
       // Connect to room
-      await room.connect(url, token, {
-        name: roomId,
-        identity: identity || userId
-      });
-      await waitForRoomConnected(room, 5000);
+      await room.connect(url, token);
+      await waitForRoomConnected(room, 10000);
 
        // Get existing participants - guard against undefined
        const existingParticipants = room.remoteParticipants ? Array.from(room.remoteParticipants.values()) : [];
-       console.log('[useLiveKitRoom] Existing participants after connect:', existingParticipants.map(p => ({
+       console.log('[useLiveKitRoom] Existing participants after connect:', existingParticipants.map((p: any) => ({
          identity: p.identity,
          hasAudio: !!p.audioTrack,
          audioTrackSid: p.audioTrack?.sid
@@ -633,7 +641,69 @@ export function useLiveKitRoom({
         }
       }
     }
-  }, [roomId, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError]);
+  }, [roomId, identity, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError, userName]);
+
+  const stopUnusedPrewarmedTracks = useCallback(() => {
+    if (prewarmCleanupTimerRef.current) {
+      clearTimeout(prewarmCleanupTimerRef.current)
+      prewarmCleanupTimerRef.current = null
+    }
+
+    if (prewarmedAudioTrackRef.current) {
+      try { prewarmedAudioTrackRef.current.stop() } catch {}
+      prewarmedAudioTrackRef.current = null
+    }
+
+    if (prewarmedVideoTrackRef.current) {
+      try { prewarmedVideoTrackRef.current.stop() } catch {}
+      prewarmedVideoTrackRef.current = null
+    }
+
+    setLocalAudioTrack(null)
+    setLocalVideoTrack(null)
+  }, [])
+
+  const prewarmPublisherTracks = useCallback(async () => {
+    if (prewarmCleanupTimerRef.current) {
+      clearTimeout(prewarmCleanupTimerRef.current)
+      prewarmCleanupTimerRef.current = null
+    }
+
+    if (prewarmedAudioTrackRef.current && prewarmedVideoTrackRef.current) {
+      setLocalAudioTrack(prewarmedAudioTrackRef.current)
+      setLocalVideoTrack(prewarmedVideoTrackRef.current)
+      return {
+        audioTrack: prewarmedAudioTrackRef.current,
+        videoTrack: prewarmedVideoTrackRef.current,
+      }
+    }
+
+    const audioTrack = await createLocalAudioTrack({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    })
+
+    let videoTrack: LocalVideoTrack | null = null
+    if (!audioOnly && roomType !== 'pod') {
+      try {
+        videoTrack = await createLocalVideoTrack({
+          ...videoPreset,
+          facingMode: 'user',
+        })
+      } catch (err) {
+        console.warn('[useLiveKitRoom] prewarm video track failed:', err)
+      }
+    }
+
+    prewarmedAudioTrackRef.current = audioTrack
+    prewarmedVideoTrackRef.current = videoTrack
+
+    setLocalAudioTrack(audioTrack)
+    setLocalVideoTrack(videoTrack)
+
+    return { audioTrack, videoTrack }
+  }, [audioOnly, roomType, videoPreset])
 
 // Leave room
    const leaveRoom = useCallback(async () => {
@@ -676,17 +746,27 @@ export function useLiveKitRoom({
 
   // Toggle camera
   const toggleCamera = useCallback(async () => {
-    if (!localVideoTrack || !roomRef.current) return;
+    if (!roomRef.current) return;
 
     try {
-      if (localVideoTrack.isEnabled) {
-        await roomRef.current.localParticipant.unpublishTrack(localVideoTrack);
-        localVideoTrack.stop();
-} else {
-         const newTrack = await LocalVideoTrack.create(videoPreset);
-         setLocalVideoTrack(newTrack);
-         localVideoTrackRef.current = newTrack;
-         await roomRef.current.localParticipant.publishTrack(newTrack);
+      if (localVideoTrack) {
+        if (!localVideoTrack.isMuted) {
+          await roomRef.current.localParticipant.unpublishTrack(localVideoTrack);
+          localVideoTrack.stop();
+          localVideoTrackRef.current = null;
+          setLocalVideoTrack(null);
+        } else {
+          await roomRef.current.localParticipant.publishTrack(localVideoTrack);
+        }
+      } else {
+        const { createLocalVideoTrack } = await import('livekit-client');
+        const newTrack = await createLocalVideoTrack({
+          ...videoPreset,
+          facingMode: 'user',
+        });
+        setLocalVideoTrack(newTrack);
+        localVideoTrackRef.current = newTrack;
+        await roomRef.current.localParticipant.publishTrack(newTrack);
       }
     } catch (err) {
       console.error('[useLiveKitRoom] Error toggling camera:', err);
@@ -695,7 +775,7 @@ export function useLiveKitRoom({
 
 // Wait for room to be connected
     const waitForRoomConnected = useCallback(async (room: Room, timeoutMs = 5000) => {
-      if (room.state === 'connected' || room.connectionState === 'CONNECTED') {
+      if (room.state === 'connected') {
         return true;
       }
 
@@ -735,10 +815,10 @@ export function useLiveKitRoom({
     
     // Just toggle the track directly - doesn't need room
     try {
-      if (track.isEnabled) {
-        track.disable();
+      if (track.isMuted) {
+        await track.unmute();
       } else {
-        track.enable();
+        await track.mute();
       }
     } catch (err) {
       console.warn('[useLiveKitRoom] Toggle mic error:', err);
@@ -752,9 +832,9 @@ export function useLiveKitRoom({
     
     try {
       if (enabled) {
-        await track.enable();
+        await track.unmute();
       } else {
-        await track.disable();
+        await track.mute();
       }
       setLocalAudioTrack(track);
       return true;
@@ -767,7 +847,7 @@ export function useLiveKitRoom({
   // Get current mic state
   const getMicEnabled = useCallback(() => {
     const track = localAudioTrackRef.current;
-    return track?.isEnabled ?? false;
+    return track ? !track.isMuted : false;
   }, []);
 
 // Cleanup on unmount
@@ -818,6 +898,8 @@ export function useLiveKitRoom({
     toggleMicrophone,
     setMicEnabled,
     getMicEnabled,
+    prewarmPublisherTracks,
+    stopUnusedPrewarmedTracks,
     
     // Room ref for external access
     room: roomRef.current

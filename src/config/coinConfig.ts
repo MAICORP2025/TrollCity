@@ -170,7 +170,7 @@ export function calculateNetCoins(coinAmount: number, feeCoins: number): number 
 }
 
 /**
- * Check if cashout window is open (Friday 2 PM - 3 PM Mountain Time)
+ * Check if cashout window is open (Friday/Saturday/Sunday 1 AM - 7 PM Mountain Time)
  */
 export function isCashoutWindowOpen(): boolean {
   const now = new Date();
@@ -188,6 +188,6 @@ export function isCashoutWindowOpen(): boolean {
   const weekday = parts.find(p => p.type === 'weekday')?.value;
   const hour = parts.find(p => p.type === 'hour')?.value;
   
-  // Friday is the day, 14:00-15:00 (2 PM - 3 PM) is the window
-  return weekday === 'Friday' && hour === '14';
+  // Weekend payout window: Friday, Saturday, or Sunday between 01:00 and 19:00 MT
+  return ['Friday', 'Saturday', 'Sunday'].includes(weekday || '') && Number(hour) >= 1 && Number(hour) < 19;
 }

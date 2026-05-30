@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+﻿import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
   Link,
   useParams,
@@ -87,8 +87,6 @@ function participantMatchesSeat(
   return candidates.some((candidate) => {
     return (
       participantToken === candidate ||
-      participantToken.startsWith(candidate) ||
-      candidate.startsWith(participantToken) ||
       participantToken.endsWith(`-${candidate}`) ||
       participantIdentity === candidate ||
       participantIdentity.endsWith(`-${candidate}`) ||
@@ -120,8 +118,6 @@ function remoteParticipantMatchesUser(
     return (
       identity === candidate ||
       normalizedIdentity === normalizedCandidate ||
-      normalizedIdentity.startsWith(normalizedCandidate) ||
-      normalizedCandidate.startsWith(normalizedIdentity) ||
       identity.endsWith(`-${candidate}`) ||
       normalizedIdentity.endsWith(`-${normalizedCandidate}`)
     )
@@ -288,7 +284,7 @@ function RemoteSeatSurface({
         autoPlay
         playsInline
         muted={false}
-        className={cn('absolute inset-0 h-full w-full object-cover', mirror && '-scale-x-100')}
+        className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover', mirror && '-scale-x-100')}
       />
       <audio ref={audioRef} autoPlay />
     </>
@@ -308,27 +304,24 @@ function findSeatRemoteParticipant(
       ? Array.from(participants.values())
       : []
 
-  const exact = list.find((participant: any) =>
-    participantMatchesSeat(participant, seatUserId, seatIdentity)
-  )
-
-  if (exact) return exact as RemoteParticipant
-
-  const userToken = normalizeIdentityToken(seatUserId)
-  const identityToken = normalizeIdentityToken(seatIdentity)
+  const userId = String(seatUserId || '').trim()
+  const identity = String(seatIdentity || '').trim()
 
   return (
-    (list.find((participant: any) => {
-      const participantToken = normalizeIdentityToken(getRemoteParticipantIdentity(participant))
+    list.find((participant: any) => {
+      const participantIdentity = String(participant?.identity || '').trim()
+      const metadata = getRemoteParticipantMetadata(participant)
 
       return (
-        (userToken && participantToken.includes(userToken)) ||
-        (identityToken && participantToken.includes(identityToken))
+        (!!identity && participantIdentity === identity) ||
+        (!!userId && participantIdentity === userId) ||
+        (!!userId && participantIdentity.endsWith(`-${userId}`)) ||
+        metadata?.user_id === userId ||
+        metadata?.userId === userId
       )
-    }) as RemoteParticipant) || null
+    }) || null
   )
 }
-
 function isUuidLike(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
@@ -372,34 +365,6 @@ function getParticipantList(
   return []
 }
 
-function getFallbackSeatParticipant(
-  participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
-  seatIndex: number,
-  occupiedSeatIdentities: Array<string | null | undefined>,
-): RemoteParticipant | null {
-  const list = getParticipantList(participants)
-  if (list.length === 0) return null
-
-  const occupiedTokens = occupiedSeatIdentities
-    .map((value) => normalizeIdentityToken(value))
-    .filter(Boolean)
-
-  const unclaimedParticipants = list.filter((participant: any) => {
-    const identity = getRemoteParticipantIdentity(participant)
-    const token = normalizeIdentityToken(identity)
-
-    return !occupiedTokens.some((occupiedToken) => {
-      return (
-        token === occupiedToken ||
-        token.endsWith(`-${occupiedToken}`) ||
-        occupiedToken.endsWith(`-${token}`) ||
-        identity.includes(occupiedToken)
-      )
-    })
-  })
-
-  return (unclaimedParticipants[seatIndex - 1] || unclaimedParticipants[0] || null) as RemoteParticipant | null
-}
 
 function getRemoteSeatVideoTrack(
   participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
@@ -440,8 +405,6 @@ function matchesNormalizedIdentity(identity: string, candidate?: string | null):
 
   return (
     normalizedIdentity === normalizedCandidate ||
-    normalizedIdentity.startsWith(normalizedCandidate) ||
-    normalizedCandidate.startsWith(normalizedIdentity) ||
     normalizedIdentity.endsWith(`-${normalizedCandidate}`) ||
     normalizedCandidate.endsWith(`-${normalizedIdentity}`)
   )
@@ -607,7 +570,7 @@ export function BroadcastPage() {
    const isHost = stream?.user_id === user?.id
    const isBroadcaster = isHost;
 
-const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
     const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
 
   const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
@@ -638,7 +601,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
       const seatIndex = offset + 1
       const seat = seats?.[seatIndex]
       const seatUserId = seat?.user_id || seat?.guest_id || null
-      const seatIdentity = seat?.livekit_participant_identity || seatUserId || null
+      const seatIdentity = seat?.livekit_participant_identity || seat?.participant_identity || seat?.livekit_identity || seatUserId || null
       const seatPrice = Array.isArray(stream?.seat_prices)
         ? Number(stream.seat_prices[seatIndex] ?? stream?.seat_price ?? 0)
         : Number(stream?.seat_price ?? 0)
@@ -661,6 +624,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
         avatarUrl,
         seatStatus,
         seatIdentity,
+        seatSessionId: seat?.id || undefined,
       }
     })
   }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices])
@@ -959,6 +923,36 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   }, [remoteParticipants])
 
   useEffect(() => {
+    if (!streamId) return
+
+    const channel = supabase
+      .channel(`stream-seat-events:${streamId}`)
+      .on('broadcast', { event: 'seat_joined' }, async () => {
+        console.log('[BroadcastPage] seat_joined event')
+        await refreshSeats()
+      })
+      .on('broadcast', { event: 'seat_live' }, async () => {
+        console.log('[BroadcastPage] seat_live event')
+        await refreshSeats()
+      })
+      .on('broadcast', { event: 'seat_left' }, async () => {
+        console.log('[BroadcastPage] seat_left event')
+        await refreshSeats()
+      })
+      .on('broadcast', { event: 'seat_refreshed' }, async () => {
+        console.log('[BroadcastPage] seat_refreshed event')
+        await refreshSeats()
+      })
+      .subscribe((status) => {
+        console.log('[BroadcastPage] seat event channel:', status)
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [streamId, refreshSeats])
+
+  useEffect(() => {
     console.log('[BroadcastSeatState]', {
       streamId,
       seats,
@@ -1006,7 +1000,9 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
    const [giftUserPositions, setGiftUserPositions] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({})
     const getGiftUserPositionsRef = useRef<() => Record<string, { top: number; left: number; width: number; height: number }>>(() => ({}))
     const giftNameMapRef = useRef<Record<string, string>>({})
-const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{user_id: string; sender_username: string; sender_avatar_url: string | null; total_gift_coins: number; last_gift_at: string | null}>>([])
+const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{
+  sender_id: string; sender_username: string; sender_avatar_url: string | null; total_gift_coins: number; last_gift_at: string | null
+}>>([])
     const [isAllTimeTopGiftersLoading, setIsAllTimeTopGiftersLoading] = useState(false)
     const { subscriberUsernames } = useSubscriberUsernames(stream?.user_id)
 
@@ -1898,7 +1894,7 @@ useEffect(() => {
     PreflightStore.clear()
     
     // Navigate away
-    navigate('/')
+    navigate('/home', { replace: true })
   }, [isHost, localTracks, navigate])
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
    const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
@@ -2782,9 +2778,9 @@ useEffect(() => {
   }, [stream?.user_id]);
 
   const handleLiveKitParticipantConnected = useCallback((participant: RemoteParticipant) => {
+    if (!participant?.identity) return
     setRemoteParticipants(prev => {
       const next = new Map(prev)
-      if (next.get(participant.identity) === participant) return prev
       next.set(participant.identity, participant)
       return next
     })
@@ -2799,21 +2795,19 @@ useEffect(() => {
     })
   }, [])
 
-  const handleLiveKitTrackSubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
+  const handleLiveKitTrackSubscribed = useCallback((_track: any, _publication: any, participant: RemoteParticipant) => {
     DEBUG_COUNTERS.trackSubscribedCount++
+    if (!participant?.identity) return
+
     setRemoteParticipants(prev => {
       const next = new Map(prev)
-      if (next.get(participant.identity) === participant) return prev
       next.set(participant.identity, participant)
       return next
     })
 
-    // LiveKit mutates the participant/publication object in place. Refresh the same
-    // entry once on the next frame only when the participant object changed.
     window.requestAnimationFrame(() => {
       setRemoteParticipants(prev => {
         const next = new Map(prev)
-        if (next.get(participant.identity) === participant) return prev
         next.set(participant.identity, participant)
         return next
       })
@@ -3641,9 +3635,9 @@ const toggleMicrophone = useCallback(async () => {
 
    const handleGiftHost = useCallback(() => onGift(stream?.user_id || ''), [onGift, stream?.user_id])
 
-   const handleOpenUserAction = useCallback((info: { userId: string; username?: string; role?: string; createdAt?: string }) => {
-     setUserActionTarget(info)
-   }, [])
+    const handleOpenUserAction = useCallback((info: { userId: string; username?: string; role?: string; createdAt?: string; seatSessionId?: string }) => {
+      setUserActionTarget(info)
+    }, [])
 
    const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
      if (!username || isAnonymousDisplayName(username)) return
@@ -4450,17 +4444,77 @@ const handleLike = useCallback(async () => {
      toast.info(`Mute user ${userId}`);
    }
 
-   function handleGeneralKick() {
-     toast.info('Kick issued');
-   }
+    function handleGeneralKick() {
+      if (!userActionTarget) return
+      const targetUserId = userActionTarget.userId
+      const seatSessionId = (userActionTarget as any).seatSessionId as string | undefined
+
+      const doKick = async () => {
+        try {
+          if (seatSessionId) {
+            const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seatSessionId })
+            if (error) {
+              console.warn('[BroadcastPage] handleGeneralKick leave_seat_atomic error:', error)
+              toast.error('Failed to remove user from seat')
+              return
+            }
+          } else {
+            const seat = Object.values(seats).find(
+              (s: any) => s.user_id === targetUserId || s.guest_id === targetUserId,
+            )
+            if (seat?.id) {
+              const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
+              if (error) {
+                console.warn('[BroadcastPage] handleGeneralKick leave_seat_atomic error:', error)
+                toast.error('Failed to remove user from seat')
+                return
+              }
+            } else {
+              toast.error('Seat session not found')
+              return
+            }
+          }
+          toast.success('User removed from seat')
+          setUserActionTarget(null)
+        } catch (err) {
+          console.error('[BroadcastPage] handleGeneralKick error:', err)
+          toast.error('Failed to remove user from seat')
+        }
+      }
+      void doKick()
+    }
 
    function handleArrest(userId: string, reason?: string) {
-     toast.info(`Arrest user ${userId}`);
-   }
+      const doArrest = async () => {
+        try {
+          const { error } = await supabase.rpc('arrest_user', { p_user_id: userId, p_reason: reason || 'Manual arrest' })
+          if (error) {
+            toast.error('Failed to arrest user')
+          } else {
+            toast.success('User arrested')
+          }
+        } catch (err) {
+          toast.error('Failed to arrest user')
+        }
+      }
+      void doArrest()
+    }
 
-   function handleBlock(userId: string, reason?: string) {
-     toast.info(`Block user ${userId}`);
-   }
+    function handleBlock(userId: string, reason?: string) {
+      const doBlock = async () => {
+        try {
+          const { error } = await supabase.rpc('ban_user_from_stream', { p_stream_id: streamId, p_user_id: userId, p_reason: reason || 'Manual block' })
+          if (error) {
+            toast.error('Failed to block user')
+          } else {
+            toast.success('User blocked from stream')
+          }
+        } catch (err) {
+          toast.error('Failed to block user')
+        }
+      }
+      void doBlock()
+    }
 
   const [isAssignOfficerModalOpen, setIsAssignOfficerModalOpen] = useState(false)
 
@@ -4765,9 +4819,6 @@ const handleLike = useCallback(async () => {
 
                 <div className="mt-4 grid min-h-0 flex-1 grid-cols-2 auto-rows-fr gap-4">
                   {viewerSeatCards.map((seat) => {
-                    const occupiedSeatIdentities = viewerSeatCards
-                      .filter((candidate) => candidate.seatUserId || candidate.seatIdentity)
-                      .flatMap((candidate) => [candidate.seatUserId, candidate.seatIdentity])
 
                     const exactParticipant = findSeatRemoteParticipant(
                       remoteParticipants,
@@ -4775,16 +4826,7 @@ const handleLike = useCallback(async () => {
                       seat.seatIdentity,
                     )
 
-                    const fallbackParticipant =
-                      !exactParticipant && remoteParticipants.size > 0
-                        ? getFallbackSeatParticipant(
-                            remoteParticipants,
-                            seat.seatIndex,
-                            occupiedSeatIdentities,
-                          )
-                        : null
-
-                    const matchedParticipant = exactParticipant || fallbackParticipant
+                     const matchedParticipant = exactParticipant
 
                     const participantDisplayName = matchedParticipant
                       ? getParticipantLabel(matchedParticipant, seat.displayName)
@@ -4817,7 +4859,7 @@ const handleLike = useCallback(async () => {
                       seat?.avatarUrl ? seatParticipantMetadata.role || seatParticipantMetadata.troll_role || seat?.seatStatus : undefined
                     const seatActionInfo =
                       canInteractWithSeats && seat.isOccupied && seatActionUserId
-                        ? { userId: String(seatActionUserId), username: seatActionUsername, role: seatActionRole }
+                        ? { userId: String(seatActionUserId), username: seatActionUsername, role: seatActionRole, seatSessionId: seat.seatSessionId }
                         : null
 
                     const clickProps = seatActionInfo
@@ -4836,7 +4878,7 @@ const handleLike = useCallback(async () => {
 
                     return (
                     <div
-                      key={seat.seatIndex}
+                      key={`seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
                       className={cn(
                         'relative min-h-[155px] overflow-hidden rounded-2xl border bg-black/30 shadow-[0_0_20px_rgba(15,23,42,0.45)] transition-all',
                         seat.isOccupied

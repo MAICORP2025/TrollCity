@@ -754,7 +754,7 @@ export default function CEOAssistantDashboard() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">Cashout Request Queue</p>
                 <h2 className="mt-2 text-xl font-black text-white">Review cashout requests and forward to Admin</h2>
-                <p className="mt-1 text-xs text-slate-400">Cashout requests from users appear here on Fridays. Review and forward to the Admin Operations & Control Deck for payout processing.</p>
+                <p className="mt-1 text-xs text-slate-400">Cashout requests from users appear here on weekends. Review and forward to the Admin Operations & Control Deck for payout processing.</p>
               </div>
             </div>
 
@@ -762,7 +762,7 @@ export default function CEOAssistantDashboard() {
               {loading ? (
                 <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-300">Loading cashout requests...</div>
               ) : payoutRequests.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-300">No pending cashout requests. Users submit these on Fridays from their wallet page.</div>
+                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-300">No pending cashout requests. Users submit these on weekends from their wallet page.</div>
               ) : (
                 <div className="bg-black/40 rounded-lg border border-purple-700/50 overflow-hidden overflow-x-auto">
                   <table className="w-full text-left min-w-[900px]">

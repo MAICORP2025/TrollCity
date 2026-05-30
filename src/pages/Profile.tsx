@@ -949,7 +949,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
             {inventory.homeListings.map((home: any) => (
               <div key={home.id} className={`${innerPanel} flex items-center justify-between gap-4 p-5`}>
                 <div><h4 className="font-black text-white">Home {String(home.id).slice(0, 6).toUpperCase()}{home.is_starter ? ' • Starter' : ''}</h4>{home.ask_price && <p className="text-sm text-zinc-400">Listed for {Number(home.ask_price).toLocaleString()} TrollCoins</p>}</div>
-                {isOwnProfile && <button onClick={() => navigate('/neighbors')} className={secondaryButton}>Manage</button>}
+                {isOwnProfile && <button onClick={() => navigate('/neighborhood-setup')} className={secondaryButton}>Manage</button>}
               </div>
             ))}
           </div>
@@ -1086,6 +1086,8 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
     switch (activeTab) {
       case 'social':
         return renderSocial();
+      case 'background':
+        return <BackgroundCheckView userId={profile.id} />;
       case 'inventory':
         return renderInventory();
       case 'earnings':

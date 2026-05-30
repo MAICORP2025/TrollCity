@@ -28,7 +28,7 @@ export default function StreamEndedPage() {
           </button>
           
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/home', { replace: true })}
             className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full flex items-center justify-center gap-2"
           >
             <ArrowLeft className="w-5 h-5" />

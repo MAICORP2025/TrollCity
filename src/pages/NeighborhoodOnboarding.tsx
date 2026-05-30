@@ -173,11 +173,12 @@ export default function NeighborhoodOnboarding() {
   const [testResult, setTestResult] = useState<{ score: number; passed: boolean } | null>(null)
   const [insuranceBuying, setInsuranceBuying] = useState(false)
   const [insuranceActive, setInsuranceActive] = useState(false)
+  const [driversLicenseExpiry, setDriversLicenseExpiry] = useState<string | null>(null)
   const [plateText, setPlateText] = useState('TROLL123')
   const [updatingPlate, setUpdatingPlate] = useState(false)
   const [creatingNeighborhood, setCreatingNeighborhood] = useState(false)
   const [completeMessage, setCompleteMessage] = useState('')
-  const [driversLicenseExpiry, setDriversLicenseExpiry] = useState<string | null>(null)
+  const [hasFreeInsurance, setHasFreeInsurance] = useState(false)
   const [sceneTransitioning, setSceneTransitioning] = useState(false)
   const [showSceneCelebration, setShowSceneCelebration] = useState(false)
   const [celebrationMessage, setCelebrationMessage] = useState('')
@@ -189,10 +190,29 @@ export default function NeighborhoodOnboarding() {
     }
   }, [])
 
+  useEffect(() => {
+    if (currentScene !== 'insurance' || !user?.id) return
+
+    const checkFreeInsurance = async () => {
+      const { data: existing } = await supabase
+        .from('car_insurances')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle()
+
+      if (isMountedRef.current) {
+        setHasFreeInsurance(!existing)
+      }
+    }
+
+    checkFreeInsurance();
+  }, [currentScene, user?.id])
+
   const selectedCar = useMemo(
     () => CAR_OPTIONS.find((car) => car.id === selectedCarId) || CAR_OPTIONS[0],
     [selectedCarId]
-  )
+  );
 
   const currentStepIndex = useMemo(
     () => ['street', 'car', 'driverTest', 'insurance', 'license', 'complete'].indexOf(currentScene),
@@ -210,15 +230,10 @@ export default function NeighborhoodOnboarding() {
 
   const driverStatus = useMemo(() => {
     const profileAny = profile as any
-    // Check profile first as it's updated during insurance purchase
     if (profileAny?.license_status === 'active') return 'Active'
     if (profileAny?.license_status === 'suspended') return 'Suspended'
-    // Fallback to license object
-    if (!license) return 'No License'
-    if (license.status === 'active') return 'Active'
-    if (license.status === 'suspended') return 'Suspended'
     return 'No License'
-  }, [license, profile])
+  }, [profile])
 
   const transitionToScene = (nextScene: OnboardingScene, celebrationMsg: string = '') => {
     setSceneTransitioning(true)
@@ -238,6 +253,9 @@ export default function NeighborhoodOnboarding() {
     }
   }
 
+  const currentSceneRef = useRef(currentScene)
+  currentSceneRef.current = currentScene
+
   useEffect(() => {
     if (!user) return
 
@@ -254,9 +272,8 @@ export default function NeighborhoodOnboarding() {
         profileAny?.license_status === 'suspended' &&
         carInsuranceValid &&
         !!profileAny?.driver_test_passed_at
-      const hasLicense = license?.status === 'active' || profileAny?.license_status === 'active' || hasRestorableLicense
+      const hasLicense = profileAny?.license_status === 'active' || hasRestorableLicense
 
-      // Sync drivers license expiry from profile
       if (profileAny?.drivers_license_expiry) {
         setDriversLicenseExpiry(profileAny.drivers_license_expiry)
       }
@@ -265,11 +282,9 @@ export default function NeighborhoodOnboarding() {
       const { hasAcceptedInvites } = await checkInvites()
       const isFamilyMember = hasAcceptedInvites && !hasNeighborhood
 
-      // If family member doesn't have neighborhood, accept the invite to assign them
       if (isFamilyMember) {
         try {
           await acceptInvite()
-          // Refresh profile after accepting invite
           await refreshProfile()
         } catch (error) {
           console.error('Error accepting family invite:', error)
@@ -278,14 +293,13 @@ export default function NeighborhoodOnboarding() {
 
       if (!isMountedRef.current) return
 
-      let nextScene: OnboardingScene = currentScene
+      let nextScene: OnboardingScene = 'street'
       let nextMessage = ''
 
       if (hasNeighborhood && hasHouse && hasVehicle && carInsuranceValid && hasPlate && hasLicense) {
         nextScene = 'complete'
         nextMessage = 'Your neighborhood is ready. Enter the streets of Troll City!'
       } else if (isFamilyMember) {
-        // Family members skip neighborhood creation and go to car selection
         if (!hasVehicle) {
           nextScene = 'car'
         } else if (!hasLicense && !hasRestorableLicense) {
@@ -310,17 +324,15 @@ export default function NeighborhoodOnboarding() {
         nextScene = 'license'
       }
 
-      if (nextScene !== currentScene) {
-        setCurrentScene(nextScene)
-      }
-      if (nextScene === 'complete' && nextMessage) {
+      setCurrentScene(nextScene)
+      if (nextMessage) {
         setCompleteMessage(nextMessage)
       }
       setLoading(false)
     }
 
     checkUserStatus()
-  }, [profile, license, user, checkInvites])
+  }, [profile, user, checkInvites])
 
   const streetPreview = () => {
     const houses = Array.from({ length: houseCount }, (_, index) => index + 1)
@@ -471,6 +483,10 @@ export default function NeighborhoodOnboarding() {
     if (result.success) {
       setTestResult({ score: result.score, passed: result.passed })
       if (result.passed) {
+        await refreshProfile(true)
+        if (profile) {
+          setProfile({ ...profile, license_status: 'active', driver_test_passed_at: new Date().toISOString() })
+        }
         transitionToScene('insurance', '🎓 Test passed! License pending - get insured!')
       }
     } else {
@@ -487,36 +503,36 @@ export default function NeighborhoodOnboarding() {
     setInsuranceBuying(true)
     try {
       const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      
-      const profileAny = profile as any
-      const isFirstTimeUser = !profileAny?.neighborhood_id && !profileAny?.house_id
-      const hasFreeInsurance = isFirstTimeUser
 
-      let deductSuccess = true
-      let deductError: string | null = null
+      const { data: existingInsurance } = await supabase
+        .from('car_insurances')
+        .select('id')
+        .eq('user_id', user?.id)
+        .limit(1)
+        .maybeSingle()
+
+      const hasFreeInsurance = !existingInsurance
 
       if (!hasFreeInsurance) {
-         const { success, error } = await deductCoins({
-           userId: user?.id,
-           amount: 200,
-           type: 'insurance_purchase',
-           coinType: 'troll_coins',
-           description: 'Car insurance - 30 days',
-           metadata: { vehicle_id: activeVehicle.id, duration_days: 30 }
-         })
-        deductSuccess = success
-        deductError = error
+        const { success, error } = await deductCoins({
+          userId: user?.id,
+          amount: 200,
+          type: 'insurance_purchase',
+          coinType: 'troll_coins',
+          description: 'Car insurance - 30 days',
+          metadata: { vehicle_id: activeVehicle.id, duration_days: 30 }
+        })
+        if (!success) {
+          throw new Error(error || 'Insufficient coins to purchase insurance')
+        }
       }
 
-      if (!deductSuccess) {
-        throw new Error(deductError || 'Insufficient coins to purchase insurance')
-      }
+      const profileAny = profile as any
 
       const shouldRestoreLicense =
         profileAny?.license_status === 'suspended' &&
         !!profileAny?.driver_test_passed_at
 
-      // Also check if user passed test but license status wasn't set to active
       const shouldActivateLicense =
         (profileAny?.license_status !== 'active') &&
         !!profileAny?.driver_test_passed_at
@@ -531,7 +547,6 @@ export default function NeighborhoodOnboarding() {
         updateData.insurance_required = false
         updateData.drivers_license_expiry = expiry
       } else if (shouldActivateLicense) {
-        // First-time user who passed test gets license activated with insurance
         updateData.license_status = 'active'
         updateData.license_activated_at = new Date().toISOString()
         updateData.drivers_license_expiry = expiry
@@ -547,9 +562,23 @@ export default function NeighborhoodOnboarding() {
         throw error
       }
 
+      const { error: homeInsError } = await supabase.from('homeowners_insurances').insert({
+        user_id: user?.id,
+        house_id: profileAny?.house_id || null,
+        expires_at: expiry,
+        deductible_paid: 0
+      })
+      if (homeInsError) {
+        throw homeInsError
+      }
+
       const { error: profileError } = await supabase
         .from('user_profiles')
-        .update(updateData)
+        .update({
+          ...updateData,
+          homeowners_insurance_expiry: expiry,
+          homeowners_insurance_deductible: 25
+        })
         .eq('id', user?.id)
 
       if (profileError) {
@@ -559,7 +588,9 @@ export default function NeighborhoodOnboarding() {
       if (profile) {
         setProfile({
           ...profile,
-          ...updateData
+          ...updateData,
+          homeowners_insurance_expiry: expiry,
+          homeowners_insurance_deductible: 25
         })
         if (shouldRestoreLicense || shouldActivateLicense) {
           setDriversLicenseExpiry(expiry)
@@ -567,10 +598,10 @@ export default function NeighborhoodOnboarding() {
       }
 
       await refreshProfile(true)
-      
+
       setInsuranceActive(true)
-      toast.success(hasFreeInsurance 
-        ? 'Free insurance activated for 30 days!' 
+      toast.success(hasFreeInsurance
+        ? 'Free car + home insurance activated for 30 days!'
         : 'Car insurance active for 30 days')
       transitionToScene('license', '🛡️ Insured! Now customize your license plate!')
     } catch (error: any) {
@@ -862,14 +893,23 @@ export default function NeighborhoodOnboarding() {
                         <p>30 days active coverage with deductible protection.</p>
                       </div>
                       <div className="text-right">
-                        <div className="text-2xl font-bold text-white"> 200 TC</div>
-                        <div className="text-slate-500">Monthly</div>
+                        {hasFreeInsurance ? (
+                          <>
+                            <div className="text-2xl font-bold text-emerald-400">FREE</div>
+                            <div className="text-emerald-400/70 text-xs">First month free</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-2xl font-bold text-yellow-300">200 TC</div>
+                            <div className="text-slate-500 text-xs">Monthly</div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <Button onClick={handlePurchaseInsurance} disabled={insuranceBuying} className="bg-gradient-to-r from-yellow-500 to-amber-500">
-                      {insuranceBuying ? 'Buying insurance…' : 'Buy Insurance'}
+                      {insuranceBuying ? 'Activating…' : hasFreeInsurance ? 'Get Free Insurance' : 'Buy Insurance'}
                     </Button>
                     <Button variant="secondary" onClick={() => setCurrentScene('license')}>Skip for now</Button>
                   </div>
@@ -1035,4 +1075,3 @@ export default function NeighborhoodOnboarding() {
     </div>
   )
 }
-

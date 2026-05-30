@@ -1213,7 +1213,7 @@ export default function LivingPage() {
                 </button>
               )}
 
-              <button onClick={() => navigate('/neighbors')} className={tcSecondary}>
+              <button onClick={() => navigate('/neighborhood-setup')} className={tcSecondary}>
                 View Neighborhoods
               </button>
             </div>

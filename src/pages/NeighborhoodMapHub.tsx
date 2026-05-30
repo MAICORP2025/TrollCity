@@ -12,7 +12,6 @@ import {
   RotateCcw,
   Shield,
   Sparkles,
-  Users,
   Zap,
 } from 'lucide-react'
 import { Badge } from '../components/ui/badge'
@@ -41,6 +40,15 @@ interface PropertyCard {
   isAdmin?: boolean
   kind?: PropertyKind
   lotShape?: 'square' | 'wide' | 'corner'
+  house?: any
+  ownerUser?: any
+  isLive?: boolean
+  inSeat?: boolean
+  seatIndex?: number | null
+  viewerCount?: number
+  licenseStatus?: string
+  hasHomeInsurance?: boolean
+  insuranceExpiry?: string | null
 }
 
 const RAID_COST = 100
@@ -94,147 +102,334 @@ export default function NeighborhoodMapHub() {
   const { vehicles } = useVehicleSystem()
   const { raids, isRaided } = useHouseRaids(house?.id || null)
 
-  const [allUsers, setAllUsers] = useState<any[]>([])
-  const [adminProperties, setAdminProperties] = useState<any[]>([])
+  const [ownedHouses, setOwnedHouses] = useState<any[]>([])
+  const [houseOwners, setHouseOwners] = useState<Map<string, any>>(new Map())
+  const [ownerStreams, setOwnerStreams] = useState<Map<string, any>>(new Map())
+  const [ownerSeatMap, setOwnerSeatMap] = useState<Map<string, any>>(new Map())
+  const [ownerLicenses, setOwnerLicenses] = useState<Map<string, string>>(new Map())
+  const [ownerInsurances, setOwnerInsurances] = useState<Map<string, any>>(new Map())
+  const [neighborhoodNames, setNeighborhoodNames] = useState<Map<string, string>>(new Map())
+  const [mapLoading, setMapLoading] = useState(true)
 
   useEffect(() => {
     const fetchMapData = async () => {
       try {
-        const { data: users, error: usersError } = await supabase
-          .from('user_profiles')
-          .select(`
-            id,
-            username,
-            neighborhood_id,
-            house_id,
-            vehicle_id,
-            license_plate,
-            role,
-            is_admin,
-            is_superadmin
-          `)
-          .not('neighborhood_id', 'is', null)
+        setMapLoading(true)
 
-        if (!usersError && users) {
-          setAllUsers(users)
-        }
-
-        const adminUserIds = users?.filter((u) => u.is_admin || u.is_superadmin).map((u) => u.id) || []
-
-        const { data: properties, error: propsError } = await supabase
+        const { data: houses, error } = await supabase
           .from('houses')
           .select(`
             id,
             neighborhood_id,
             owner_user_id,
             upgrade_level,
-            condition
+            condition,
+            is_reposessed,
+            electric_on,
+            water_on,
+            internet_on,
+            created_at
           `)
-          .in('owner_user_id', adminUserIds)
+          .not('owner_user_id', 'is', null)
+          .order('created_at', { ascending: true })
 
-        if (!propsError && properties) {
-          setAdminProperties(properties)
+        if (error) {
+          console.error('[NeighborhoodMapHub] Error fetching houses:', error)
+          return
+        }
+
+        const filtered = (houses || []).filter((h) => h.owner_user_id)
+        setOwnedHouses(filtered)
+
+        const ownerIds = [...new Set(filtered.map((h) => h.owner_user_id).filter(Boolean))]
+        const neighborhoodIds = [...new Set(filtered.map((h) => h.neighborhood_id).filter(Boolean))]
+
+        if (neighborhoodIds.length > 0) {
+          const { data: neighborhoods } = await supabase
+            .from('neighborhoods')
+            .select('id, name')
+            .in('id', neighborhoodIds)
+
+          const nameMap = new Map()
+          ;(neighborhoods || []).forEach((n) => nameMap.set(n.id, n.name))
+          setNeighborhoodNames(nameMap)
+        } else {
+          setNeighborhoodNames(new Map())
+        }
+
+        if (ownerIds.length > 0) {
+          const { data: owners } = await supabase
+            .from('user_profiles')
+            .select('id, username, display_name, avatar_url, is_admin, is_superadmin, vehicle_id, license_plate')
+            .in('id', ownerIds)
+
+          const ownerMap = new Map()
+          ;(owners || []).forEach((o) => ownerMap.set(o.id, o))
+          setHouseOwners(ownerMap)
+        } else {
+          setHouseOwners(new Map())
+        }
+
+        // Fetch active streams for owners (owner -> stream)
+        if (ownerIds.length > 0) {
+          const { data: streams } = await supabase
+            .from('streams')
+            .select('id, broadcaster_id, is_live, status, current_viewers')
+            .in('broadcaster_id', ownerIds)
+            .eq('is_live', true)
+
+          const streamMap = new Map()
+          ;(streams || []).forEach((s: any) => {
+            if (s.broadcaster_id) streamMap.set(s.broadcaster_id, s)
+          })
+          setOwnerStreams(streamMap)
+
+          // Fetch any active participant seats for these owners (if they're seated in other streams)
+          const { data: participants } = await supabase
+            .from('stream_participants')
+            .select('id, stream_id, user_id, seat_index, is_active')
+            .in('user_id', ownerIds)
+            .eq('is_active', true)
+
+          const seatMap = new Map()
+          ;(participants || []).forEach((p: any) => {
+            if (p.user_id) seatMap.set(p.user_id, p)
+          })
+          setOwnerSeatMap(seatMap)
+
+          // Fetch user licenses
+          const { data: licenses } = await supabase
+            .from('user_licenses')
+            .select('user_id, status')
+            .in('user_id', ownerIds)
+
+          const licenseMap = new Map()
+          ;(licenses || []).forEach((l: any) => {
+            if (l.user_id) licenseMap.set(l.user_id, l.status || 'none')
+          })
+          setOwnerLicenses(licenseMap)
+
+          // Fetch homeowners insurances (pick latest expiry per user)
+          const { data: ins } = await supabase
+            .from('homeowners_insurances')
+            .select('user_id, house_id, expires_at')
+            .in('user_id', ownerIds)
+
+          const insMap = new Map()
+          ;(ins || []).forEach((r: any) => {
+            const prev = insMap.get(r.user_id)
+            if (!prev) insMap.set(r.user_id, r)
+            else if (r.expires_at && (!prev.expires_at || new Date(r.expires_at) > new Date(prev.expires_at))) {
+              insMap.set(r.user_id, r)
+            }
+          })
+          setOwnerInsurances(insMap)
+        } else {
+          setOwnerStreams(new Map())
+          setOwnerSeatMap(new Map())
+          setOwnerLicenses(new Map())
+          setOwnerInsurances(new Map())
         }
       } catch (error) {
         console.error('[NeighborhoodMapHub] Error fetching map data:', error)
+      } finally {
+        setMapLoading(false)
       }
     }
 
-    if (!loading) {
-      fetchMapData()
+    fetchMapData()
+
+    const channel = supabase
+      .channel('all-neighborhood-houses')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'houses',
+        },
+        (payload) => {
+          const record = payload.new || payload.old
+          if (record && (record as any).owner_user_id) {
+            fetchMapData()
+          } else if (payload.eventType === 'UPDATE') {
+            fetchMapData()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'neighborhoods',
+        },
+        () => {
+          fetchMapData()
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_profiles',
+        },
+        (payload) => {
+          const updated = payload.new as any
+          if (updated?.id && houseOwners.has(updated.id)) {
+            fetchMapData()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'streams',
+        },
+        (payload) => {
+          // If a stream changed for an owner, refresh
+          const rec = (payload.new || payload.old) as any
+          if (rec && rec.broadcaster_id && houseOwners.has(rec.broadcaster_id)) {
+            fetchMapData()
+          } else {
+            fetchMapData()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stream_participants',
+        },
+        (payload) => {
+          const rec = (payload.new || payload.old) as any
+          if (rec && rec.user_id && houseOwners.has(rec.user_id)) {
+            fetchMapData()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
     }
-  }, [loading])
+  }, [])
 
   const mapRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, baseX: 0, baseY: 0 })
 
-  const [selectedProperty, setSelectedProperty] = useState<string | null>('prop-0')
-  const [selectedFilter, setSelectedFilter] = useState<'all' | PropertyStatus>('all')
+  const [selectedProperty, setSelectedProperty] = useState<string | null>(null)
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'owned' | 'raided' | 'locked'>('all')
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
 
   const raidWindowActive = false
-  const neighborhoodName = neighborhood?.name || 'Troll City'
-  const zipCode = neighborhood?.zip_code || '00000'
 
   const propertyCards = useMemo<PropertyCard[]>(() => {
-    const adminUserIds = new Set(
-      allUsers.filter((u) => u.is_admin || u.is_superadmin).map((u) => String(u.id)),
-    )
+    if (ownedHouses.length === 0) return []
 
-    const hasAdminProperties = adminProperties.length > 0
+    const total = ownedHouses.length
+    const gridCols = Math.max(3, Math.ceil(Math.sqrt(total * 1.5)))
+    const marginTop = 8
+    const marginBottom = 8
+    const marginLeft = 5
+    const marginRight = 5
+    const usableWidth = 100 - marginLeft - marginRight
+    const usableHeight = 100 - marginTop - marginBottom
+    const rows = Math.ceil(total / gridCols)
+    const cellWidth = usableWidth / gridCols
+    const cellHeight = rows > 0 ? usableHeight / rows : usableHeight
 
-    const positions = [
-      { top: '18%', left: '18%', size: 'lg' as const, rotate: '-8deg', lotShape: 'corner' as const },
-      { top: '24%', left: '39%', size: 'md' as const, rotate: '5deg', lotShape: 'square' as const },
-      { top: '17%', left: '61%', size: 'md' as const, rotate: '-3deg', lotShape: 'wide' as const },
-      { top: '42%', left: '24%', size: 'md' as const, rotate: '7deg', lotShape: 'square' as const },
-      { top: '45%', left: '50%', size: 'lg' as const, rotate: '-6deg', lotShape: 'corner' as const },
-      { top: '39%', left: '74%', size: 'sm' as const, rotate: '5deg', lotShape: 'square' as const },
-      { top: '65%', left: '16%', size: 'sm' as const, rotate: '-4deg', lotShape: 'square' as const },
-      { top: '70%', left: '38%', size: 'md' as const, rotate: '6deg', lotShape: 'wide' as const },
-      { top: '66%', left: '62%', size: 'lg' as const, rotate: '-7deg', lotShape: 'corner' as const },
-      { top: '76%', left: '82%', size: 'sm' as const, rotate: '4deg', lotShape: 'square' as const },
-      { top: '32%', left: '88%', size: 'md' as const, rotate: '-6deg', lotShape: 'wide' as const },
-      { top: '84%', left: '52%', size: 'md' as const, rotate: '5deg', lotShape: 'square' as const },
-      { top: '54%', left: '88%', size: 'lg' as const, rotate: '-4deg', lotShape: 'corner' as const },
-      { top: '86%', left: '24%', size: 'sm' as const, rotate: '7deg', lotShape: 'square' as const },
-    ]
+    const sizes: PropertySize[] = ['sm', 'md', 'lg']
+    const shapes: Array<'square' | 'wide' | 'corner'> = ['square', 'wide', 'corner']
 
-    return positions.map((position, index) => {
-      const userForSlot = allUsers[index % Math.max(allUsers.length, 1)]
-      const slotIsAdmin =
-        index === 0 ||
-        index === 4 ||
-        index === 8 ||
-        (userForSlot?.id ? adminUserIds.has(String(userForSlot.id)) : false) ||
-        (hasAdminProperties && index === 12)
+    return ownedHouses.map((house, index) => {
+      const row = Math.floor(index / gridCols)
+      const col = index % gridCols
+      const jitterTop = ((index * 7) % 7) - 3
+      const jitterLeft = ((index * 11) % 7) - 3
 
-      const status: PropertyStatus =
-        index === 0
-          ? 'owned'
-          : index === 3 || index === 8 || index === 12
-            ? 'raided'
-            : index === 5 || index === 9
-              ? 'locked'
-              : 'available'
+      const top = `${marginTop + row * cellHeight + cellHeight / 2 + jitterTop}%`
+      const left = `${marginLeft + col * cellWidth + cellWidth / 2 + jitterLeft}%`
 
-      const kind: PropertyKind = slotIsAdmin
-        ? index === 0
+      const owner = house.owner_user_id ? houseOwners.get(house.owner_user_id) : null
+      const isCurrentUser = house.owner_user_id === profile?.id
+      const isOwnerAdmin = owner?.is_admin || owner?.is_superadmin
+      const neighborhoodName = house.neighborhood_id ? neighborhoodNames.get(house.neighborhood_id) || 'Troll City' : 'Troll City'
+
+      let status: PropertyStatus = 'owned'
+      if (house.is_reposessed) status = 'locked'
+      if (house.condition !== null && house.condition <= 0) status = 'raided'
+
+      const kind: PropertyKind =
+        isOwnerAdmin && isCurrentUser
           ? 'tower'
-          : 'mansion'
-        : position.size === 'lg'
-          ? 'mansion'
-          : 'house'
+          : isOwnerAdmin || house.upgrade_level >= 3
+            ? 'mansion'
+            : 'house'
+
+      const size = isCurrentUser
+        ? 'lg'
+        : isOwnerAdmin
+          ? 'md'
+          : sizes[index % 3]
+
+      const lotShape = shapes[index % 3]
+      const rotateStr = `${((index * 13) % 11) - 5}deg`
+
+      const ownerStream = house.owner_user_id ? ownerStreams.get(house.owner_user_id) : undefined
+      const ownerSeat = house.owner_user_id ? ownerSeatMap.get(house.owner_user_id) : undefined
+      const licenseStatus = house.owner_user_id ? ownerLicenses.get(house.owner_user_id) : 'none'
+      const insuranceRec = house.owner_user_id ? ownerInsurances.get(house.owner_user_id) : undefined
 
       return {
-        id: `prop-${index}`,
-        address: `${index + 1} ${neighborhoodName} Blvd`,
-        owner:
-          index === 0
-            ? profile?.username || 'You'
-            : userForSlot?.username && status !== 'available'
-              ? userForSlot.username
-              : undefined,
-        ownerId: index === 0 ? profile?.id : userForSlot?.id || null,
+        id: house.id,
+        address: `${neighborhoodName}`,
+        owner: isCurrentUser
+          ? profile?.username || 'You'
+          : owner?.username || undefined,
+        ownerId: house.owner_user_id,
+        isLive: !!ownerStream?.is_live,
+        viewerCount: ownerStream?.current_viewers || ownerStream?.viewer_count || 0,
+        inSeat: !!ownerSeat,
+        seatIndex: ownerSeat?.seat_index,
         status,
-        label:
-          index === 0
-            ? 'Your House'
-            : slotIsAdmin && status !== 'raided'
-              ? 'Admin Property'
-              : status === 'raided'
-                ? 'Raided'
-                : status === 'locked'
-                  ? 'Locked'
-                  : 'Available',
-        ...position,
-        isAdmin: slotIsAdmin,
+        label: isCurrentUser
+          ? 'Your House'
+          : isOwnerAdmin
+            ? 'Admin Property'
+            : status === 'raided'
+              ? 'Raided'
+              : status === 'locked'
+                ? 'Locked'
+                : `${owner?.username || 'Owner'}'s House`,
+        top,
+        left,
+        size,
+        rotate: rotateStr,
+        isAdmin: isOwnerAdmin,
         kind,
-        car: index === 0 || index === 2 || index === 4 || index === 8 || index === 12,
+        lotShape,
+        car: isCurrentUser || (owner?.vehicle_id != null) || index % 3 === 0,
+        house,
+        ownerUser: owner,
+        licenseStatus,
+        hasHomeInsurance: !!insuranceRec,
+        insuranceExpiry: insuranceRec?.expires_at || null,
       }
     })
-  }, [adminProperties.length, allUsers, neighborhoodName, profile?.id, profile?.username])
+  }, [ownedHouses, houseOwners, neighborhoodNames, profile?.id, profile?.username, ownerStreams, ownerSeatMap, ownerLicenses, ownerInsurances])
+
+  useEffect(() => {
+    if (!selectedProperty && propertyCards.length > 0) {
+      setSelectedProperty(propertyCards[0].id)
+    }
+  }, [propertyCards, selectedProperty])
 
   const filteredProperties = useMemo(() => {
     if (selectedFilter === 'all') return propertyCards
@@ -267,7 +462,7 @@ export default function NeighborhoodMapHub() {
     if (!dragRef.current.dragging) return
 
     setPan({
-      x: dragRef.current.baseX + event.clientX - event.clientX + event.clientX - dragRef.current.startX,
+      x: dragRef.current.baseX + event.clientX - dragRef.current.startX,
       y: dragRef.current.baseY + event.clientY - dragRef.current.startY,
     })
   }
@@ -282,12 +477,12 @@ export default function NeighborhoodMapHub() {
     setZoom((z) => clampZoom(z + direction))
   }
 
-  if (loading) {
+  if (loading || mapLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#020617] text-white">
         <div className="text-center">
           <div className="mx-auto mb-5 h-14 w-14 animate-spin rounded-full border-4 border-cyan-400/20 border-t-cyan-300" />
-          <p className="text-sm font-semibold text-cyan-100">Loading neighborhood map...</p>
+          <p className="text-sm font-semibold text-cyan-100">Loading city map...</p>
         </div>
       </div>
     )
@@ -308,7 +503,7 @@ export default function NeighborhoodMapHub() {
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <Badge className="border border-cyan-300/30 bg-cyan-400/10 text-cyan-100">
                 <MapPin className="mr-1 h-3.5 w-3.5" />
-                {neighborhoodName} ZIP {zipCode}
+                Troll City — {neighborhoodNames.size} Neighborhoods
               </Badge>
               <Badge className="border border-red-300/30 bg-red-500/10 text-red-100">
                 <Coins className="mr-1 h-3.5 w-3.5" />
@@ -321,13 +516,13 @@ export default function NeighborhoodMapHub() {
             </div>
 
             <h1 className="text-xl font-black leading-tight text-white md:text-2xl">
-              {neighborhoodName} Neighborhood Map
+              Troll City — All Neighborhoods
             </h1>
-            <p className="text-xs text-slate-400">Drag, zoom, inspect properties, and monitor raid activity.</p>
+            <p className="text-xs text-slate-400">{ownedHouses.length} properties across {neighborhoodNames.size} neighborhoods • Drag and zoom to explore</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {(['all', 'owned', 'available', 'raided', 'locked'] as const).map((filter) => (
+            {(['all', 'owned', 'raided', 'locked'] as const).map((filter) => (
               <Button
                 key={filter}
                 size="sm"
@@ -440,6 +635,12 @@ export default function NeighborhoodMapHub() {
             {selectedPropertyData.owner && (
               <p className="mt-1 text-xs text-cyan-200">Owner: {selectedPropertyData.owner}</p>
             )}
+            {selectedPropertyData.isLive && (
+              <p className="mt-1 text-xs text-emerald-300">Live Now • {selectedPropertyData.viewerCount || 0} viewers</p>
+            )}
+            {selectedPropertyData.inSeat && (
+              <p className="mt-1 text-xs text-violet-300">Currently on a live seat{selectedPropertyData.seatIndex != null ? ` — Seat ${selectedPropertyData.seatIndex}` : ''}</p>
+            )}
           </div>
           <StatusBadge status={selectedPropertyData.status} label={selectedPropertyData.status} />
         </div>
@@ -461,7 +662,7 @@ export default function NeighborhoodMapHub() {
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-2">
-          <InfoPill icon={<Users className="h-4 w-4" />} label="Family" value={members.length} />
+          <InfoPill icon={<Home className="h-4 w-4" />} label="Properties" value={ownedHouses.length} />
           <InfoPill icon={<Car className="h-4 w-4" />} label="Cars" value={vehicles.length} />
           <InfoPill icon={<Shield className="h-4 w-4" />} label="Raids" value={raids.length} />
         </div>
@@ -675,6 +876,19 @@ function PropertyMarker({ property, selected }: { property: PropertyCard; select
         {property.isAdmin && (
           <div className="absolute left-3 top-3 z-30 rounded-xl border border-amber-200/30 bg-amber-400/20 p-1.5">
             <Crown className="h-4 w-4 text-amber-100" />
+          </div>
+        )}
+        {property.isLive && (
+          <div className="absolute left-3 bottom-3 z-30 flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-500/80 px-2 py-1 text-[10px] font-black text-white">
+            <span className="h-2 w-2 rounded-full bg-white/90 shadow" />
+            <span>LIVE{property.viewerCount ? ` • ${property.viewerCount}` : ''}</span>
+          </div>
+        )}
+
+        {property.inSeat && (
+          <div className="absolute right-3 bottom-3 z-30 flex items-center gap-2 rounded-full border border-violet-300/30 bg-violet-500/80 px-2 py-1 text-[10px] font-black text-white">
+            <Sparkles className="h-3 w-3" />
+            <span>ON SEAT{property.seatIndex != null ? ` ${property.seatIndex}` : ''}</span>
           </div>
         )}
       </div>
@@ -937,7 +1151,6 @@ function FloatingPanel({
 function MapLegend() {
   const items = [
     { label: 'Owned', className: 'bg-cyan-400' },
-    { label: 'Available', className: 'bg-emerald-400' },
     { label: 'Raided', className: 'bg-red-500' },
     { label: 'Locked', className: 'bg-slate-400' },
     { label: 'Admin', className: 'bg-amber-300' },

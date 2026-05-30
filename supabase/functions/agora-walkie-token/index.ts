@@ -28,13 +28,35 @@ const ALLOWED_ROLES = new Set([
   "staff",
   "officer",
   "broadofficer",
+  "troll_officer",
   "lead_troll_officer",
   "secretary",
   "president",
   "agency_hr",
   "agency_hr_manager",
+  "agency_leader",
+  "attorney",
+  "prosecutor",
+  "journalist",
+  "tcnn_news_caster",
+  "tcnn_chief_news_caster",
+  "auctioneer",
+  "pastor",
+  "org_admin",
+  "empire_partner",
+  "troller",
+  "ceo_assistant",
+  "noah_assistant",
   "hr",
   "hr_manager",
+  "moderator",
+  "superadmin",
+  "troll_family_leader",
+  "noah_admin",
+  "family_leader",
+  "broadcaster",
+  "org_student",
+  "student",
 ]);
 
 function stableNumericUid(value: unknown): number {
@@ -96,7 +118,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const body = (await req.json().catch(() => ({}))) as TokenRequestBody;
 
-    const channelName = String(body.channelName || "staff-walkie-talkie").trim();
+    const rawChannelName = String(body.channelName || "staff-walkie-talkie").trim();
+    const pageSuffix = pageNum > 0 ? `-page${pageNum}` : '';
+    const channelName = `${rawChannelName}${pageSuffix}`;
 
     const rawUserId =
       body.userId ||
@@ -110,6 +134,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const role = String(body.role || body.metadata?.role || "")
       .trim()
       .toLowerCase();
+
+    const pageNum = Number(body.walkieTalkiePage || body.walkie_talkie_page || 0) || 0;
+    const pageSuffix = pageNum > 0 ? `-page${pageNum}` : '';
+    const channelName = `${String(body.channelName || "staff-walkie-talkie").trim()}${pageSuffix}`;
 
     if (role && !ALLOWED_ROLES.has(role)) {
       return withCors(
@@ -151,13 +179,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const privilegeExpiredTs = Math.floor(Date.now() / 1000) + expireSeconds;
     const expiresAt = new Date(privilegeExpiredTs * 1000).toISOString();
 
-    console.log("[agora-walkie-token] Generating token", {
-      channelName,
-      uid,
-      role: role || "unverified",
-      privilegeExpiredTs,
-      expiresAt,
-    });
+      console.log("[agora-walkie-token] Generating token", {
+        channelName,
+        uid,
+        role: role || "unverified",
+        page: pageNum || "default",
+        privilegeExpiredTs,
+        expiresAt,
+      });
 
     const token = generateAgoraToken({
       appId,

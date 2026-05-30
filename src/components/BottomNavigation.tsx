@@ -640,7 +640,6 @@ export default function BottomNavigation() {
       { category: 'Community', label: 'Mai Talent', icon: Star, path: '/mai-talent' },
       { category: 'Community', label: 'My Agency', icon: Users, path: '/agency-dashboard' },
       { category: 'Community', label: 'My Family', icon: Users, path: '/family/home' },
-      { category: 'Community', label: 'Neighbors', icon: Building2, path: '/neighbors' },
       { category: 'Community', label: 'Pool', icon: Waves, path: '/pool' },
       { category: 'Community', label: 'Troll Church', icon: BookOpen, path: '/church' },
       { category: 'Community', label: 'Troll Match', icon: Heart, path: '/match' },

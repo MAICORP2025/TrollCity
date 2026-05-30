@@ -1,7 +1,7 @@
 -- Function to handle paid kicks (100 coins)
 -- Kicker pays 100 coins, Target is banned for 24 hours (unless they pay to return)
 
-CREATE OR REPLACE FUNCTION kick_user_paid(p_stream_id UUID, p_target_user_id UUID, p_kicker_id UUID)
+CREATE OR REPLACE FUNCTION kick_user_paid(p_stream_id UUID, p_target_user_id UUID, p_kicker_id UUID, p_duration_minutes INTEGER DEFAULT 1440)
 RETURNS JSONB AS $$
 DECLARE
     v_cost INTEGER := 100;
@@ -17,12 +17,12 @@ BEGIN
     -- Deduct coins
     UPDATE user_profiles SET coins = coins - v_cost WHERE id = p_kicker_id;
 
-    -- Add to kick/ban list (temporary ban for 24 hours)
+    -- Add to kick/ban list (default 24 hours, caller can override)
     -- We use ON CONFLICT to update expiry if already kicked
     INSERT INTO stream_bans (stream_id, user_id, banned_by, reason, expires_at)
-    VALUES (p_stream_id, p_target_user_id, p_kicker_id, 'Paid Kick', NOW() + INTERVAL '24 hours')
+    VALUES (p_stream_id, p_target_user_id, p_kicker_id, 'Paid Kick', NOW() + (p_duration_minutes || ' minutes')::INTERVAL)
     ON CONFLICT (stream_id, user_id) 
-    DO UPDATE SET expires_at = NOW() + INTERVAL '24 hours', banned_by = p_kicker_id;
+    DO UPDATE SET expires_at = NOW() + (p_duration_minutes || ' minutes')::INTERVAL, banned_by = p_kicker_id;
 
     -- Remove from viewers
     DELETE FROM stream_viewers WHERE stream_id = p_stream_id AND user_id = p_target_user_id;

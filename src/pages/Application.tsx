@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Shield, XCircle, Gavel, Briefcase, Video, Sparkles, Newspaper, Mic, Radio, Crown } from 'lucide-react'
+import { Shield, XCircle, Gavel, Briefcase, Video, Sparkles, Newspaper, Mic, Radio, Crown, Users } from 'lucide-react'
 
 interface JobPosition {
   id: string
@@ -19,25 +19,39 @@ const positionToJobPosition: Record<string, { title: string; icon: any; descript
   prosecutor: { title: 'Troll Court Prosecutor', icon: Gavel, description: 'Represents Troll City in court cases, reviews evidence, presents charges, and supports city justice.' },
   attorney: { title: 'Troll Court Attorney', icon: Shield, description: 'Defense attorney representing defendants in Troll Court cases, appeals, hearings, and disputes.' },
   news_caster: { title: 'News Caster', icon: Mic, description: 'On-air TCNN personality delivering breaking news, live reports, and official city broadcasts.' },
+  tcnn_news_caster: { title: 'TCNN News Caster', icon: Mic, description: 'On-air TCNN personality delivering breaking news, live reports, and official city broadcasts.' },
   secretary: { title: 'Secretary', icon: Briefcase, description: 'Official city support role for admin operations, reports, meetings, and city coordination.' },
+  pastor: { title: 'Pastor', icon: Sparkles, description: 'Provide spiritual guidance, community support, and city services for Troll City.' },
   chief_news_caster: { title: 'Chief News Caster', icon: Radio, description: 'Lead the TCNN team, manage journalists and news casters, and maintain editorial standards.' },
+  tcnn_chief_news_caster: { title: 'TCNN Chief News Caster', icon: Radio, description: 'Lead the TCNN team, manage journalists and news casters, and maintain editorial standards.' },
   troll_officer: { title: 'Troll Officer', icon: Shield, description: 'Official city enforcer responsible for reports, moderation, investigations, arrests, and safety response.' },
-  journalist: { title: 'Journalist', icon: Newspaper, description: 'Write articles, conduct investigations, and keep the city informed through Troll City News Network.' },
   lead_officer: { title: 'Lead Troll Officer', icon: Crown, description: 'Senior enforcement role overseeing Troll Officers, cases, escalation, and city safety consistency.' },
+  lead_troll_officer: { title: 'Lead Troll Officer', icon: Crown, description: 'Senior enforcement role overseeing Troll Officers, cases, escalation, and city safety consistency.' },
+  journalist: { title: 'Journalist', icon: Newspaper, description: 'Write articles, conduct investigations, and keep the city informed through Troll City News Network.' },
+  agency_hr_manager: { title: 'Agency HR Manager', icon: Briefcase, description: 'Manage, approve, review, and settle issues for Troll City agencies.' },
+  agency_leader: { title: 'Agency Leader', icon: Users, description: 'Lead a Troll City agency, recruit members, and grow creator talent.' },
+  ceo_assistant: { title: 'CEO Assistant', icon: Crown, description: 'Assist the CEO with reports, coordination, admin follow-up, and platform operations.' },
+  noah_assistant: { title: 'Noah Assistant', icon: Briefcase, description: 'Assist Noah Admin with reports, support tasks, and city operation follow-up.' },
   troller: { title: 'Troller', icon: Video, description: 'Entertainer role focused on playful chaos, satire, comedy, and broadcast engagement within city rules.' },
 }
 
 const positionToRoleCheck: Record<string, { field: string; message: string }> = {
   auctioneer: { field: 'is_auctioneer', message: 'You are already an Auctioneer' },
   secretary: { field: 'is_secretary', message: 'You are already a Secretary' },
+  pastor: { field: 'is_pastor', message: 'You are already a Pastor' },
   troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
   lead_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
+  lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
   troller: { field: 'is_troller', message: 'You are already a Troller' },
   journalist: { field: 'is_journalist', message: 'You are already a Journalist' },
   news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
+  tcnn_news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
   chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
-  prosecutor: { field: 'is_prosecutor', message: 'You are already a Prosecutor' },
-  attorney: { field: 'is_attorney', message: 'You are already an Attorney' },
+  tcnn_chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
+  agency_hr_manager: { field: 'is_agency_hr_manager', message: 'You are already an Agency HR Manager' },
+  agency_leader: { field: 'is_agency_leader', message: 'You are already an Agency Leader' },
+  ceo_assistant: { field: 'is_ceo_assistant', message: 'You are already a CEO Assistant' },
+  noah_assistant: { field: 'is_noah_assistant', message: 'You are already a Noah Assistant' },
 }
 
 export default function Application() {
@@ -106,6 +120,20 @@ export default function Application() {
     }
   }, [user, navigate])
 
+  // If no position specified, redirect to the careers listing page
+  useEffect(() => {
+    if (!positionId) {
+      navigate('/careers')
+    }
+  }, [positionId, navigate])
+
+  // Redirect invalid /apply?position=... values back to careers
+  useEffect(() => {
+    if (positionId && !positionToJobPosition[positionId]) {
+      navigate('/careers')
+    }
+  }, [positionId, navigate])
+
   if (positionId && positionToJobPosition[positionId]) {
     const position = positionToJobPosition[positionId]
     const eligibility = checkRoleEligibility(positionId)
@@ -157,40 +185,8 @@ export default function Application() {
     )
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">Apply for Roles</h1>
-          <p className="text-gray-400">Choose a role to apply for in Troll City</p>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          {Object.entries(positionToJobPosition).map(([id, pos]) => {
-            const Icon = pos.icon
-            const isDisabled = !checkRoleEligibility(id).eligible || loading
-            const disabledText = checkRoleEligibility(id).message
-
-            return (
-              <div
-                key={id}
-                className="rounded-xl border-2 border-purple-600 bg-purple-900/20 p-6 transition-all hover:scale-105 cursor-pointer hover:shadow-lg"
-                onClick={() => navigate(`/apply?position=${id}`)}
-              >
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="p-3 rounded-lg bg-purple-600/20">
-                    <Icon className="w-8 h-8 text-purple-400" />
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold">{pos.title}</h2>
-                  </div>
-                </div>
-                <p className="text-gray-300 mb-4">{pos.description}</p>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-)
+  // This view is intentionally blank: the app redirects to `/careers`
+  // when no `position` query param is present. Return null to
+  // avoid rendering the legacy listing UI.
+  return null
 }

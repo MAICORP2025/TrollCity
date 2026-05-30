@@ -268,7 +268,6 @@ export function useVehicleSystem() {
         .update(updateData)
         .eq('id', user.id)
 
-      await fetchLicense()
       return { 
         success: true, 
         message: 'Driving without an active license is not allowed. Your license status has been suspended and insurance is now required.' 
@@ -328,7 +327,7 @@ export function useVehicleSystem() {
 }
 
 export function useDriverTest() {
-  const { user } = useAuthStore()
+  const { user, profile, setProfile } = useAuthStore()
   const [test, setTest] = useState<DriverTest | null>(null)
   const [license, setLicense] = useState<UserLicense | null>(null)
   const [loading, setLoading] = useState(true)
@@ -442,17 +441,36 @@ const takeTest = async (answers: number[], correctAnswers: number[] = [1, 2, 1, 
       // Also insert into user_licenses table for consistency
       if (passed) {
         const licenseNumber = `TC${Date.now().toString(36).toUpperCase()}`
-        const expiry = passed && newLicenseStatus === 'active' 
+        const expiry = newLicenseStatus === 'active'
           ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          : null
-        
-        await supabase.from('user_licenses').upsert({
-          user_id: user.id,
-          license_number: licenseNumber,
-          status: newLicenseStatus,
-          issued_at: new Date().toISOString(),
-          expires_at: expiry || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-        }, { onConflict: 'user_id' })
+          : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+
+        // Check if license row already exists
+        const { data: existingLicense } = await supabase
+          .from('user_licenses')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (existingLicense) {
+          await supabase
+            .from('user_licenses')
+            .update({
+              license_number: licenseNumber,
+              status: newLicenseStatus,
+              issued_at: new Date().toISOString(),
+              expires_at: expiry
+            })
+            .eq('user_id', user.id)
+        } else {
+          await supabase.from('user_licenses').insert({
+            user_id: user.id,
+            license_number: licenseNumber,
+            status: newLicenseStatus,
+            issued_at: new Date().toISOString(),
+            expires_at: expiry
+          })
+        }
       }
 
       // Save test result
@@ -463,6 +481,20 @@ const takeTest = async (answers: number[], correctAnswers: number[] = [1, 2, 1, 
         test_date: new Date().toISOString(),
         license_number: passed ? `TC${Date.now().toString(36).toUpperCase()}` : null
       })
+
+      // Sync Zustand profile with license status
+      if (passed && profile) {
+        const expiry = newLicenseStatus === 'active'
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          : (profile as any).drivers_license_expiry
+
+        setProfile({
+          ...profile,
+          license_status: newLicenseStatus,
+          driver_test_passed_at: new Date().toISOString(),
+          drivers_license_expiry: expiry,
+        } as any)
+      }
 
       await fetchLicense()
       return { success: true, passed, score, message }
@@ -555,8 +587,4 @@ const takeTest = async (answers: number[], correctAnswers: number[] = [1, 2, 1, 
     fetchLicense,
     checkAndSuspendExpiredInsurance
   }
-}
-
-function fetchLicense() {
-  throw new Error('Function not implemented.')
 }

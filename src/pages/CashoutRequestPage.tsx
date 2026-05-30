@@ -61,9 +61,17 @@ export default function CashoutRequestPage() {
   const [idFile, setIdFile] = useState<File | null>(null);
   const [idUploading, setIdUploading] = useState(false);
   const [idUrl, setIdUrl] = useState<string | null>(null);
+  const [lastApprovedAt, setLastApprovedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [recentRequests, setRecentRequests] = useState<CashoutRequest[]>([]);
+
+  const hasRecentApprovedPayout = useMemo(() => {
+    if (!lastApprovedAt) return false;
+    return new Date(lastApprovedAt).getTime() >= Date.now() - 30 * 24 * 60 * 60 * 1000;
+  }, [lastApprovedAt]);
+
+  const requiresIdUpload = !hasRecentApprovedPayout;
 
    // Derived state for display
    const feeCoins = selectedTier ? calculateFeeCoins(selectedTier.coins) : 0;
@@ -71,9 +79,43 @@ export default function CashoutRequestPage() {
    const usdAmount = selectedTier ? selectedTier.usd : 0;
 
    const isFriday = isCashoutWindowOpen();
-   const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && idUrl && providerUsername.trim() && userTag.trim();
+   const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim();
 
   // Load user's troll_coins balance and recent payout requests
+  const getSavedPayoutUsername = useCallback((method: PayoutMethod) => {
+    if (!profile) return '';
+    switch (method) {
+      case 'paypal':
+        return profile.paypal_email || '';
+      case 'cash_app':
+        return profile.cashapp_handle ? profile.cashapp_handle.replace(/\$/g, '') : '';
+      case 'venmo':
+        return profile.venmo_handle || '';
+      default:
+        return '';
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    const preferredMethod = (profile.preferred_payout_method as PayoutMethod) || (
+      profile.paypal_email ? 'paypal' : profile.venmo_handle ? 'venmo' : 'cash_app'
+    );
+
+    setPayoutMethod(preferredMethod);
+    const savedProvider = getSavedPayoutUsername(preferredMethod);
+    if (savedProvider) setProviderUsername(savedProvider);
+  }, [profile, getSavedPayoutUsername]);
+
+  useEffect(() => {
+    if (!profile) return;
+    if (providerUsername.trim()) return;
+
+    const savedProvider = getSavedPayoutUsername(payoutMethod);
+    if (savedProvider) setProviderUsername(savedProvider);
+  }, [profile, payoutMethod, providerUsername, getSavedPayoutUsername]);
+
   useEffect(() => {
     async function loadData() {
       if (!profile) return;
@@ -81,8 +123,8 @@ export default function CashoutRequestPage() {
       try {
         setLoading(true);
 
-        // Get troll_coins balance (all working-earned coins are cashable)
-        const eligibleTotal = Math.max(0, (profile.troll_coins || 0) - (profile.reserved_troll_coins || 0));
+        // Use cashout escrow balance only; free or non-cashout coins do not qualify.
+        const eligibleTotal = Math.max(0, (profile.cashout_coins || 0) - (profile.cashout_reserved_coins || 0));
         setEligibleCoins(eligibleTotal);
 
         // Load recent payout requests
@@ -95,6 +137,18 @@ export default function CashoutRequestPage() {
 
         if (requestsError) throw requestsError;
         setRecentRequests(requestsData || []);
+
+        // Load last approved payout date to optionally skip ID upload for 30 days
+        const { data: lastApprovedData, error: lastApprovedError } = await supabase
+          .from('payout_requests')
+          .select('created_at')
+          .eq('user_id', profile.id)
+          .in('status', ['approved', 'completed'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (lastApprovedError) throw lastApprovedError;
+        setLastApprovedAt(lastApprovedData?.[0]?.created_at || null);
 
         // Auto-select highest eligible tier based on the loaded balance
         const eligibleTier = [...TIERS].reverse().find(t => t.coins <= eligibleTotal) || TIERS[0];
@@ -192,13 +246,13 @@ export default function CashoutRequestPage() {
 
   // Handle cashout submission
   const handleSubmit = useCallback(async () => {
-    if (!profile || !selectedTier || !idUrl) {
+    if (!profile || !selectedTier || (requiresIdUpload && !idUrl)) {
       toast.error('Missing required fields');
       return;
     }
 
     if (!isFriday) {
-      toast.error('Cashouts are only available on Fridays');
+      toast.error('Cashout requests are only available during the weekend payout window.');
       return;
     }
 
@@ -221,6 +275,7 @@ export default function CashoutRequestPage() {
          p_provider_type: payoutMethod,
          p_provider_username: providerUsername.trim(),
          p_user_tag: userTag.trim() || null,
+         p_id_verification_url: idUrl || null,
        });
 
       if (error) throw error;
@@ -268,8 +323,8 @@ export default function CashoutRequestPage() {
             <div className="flex-1">
               <h1 className="text-3xl font-extrabold text-white mb-2">Request Cashout</h1>
               <p className="text-gray-300">
-                Convert your earned troll coins to cash. All coins you've earned from working in your role are cashable.
-                Coins are added to your balance on Thursdays. Cashout requests are processed on Fridays and sent to the CEO Assistant and Noah Assistant for review before admin payout.
+                Convert your eligible cashout coins into real payout requests. Only coins moved into Cashout Escrow are eligible for payout; free or non-cashout coins are excluded.
+                Eligible cashout coins are added on Thursdays, and cashout requests are processed on weekends by the CEO Assistant and Noah Assistant before admin payout.
               </p>
             </div>
           </div>
@@ -281,7 +336,7 @@ export default function CashoutRequestPage() {
               <div>
                 <h4 className="font-bold text-red-400">Cashouts Are Closed</h4>
                 <p className="text-sm text-red-300/80">
-                  Cashout requests are only accepted on Fridays between 1:00 AM - 3:00 PM Mountain Time.
+                  Cashout requests are only accepted on Friday, Saturday, and Sunday between 1:00 AM - 7:00 PM Mountain Time.
                   Please come back during that window to submit your request.
                 </p>
               </div>
@@ -292,7 +347,7 @@ export default function CashoutRequestPage() {
           <div className="mt-4 bg-[#151027] rounded-lg p-4 border border-purple-500/30">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <p className="text-sm text-gray-400">Troll Coins Balance</p>
+                <p className="text-sm text-gray-400">Cashout Escrow Balance</p>
                 <p className="text-2xl font-bold text-troll-green-neon">{eligibleCoins.toLocaleString()}</p>
               </div>
               <div>
@@ -447,11 +502,20 @@ export default function CashoutRequestPage() {
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Upload ID Verification
-              <span className="text-red-400 ml-1">*</span>
+              {requiresIdUpload ? (
+                <span className="text-red-400 ml-1">*</span>
+              ) : (
+                <span className="text-green-400 ml-1">(optional for this request)</span>
+              )}
             </label>
             <p className="text-xs text-gray-500 mb-2">
               For security, we require a photo of your government-issued ID. This will be reviewed by our admin team.
             </p>
+            {!requiresIdUpload && lastApprovedAt && (
+              <p className="text-sm text-green-300 mb-2">
+                Your last approved payout was on {new Date(lastApprovedAt).toLocaleDateString()}. ID upload is optional for 30 days after approval.
+              </p>
+            )}
 
             {!idUrl ? (
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-purple-500/40 rounded-lg cursor-pointer bg-[#171427] hover:bg-purple-900/20 transition-colors">
@@ -517,7 +581,7 @@ export default function CashoutRequestPage() {
              ) : !isFriday ? (
                <>
                  <Clock className="w-5 h-5" />
-                 Cashouts Only on Fridays
+                 Weekend Cashout Window Closed
                </>
              ) : eligibleCoins < (selectedTier?.coins || 0) ? (
                <>

@@ -25,6 +25,29 @@ SELECT cron.schedule(
   $$
 );
 
+-- Add cron job: Weekly Thursday reminder to move eligible earned coins into Cashout Escrow
+SELECT cron.schedule(
+  'cashout-escrow-reminder-thursday',
+  '0 10 * * 4',  -- At 10:00 on Thursday every week (MST)
+  $$
+    INSERT INTO public.global_notifications (
+      title,
+      message,
+      type,
+      priority,
+      expires_at,
+      created_at
+    ) VALUES (
+      '📦 Add Cashout Coins Today',
+      'Reminder: click Cashout Coins and move your eligible earned coins into cashout escrow for weekend payouts. Deposit enough to cover the payout fee.',
+      'announcement',
+      'high',
+      NOW() + INTERVAL '2 days',
+      NOW()
+    );
+  $$
+);
+
 -- Add cron job: Runs when cashout window opens at 2:00 PM MST Friday
 SELECT cron.schedule(
   'cashout-window-open',

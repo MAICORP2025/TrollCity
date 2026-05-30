@@ -199,13 +199,13 @@ export default function EarningsPage() {
   const paidCoins = earningsData.purchased_coins || 0;
   const eligibleTier = getEligibleTier(paidCoins);
   
-  // Cashout window check: Fridays 2:00 PM - 3:00 PM MST (America/Denver)
+  // Cashout window check: Friday/Saturday/Sunday 1:00 AM - 7:00 PM MST (America/Denver)
   const now = new Date();
   const mtDateString = now.toLocaleString("en-US", {timeZone: "America/Denver"});
   const mtDate = new Date(mtDateString);
   const day = mtDate.getDay();
   const hour = mtDate.getHours();
-  const isCashoutWindowOpen = day === 5 && hour === 14;
+  const isCashoutWindowOpen = [5, 6, 0].includes(day) && hour >= 1 && hour < 19;
 
   return (
     <RequireRole roles={['broadcaster', 'admin']} fallbackPath="/dashboard">
@@ -356,7 +356,7 @@ export default function EarningsPage() {
                       >
                         {isCashoutWindowOpen 
                           ? `Request ${formatUSD(tier.payout)}` 
-                          : 'Cashouts open Fridays 2-3PM MST'}
+                          : 'Cashouts open Fri-Sun 1AM-7PM MST'}
                       </button>
                     ) : null}
                   </div>

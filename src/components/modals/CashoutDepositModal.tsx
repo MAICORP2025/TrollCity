@@ -147,7 +147,7 @@ return (
               {autoTierPrompt && unlockedTier ? 'New Cashout Tier Unlocked' : 'Add Earned Coins to Cashout'}
             </h2>
             <p className="text-xs text-zinc-400">
-              Only coins earned from gifts and creator activity can be cashed out.
+              Only coins earned from gifts and creator activity can be cashed out. Add enough coins so your chosen payout tier covers the cashout fee.
             </p>
           </div>
         </div>

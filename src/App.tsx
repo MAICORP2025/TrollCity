@@ -312,7 +312,6 @@ import InmatesPage from "./pages/InmatesPage.js";
 import JailAppealPage from "./pages/JailAppealPage.js";
 import ProfileSetup from "./pages/ProfileSetup.js";
 import Profile from "./pages/Profile.js";
-import NeighborsPage from "./pages/Neighbors.js";
 import MapPage from "./pages/MapPage.js";
 import NeighborhoodMapHub from "./pages/NeighborhoodMapHub.js";
 import InsurancePage from "./pages/InsurancePage.js";
@@ -372,6 +371,7 @@ import DistrictTour from "./pages/DistrictTour.js";
 import LivingPage from "./pages/UnderConstructionPage.js";
 import ChurchPage from "./pages/ChurchPage.js";
 import PastorDashboard from "./pages/church/PastorDashboard.js";
+const ChurchLivePage = lazyWithRetry(() => import("./pages/church/ChurchLivePage.tsx"));
 import LiveCommandCenter from "./pages/live/LiveCommandCenter.js";
 import LiveStreamOverlay from "./pages/live/LiveStreamOverlay.js";
 import AudioSettings from "./pages/live/AudioSettings.js";
@@ -1387,7 +1387,6 @@ const handleVisibilityChange = async () => {
                   <Route path="/blocked-users" element={<BlockedUsers />} />
 <Route path="/district/:districtName" element={<DistrictTour />} />
                    <Route path="/living" element={<LivingPage />} />
-                    <Route path="/neighbors" element={<NeighborsPage />} />
                     <Route path="/map" element={<MapPage />} />
                     <Route path="/neighborhood-map" element={<NeighborhoodMapHub />} />
                     <Route path="/neighborhood-setup" element={<NeighborhoodOnboarding />} />
@@ -1395,7 +1394,12 @@ const handleVisibilityChange = async () => {
                     <Route path="/insurance" element={<InsurancePage />} />
                     
                     <Route path="/church" element={<ChurchPage />} />
-                  <Route path="/church/pastor" element={<PastorDashboard />} />
+                    <Route path="/church/live/:sessionId" element={<ChurchLivePage />} />
+                  <Route path="/church/pastor" element={
+                    <RequireRole roles={['pastor']}>
+                      <PastorDashboard />
+                    </RequireRole>
+                  } />
                   <Route
                     path="/attorney"
                     element={
@@ -2132,7 +2136,7 @@ const handleVisibilityChange = async () => {
 <Route
                       path="/rtcadminmonitor"
                       element={
-                        <RequireRole roles={[UserRole.ADMIN, UserRole.HR_ADMIN, UserRole.AGENCY_HR_MANAGER, UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, UserRole.SECRETARY, 'ceo', 'officer']}>
+                        <RequireRole roles={[UserRole.ADMIN, UserRole.HR_ADMIN, UserRole.AGENCY_HR_MANAGER, UserRole.LEAD_TROLL_OFFICER, UserRole.TROLL_OFFICER, UserRole.SECRETARY, 'ceo', 'officer', 'pastor']}>
                           <RTCAdminMonitor />
                         </RequireRole>
                       }

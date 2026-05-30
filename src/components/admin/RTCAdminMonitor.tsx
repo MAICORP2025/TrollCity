@@ -189,7 +189,7 @@ const { profile } = useAuthStore();
     canAccessWalkieTalkie: contextCanAccessWalkieTalkie,
   } = useStaffWalkieTalkieContext();
 
-const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin', 'empire_partner', 'auctioneer', 'attorney', 'prosecutor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'agency_hr', 'agency_leader', 'ceo_assistant', 'noah_assistant'];
+const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin', 'empire_partner', 'auctioneer', 'attorney', 'prosecutor', 'pastor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'agency_hr', 'agency_leader', 'ceo_assistant', 'noah_assistant'];
    const isStaff = profile?.is_admin === true || staffRoles.includes(profile?.role || '');
   const isFullAdmin = profile?.is_admin === true || ['admin', 'ceo', 'superadmin'].includes(profile?.role || '');
   const canUseWalkieTalkie = contextCanAccessWalkieTalkie;
