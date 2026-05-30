@@ -1,12 +1,63 @@
 /**
  * Troll City Background Audio Safety & Location System Types
- * 
- * This file contains all type definitions for:
+ *
+ * Covers:
  * - Audio safety monitoring
  * - Safety alerts
- * - User geolocation
+ * - User IP/location intelligence
  * - Admin audit logging
+ *
+ * Role model note:
+ * This file uses current Troll City canonical roles only.
+ * Do not reintroduce moderator, super_admin, platform_admin,
+ * troll_officer, or lead_troll_officer here unless the app role model changes.
  */
+
+// ============================================================
+// CANONICAL TROLL CITY ROLE TYPES
+// ============================================================
+
+export type TrollCitySafetyRole =
+  | 'admin'
+  | 'ceo'
+  | 'staff'
+  | 'officer'
+  | 'broadofficer'
+  | 'secretary'
+  | 'president';
+
+export type LocationAccessRole =
+  | 'admin'
+  | 'ceo'
+  | 'secretary';
+
+export type SafetyAlertAccessRole = TrollCitySafetyRole;
+
+export const LOCATION_ACCESS_ROLES: LocationAccessRole[] = [
+  'admin',
+  'ceo',
+  'secretary'
+];
+
+export const SAFETY_ALERT_ACCESS_ROLES: SafetyAlertAccessRole[] = [
+  'admin',
+  'ceo',
+  'staff',
+  'officer',
+  'broadofficer',
+  'secretary',
+  'president'
+];
+
+export const canAccessSafetyAlerts = (role?: string | null): role is SafetyAlertAccessRole => {
+  if (!role) return false;
+  return SAFETY_ALERT_ACCESS_ROLES.includes(role.toLowerCase() as SafetyAlertAccessRole);
+};
+
+export const canAccessLocationIntelligence = (role?: string | null): role is LocationAccessRole => {
+  if (!role) return false;
+  return LOCATION_ACCESS_ROLES.includes(role.toLowerCase() as LocationAccessRole);
+};
 
 // ============================================================
 // SAFETY ALERT TYPES
@@ -16,6 +67,13 @@ export type SafetyTriggerType = 'SELF_HARM' | 'THREAT' | 'VIOLENCE' | 'ABUSE';
 
 export type AlertLevel = 1 | 2 | 3;
 
+export type SafetyAlertReviewStatus =
+  | 'unreviewed'
+  | 'reviewing'
+  | 'reviewed'
+  | 'dismissed'
+  | 'escalated';
+
 export interface SafetyAlert {
   id: string;
   stream_id: string;
@@ -24,16 +82,18 @@ export interface SafetyAlert {
   trigger_phrase: string;
   audio_chunk_timestamp: string;
   alert_level: AlertLevel;
-  reviewed_by?: string;
-  action_taken?: string;
-  reviewed_at?: string;
+  review_status?: SafetyAlertReviewStatus;
+  reviewed_by?: string | null;
+  action_taken?: SafetyAction | string | null;
+  reviewed_at?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface SafetyAlertWithDetails extends SafetyAlert {
   user_username: string;
-  stream_title?: string;
-  reviewer_username?: string;
+  stream_title?: string | null;
+  reviewer_username?: string | null;
   total_triggers?: number;
   alert_status: 'HIGH PRIORITY' | 'FLAGGED' | 'NOTIFICATION';
 }
@@ -54,6 +114,7 @@ export interface CreateSafetyAlertResponse {
 export interface ReviewSafetyAlertRequest {
   alert_id: string;
   action_taken: SafetyAction;
+  review_notes?: string;
 }
 
 // ============================================================
@@ -82,42 +143,56 @@ export const SAFETY_ACTIONS: SafetyActionOption[] = [
   {
     value: 'JOIN_STREAM',
     label: 'Join Stream',
-    description: 'Enter the stream to observe the situation',
+    description: 'Enter the stream to observe the situation.',
     severity: 'low',
     icon: 'Eye'
   },
   {
     value: 'REVIEW_STREAM',
     label: 'Review Stream',
-    description: 'Mark stream for closer monitoring',
+    description: 'Mark the stream for closer monitoring.',
     severity: 'low',
     icon: 'Search'
   },
   {
+    value: 'NO_ACTION',
+    label: 'No Action',
+    description: 'Close the review with no enforcement action.',
+    severity: 'low',
+    icon: 'CheckCircle'
+  },
+  {
+    value: 'DISMISSED',
+    label: 'Dismiss Alert',
+    description: 'Dismiss the alert as not actionable.',
+    severity: 'low',
+    icon: 'XCircle'
+  },
+  {
     value: 'ISSUE_WARNING',
     label: 'Issue Warning',
-    description: 'Send warning to the user',
+    description: 'Send a warning to the user.',
     severity: 'medium',
     icon: 'AlertTriangle'
   },
   {
     value: 'END_BROADCAST',
     label: 'End Broadcast',
-    description: 'Immediately terminate the stream',
+    description: 'Immediately terminate the stream.',
     severity: 'high',
     icon: 'StopCircle'
   },
   {
     value: 'SEND_TO_TROLL_COURT',
     label: 'Send to Troll Court',
-    description: 'Escalate to judicial review',
+    description: 'Escalate the incident to judicial review.',
     severity: 'high',
     icon: 'Gavel'
   },
   {
     value: 'PLACE_IN_TROLL_JAIL',
     label: 'Place in Troll Jail',
-    description: 'Immediate detention pending review',
+    description: 'Apply immediate jail restriction pending or after review.',
     severity: 'high',
     icon: 'Lock'
   }
@@ -155,27 +230,29 @@ export interface AudioChunkResult {
 // USER LOCATION TYPES
 // ============================================================
 
+export type UserLocationSource = 'login' | 'signup' | 'manual_lookup';
+
 export interface UserIpLocation {
   id: string;
   user_id: string;
   ip_address: string;
-  city?: string;
-  state?: string;
-  region?: string;
-  country?: string;
-  country_code?: string;
-  latitude?: number;
-  longitude?: number;
-  isp?: string;
-  organization?: string;
-  timezone?: string;
-  source: 'login' | 'signup' | 'manual_lookup';
+  city?: string | null;
+  state?: string | null;
+  region?: string | null;
+  country?: string | null;
+  country_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  isp?: string | null;
+  organization?: string | null;
+  timezone?: string | null;
+  source: UserLocationSource;
   created_at: string;
 }
 
 export interface UserLocationWithProfile extends UserIpLocation {
   username: string;
-  email?: string;
+  email?: string | null;
   role: string;
 }
 
@@ -187,13 +264,13 @@ export interface UserLocationSearchRequest {
 export interface EmergencyUserInfo {
   user_id: string;
   username: string;
-  email?: string;
-  latest_ip?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  isp?: string;
-  last_seen?: string;
+  email?: string | null;
+  latest_ip?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  isp?: string | null;
+  last_seen?: string | null;
 }
 
 // ============================================================
@@ -212,20 +289,32 @@ export type AuditActionType =
 
 export interface AdminAuditLog {
   id: string;
-  admin_id?: string;
-  action_type: AuditActionType;
-  target_user_id?: string;
-  target_stream_id?: string;
-  details?: Record<string, unknown>;
-  ip_address?: string;
-  user_agent?: string;
+  admin_id?: string | null;
+
+  /**
+   * Preferred database column for Troll City audit logs.
+   * Use this when the table is public.admin_audit_log/action.
+   */
+  action?: AuditActionType | string;
+
+  /**
+   * Backward-compatible field for older UI code that still expects action_type.
+   * Remove later only after all callers are migrated to action.
+   */
+  action_type?: AuditActionType | string;
+
+  target_user_id?: string | null;
+  target_stream_id?: string | null;
+  details?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
   created_at: string;
 }
 
 export interface AdminAuditLogWithDetails extends AdminAuditLog {
-  admin_username?: string;
-  target_username?: string;
-  stream_title?: string;
+  admin_username?: string | null;
+  target_username?: string | null;
+  stream_title?: string | null;
 }
 
 // ============================================================
@@ -238,9 +327,9 @@ export interface StreamAudioMonitoring {
   user_id: string;
   is_monitored: boolean;
   monitoring_started_at: string;
-  monitoring_ended_at?: string;
+  monitoring_ended_at?: string | null;
   total_triggers: number;
-  last_trigger_at?: string;
+  last_trigger_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -248,17 +337,17 @@ export interface StreamAudioMonitoring {
 export interface StreamMonitoringStatus {
   stream_id: string;
   title: string;
-  category?: string;
+  category?: string | null;
   user_id: string;
   broadcaster_name: string;
   is_live: boolean;
   current_viewers: number;
   is_monitored?: boolean;
-  monitoring_started_at?: string;
+  monitoring_started_at?: string | null;
   total_triggers?: number;
-  last_trigger_at?: string;
+  last_trigger_at?: string | null;
   pending_alerts: number;
-  highest_alert_level?: AlertLevel;
+  highest_alert_level?: AlertLevel | null;
 }
 
 // ============================================================
@@ -270,7 +359,7 @@ export interface SafetyAlertDashboardItem {
   stream_id: string;
   user_id: string;
   user_username: string;
-  stream_title?: string;
+  stream_title?: string | null;
   trigger_type: SafetyTriggerType;
   trigger_phrase: string;
   alert_level: AlertLevel;
@@ -284,24 +373,24 @@ export interface LocationIntelligenceItem {
   user_id: string;
   username: string;
   role: string;
-  email?: string;
+  email?: string | null;
   ip_address: string;
-  city?: string;
-  state?: string;
-  region?: string;
-  country?: string;
-  country_code?: string;
-  latitude?: number;
-  longitude?: number;
-  isp?: string;
-  organization?: string;
-  timezone?: string;
+  city?: string | null;
+  state?: string | null;
+  region?: string | null;
+  country?: string | null;
+  country_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  isp?: string | null;
+  organization?: string | null;
+  timezone?: string | null;
   source: string;
   last_seen: string;
 }
 
 // ============================================================
-// OFFICER DASHBOARD TYPES
+// OFFICER / STAFF DASHBOARD TYPES
 // ============================================================
 
 export interface SafetyAlertFilters {
@@ -316,7 +405,7 @@ export interface AlertStats {
   total_alerts_today: number;
   unreviewed_alerts: number;
   high_priority_alerts: number;
-  alerts_by_type: Record<SafetyTriggerType, number>;
+  alerts_by_type: Partial<Record<SafetyTriggerType, number>>;
 }
 
 // ============================================================
@@ -345,20 +434,3 @@ export interface GeolocationApiResponse {
   org?: string;
   asn?: string;
 }
-
-// ============================================================
-// PERMISSION TYPES
-// ============================================================
-
-export type LocationAccessRole = 'super_admin' | 'platform_admin';
-export type SafetyAlertAccessRole = 'admin' | 'troll_officer' | 'lead_troll_officer' | 'moderator' | 'super_admin' | 'platform_admin';
-
-export const LOCATION_ACCESS_ROLES: LocationAccessRole[] = ['super_admin', 'platform_admin'];
-export const SAFETY_ALERT_ACCESS_ROLES: SafetyAlertAccessRole[] = [
-  'admin',
-  'troll_officer',
-  'lead_troll_officer',
-  'moderator',
-  'super_admin',
-  'platform_admin'
-];

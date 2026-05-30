@@ -189,14 +189,6 @@ export default function TrollWheel() {
     await refreshCoins?.()
   }
 
-  const handleTrollmondChange = async (newBalance: number) => {
-    setTrollmondBalance(newBalance)
-    if (profile) {
-      useAuthStore.getState().setProfile({ ...profileAny, trollmonds: newBalance })
-    }
-    await refreshCoins?.()
-  }
-
   const IS_UNDER_CONSTRUCTION = false
 
   if (IS_UNDER_CONSTRUCTION) {
@@ -296,7 +288,7 @@ export default function TrollWheel() {
                   userBalance={userBalance}
                   trollmondBalance={trollmondBalance}
                   onBalanceChange={handleBalanceChange}
-                  onTrollmondChange={handleTrollmondChange}
+                  onTrollmondChange={handleBalanceChange}
                 />
               </div>
             </ArcadePanel>

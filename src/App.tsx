@@ -184,6 +184,7 @@ const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersT
 const TMFamilyInviteHandler = lazyWithRetry(() => import("./components/trollmatch/TMFamilyInviteHandler"));
 const EmbedPage = lazyWithRetry(() => import("./pages/broadcast/EmbedPage"));
 const HomepageBackgroundShowcase = lazyWithRetry(() => import("./pages/dev/HomepageBackgroundShowcase"));
+const BlockedUsers = lazyWithRetry(() => import("./pages/BlockedUsers"));
 
 const AuthenticatedHome = lazyWithRetry(() => import("./pages/Home"));
 
@@ -1383,6 +1384,7 @@ const handleVisibilityChange = async () => {
                   <Route path="/profile/setup" element={<ProfileSetup />} />
                   <Route path="/profile/id/:userId" element={<Profile />} />
                    <Route path="/profile/:username" element={<Profile />} />
+                  <Route path="/blocked-users" element={<BlockedUsers />} />
 <Route path="/district/:districtName" element={<DistrictTour />} />
                    <Route path="/living" element={<LivingPage />} />
                     <Route path="/neighbors" element={<NeighborsPage />} />

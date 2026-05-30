@@ -134,6 +134,20 @@ export interface EmergencyPowerAction {
   cooldown_ends_at: string | null;
 }
 
+export interface GovernmentHistoryEntry {
+  id: string;
+  event_type: string;
+  event_data: Record<string, any>;
+  actor_id: string | null;
+  target_id: string | null;
+  description: string | null;
+  created_at: string;
+  actor_profile?: {
+    username: string;
+    avatar_url: string;
+  };
+}
+
 // Role-based tab permissions
 export const ROLE_TABS = {
   officer: ['Officer Dashboard', 'Officer Lounge', 'Officer Moderation'],
@@ -166,6 +180,8 @@ export const useGovernmentSystem = () => {
   const [protests, setProtests] = useState<Protest[]>([]);
   const [reputation, setReputation] = useState<GovernmentReputation | null>(null);
   const [cityReputation, setCityReputation] = useState<CityReputation | null>(null);
+  const [governmentHistory, setGovernmentHistory] = useState<GovernmentHistoryEntry[]>([]);
+  const [userProtestIds, setUserProtestIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -530,6 +546,54 @@ export const useGovernmentSystem = () => {
     }
   }, [user]);
 
+  // Fetch government history
+  const fetchGovernmentHistory = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('government_history')
+        .select('*, actor_profile:user_profiles(username, avatar_url)')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setGovernmentHistory(data || []);
+    } catch (err: any) {
+      console.error('Error fetching government history:', err);
+    }
+  }, []);
+
+  // Fetch which protests the current user has joined
+  const fetchUserProtests = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('protest_participants')
+        .select('protest_id')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      setUserProtestIds(new Set((data || []).map((r: any) => r.protest_id)));
+    } catch (err: any) {
+      console.error('Error fetching user protests:', err);
+    }
+  }, [user]);
+
+  // Leave a protest
+  const leaveProtest = useCallback(async (protestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('protest_participants')
+        .delete()
+        .eq('protest_id', protestId)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+      await fetchProtests();
+      await fetchUserProtests();
+    } catch (err: any) {
+      console.error('Error leaving protest:', err);
+      setError(err.message);
+      throw err;
+    }
+  }, [user, fetchProtests, fetchUserProtests]);
+
   // Fetch city reputation
   const fetchCityReputation = useCallback(async () => {
     try {
@@ -599,7 +663,9 @@ export const useGovernmentSystem = () => {
         fetchBribes(),
         fetchProtests(),
         fetchReputation(),
-        fetchCityReputation()
+        fetchCityReputation(),
+        fetchGovernmentHistory(),
+        fetchUserProtests()
       ]);
       setLoading(false);
     };
@@ -608,6 +674,50 @@ export const useGovernmentSystem = () => {
       initializeData();
     }
   }, [user]);
+
+  // Realtime subscription for protest changes - live updates when users join/leave
+  useEffect(() => {
+    const protestChannel = supabase
+      .channel('protests_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'protests',
+        },
+        () => {
+          fetchProtests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(protestChannel);
+    };
+  }, [fetchProtests]);
+
+  // Realtime subscription for government history - live audit log
+  useEffect(() => {
+    const historyChannel = supabase
+      .channel('government_history_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'government_history',
+        },
+        () => {
+          fetchGovernmentHistory();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(historyChannel);
+    };
+  }, [fetchGovernmentHistory]);
 
   return {
     // Data
@@ -618,6 +728,8 @@ export const useGovernmentSystem = () => {
     protests,
     reputation,
     cityReputation,
+    governmentHistory,
+    userProtestIds,
     loading,
     error,
     
@@ -634,8 +746,11 @@ export const useGovernmentSystem = () => {
     fetchProtests,
     createProtest,
     joinProtest,
+    leaveProtest,
     fetchReputation,
     fetchCityReputation,
+    fetchGovernmentHistory,
+    fetchUserProtests,
     useEmergencyPower,
     getUserRoleLevel,
     getAvailableTabs

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Coins, Loader2, ChevronDown, Gem } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { useGiftSystem, GiftItem, getTrollmondDiscount, getDiscountedPrice } from '../../lib/hooks/useGiftSystem';
+import { useGiftSystem, GiftItem } from '../../lib/hooks/useGiftSystem';
 import { getGiftVisualConfig } from '../../lib/giftVisuals';
 import { useAuthStore } from '../../lib/store';
 import { toast } from 'sonner';
@@ -27,16 +27,16 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
   const [_sendingToAll, setSendingToAll] = useState(false);
   const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
 
-  // Calculate trollmonds discount
-  const trollmondDiscount = useMemo(() => {
-    return getTrollmondDiscount(profile?.trollmonds || 0);
-  }, [profile?.trollmonds]);
+  // Calculate trollmonds info for display
+  // New rule: gifts >= 100 coins deduct 100 trollmonds per gift (if sender has trollmonds)
+  // Gifts under 100 coins have no trollmond cost
+  const trollmondBalance = profile?.trollmonds || 0;
 
-  // Discount label for display
-  const discountLabel = useMemo(() => {
-    if (trollmondDiscount >= 10) return '10% OFF';
-    return null;
-  }, [trollmondDiscount]);
+  // Calculate trollmond cost for a specific gift
+  const getGiftTrollmondCost = (coinCost: number): number => {
+    if (coinCost >= 100) return 100;
+    return 0;
+  };
 
   useEffect(() => {
     const fetchGifts = async () => {
@@ -208,8 +208,7 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
   };
 
   const canAfford = (cost: number) => {
-    const discountedCost = getDiscountedPrice(cost, trollmondDiscount);
-    return (profile?.troll_coins || 0) >= discountedCost;
+    return (profile?.troll_coins || 0) >= cost;
   };
 
   return (
@@ -227,11 +226,8 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
           {/* Trollmonds Balance */}
           <div className="text-purple-400 font-mono text-xs md:text-sm bg-purple-400/10 px-2 md:px-3 py-1 rounded-full border border-purple-400/20 flex items-center gap-1">
             <Gem size={12} />
-            <span className="hidden sm:inline">{profile?.trollmonds?.toLocaleString() || 0}</span>
-            <span className="sm:hidden">{profile?.trollmonds || 0}</span>
-            {trollmondDiscount > 0 && (
-              <span className="text-green-400 text-[10px]">(-{trollmondDiscount}%)</span>
-            )}
+            <span className="hidden sm:inline">{trollmondBalance.toLocaleString()}</span>
+            <span className="sm:hidden">{trollmondBalance}</span>
           </div>
           
           {/* Coin Balance */}
@@ -317,8 +313,14 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
                   </div>
                   <div className="flex items-center gap-1 text-[10px] font-mono text-cyan-100 bg-black/20 px-2 py-1 rounded-full">
                     <Coins size={10} />
-                    {getDiscountedPrice(gift.coinCost, trollmondDiscount).toLocaleString()}
+                    {gift.coinCost.toLocaleString()}
                   </div>
+                  {getGiftTrollmondCost(gift.coinCost) > 0 && (
+                    <div className="flex items-center gap-0.5 text-[9px] font-mono text-purple-300 bg-purple-500/10 px-1.5 py-0.5 rounded-full">
+                      <Gem size={8} />
+                      -{getGiftTrollmondCost(gift.coinCost)}
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center justify-center gap-1 text-[8px] uppercase tracking-[0.12em] text-slate-300">
                     <span className={cn(
                       'rounded-full px-2 py-0.5',

@@ -161,7 +161,7 @@ export default function UserProfilePopup({ userId, username, onClose, onOpenChat
     if (onOpenChat) {
       onOpenChat(userId, username)
     } else {
-      navigate(`/messages?user=${username}`)
+      navigate(`/tcps?user=${userId}`)
     }
     onClose()
   }

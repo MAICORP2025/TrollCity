@@ -222,7 +222,7 @@ function getAudioTrackFromRemoteParticipant(participant: any): RemoteAudioTrack 
 function RemoteSeatSurface({
   participant,
   fallback,
-  mirror = true,
+  mirror = false,
 }: {
   participant: RemoteParticipant | null
   fallback: React.ReactNode

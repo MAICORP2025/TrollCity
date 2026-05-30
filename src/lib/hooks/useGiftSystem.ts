@@ -106,23 +106,14 @@ export function GiftSystemProvider({
         return false
       }
 
-      const trollmonds = (profile as any)?.trollmonds || 0
-      const battleCrowns = (profile as any)?.battle_crowns || 0
-      let discountPercent = 0
-
-      if (battleCrowns >= 100) {
-        discountPercent = 5
-      }
-      if (trollmonds >= 100) {
-        discountPercent = Math.max(discountPercent, 10)
-      }
-
-      const discountAmount = Math.floor(gift.coinCost * (discountPercent / 100))
-      const finalCost = (gift.coinCost - discountAmount) * quantity
+      // Note: trollmond deduction is now handled entirely by the RPC.
+      // Gifts >= 100 coins deduct 100 trollmonds per gift (if sender has trollmonds).
+      // No client-side coin discount is applied.
+      const totalCost = gift.coinCost * quantity
       const balance = gift.type === 'paid' ? (profile.troll_coins || 0) : 0
 
-      if (gift.type === 'paid' && balance < finalCost) {
-        toast.error(`Not enough Coins for this gift.${discountPercent > 0 ? ` (${discountPercent}% off: ${finalCost} coins needed)` : ''}`)
+      if (gift.type === 'paid' && balance < totalCost) {
+        toast.error(`Not enough Coins for this gift. Need ${totalCost} coins.`)
         return false
       }
 
@@ -180,19 +171,18 @@ export function GiftSystemProvider({
         }
 
         // Record family activity: gift sent and gift earned
-        const finalCost = (gift.coinCost - discountAmount) * quantity
         const dedupKey = `gift_${streamId}_${gift.id}_${user.id}_${targetReceiverId}_${Date.now()}`
         
         try {
           // Record for sender (gift_sent)
-          await recordGiftSent(finalCost, targetReceiverId, streamId, gift.id)
+          await recordGiftSent(totalCost, targetReceiverId, streamId, gift.id)
           
           // Record for receiver (gift_earned) - receiver_id parameter
           // The RPC will record this for the receiver via the targetReceiverId
           const { data: receiverData } = await supabase.rpc('record_troll_family_activity', {
             p_user_id: targetReceiverId,
             p_event_type: 'broadcast_gift_earned',
-            p_amount: finalCost,
+            p_amount: totalCost,
             p_metadata: {
               stream_id: streamId,
               gift_id: gift.id,

@@ -1467,7 +1467,24 @@ const renderFloatingButton = () => {
                             type="button"
                             onClick={(e) => {
                               const rect = e.currentTarget.getBoundingClientRect();
-                              setDropdownRect({ top: rect.bottom, left: rect.left });
+                              const menuWidth = 144;
+                              const menuHeight = 260;
+                              const pad = 4;
+                              let top = rect.bottom;
+                              let left = rect.left;
+                              if (top + menuHeight + pad > window.innerHeight) {
+                                top = rect.top - menuHeight;
+                              }
+                              if (top < pad) {
+                                top = pad;
+                              }
+                              if (left + menuWidth + pad > window.innerWidth) {
+                                left = rect.right - menuWidth;
+                              }
+                              if (left < pad) {
+                                left = pad;
+                              }
+                              setDropdownRect({ top, left });
                               setOpenDropdownUserId(openDropdownUserId === user.id ? null : user.id);
                             }}
                             className="dropdown-trigger-btn rounded bg-slate-600 p-1.5 text-white hover:bg-slate-500"

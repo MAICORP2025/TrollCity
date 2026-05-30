@@ -4,141 +4,317 @@ import LegalLayout from '../../components/LegalLayout'
 export default function PayoutPolicy() {
   return (
     <LegalLayout>
-      <article className="prose prose-invert max-w-none prose-headings:text-slate-50 prose-a:text-purple-300 prose-strong:text-slate-100">
-        <p className="text-xs uppercase tracking-[0.15em] text-purple-300">
+      <article className="prose prose-invert max-w-none prose-headings:text-slate-50 prose-a:text-cyan-300 prose-strong:text-slate-100">
+        <p className="text-xs uppercase tracking-[0.15em] text-cyan-300">
           Legal
         </p>
+
         <h1 className="mb-2 text-2xl font-bold tracking-tight">
           Creator & Payout Policy
         </h1>
-        <p className="text-xs text-slate-400 mb-6">
-          Last updated: January 2025
+
+        <p className="mb-6 text-xs text-slate-400">
+          Last updated: May 2026
         </p>
 
         <h2>1. Eligibility for Payouts</h2>
         <p>
-          To be eligible for payouts, you must meet all of the following requirements:
+          To be eligible for payouts, you must meet all payout requirements before
+          your request can be approved or paid.
         </p>
+
         <ul>
-          <li>Hold at least <strong>5,000 troll_coins</strong> in your account</li>
-          <li>Complete identity verification (KYC/ID check)</li>
-          <li>Submit required tax forms (W-9 for US users, or equivalent for international)</li>
-          <li>Have a verified email address on file</li>
-          <li>Have no active bans, suspensions, or fraud flags</li>
-          <li>Have no pending chargebacks or payment disputes</li>
+          <li>
+            Hold enough eligible Troll Coins to qualify for one of the payout tiers.
+          </li>
+          <li>
+            Have a verified email address on file.
+          </li>
+          <li>
+            Complete identity verification if requested.
+          </li>
+          <li>
+            Submit any required tax forms, such as a W-9 for eligible United States
+            users or equivalent documentation for international users.
+          </li>
+          <li>
+            Have no active account restrictions, fraud flags, unresolved payment
+            disputes, or open chargebacks.
+          </li>
+          <li>
+            Have a valid PayPal payout account or another approved payout method if
+            Troll City makes one available.
+          </li>
         </ul>
 
-        <h2>2. Payout Process</h2>
+        <h2>2. Friday Payout Request Window</h2>
         <p>
-          Payouts are processed once a week on Fridays. You can submit a payout request at any time, 
-          but it will only be processed during the Friday payout window.
+          Troll City payout requests are submitted during the Friday payout window.
+          A payout request is not automatically approved just because it is
+          submitted. Each request must go through review before it can be included
+          in a payout batch.
         </p>
 
-        <h2>3. Payout Tiers & Conversion Rates</h2>
         <p>
-          Payouts are processed according to the following fixed tiers. You must reach the minimum balance for a tier to be eligible.
+          If the payout window is closed, you may need to wait until the next Friday
+          payout window to submit or process a payout request.
         </p>
+
+        <h2>3. Payout Review and Batch Process</h2>
+        <p>
+          Troll City uses a review and batch process for payouts:
+        </p>
+
+        <ol>
+          <li>
+            A user submits a cashout request during the Friday payout window.
+          </li>
+          <li>
+            A payout request is created with a pending status.
+          </li>
+          <li>
+            Authorized reviewers inspect the request for eligibility, payout
+            details, coin balance, account standing, and possible fraud risk.
+          </li>
+          <li>
+            Verified payout requests may be forwarded into a payout batch.
+          </li>
+          <li>
+            A payout batch is created with an open status.
+          </li>
+          <li>
+            An admin reviews the payout batch and processes the payouts through
+            PayPal or marks the payout as paid manually when appropriate.
+          </li>
+        </ol>
+
+        <p>
+          Troll City may delay, reject, or require additional review for any payout
+          request that appears suspicious, incomplete, inaccurate, abusive, or in
+          violation of platform rules.
+        </p>
+
+        <h2>4. Payout Tiers and Conversion Rates</h2>
+        <p>
+          Payouts are processed according to fixed tiers. You must meet the minimum
+          eligible coin balance for a tier before that tier can be requested.
+        </p>
+
         <ul className="list-none space-y-2 pl-0">
           <li className="flex items-center gap-2">
-            <span className="w-32 font-bold text-slate-200">Starter Tier:</span>
-            <span>5,000 coins = <span className="text-green-400">$25.00 USD</span></span>
+            <span className="w-36 font-bold text-slate-200">Starter Tier:</span>
+            <span>
+              7,500 coins = <span className="text-green-400">$25 USD</span>
+            </span>
           </li>
+
           <li className="flex items-center gap-2">
-            <span className="w-32 font-bold text-bronze-400 text-amber-600">Bronze Tier:</span>
-            <span>15,000 coins = <span className="text-green-400">$50.00 USD</span></span>
+            <span className="w-36 font-bold text-amber-600">Bronze Tier:</span>
+            <span>
+              15,000 coins = <span className="text-green-400">$50 USD</span>
+            </span>
           </li>
+
           <li className="flex items-center gap-2">
-            <span className="w-32 font-bold text-slate-400">Silver Tier:</span>
-            <span>30,000 coins = <span className="text-green-400">$150.00 USD</span></span>
+            <span className="w-36 font-bold text-slate-400">Silver Tier:</span>
+            <span>
+              30,000 coins = <span className="text-green-400">$150 USD</span>
+            </span>
           </li>
+
           <li className="flex items-center gap-2">
-            <span className="w-32 font-bold text-yellow-400">Gold Tier:</span>
-            <span>60,000 coins = <span className="text-green-400">$300.00 USD</span></span>
+            <span className="w-36 font-bold text-yellow-400">Gold Tier:</span>
+            <span>
+              60,000 coins = <span className="text-green-400">$300 USD</span>
+            </span>
           </li>
+
           <li className="flex items-center gap-2">
-            <span className="w-32 font-bold text-purple-400">Platinum Tier:</span>
-            <span>120,000 coins = <span className="text-green-400">$600.00 USD</span></span>
+            <span className="w-36 font-bold text-purple-400">Platinum Tier:</span>
+            <span>
+              120,000 coins = <span className="text-green-400">$600 USD</span>
+            </span>
           </li>
+
           <li className="flex items-center gap-2">
-            <span className="w-32 font-bold text-cyan-400">Diamond Tier:</span>
-            <span>200,000 coins = <span className="text-green-400">$1,000.00 USD</span> (Manual Review)</span>
+            <span className="w-36 font-bold text-cyan-400">Diamond Tier:</span>
+            <span>
+              200,000 coins = <span className="text-green-400">$1,000 USD</span>{' '}
+              <span className="text-yellow-300">manual review</span>
+            </span>
           </li>
+
           <li className="flex items-center gap-2">
-            <span className="w-32 font-bold text-pink-400">VIP Tier:</span>
-            <span>400,000 coins = <span className="text-green-400">$2,000.00 USD</span> (3 Day Manual Review)</span>
+            <span className="w-36 font-bold text-pink-400">VIP Tier:</span>
+            <span>
+              400,000 coins = <span className="text-green-400">$2,000 USD</span>{' '}
+              <span className="text-yellow-300">manual review</span>
+            </span>
+          </li>
+
+          <li className="flex items-center gap-2">
+            <span className="w-36 font-bold text-blue-300">Empire Tier:</span>
+            <span>
+              600,000 coins = <span className="text-green-400">$3,000 USD</span>{' '}
+              <span className="text-yellow-300">manual review</span>
+            </span>
           </li>
         </ul>
+
         <p className="mt-4 text-sm text-slate-400">
-          Rates and tiers are subject to change. The system automatically selects the highest tier your balance qualifies for.
+          Cashout amounts are based on eligible gift coins only. Rates, tiers,
+          review rules, payout timing, and eligibility requirements may change as
+          Troll City grows or updates its payout system.
         </p>
 
-        <h2>4. Minimum and Maximum Payouts</h2>
+        <h2>5. Minimum and Maximum Payouts</h2>
         <p>
-          Minimum payout: <strong>5,000 troll_coins ($25.00 USD)</strong><br />
-          Maximum payout per week: <strong>$10,000 USD</strong>
+          Minimum payout: <strong>7,500 eligible Troll Coins ($25 USD)</strong>
+          <br />
+          Higher payout tiers, including $1,000, $2,000, and $3,000 payouts, may
+          require manual review before approval.
         </p>
 
-        <h2>5. Tax Obligations</h2>
+        <h2>6. Eligible Coins</h2>
         <p>
-          <strong>US Users:</strong> If you receive $600 or more in payouts in a
-          calendar year, we are required to collect a W-9 form and may issue a
-          1099-NEC or 1099-K form for tax reporting purposes.
-        </p>
-        <p>
-          <strong>International Users:</strong> You are responsible for reporting
-          and paying any taxes required by your local jurisdiction. We may request
-          tax documentation as required by law.
-        </p>
-        <p>
-          <strong>Important:</strong> Payouts may be delayed or denied if required
-          tax forms are not submitted and approved.
+          Not every coin balance is automatically eligible for payout. Cashout
+          amounts are based on eligible gift coins only unless Troll City states
+          otherwise.
         </p>
 
-        <h2>6. Payout Denials</h2>
         <p>
-          Payout requests may be denied for the following reasons:
+          Troll City may separate paid coins, gift-earned coins, promotional coins,
+          Hype Coins, bonuses, credits, and other balances for review and payout
+          eligibility.
         </p>
+
+        <p>
+          Troll City may deny or delay a payout if the requested coins came from
+          suspicious activity, fake engagement, chargeback-related activity,
+          platform abuse, exploit behavior, or any source that is not eligible for
+          cashout.
+        </p>
+
+        <h2>7. Hype Coins</h2>
+        <p>
+          Hype Coins are a broadcast engagement currency and may have separate
+          conversion rules before they become eligible Troll Coins. Hype Coin
+          conversion may depend on platform requirements, account status, timing,
+          and cashout eligibility.
+        </p>
+
+        <p>
+          Converted Hype Coins may still be reviewed before a payout is approved.
+        </p>
+
+        <h2>8. Tax Obligations</h2>
+        <p>
+          <strong>United States users:</strong> If you receive $600 or more in
+          payouts during a calendar year, Troll City may be required to collect tax
+          information and may issue applicable tax forms.
+        </p>
+
+        <p>
+          <strong>International users:</strong> You are responsible for reporting
+          and paying any taxes required by your local jurisdiction. Troll City may
+          request tax documentation when required by law, payment processors, or
+          platform policy.
+        </p>
+
+        <p>
+          <strong>Important:</strong> Payouts may be delayed, held, or denied if
+          required tax information is missing, incomplete, inaccurate, or not
+          approved.
+        </p>
+
+        <h2>9. Payout Denials</h2>
+        <p>
+          Payout requests may be denied for reasons including, but not limited to:
+        </p>
+
         <ul>
-          <li>Insufficient Paid Coin balance</li>
-          <li>Incomplete identity verification</li>
-          <li>Missing or unapproved tax forms</li>
-          <li>Active account restrictions (bans, suspensions)</li>
-          <li>Suspected fraud or chargeback history</li>
-          <li>Violation of Terms of Service</li>
-          <li>PayPal account issues or restrictions</li>
+          <li>Insufficient eligible Troll Coin balance.</li>
+          <li>Incomplete identity verification.</li>
+          <li>Missing or unapproved tax forms.</li>
+          <li>Incorrect payout details.</li>
+          <li>
+            Active account restrictions, Troll Jail restrictions, or suspensions.
+          </li>
+          <li>
+            Suspected fraud, fake engagement, payout abuse, or suspicious activity.
+          </li>
+          <li>Chargebacks, refunds, payment disputes, or processor risk flags.</li>
+          <li>Violation of the Terms of Service or Safety Guidelines.</li>
+          <li>
+            PayPal account issues, payout account limits, or payment processor
+            restrictions.
+          </li>
         </ul>
+
         <p>
-          If your payout is denied, you will receive a notification with the reason.
-          You may address the issue and resubmit your request.
+          If your payout is denied, Troll City may provide a reason when available.
+          You may be allowed to correct the issue and request another review.
         </p>
 
-        <h2>7. Processing Fees</h2>
+        <h2>10. Processing Fees</h2>
         <p>
-          Standard PayPal transaction fees may apply and will be deducted from the
-          payout amount. We do not charge an additional platform fee for payouts.
+          PayPal or other payment processor fees may apply. Troll City may deduct
+          applicable processor fees from the payout amount or require users to
+          account for those fees depending on the payout method.
         </p>
 
-        <h2>8. Payment Method</h2>
         <p>
-          Payouts are sent via PayPal. You must have a verified PayPal account
-          matching your Troll City account details.
+          Troll City does not guarantee that the amount requested will exactly match
+          the final amount received after third-party payment processor fees, holds,
+          reversals, or restrictions.
         </p>
 
-        <h2>9. Payout Timeline</h2>
+        <h2>11. Payment Method</h2>
         <p>
-          Payouts are processed on Fridays. Once processed, funds usually
-          arrive in your PayPal account within 24 hours, though some transactions
-          may take longer depending on PayPal&apos;s processing times.
+          Payouts are primarily processed through PayPal unless Troll City provides
+          another approved payout method. You are responsible for providing accurate
+          payout information.
         </p>
 
-        <h2>10. Disputes and Appeals</h2>
+        <p>
+          Troll City is not responsible for delays, failed payments, or lost funds
+          caused by incorrect payout details submitted by the user.
+        </p>
+
+        <h2>12. Payout Timeline</h2>
+        <p>
+          Payouts are reviewed and processed on Fridays when the payout window is
+          active. After admin processing, funds may arrive within 24 hours, but
+          timing can vary based on PayPal, payment processor review, account limits,
+          holidays, weekends, or additional platform review.
+        </p>
+
+        <h2>13. Holds and Manual Review</h2>
+        <p>
+          Troll City may place a payout on hold or require manual review for larger
+          payouts, suspicious activity, new accounts, unusual gifting patterns,
+          refund risk, chargeback risk, or violations of platform rules.
+        </p>
+
+        <p>
+          A manual review does not guarantee approval. Troll City may approve,
+          partially approve, delay, deny, or cancel a payout depending on the review.
+        </p>
+
+        <h2>14. Disputes and Appeals</h2>
         <p>
           If you disagree with a payout denial or have questions about your payout
           status, contact support through the in-app support system. Include your
-          payout request ID and any relevant documentation.
+          payout request details, payout method, and any relevant documentation.
+        </p>
+
+        <h2>15. Policy Updates</h2>
+        <p>
+          Troll City may update this Creator & Payout Policy at any time. Continued
+          use of Troll City after updates means you accept the revised payout
+          policy.
         </p>
       </article>
     </LegalLayout>
   )
 }
-

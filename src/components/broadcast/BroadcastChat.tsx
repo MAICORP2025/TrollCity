@@ -228,8 +228,9 @@ export default function BroadcastChat({
       giftName: parts[1],
       quantity: parseInt(parts[2], 10) || 1,
       giftValue: parseInt(parts[3], 10) || 0,
-      currencyUsed: parts[4],
+      currencyUsed: parts[4] || 'coins',
       coinsBack: parseInt(parts[5], 10) || 0,
+      trollmondsTransferred: parseInt(parts[6], 10) || 0,
     };
   };
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -1504,26 +1505,16 @@ const fetchMessages = async () => {
                             }
                         }
 
-                        if (parsedCurrencyUsed === 'trollmonds') {
-                            return (
-                                <div
-                                    key={msg.id}
-                                    className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
-                                >
-                                    <Gift size={14} className="text-yellow-400 flex-shrink-0" />
-                                    <span className="text-xs text-yellow-100">
-                                        {senderName} sent a gift worth {parsedGiftValue} Trollmonds and earned {parsedCoinsBack} coins back.
-                                    </span>
-                                </div>
-                            );
-                        }
-                        
+                        // Parse trollmonds transferred from message content
+                        const parsedTrollmondsTransferred = msg.trollmonds_transferred
+                          || (msg.content ? (parseGiftMessage(msg.content)?.trollmondsTransferred || 0) : 0);
+
                         // Format the gift name (capitalize first letter)
                         const formattedGiftName = giftType.charAt(0).toUpperCase() + giftType.slice(1).toLowerCase();
                         const giftText = giftAmount > 1 ? `sent ${formattedGiftName}s` : `sent a ${formattedGiftName}`;
-                        
+
                         return (
-                            <div 
+                            <div
                                 key={msg.id}
                                 className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
                             >
@@ -1552,6 +1543,9 @@ const fetchMessages = async () => {
                                                 {receiverName}
                                             </button>
                                         </span>
+                                    )}
+                                    {parsedTrollmondsTransferred > 0 && (
+                                        <span className="text-purple-300 ml-1">(+{parsedTrollmondsTransferred} 💎)</span>
                                     )}
                                 </span>
                             </div>

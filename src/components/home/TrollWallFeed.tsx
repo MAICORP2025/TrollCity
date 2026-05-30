@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner'
 import { Virtuoso } from 'react-virtuoso'
 
-import { supabase } from '@/lib/supabase'
+import { supabase, getBlockedUserIds } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { WallPost } from '@/types/trollWall'
 import UserNameWithAge from '@/components/UserNameWithAge'
@@ -57,6 +57,18 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   const [lightboxImage, setLightboxImage] = useState<string | null>(null)
   const [lightboxTitle, setLightboxTitle] = useState<string | null>(null)
   const [lightboxVisible, setLightboxVisible] = useState(false)
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set())
+
+  // Load blocked user IDs on mount and when user changes
+  useEffect(() => {
+    if (!user?.id) {
+      setBlockedIds(new Set())
+      return
+    }
+    getBlockedUserIds().then(ids => {
+      if (isMountedRef.current) setBlockedIds(new Set(ids))
+    }).catch(() => {})
+  }, [user?.id])
 
   const loadPosts = useCallback(
     async (pageIndex: number, append: boolean) => {
@@ -87,7 +99,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         if (error) throw error
         if (!isActiveRequest()) return
 
-        const rows = (data as any[]) || []
+        const rows = ((data as any[]) || []).filter((row) => !blockedIds.has(row.user_id))
         const postIds = rows.map((row) => row.id)
 
         let likedPostIds = new Set<string>()
@@ -129,7 +141,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         })
 
         const parentPosts = normalized.filter((post: WallPost) => !post.reply_to_post_id)
-        const replies = normalized.filter((post: WallPost) => post.reply_to_post_id)
+        const replies = normalized.filter((post: WallPost) => post.reply_to_post_id && !blockedIds.has(post.user_id))
 
         const repliesMap: Record<string, WallPost[]> = {}
 
@@ -168,7 +180,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         setLoadingMore(false)
       }
     },
-    [user]
+    [user, blockedIds]
   )
 
   useEffect(() => {
@@ -181,8 +193,9 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   }, [loadPosts])
 
   const handlePostCreated = useCallback((post: WallPost) => {
+    if (blockedIds.has(post.user_id)) return
     setPosts((prev) => [post, ...prev])
-  }, [])
+  }, [blockedIds])
 
   const handleLike = useCallback(
     async (postId: string) => {

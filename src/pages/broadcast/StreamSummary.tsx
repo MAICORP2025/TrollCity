@@ -95,40 +95,22 @@ export default function StreamSummary() {
         if (user?.id) {
           console.log('[StreamSummary] Fetching gift data for user:', user.id, 'stream:', streamId);
 
-          // Get sender's current trollmond balance to determine if trollmonds were actually used
-          // Users with < 100 trollmonds do not get the trollmond deduction (they pay full troll coin price)
-          const { data: userProfile } = await supabase
-            .from('user_profiles')
-            .select('trollmonds')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          const senderTrollmonds = userProfile?.trollmonds || 0;
-
           // 1. Get trollmonds spent by this user (as sender)
-          // Only count trollmonds if sender had 100+ (the threshold for trollmond deduction)
+          // The RPC now records trollmonds_spent directly in stream_gifts for gifts >= 100 coins
           const { data: streamGiftsSpent, error: streamGiftsSpentError } = await supabase
             .from('stream_gifts')
-            .select('id, quantity, metadata')
+            .select('id, trollmonds_spent, metadata')
             .eq('stream_id', streamId)
             .eq('sender_id', user.id);
 
           console.log('[StreamSummary] stream_gifts spent data:', streamGiftsSpent, 'error:', streamGiftsSpentError);
 
           if (streamGiftsSpent && streamGiftsSpent.length > 0) {
-            // Only count trollmonds if user has/had 100+ trollmonds (the deduction threshold)
-            // If balance is under 100, they paid full troll coin price with no trollmond deduction
-            if (senderTrollmonds >= 100) {
-              trollmondsSpent = streamGiftsSpent.reduce((sum: number, g: any) => {
-                // Check metadata for actual trollmonds deducted (if recorded)
-                const metaDeducted = g.metadata?.trollmonds_deducted;
-                if (typeof metaDeducted === 'number' && metaDeducted > 0) {
-                  return sum + metaDeducted;
-                }
-                return sum + (100 * (g.quantity || 1));
-              }, 0);
-            }
-            // If senderTrollmonds < 100, trollmondsSpent stays 0 (they never had enough to trigger deduction)
+            trollmondsSpent = streamGiftsSpent.reduce((sum: number, g: any) => {
+              // Use trollmonds_spent column if available, fallback to metadata
+              const spent = g.trollmonds_spent ?? g.metadata?.trollmonds_spent ?? g.metadata?.trollmonds_deducted ?? 0;
+              return sum + (typeof spent === 'number' ? spent : 0);
+            }, 0);
           }
 
           // 2. Get gifts received by this user (as receiver)

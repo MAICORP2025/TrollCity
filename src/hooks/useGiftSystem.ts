@@ -353,40 +353,18 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
          finalGiftCoinAmount: totalGiftAmount
        });
 
-       // First, check the currency from gift_items table
-       const { data: giftData } = await supabase
-         .from('gift_items')
-         .select('currency, value')
-         .eq('id', gift.id)
-         .maybeSingle();
-       
-       const giftCurrency = giftData?.currency || 'troll_coins';
-       
-if (giftCurrency === 'trollmonds') {
-          // Use send_gift_in_stream for trollmonds gifts (as they're stored in gifts table too)
-          const result = await supabase.rpc('send_gift_in_stream', {
-            p_sender_id: user.id,
-            p_receiver_id: finalRecipientId,
-            p_stream_id: streamId || null,
-            p_gift_id: gift.id,
-            p_quantity: quantity,
-            p_metadata: { txn_key: txnKey, trollmond_coins_back_enabled: TROLLMOND_CASHBACK_ENABLED, battle_id: effectiveBattleId || undefined }
-          });
-          data = result.data;
-          error = result.error;
-        } else {
-          // Use send_gift_in_stream for troll_coins
-          const result = await supabase.rpc('send_gift_in_stream', {
-            p_sender_id: user.id,
-            p_receiver_id: finalRecipientId,
-            p_stream_id: streamId || null,
-            p_gift_id: gift.id,
-            p_quantity: quantity,
-            p_metadata: { txn_key: txnKey, trollmond_coins_back_enabled: TROLLMOND_CASHBACK_ENABLED, battle_id: effectiveBattleId || undefined }
-          });
-          data = result.data;
-          error = result.error;
-        }
+       // Always use send_gift_in_stream — the RPC now handles coin spending +
+       // conditional trollmond deduction (>= 100 coin gifts deduct 100 trollmonds per gift)
+       const result = await supabase.rpc('send_gift_in_stream', {
+         p_sender_id: user.id,
+         p_receiver_id: finalRecipientId,
+         p_stream_id: streamId || null,
+         p_gift_id: gift.id,
+         p_quantity: quantity,
+         p_metadata: { txn_key: txnKey, trollmond_coins_back_enabled: TROLLMOND_CASHBACK_ENABLED, battle_id: effectiveBattleId || undefined }
+       });
+       data = result.data;
+       error = result.error;
 
       console.log('[GiftDebugger-2] RPC Result:', { data, error });
 
@@ -452,6 +430,7 @@ if (giftCurrency === 'trollmonds') {
               quantity: quantity,
               currency_used: data.currency_used,
               trollmonds_spent: data.trollmonds_spent || 0,
+              trollmonds_transferred: data.trollmonds_transferred || 0,
               coins_back: data.coins_back || 0,
               sender_id: user.id,
               sender_name: senderName,
@@ -510,15 +489,15 @@ if (giftCurrency === 'trollmonds') {
               id: txnId,
               txn_id: txnId,
               user_id: user.id,
-              content: data?.currency_used === 'trollmonds'
-                ? `${senderName} sent a gift worth ${data.gift_value || gift.coinCost * quantity} Trollmonds and earned ${data.coins_back || 0} coins back.`
-                : `GIFT_EVENT:${gift.slug}:${quantity}`,
+              content: `GIFT_EVENT:${gift.slug}:${quantity}`,
               created_at: new Date().toISOString(),
               type: 'gift',
               gift_type: gift.slug,
               gift_amount: quantity,
+              gift_value: data.gift_value || gift.coinCost * quantity,
               currency_used: data.currency_used,
               trollmonds_spent: data.trollmonds_spent || 0,
+              trollmonds_transferred: data.trollmonds_transferred || 0,
               coins_back: data.coins_back || 0,
               sender_name: senderName,
               receiver_id: finalRecipientId,

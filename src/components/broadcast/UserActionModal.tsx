@@ -277,7 +277,7 @@ export default function UserActionModal({
       // Insert report into moderation_reports table so officers can see it
       const { error: reportError } = await supabase.from('moderation_reports').insert({
         reporter_id: currentUser.id,
-        target_id: userId,
+        reported_user_id: userId,
         reason: selectedReason,
         description: reportDescription || null,
         stream_id: streamId || null,

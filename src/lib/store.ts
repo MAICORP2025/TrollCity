@@ -366,6 +366,7 @@ function pickProfileComparable(profile: any) {
     role: profile?.role ?? null,
     troll_role: profile?.troll_role ?? null,
     troll_coins: toSafeNumber(profile?.troll_coins, 0),
+    trollmonds: toSafeNumber(profile?.trollmonds, 0),
     paid_coin_balance: toSafeNumber(profile?.paid_coin_balance, 0),
     free_coin_balance: toSafeNumber(profile?.free_coin_balance, 0),
     credit_score: toSafeNumber(profile?.credit_score, 0),

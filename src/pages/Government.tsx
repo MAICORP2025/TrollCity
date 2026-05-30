@@ -186,6 +186,8 @@ export default function GovernmentPage() {
     protests,
     reputation,
     cityReputation,
+    governmentHistory,
+    userProtestIds,
     loading,
     error,
     setActiveLaw,
@@ -197,9 +199,11 @@ export default function GovernmentPage() {
     exposeBribe,
     createProtest,
     joinProtest,
+    leaveProtest,
     useEmergencyPower,
     getUserRoleLevel,
     getAvailableTabs,
+    fetchGovernmentHistory,
   } = useGovernmentSystem()
 
 const currentTab = searchParams.get('tab') || 'laws'
@@ -475,8 +479,13 @@ const currentTab = searchParams.get('tab') || 'laws'
                      onExposeBribe={exposeBribe}
                      onCreateProtest={createProtest}
                      onJoinProtest={joinProtest}
+                     onLeaveProtest={leaveProtest}
                      onUseEmergencyPower={useEmergencyPower}
+                     onFetchGovernmentHistory={fetchGovernmentHistory}
                      roleLevel={roleLevel}
+                     userId={user?.id}
+                     governmentHistory={governmentHistory}
+                     userProtestIds={userProtestIds}
                    />
                 </div>
               ) : (

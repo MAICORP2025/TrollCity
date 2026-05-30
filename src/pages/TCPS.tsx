@@ -238,6 +238,21 @@ export default function TCPS() {
           setActiveConversation(first.other_user_id)
           navigate(`/tcps?user=${first.other_user_id}`, { replace: true })
         }
+
+        // If a user param is specified but not yet active, try to find and select them
+        if (userParam && !activeConversation) {
+          const found = conversations.find(c => c.other_user_id === userParam)
+          if (found) {
+            setActiveConversation(found.other_user_id)
+            setOtherUserInfo({
+              id: found.other_user_id,
+              username: found.other_username,
+              avatar_url: found.other_avatar_url,
+              rgb_username_expires_at: found.rgb_username_expires_at,
+              glowing_username_color: found.glowing_username_color,
+            })
+          }
+        }
       }
     },
     [activeConversation, navigate, searchParams]

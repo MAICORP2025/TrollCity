@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+﻿import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import { sendNotification } from '../lib/sendNotification'
 import BondRequestModal from '../components/jail/BondRequestModal'
 
 interface Inmate {
@@ -66,9 +67,7 @@ export default function InmatesPage() {
 
   const filteredInmates = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-
     if (!query) return inmates
-
     return inmates.filter((inmate) => {
       return (
         inmate.username.toLowerCase().includes(query) ||
@@ -87,36 +86,29 @@ export default function InmatesPage() {
 
   const fetchInmates = async () => {
     setLoading(true)
-
     try {
       const { data: jailData, error: jailError } = await supabase
         .from('jail')
         .select('*')
         .order('created_at', { ascending: false })
-
       if (jailError) throw jailError
 
       const userIds = Array.from(
         new Set((jailData || []).map((inmate: any) => inmate.user_id).filter(Boolean))
       )
-
       const userProfiles: Record<string, any> = {}
-
       if (userIds.length > 0) {
         const { data: profilesData, error: profilesError } = await supabase
           .from('user_profiles')
           .select('id, username, avatar_url')
           .in('id', userIds)
-
         if (profilesError) throw profilesError
-
-        ;(profilesData || []).forEach((profile: any) => {
-          userProfiles[profile.id] = profile
+        ;(profilesData || []).forEach((p: any) => {
+          userProfiles[p.id] = p
         })
       }
 
       const now = new Date()
-
       const activeInmates = (jailData || [])
         .filter((inmate: any) => {
           if (inmate.bond_posted) return false
@@ -125,7 +117,6 @@ export default function InmatesPage() {
         })
         .map((inmate: any) => {
           const inmateProfile = userProfiles[inmate.user_id] || {}
-
           return {
             id: inmate.id,
             user_id: inmate.user_id,
@@ -143,9 +134,8 @@ export default function InmatesPage() {
         })
 
       setInmates(activeInmates)
-
       if (selectedInmate) {
-        const updated = activeInmates.find((inmate) => inmate.id === selectedInmate.id)
+        const updated = activeInmates.find((i) => i.id === selectedInmate.id)
         setSelectedInmate(updated || null)
       }
     } catch (error: any) {
@@ -158,17 +148,13 @@ export default function InmatesPage() {
 
   const formatReleaseTime = (releaseTime: string) => {
     if (!releaseTime) return 'Pending release time'
-
     const release = new Date(releaseTime)
     const now = new Date()
     const diff = release.getTime() - now.getTime()
-
     if (diff <= 0) return 'Released'
-
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
     if (days > 0) return `${days}d ${hours}h remaining`
     if (hours > 0) return `${hours}h ${minutes}m remaining`
     return `${minutes}m remaining`
@@ -176,40 +162,29 @@ export default function InmatesPage() {
 
   const getBalance = async () => {
     if (!user?.id) throw new Error('You must be logged in.')
-
     const { data, error } = await supabase
       .from('user_profiles')
       .select('troll_coins')
       .eq('id', user.id)
       .single()
-
     if (error) throw error
-
     return Number(data?.troll_coins || 0)
   }
 
   const deductCoins = async (amount: number) => {
     if (!user?.id) throw new Error('You must be logged in.')
-
     const balance = await getBalance()
-
-    if (balance < amount) {
-      throw new Error('Insufficient Troll Coins.')
-    }
-
+    if (balance < amount) throw new Error('Insufficient Troll Coins.')
     const { error } = await supabase
       .from('user_profiles')
       .update({ troll_coins: balance - amount })
       .eq('id', user.id)
-
     if (error) throw error
   }
 
   const handlePostBond = async () => {
     if (!user || !selectedInmate) return
-
     const bondAmount = selectedInmate.bond_amount || DEFAULT_BOND_AMOUNT
-
     if (
       !confirm(
         `Post ${bondAmount} Troll Coins bond for ${selectedInmate.username}? This will immediately release the inmate.`
@@ -217,14 +192,10 @@ export default function InmatesPage() {
     ) {
       return
     }
-
     setPostingBond(true)
-
     try {
       await deductCoins(bondAmount)
-
       const releaseNow = new Date().toISOString()
-
       const { error: jailError } = await supabase
         .from('jail')
         .update({
@@ -235,9 +206,7 @@ export default function InmatesPage() {
           status: 'released_bond',
         })
         .eq('id', selectedInmate.id)
-
       if (jailError) throw jailError
-
       await supabase.from('jail_transactions').insert({
         jail_id: selectedInmate.id,
         user_id: user.id,
@@ -246,20 +215,13 @@ export default function InmatesPage() {
         recipient_type: 'admin',
         notes: `Bond posted for ${selectedInmate.username}. Inmate released.`,
       })
-
       await supabase.from('jail_notifications').insert({
         user_id: selectedInmate.user_id,
         notification_type: 'bond_posted',
         title: 'Bond Posted',
         message: `Your bond of ${bondAmount} Troll Coins was posted. You have been released from jail.`,
-        data: {
-          amount: bondAmount,
-          posted_by: user.id,
-          jail_id: selectedInmate.id,
-          released_at: releaseNow,
-        },
+        data: { amount: bondAmount, posted_by: user.id, jail_id: selectedInmate.id, released_at: releaseNow },
       })
-
       toast.success(`${selectedInmate.username} has been released. Bond posted.`)
       setSelectedInmate(null)
       await fetchInmates()
@@ -273,9 +235,7 @@ export default function InmatesPage() {
 
   const handleBuyMinutes = async () => {
     if (!user || !selectedInmate) return
-
     const totalCost = minutesToBuy * MINUTES_PRICE
-
     if (
       !confirm(
         `Buy ${minutesToBuy} inmate chat minute(s) for ${totalCost} Troll Coins?`
@@ -283,23 +243,15 @@ export default function InmatesPage() {
     ) {
       return
     }
-
     setBuyingMinutes(true)
-
     try {
       await deductCoins(totalCost)
-
       const nextMinutes = Number(selectedInmate.message_minutes || 0) + minutesToBuy
-
       const { error: jailError } = await supabase
         .from('jail')
-        .update({
-          message_minutes: nextMinutes,
-        })
+        .update({ message_minutes: nextMinutes })
         .eq('id', selectedInmate.id)
-
       if (jailError) throw jailError
-
       await supabase.from('jail_transactions').insert({
         jail_id: selectedInmate.id,
         user_id: user.id,
@@ -308,7 +260,6 @@ export default function InmatesPage() {
         recipient_type: 'public_pool',
         notes: `Purchased ${minutesToBuy} inmate chat minute(s) for ${selectedInmate.username}`,
       })
-
       toast.success('Chat minutes purchased.')
       await fetchInmates()
     } catch (error: any) {
@@ -323,19 +274,16 @@ export default function InmatesPage() {
     if (!user || !selectedInmate) return
 
     const cleanMessage = messageText.trim()
-
     if (!cleanMessage) {
       toast.error('Enter a message first.')
       return
     }
-
     if (selectedRemainingMinutes <= 0) {
       toast.error('No chat minutes available. Buy minutes first.')
       return
     }
 
     setSendingMessage(true)
-
     try {
       await deductCoins(MESSAGE_COST)
 
@@ -347,7 +295,6 @@ export default function InmatesPage() {
         cost: MESSAGE_COST,
         is_free_message: false,
       })
-
       if (messageError) throw messageError
 
       const { error: jailError } = await supabase
@@ -356,7 +303,6 @@ export default function InmatesPage() {
           message_minutes_used: Number(selectedInmate.message_minutes_used || 0) + 1,
         })
         .eq('id', selectedInmate.id)
-
       if (jailError) throw jailError
 
       await supabase.from('jail_transactions').insert({
@@ -369,6 +315,57 @@ export default function InmatesPage() {
       })
 
       const senderUsername = profile?.username || 'Someone'
+
+      // Find or create a TCPS conversation between sender and inmate
+      let conversationId: string | null = null
+      try {
+        const { data: foundConvId } = await supabase.rpc('find_shared_conversation', {
+          p_user_id: user.id,
+          p_other_user_id: selectedInmate.user_id,
+        })
+        conversationId = foundConvId || null
+      } catch {
+        // RPC may not exist yet, fall through to create
+      }
+
+      if (!conversationId) {
+        const { data: newConv, error: convError } = await supabase
+          .from('conversations')
+          .insert({ created_by: user.id })
+          .select()
+          .single()
+        if (!convError && newConv) {
+          conversationId = newConv.id
+          await supabase.from('conversation_members').insert([
+            { conversation_id: conversationId, user_id: user.id, role: 'owner' },
+            { conversation_id: conversationId, user_id: selectedInmate.user_id, role: 'member' },
+          ])
+        }
+      }
+
+      // Insert into conversation_messages so inmate sees it in TCPS inbox
+      if (conversationId) {
+        await supabase.from('conversation_messages').insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          body: cleanMessage,
+        })
+
+        // Send notification with conversation link
+        await sendNotification(
+          selectedInmate.user_id,
+          'message',
+          `New message from @${senderUsername}`,
+          cleanMessage.length > 100 ? cleanMessage.substring(0, 100) + '...' : cleanMessage,
+          {
+            conversation_id: conversationId,
+            sender_id: user.id,
+            sender_username: senderUsername,
+          }
+        ).catch(() => {})
+      }
+
+      // Legacy jail notification (kept for backward compat)
       await supabase.from('jail_notifications').insert({
         user_id: selectedInmate.user_id,
         notification_type: 'inmate_message_received',
@@ -379,6 +376,7 @@ export default function InmatesPage() {
           sender_id: user.id,
           sender_username: senderUsername,
           jail_id: selectedInmate.id,
+          conversation_id: conversationId,
         },
       })
 
@@ -395,23 +393,15 @@ export default function InmatesPage() {
 
   const handleStartCall = async () => {
     if (!user || !selectedInmate) return
-
     setStartingCall(true)
-
     try {
       const { data, error } = await supabase.rpc('start_inmate_call', {
         p_inmate_id: selectedInmate.user_id,
         p_jail_id: selectedInmate.id,
       })
-
       if (error) throw error
-
-      if (data?.success === false) {
-        throw new Error(data?.error || 'Failed to start call')
-      }
-
+      if (data?.success === false) throw new Error(data?.error || 'Failed to start call')
       const roomId = data?.room_id || data?.call_id || selectedInmate.user_id
-
       toast.success('Inmate call started.')
       navigate(`/jail/calls/${roomId}`)
     } catch (error: any) {
@@ -437,19 +427,16 @@ export default function InmatesPage() {
                 <Lock className="h-4 w-4" />
                 Troll City Jail Registry
               </div>
-
               <h1 className="text-4xl font-black tracking-tight md:text-6xl">
                 City Jail
                 <span className="block bg-gradient-to-r from-cyan-300 via-red-300 to-fuchsia-300 bg-clip-text text-transparent">
                   Inmate Control
                 </span>
               </h1>
-
               <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">
                 View inmates, post bond for release, purchase chat minutes, send paid messages, and start inmate calls.
               </p>
             </div>
-
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               <StatCard icon={Users} label="Inmates" value={inmates.length} />
               <StatCard icon={Handshake} label="Bond" value="Enabled" />
@@ -469,7 +456,6 @@ export default function InmatesPage() {
                 className="h-13 w-full rounded-2xl border border-cyan-400/20 bg-black/40 py-3 pl-12 pr-4 text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/20"
               />
             </div>
-
             <button
               type="button"
               onClick={fetchInmates}
@@ -491,9 +477,7 @@ export default function InmatesPage() {
           <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[2rem] border border-cyan-400/10 bg-slate-950/60 px-6 text-center">
             <Lock className="mb-5 h-16 w-16 text-slate-600" />
             <h2 className="text-2xl font-black text-white">No Inmates Found</h2>
-            <p className="mt-2 text-sm text-slate-400">
-              No active inmates match your search.
-            </p>
+            <p className="mt-2 text-sm text-slate-400">No active inmates match your search.</p>
           </div>
         ) : (
           <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -514,12 +498,9 @@ export default function InmatesPage() {
         <aside className="fixed right-0 top-0 z-40 h-full w-full overflow-y-auto border-l border-cyan-400/20 bg-slate-950/95 p-5 shadow-[0_0_80px_rgba(34,211,238,0.14)] backdrop-blur-xl md:w-[440px]">
           <div className="mb-6 flex items-center justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">
-                Selected Inmate
-              </p>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">Selected Inmate</p>
               <h2 className="text-2xl font-black text-white">{selectedInmate.username}</h2>
             </div>
-
             <button
               onClick={() => setSelectedInmate(null)}
               className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:bg-white/10 hover:text-white"
@@ -532,9 +513,7 @@ export default function InmatesPage() {
             <Avatar inmate={selectedInmate} size="lg" />
             <div>
               <p className="text-xl font-black text-white">{selectedInmate.username}</p>
-              <p className="text-sm text-slate-400">
-                Jailed {new Date(selectedInmate.created_at).toLocaleDateString()}
-              </p>
+              <p className="text-sm text-slate-400">Jailed {new Date(selectedInmate.created_at).toLocaleDateString()}</p>
             </div>
           </div>
 
@@ -550,7 +529,6 @@ export default function InmatesPage() {
               <p className="mb-4 text-sm leading-6 text-slate-400">
                 Any user can post bond. Once bond is posted, the inmate is released immediately.
               </p>
-
               <button
                 type="button"
                 onClick={handlePostBond}
@@ -558,11 +536,8 @@ export default function InmatesPage() {
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-500 px-5 py-3 text-sm font-black text-white shadow-[0_0_26px_rgba(16,185,129,0.2)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Unlock className="h-4 w-4" />
-                {postingBond
-                  ? 'Posting Bond...'
-                  : `Post Bond & Release - ${selectedInmate.bond_amount || DEFAULT_BOND_AMOUNT} TC`}
+                {postingBond ? 'Posting Bond...' : `Post Bond & Release - ${selectedInmate.bond_amount || DEFAULT_BOND_AMOUNT} TC`}
               </button>
-
               {user?.id === selectedInmate.user_id && (
                 <button
                   type="button"
@@ -577,14 +552,10 @@ export default function InmatesPage() {
 
             <InfoPanel title="Inmate Chat">
               <div className="mb-4 rounded-2xl border border-cyan-400/10 bg-black/30 p-4">
-                <InfoRow
-                  label="Minutes"
-                  value={`${selectedRemainingMinutes} / ${selectedInmate.message_minutes}`}
-                />
+                <InfoRow label="Minutes" value={`${selectedRemainingMinutes} / ${selectedInmate.message_minutes}`} />
                 <InfoRow label="Message Cost" value={`${MESSAGE_COST} TC`} />
                 <InfoRow label="Minute Price" value={`${MINUTES_PRICE} TC`} />
               </div>
-
               <textarea
                 value={messageText}
                 onChange={(event) => setMessageText(event.target.value)}
@@ -592,7 +563,6 @@ export default function InmatesPage() {
                 maxLength={500}
                 className="mb-3 min-h-[110px] w-full rounded-2xl border border-cyan-400/20 bg-black/40 p-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/20"
               />
-
               <button
                 type="button"
                 onClick={handleSendMessage}
@@ -602,12 +572,8 @@ export default function InmatesPage() {
                 <MessageSquare className="h-4 w-4" />
                 {sendingMessage ? 'Sending...' : `Send Message - ${MESSAGE_COST} TC`}
               </button>
-
               <div className="mt-4">
-                <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-500">
-                  Buy Chat Minutes
-                </p>
-
+                <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-500">Buy Chat Minutes</p>
                 <div className="mb-3 grid grid-cols-4 gap-2">
                   {[1, 2, 5, 10].map((amount) => (
                     <button
@@ -623,7 +589,6 @@ export default function InmatesPage() {
                     </button>
                   ))}
                 </div>
-
                 <button
                   type="button"
                   onClick={handleBuyMinutes}
@@ -631,9 +596,7 @@ export default function InmatesPage() {
                   className="flex w-full items-center justify-center gap-2 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/15 px-5 py-3 text-sm font-black text-fuchsia-200 transition hover:bg-fuchsia-500/25 disabled:opacity-50"
                 >
                   <Coins className="h-4 w-4" />
-                  {buyingMinutes
-                    ? 'Buying...'
-                    : `Buy ${minutesToBuy} Minute(s) - ${minutesToBuy * MINUTES_PRICE} TC`}
+                  {buyingMinutes ? 'Buying...' : `Buy ${minutesToBuy} Minute(s) - ${minutesToBuy * MINUTES_PRICE} TC`}
                 </button>
               </div>
             </InfoPanel>
@@ -642,7 +605,6 @@ export default function InmatesPage() {
               <p className="mb-4 text-sm leading-6 text-slate-400">
                 Start a paid inmate call using your existing call cost system.
               </p>
-
               <button
                 type="button"
                 onClick={handleStartCall}
@@ -713,20 +675,13 @@ function InmateCard({
           </p>
         </div>
       </div>
-
       <div className="space-y-3">
         <MiniRow label="Sentence" value={`${inmate.sentence_days} days`} />
         <MiniRow label="Remaining" value={formatReleaseTime(inmate.release_time)} danger />
         <MiniRow label="Bond" value={`${inmate.bond_amount || DEFAULT_BOND_AMOUNT} TC`} />
-        <MiniRow
-          label="Chat"
-          value={`${Math.max(0, inmate.message_minutes - inmate.message_minutes_used)} min`}
-        />
-
+        <MiniRow label="Chat" value={`${Math.max(0, inmate.message_minutes - inmate.message_minutes_used)} min`} />
         <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-          <p className="mb-1 text-xs font-black uppercase tracking-[0.16em] text-slate-500">
-            Reason
-          </p>
+          <p className="mb-1 text-xs font-black uppercase tracking-[0.16em] text-slate-500">Reason</p>
           <p className="line-clamp-2 text-sm text-slate-300">{inmate.reason}</p>
         </div>
       </div>
@@ -735,19 +690,11 @@ function InmateCard({
 }
 
 function Avatar({ inmate, size = 'md' }: { inmate: Inmate; size?: 'md' | 'lg' }) {
-  const className =
-    size === 'lg'
-      ? 'h-20 w-20 rounded-3xl'
-      : 'h-14 w-14 rounded-2xl'
-
+  const className = size === 'lg' ? 'h-20 w-20 rounded-3xl' : 'h-14 w-14 rounded-2xl'
   return (
     <div className={`${className} overflow-hidden border border-cyan-300/20 bg-slate-800`}>
       {inmate.avatar_url ? (
-        <img
-          src={inmate.avatar_url}
-          alt={inmate.username}
-          className="h-full w-full object-cover"
-        />
+        <img src={inmate.avatar_url} alt={inmate.username} className="h-full w-full object-cover" />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-cyan-500/10 text-xl font-black text-cyan-200">
           {inmate.username.charAt(0).toUpperCase()}
@@ -757,77 +704,39 @@ function Avatar({ inmate, size = 'md' }: { inmate: Inmate; size?: 'md' | 'lg' })
   )
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string | number
-}) {
+function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | number }) {
   return (
     <div className="rounded-3xl border border-cyan-400/20 bg-cyan-500/5 p-4">
       <Icon className="mb-3 h-5 w-5 text-cyan-300" />
-      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </p>
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-black text-white">{value}</p>
     </div>
   )
 }
 
-function InfoPanel({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
+function InfoPanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-[2rem] border border-cyan-400/15 bg-black/30 p-4">
-      <h3 className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
-        {title}
-      </h3>
+      <h3 className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-cyan-300">{title}</h3>
       {children}
     </section>
   )
 }
 
-function InfoRow({
-  label,
-  value,
-  danger,
-}: {
-  label: string
-  value: string
-  danger?: boolean
-}) {
+function InfoRow({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-white/5 py-2 last:border-b-0">
       <span className="text-sm text-slate-400">{label}</span>
-      <span className={`text-right text-sm font-black ${danger ? 'text-red-300' : 'text-white'}`}>
-        {value}
-      </span>
+      <span className={`text-right text-sm font-black ${danger ? 'text-red-300' : 'text-white'}`}>{value}</span>
     </div>
   )
 }
 
-function MiniRow({
-  label,
-  value,
-  danger,
-}: {
-  label: string
-  value: string
-  danger?: boolean
-}) {
+function MiniRow({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 text-sm">
       <span className="text-slate-400">{label}</span>
-      <span className={`font-black ${danger ? 'text-red-300' : 'text-cyan-100'}`}>
-        {value}
-      </span>
+      <span className={`font-black ${danger ? 'text-red-300' : 'text-cyan-100'}`}>{value}</span>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { useInRouterContext, useNavigate, useParams, useSearchParams } from 'rea
 import {
   Bell,
   Calendar,
+  Ban,
   Car,
   CheckCircle,
   ChevronDown,
@@ -186,6 +187,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   const [isTabDropdownOpen, setIsTabDropdownOpen] = useState(false);
   const [organization, setOrganization] = useState<{ name: string; role: string } | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const tabDropdownRef = useRef<HTMLDivElement | null>(null);
   const initialLoadRef = useRef(true);
   const prevProfileIdRef = useRef<string | null>(null);
@@ -198,6 +200,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   const isOwnProfile = currentUser?.id === profile?.id;
   const canSeeFullProfile = isOwnProfile;
   const isAdminViewer = ['admin', 'troll_officer', 'lead_troll_officer'].includes(viewerRole);
+  const isViewBlocked = !isOwnProfile && !isAdminViewer && isBlocked;
   const canUseBackground = isAdminViewer || ['secretary', 'prosecutor', 'attorney'].includes(viewerRole);
 
   const tabOptions: TabOption[] = [
@@ -500,6 +503,24 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
     checkFollowStatus();
   }, [currentUser, profile?.id]);
 
+  // Check block status: either direction
+  useEffect(() => {
+    const checkBlockStatus = async () => {
+      if (!currentUser || !profile?.id || currentUser.id === profile.id) {
+        setIsBlocked(false);
+        return;
+      }
+      // Check if current user blocked the profile owner
+      const { data: iBlocked } = await supabase.from('user_blocks')
+        .select('id').eq('blocker_id', currentUser.id).eq('blocked_id', profile.id).maybeSingle();
+      // Check if profile owner blocked current user
+      const { data: blockedMe } = await supabase.from('user_blocks')
+        .select('id').eq('blocker_id', profile.id).eq('blocked_id', currentUser.id).maybeSingle();
+      setIsBlocked(!!iBlocked || !!blockedMe);
+    };
+    checkBlockStatus();
+  }, [currentUser, profile?.id]);
+
   useEffect(() => {
     if (isOwnProfile && profile?.announcements_enabled !== undefined) setAnnouncementsEnabled(profile.announcements_enabled);
     if (isOwnProfile && profile?.banner_notifications_enabled !== undefined) setBannerNotificationsEnabled(profile.banner_notifications_enabled);
@@ -726,6 +747,24 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
           <div className={`${panel} max-w-md p-8 text-center`}>
             <h2 className="text-2xl font-black text-white">User not found</h2>
             <p className="mt-2 text-zinc-400">The user you are looking for does not exist.</p>
+            <button onClick={() => navigate('/')} className={`${primaryButton} mt-6`}>Go Home</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isViewBlocked) {
+    return (
+      <div className={shell}>
+        <ProfileBackdrop />
+        <div className="relative flex min-h-screen items-center justify-center p-6">
+          <div className={`${panel} max-w-md p-8 text-center`}>
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-red-500/30 bg-red-950/30">
+              <Ban className="h-10 w-10 text-red-400" />
+            </div>
+            <h2 className="text-2xl font-black text-white">User Unavailable</h2>
+            <p className="mt-2 text-zinc-400">You cannot view this profile because you have been blocked or have blocked this user.</p>
             <button onClick={() => navigate('/')} className={`${primaryButton} mt-6`}>Go Home</button>
           </div>
         </div>

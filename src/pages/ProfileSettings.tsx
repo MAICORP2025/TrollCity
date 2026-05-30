@@ -2,7 +2,7 @@ import React from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '@/lib/supabase'
 import { useNavigate } from 'react-router-dom'
-import { Settings, Boxes, Sparkles, KeyRound, Trash2 } from 'lucide-react'
+import { Settings, Boxes, Sparkles, KeyRound, Trash2, Ban } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { setResetPin } from '@/services/passwordManager'
@@ -342,6 +342,22 @@ export default function ProfileSettings() {
             className={`px-4 py-2 rounded-lg ${trollCityTheme.gradients.button} text-white text-sm font-semibold`}
           >
             Open
+          </button>
+        </div>
+
+        <div className={`${trollCityTheme.components.card} flex items-center justify-between`}>
+          <div className="flex items-center gap-3">
+            <Ban className="w-5 h-5 text-amber-400" />
+            <div>
+              <h2 className="text-lg font-semibold">Blocked Users</h2>
+              <p className={`text-xs ${trollCityTheme.text.muted}`}>View and manage users you've blocked.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/blocked-users')}
+            className={`px-4 py-2 rounded-lg ${trollCityTheme.gradients.button} text-white text-sm font-semibold`}
+          >
+            Manage
           </button>
         </div>
 

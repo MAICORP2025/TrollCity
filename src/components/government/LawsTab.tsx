@@ -1,21 +1,13 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '@/lib/store';
-import { 
-  Law, 
-  LawVote, 
-  PoliticalParty, 
-  Bribe, 
-  Protest, 
-  GovernmentReputation, 
+import {
+  Law,
+  LawVote,
+  PoliticalParty,
+  Bribe,
+  Protest,
+  GovernmentReputation,
   CityReputation,
-  createLaw,
-  voteOnLaw,
-  createPoliticalParty,
-  submitBribe,
-  exposeBribe,
-  createProtest,
-  joinProtest,
-  useEmergencyPower
 } from '@/hooks/useGovernmentSystem';
 import { Scroll, Plus, ThumbsUp, ThumbsDown, Clock, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,7 +27,7 @@ interface LawsTabProps {
   onCreatePoliticalParty: (party: Partial<PoliticalParty>) => Promise<any>;
   onSubmitBribe: (bribeeId: string, amount: number, purpose: string) => Promise<void>;
   onExposeBribe: (bribeId: string, reason: string) => Promise<void>;
-  onCreateProtest: (protest: Partial<Protests>) => Promise<any>;
+  onCreateProtest: (protest: Partial<Protest>) => Promise<any>;
   onJoinProtest: (protestId: string) => Promise<void>;
   onUseEmergencyPower: (actionType: string, targetId?: string, reason?: string) => Promise<void>;
   roleLevel: string;

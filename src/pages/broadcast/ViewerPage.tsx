@@ -21,7 +21,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 import type { Stream } from '../../types/broadcast'
 import type { BroadcastGift } from '../../hooks/useBroadcastRealtime'
-import { supabase } from '../../lib/supabase'
+import { supabase, getBlockedUserIds } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
 import { getLiveKitRoomName } from '../../lib/liveUtils'
@@ -475,6 +475,32 @@ function ViewerPage() {
    const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
    const [chatInput, setChatInput] = useState('')
     const floatingChatContainerRef = useRef<HTMLDivElement>(null)
+    const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(new Set())
+
+    // Load blocked usernames for chat filtering
+    useEffect(() => {
+      if (!user?.id) {
+        setBlockedUsernames(new Set())
+        return
+      }
+      getBlockedUserIds().then(async (ids) => {
+        if (ids.length === 0) {
+          setBlockedUsernames(new Set())
+          return
+        }
+        // Resolve blocked user IDs to usernames
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('username, display_name')
+          .in('id', ids)
+        const names = new Set<string>()
+        profiles?.forEach((p: any) => {
+          if (p.username) names.add(p.username.toLowerCase())
+          if (p.display_name) names.add(p.display_name.toLowerCase())
+        })
+        setBlockedUsernames(names)
+      }).catch(() => {})
+    }, [user?.id])
 
   // Desktop floating chat: always scroll to top so newest messages are visible
   useEffect(() => {
@@ -1409,6 +1435,8 @@ useStreamRealtime(
        .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
          const { username, content } = payload.payload || {}
          if (!username || !content) return
+         // Filter out messages from blocked users
+         if (blockedUsernames.has(username.toLowerCase())) return
          const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
          setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
 
