@@ -46,7 +46,7 @@ export default function UserActionModal({
   isHost, 
   isModerator, 
   isOfficer = false,
-  onClose, 
+  onClose,
   onGift,
   onGiftAll,
   onKickStage
@@ -449,11 +449,11 @@ const handleViewProfile = () => {
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto"
       onClick={(e) => { e.stopPropagation(); onClose(); }}
     >
       <div 
-        className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl scale-100 animate-in zoom-in-95 duration-200"
+        className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-sm overflow-y-auto shadow-2xl scale-100 animate-in zoom-in-95 duration-200 my-8 max-h-[calc(100vh-4rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         

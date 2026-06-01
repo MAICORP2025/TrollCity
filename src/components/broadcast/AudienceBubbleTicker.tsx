@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../lib/store'
 import { isStaffProfile } from '../../lib/staff'
-import ModActionsPopup from './ModActionsPopup'
+import UserActionModal from './UserActionModal'
 
 export interface StreamAudienceMember {
   id: string
@@ -29,6 +29,7 @@ interface AudienceBubbleTickerProps {
   hostUserId?: string
   maxVisible?: number
   className?: string
+  onGiftUser?: (userId: string) => void
 }
 
 const LEAVE_ANIMATION_DURATION = 5000
@@ -40,6 +41,7 @@ export function AudienceBubbleTicker({
   hostUserId,
   maxVisible = 10,
   className = '',
+  onGiftUser,
 }: AudienceBubbleTickerProps) {
   const { profile: currentProfile } = useAuthStore()
   const [leavingAudience, setLeavingAudience] = useState<
@@ -163,7 +165,7 @@ export function AudienceBubbleTicker({
   return (
     <div
       className={cn(
-        'pointer-events-none relative z-0 flex w-full items-start gap-2 overflow-x-auto py-1 px-1 scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent',
+        'pointer-events-none relative z-0 flex min-w-0 max-w-full items-start gap-2 overflow-x-auto py-1 px-1 scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent',
         className
       )}
     >
@@ -250,22 +252,20 @@ export function AudienceBubbleTicker({
       )}
 
       {selectedMember && (
-        <ModActionsPopup
-          isOpen={Boolean(selectedMember)}
-          onClose={() => setSelectedMemberId(null)}
-          targetUser={{
-            id: selectedMember.user_id,
-            username: selectedMember.username,
-            avatar_url: selectedMember.avatar_url || '',
-            role: selectedMember.role,
-            troll_role: selectedMember.role,
-            is_troll_officer: selectedMember.role === 'seat' || selectedMember.role === 'broadcaster',
-          }}
-          targetUsername={selectedMember.username}
-          targetUserId={selectedMember.user_id}
+        <UserActionModal
           streamId={streamId}
-          hostId={hostUserId || ''}
-          currentUserId={currentUserId}
+          onClose={() => setSelectedMemberId(null)}
+          userId={selectedMember.user_id}
+          username={selectedMember.username}
+          role={selectedMember.role}
+          isHost={currentProfile?.id === hostUserId}
+          isModerator={false}
+          isOfficer={isStaffProfile(currentProfile)}
+          onGift={() => {
+            const uid = selectedMember.user_id
+            setSelectedMemberId(null)
+            onGiftUser?.(uid)
+          }}
         />
       )}
     </div>

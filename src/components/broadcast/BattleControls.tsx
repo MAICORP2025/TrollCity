@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Stream } from '../../types/broadcast';
 import { Swords, Loader2, SkipForward, Trophy, Crown, Shield, LightningBolt } from 'lucide-react';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
 import { getCategoryConfig } from '../../config/broadcastCategories';
+import { usePageVisibilityContext } from '../../contexts/PageVisibilityContext';
 
 interface BattleControlsProps {
   currentStream: Stream;
@@ -18,11 +19,15 @@ export default function BattleControls({ currentStream, onBattleAccepted }: Batt
     const [outgoingBattleId, setOutgoingBattleId] = useState<string | null>(null);
     const [skipLoading, setSkipLoading] = useState(false);
     const [waitingForAccept, setWaitingForAccept] = useState(false);
+  const { isVisible } = usePageVisibilityContext();
 
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
 
-  // Poll for pending challenges
+  // Poll for pending challenges — only when tab is visible AND not already in/searching for a battle
   useEffect(() => {
+    const isActive = outgoingBattleId !== null || matchStatus === 'searching' || pendingBattle !== null;
+    if (!isVisible || isActive) return;
+
     const fetchPending = async () => {
         // Check if I have been challenged (opponent_stream_id = my id)
         const { data } = await supabase
@@ -44,16 +49,16 @@ export default function BattleControls({ currentStream, onBattleAccepted }: Batt
         setLeaderboard(data || []);
     };
 
-    const interval = setInterval(fetchPending, 3000);
+    const interval = setInterval(fetchPending, 5000);
     fetchPending();
     fetchLeaderboard();
 
     return () => clearInterval(interval);
-  }, [currentStream.id]);
+  }, [currentStream.id, isVisible, outgoingBattleId, matchStatus, pendingBattle]);
 
   // Poll for outgoing battle status - for challenger to detect when battle becomes active
   useEffect(() => {
-    if (!outgoingBattleId) {
+    if (!outgoingBattleId || !isVisible) {
       setWaitingForAccept(false);
       return;
     }
@@ -87,7 +92,7 @@ export default function BattleControls({ currentStream, onBattleAccepted }: Batt
       clearInterval(pollInterval);
       setWaitingForAccept(false);
     };
-  }, [outgoingBattleId, onBattleAccepted, supabase]);
+  }, [outgoingBattleId, onBattleAccepted, supabase, isVisible]);
 
   const findAndChallengeRandom = async () => {
     if (matchStatus === 'searching') return;

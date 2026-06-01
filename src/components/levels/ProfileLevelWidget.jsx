@@ -58,8 +58,10 @@ export default function ProfileLevelWidget() {
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-gray-400">Broadcast Level</span>
-        <LevelBadge type="stream" level={streamLevel} />
+        <span className="text-xs text-gray-400">Broadcast League</span>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 text-white`}>
+          T{streamLevel}
+        </span>
       </div>
 
       {showMainModal && (

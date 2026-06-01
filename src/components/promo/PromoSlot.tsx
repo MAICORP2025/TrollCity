@@ -9,7 +9,7 @@ import PromoAdCard from './PromoAdCard';
 
 interface PromoSlotProps {
   placement: AdPlacement;
-  variant?: 'sidebar' | 'featured' | 'horizontal';
+  variant?: 'sidebar' | 'featured' | 'horizontal' | 'rail';
 }
 
 export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotProps) {
@@ -161,7 +161,7 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
 
   // Loading state
   if (loading) {
-    const loadingHeight = variant === 'horizontal' ? 'h-[100px]' : variant === 'sidebar' ? 'h-[180px]' : 'h-[400px]';
+    const loadingHeight = variant === 'horizontal' ? 'h-[100px]' : variant === 'sidebar' ? 'h-[180px]' : variant === 'rail' ? 'h-[300px]' : 'h-[400px]';
     return (
       <div className={`w-full ${loadingHeight} 
         bg-slate-900/50 rounded-xl animate-pulse border border-slate-800`}>
@@ -175,7 +175,7 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
   // Empty state - show advertise prompt when no ads
   if (ads.length === 0) {
     return (
-      <div className={`w-full ${variant === 'horizontal' ? 'h-[100px]' : variant === 'sidebar' ? 'h-[180px]' : 'h-[400px]'} 
+      <div className={`w-full ${variant === 'horizontal' ? 'h-[100px]' : variant === 'sidebar' ? 'h-[180px]' : variant === 'rail' ? 'h-[300px]' : 'h-[400px]'} 
         bg-slate-900/50 rounded-xl border border-slate-800 flex flex-col items-center justify-center gap-2 p-4`}>
         <div className="text-purple-400 text-lg font-semibold">Want to Advertise?</div>
         <p className="text-slate-400 text-xs text-center">

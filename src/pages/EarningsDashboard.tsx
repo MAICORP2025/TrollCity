@@ -64,7 +64,7 @@ export default function EarningsDashboard() {
         .from('earnings_view')
         .select('*')
         .eq('id', profile?.id)
-        .single()
+        .maybeSingle()
 
       if (error) throw error
       if (data) {

@@ -1,6 +1,8 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image, TrendingUp, PieChart } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image, TrendingUp, PieChart, HeadphonesIcon } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
+
+const CustomerServiceDashboard = lazy(() => import('./CustomerServiceDashboard'))
 
 const AdminAdvertisements = lazy(() => import('./AdminAdvertisements'))
 
@@ -225,6 +227,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileColor: 'text-purple-200',
     tileBgColor: 'bg-purple-500/10',
     tileBorderColor: 'border-purple-500/30',
+    category: 'support'
+  },
+  {
+    id: 'customer-service',
+    title: 'Customer Service',
+    path: '/admin/customer-service',
+    component: CustomerServiceDashboard,
+    roles: [UserRole.ADMIN],
+    description: 'Admin support dashboard — user management, password reset, screen share',
+    icon: <HeadphonesIcon className="w-5 h-5 text-cyan-200" />,
+    tileColor: 'text-cyan-200',
+    tileBgColor: 'bg-cyan-500/10',
+    tileBorderColor: 'border-cyan-500/30',
     category: 'support'
   },
   {

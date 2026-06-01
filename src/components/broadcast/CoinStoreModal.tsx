@@ -18,9 +18,10 @@ interface CoinStoreModalProps {
   isOpen: boolean;
   onClose: () => void;
   embedded?: boolean;
+  allowCardPayment?: boolean;
 }
 
-export default function CoinStoreModal({ isOpen, onClose, embedded = false }: CoinStoreModalProps) {
+export default function CoinStoreModal({ isOpen, onClose, embedded = false, allowCardPayment = true }: CoinStoreModalProps) {
   const { user, profile } = useAuthStore();
   const [selectedPack, setSelectedPack] = useState<CoinPackage | null>(null);
   const [packages, setPackages] = useState<CoinPackage[]>([]);
@@ -134,6 +135,10 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
   };
 
   const handleCardCheckout = (pkg: CoinPackage) => {
+    if (!allowCardPayment) {
+      return;
+    }
+
     if (!user?.id) {
       toast.error('Sign in to use the coin store.')
       return
@@ -257,19 +262,21 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false }: Co
                     <span className="text-[9px] text-zinc-500">
                       +${(isNewUser ? getTaxAmount(pkg.price) : getTaxAmount(pkg.price)).toFixed(2)} tax
                     </span>
-                    <div className="mt-2 flex gap-2">
+                                    <div className="mt-2 flex gap-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); handlePackageSelect(pkg); }}
                         className="px-3 py-1 bg-cyan-600 text-black font-bold rounded-md text-sm"
                       >
                         PayPal
                       </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleCardCheckout(pkg); }}
-                        className="px-3 py-1 bg-zinc-800 text-white rounded-md text-sm border border-zinc-700"
-                      >
-                        Credit Card
-                      </button>
+                      {allowCardPayment && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleCardCheckout(pkg); }}
+                          className="px-3 py-1 bg-zinc-800 text-white rounded-md text-sm border border-zinc-700"
+                        >
+                          Credit Card
+                        </button>
+                      )}
                     </div>
                   </div>
                 </button>

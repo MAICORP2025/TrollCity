@@ -101,7 +101,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
         // Mark participants as inactive
         const { error: _participantsError } = await supabase
-          .from("streams_participants")
+          .from("stream_participants")
           .update({
             is_active: false,
             left_at: new Date().toISOString(),
@@ -155,7 +155,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
         // Mark participants as inactive
         await supabase
-          .from("streams_participants")
+          .from("stream_participants")
           .update({
             is_active: false,
             left_at: new Date().toISOString(),

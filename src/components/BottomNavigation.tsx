@@ -235,11 +235,31 @@ export default function BottomNavigation() {
   const canSeeCourt = !!user && !!profile
 
   const canBroadcast = () => {
-    return (
-      !isBroadcastLockedDown &&
-      (profile as any)?.drivers_license_status !== 'suspended' &&
-      (isBroadcaster || isAdmin)
-    )
+    const licenseStatus = String(
+      (profile as any)?.license_status ||
+        (profile as any)?.drivers_license_status ||
+        ''
+    ).toLowerCase()
+
+    const licenseExpiry = (profile as any)?.drivers_license_expiry
+    const insuranceExpiry = (profile as any)?.car_insurance_expiry
+
+    const hasActiveLicense =
+      licenseStatus === 'active' &&
+      (!licenseExpiry || new Date(licenseExpiry) > new Date())
+
+    const hasInsurance =
+      !!insuranceExpiry && new Date(insuranceExpiry) > new Date()
+
+    const hasVehicle = !!(profile as any)?.vehicle_id
+    const hasPlate = !!(profile as any)?.license_plate
+
+    const isBlocked =
+      isBroadcastLockedDown ||
+      licenseStatus === 'suspended' ||
+      licenseStatus === 'revoked'
+
+    return !isBlocked && hasActiveLicense && hasInsurance && hasVehicle && hasPlate
   }
 
   const trollCoins = Number(
@@ -611,18 +631,9 @@ export default function BottomNavigation() {
   const basePages: MenuOption[] = useMemo(
     () => [
       { category: 'Broadcasting', label: 'Go Live', icon: Video, path: '/broadcast/setup', show: !!user && canBroadcast() },
-      { category: 'Broadcasting', label: 'Leagues', icon: Trophy, path: '/leagues' },
 
       { category: 'Careers + Work', label: 'Careers', icon: FileText, path: '/careers' },
-      { category: 'Careers + Work', label: 'Attorney', icon: Briefcase, path: '/attorney', show: isAttorney },
-      { category: 'Careers + Work', label: 'Prosecutor Dashboard', icon: Gavel, path: '/prosecutor', show: isProsecutor },
-      { category: 'Careers + Work', label: 'Auction Studio', icon: Gavel, path: '/auctions/studio', show: isAuctioneer },
-      { category: 'Careers + Work', label: 'My Shows', icon: List, path: '/auctions/my-shows', show: isAuctioneer },
-      { category: 'Careers + Work', label: 'Agency HR', icon: Briefcase, path: '/agency-hr-dashboard', show: isAgencyHR },
-      { category: 'Careers + Work', label: 'CEO Assistant', icon: LayoutDashboard, path: '/ceo-assistant-dashboard', show: isCEOAssistant },
-      { category: 'Careers + Work', label: 'Noah Assistant', icon: LayoutDashboard, path: '/noah-assistant-dashboard', show: isNoahAssistant },
       { category: 'Careers + Work', label: 'Mai Class', icon: BookOpen, path: '/mai-class' },
-      { category: 'Careers + Work', label: 'Organization', icon: Building2, path: '/organization/dashboard' },
 
       { category: 'City Center', label: 'Appeals', icon: Scale, path: '/city-registry' },
       { category: 'City Center', label: 'Coin Store', icon: Coins, path: '/store' },
@@ -637,7 +648,6 @@ export default function BottomNavigation() {
       { category: 'Community', label: 'Agencies', icon: Building2, path: '/agencies' },
       { category: 'Community', label: 'Inventory', icon: Package, path: '/inventory' },
       { category: 'Community', label: 'Living', icon: Warehouse, path: '/living' },
-      { category: 'Community', label: 'Mai Talent', icon: Star, path: '/mai-talent' },
       { category: 'Community', label: 'My Agency', icon: Users, path: '/agency-dashboard' },
       { category: 'Community', label: 'My Family', icon: Users, path: '/family/home' },
       { category: 'Community', label: 'Pool', icon: Waves, path: '/pool' },
@@ -646,18 +656,18 @@ export default function BottomNavigation() {
       { category: 'Community', label: 'Troll Wheel', icon: Gamepad2, path: '/troll-wheel' },
 
       { category: 'News + Ads', label: 'Advertise', icon: Megaphone, path: '/city-registry/advertise' },
-      { category: 'News + Ads', label: 'TCNN Dashboard', icon: Newspaper, path: '/tcnn/dashboard', show: !!(profile as any)?.is_journalist || !!(profile as any)?.is_news_caster || !!(profile as any)?.is_chief_news_caster || isAdmin },
       { category: 'News + Ads', label: 'Trollified', icon: ShoppingBag, path: '/trollifieds' },
 
+      { category: 'Social', label: 'Search', icon: Search, path: '/search' },
       { category: 'Social', label: 'Notifications', icon: Bell, path: '/notifications', badge: notificationCount, onClick: handleMessagesClick },
-      { category: 'Social', label: 'Postal Service', icon: MessageSquare, path: '/tcps', badge: totalUnreadCount, onClick: handleMessagesClick },
-      { category: 'Social', label: 'Profile', icon: User, path: `/${profile?.username || user?.id || 'profile'}` },
+      { category: 'Social', label: 'TCPS', icon: MessageSquare, path: '/tcps', badge: totalUnreadCount, onClick: handleMessagesClick },
+      { category: 'Social', label: 'Profile', icon: User, path: profile?.username ? `/profile/${profile.username}` : '/profile/setup' },
 
       { category: 'Support', label: 'Safety', icon: Shield, path: '/safety' },
       { category: 'Support', label: 'Policies', icon: FileText, path: '/legal' },
       { category: 'Support', label: 'Support', icon: LifeBuoy, path: '/support' },
     ],
-    [user, profile, isAdmin, notificationCount, totalUnreadCount, isBroadcastLockedDown],
+    [user, profile, notificationCount, totalUnreadCount, isBroadcastLockedDown],
   )
 
   const governmentPages: MenuOption[] = useMemo(() => {

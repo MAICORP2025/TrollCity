@@ -35,6 +35,7 @@ import { PageVisibilityProvider } from "./contexts/PageVisibilityContext";
 import TabSwitchHandler from "./components/TabSwitchHandler";
 import { initTelemetry } from "./lib/telemetry";
 import GlobalPresenceTracker from "./components/GlobalPresenceTracker";
+import { useUserPresenceRoute } from "./hooks/useUserPresenceRoute";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { reportBug } from "./lib/bugReporter";
 import { lazyWithRetry } from "./utils/lazyImport";
@@ -350,8 +351,6 @@ import AdvertisePage from "./pages/city-registry/AdvertisePage.js";
 import Following from "./pages/Following.js";
 import Marketplace from "./pages/Marketplace.js";
 import PublicPool from "./pages/PublicPool.js";
-import MaiTalent from "./pages/MaiTalent.js";
-import MaiTalentShow from "./pages/MaiTalentShow.js";
 import MaiClass from "./pages/MaiClass.js";
 import OrganizationDashboard from "./pages/organizations/OrganizationDashboard.js";
 import TrollGamesPage from "./pages/TrollGamesPage.js";
@@ -377,6 +376,8 @@ import LiveStreamOverlay from "./pages/live/LiveStreamOverlay.js";
 import AudioSettings from "./pages/live/AudioSettings.js";
 import TrollCourt from "./pages/TrollCourt.js";
 import AuctionsPage from "./pages/AuctionsPage.js";
+import SearchPage from "./pages/SearchPage.tsx";
+import { logActiveChannels } from "./lib/realtimeChannelDiagnostics";
 import PodcastCentral from "./pages/PodcastCentral.js";
 import PodcastRoom from "./pages/PodcastRoom.js";
 import AuctionStudio from "./pages/auction/AuctionStudio.js";
@@ -436,6 +437,9 @@ function AppContent() {
 
   // Some legacy logic needs the full profile object in several effects
   const profile = useAuthStore((s) => s.profile);
+
+  // Track user route presence for Customer Service dashboard
+  useUserPresenceRoute();
 
   const { expandGroup } = useSidebarStore();
 
@@ -675,6 +679,7 @@ function AppContent() {
   // Track route changes for session persistence
   useEffect(() => {
     updateRoute(location.pathname);
+    logActiveChannels(`App:nav:${location.pathname}`);
   }, [location.pathname]);
 
   // Check payouts unlock on mount
@@ -1343,17 +1348,6 @@ const handleVisibilityChange = async () => {
                   <Route path="/marketplace/orders" element={<Marketplace />} />
                   <Route path="/marketplace/sales" element={<Marketplace />} />
                   <Route path="/pool" element={<PublicPool />} />
-                  <Route path="/mai-talent" element={<MaiTalent />} />
-                  <Route path="/mai-talent/shows" element={<MaiTalent />} />
-                  <Route path="/mai-talent/show" element={<MaiTalent />} />
-                  <Route path="/mai-talent/show/:id" element={<MaiTalentShow />} />
-                  <Route path="/mai-talent/wallet" element={<MaiTalent />} />
-                  <Route path="/mai-talent/profile" element={<MaiTalent />} />
-                  <Route path="/mai-talent/profile/:userId" element={<MaiTalent />} />
-                  <Route path="/mai-talent/admin" element={<MaiTalent />} />
-                  <Route path="/mai-talent/admin/users" element={<MaiTalent />} />
-                  <Route path="/mai-talent/host" element={<MaiTalent />} />
-                  <Route path="/mai-talent/leaderboard" element={<MaiTalent />} />
                    <Route path="/mai-class" element={<MaiClass />} />
                    <Route path="/mai-class/:classId" element={<MaiClass />} />
                    <Route path="/organization/dashboard" element={<OrganizationDashboard />} />
@@ -1384,6 +1378,7 @@ const handleVisibilityChange = async () => {
                   <Route path="/profile/setup" element={<ProfileSetup />} />
                   <Route path="/profile/id/:userId" element={<Profile />} />
                    <Route path="/profile/:username" element={<Profile />} />
+                  <Route path="/search" element={<SearchPage />} />
                   <Route path="/blocked-users" element={<BlockedUsers />} />
 <Route path="/district/:districtName" element={<DistrictTour />} />
                    <Route path="/living" element={<LivingPage />} />

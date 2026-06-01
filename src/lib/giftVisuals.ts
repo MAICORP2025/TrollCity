@@ -607,8 +607,8 @@ export function getGiftVisualConfig(gift: {
   debugEntry.resolvedType = resolvedType
   debugGiftResolutionMap.set(gift.id || `${name}-${slug}`, debugEntry)
 
-  if (import.meta.env.DEV) {
-    // Only show the requested fields in dev console for clarity
+  if (import.meta.env.DEV && debugGiftResolutionMap.size <= 1) {
+    // Only log on first resolution to avoid console spam on every gift render
     const tableRows = Array.from(debugGiftResolutionMap.values()).map((v) => ({
       name: v.name,
       slug: v.slug,

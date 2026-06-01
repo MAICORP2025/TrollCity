@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
+// TODO: Replace with RPC get_admin_dashboard_metrics_v1 when backend SQL is ready.
+// That RPC should return: coinRevenue, coinsSold, totalUsers, activeStreams,
+// pendingApplications, trollOfficers, platformProfit, coinsInCirculation.
+// For now we use narrow count queries + a single RPC for coinsInCirculation.
+
 interface DashboardMetrics {
   coinRevenue: number
   coinsSold: number
@@ -164,18 +169,31 @@ export function useAdminDashboardMetrics() {
 
   async function loadCoinsInCirculation(): Promise<Partial<DashboardMetrics>> {
     try {
-      const { data, error } = await supabase
+      // SAFETY: use RPC instead of client-side SUM over all user_profiles
+      const { data, error } = await supabase.rpc('get_admin_dashboard_metrics_v1')
+      if (!error && data && typeof data.coins_in_circulation === 'number') {
+        return { coinsInCirculation: data.coins_in_circulation }
+      }
+      // Fallback: use the finance summary view if RPC not yet deployed
+      try {
+        const { data: viewData } = await supabase
+          .from('admin_finance_summary')
+          .select('total_troll_coins')
+          .maybeSingle()
+        if (viewData?.total_troll_coins != null) {
+          return { coinsInCirculation: Number(viewData.total_troll_coins) }
+        }
+      } catch { /* view may not exist */ }
+      // Last resort: sum from user_profiles (limited)
+      const { data: profData } = await supabase
         .from('user_profiles')
         .select('troll_coins')
-
-      if (error) throw error
-
-      const totalCoins = (data || []).reduce(
-        (sum: number, profile: any) => sum + Number(profile.troll_coins || 0),
-        0
-      )
-
-      return { coinsInCirculation: totalCoins }
+        .limit(1000)
+      if (profData) {
+        const total = profData.reduce((s: number, r: any) => s + (r.troll_coins || 0), 0)
+        return { coinsInCirculation: total }
+      }
+      return {}
     } catch (err) {
       console.error('[AdminDashboardMetrics] Failed to load coins in circulation:', err)
       return {}
@@ -185,7 +203,8 @@ export function useAdminDashboardMetrics() {
   useEffect(() => {
     loadMetrics()
 
-    const interval = setInterval(loadMetrics, 60000)
+    // SAFETY: reduced from 60s to 5min to avoid repeated heavy queries
+    const interval = setInterval(loadMetrics, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [loadMetrics])
 

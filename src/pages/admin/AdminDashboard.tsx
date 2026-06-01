@@ -14,6 +14,7 @@ import {
   Activity,
   Radio,
   AlertTriangle,
+  HeadphonesIcon,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -117,6 +118,7 @@ type TabId =
   | 'families'
   | 'support'
   | 'support_tickets'
+  | 'customer_service'
   | 'agreements'
   | 'reports'
   | 'send_notifications'
@@ -894,11 +896,12 @@ export default function AdminDashboard() {
     loadTaskCounts()
     loadCoinPurchases()
 
+    // SAFETY: removed 30s auto-refresh for money tables (transactions, coin_store_sales,
+    // paypal_transactions). Admins can use the manual "Refresh Sales" button instead.
+    // Only refresh lightweight task counts periodically.
     const interval = setInterval(() => {
-      loadLiveStreams()
       loadTaskCounts()
-      loadCoinPurchases()
-    }, 30000)
+    }, 5 * 60 * 1000)
 
     return () => clearInterval(interval)
   }, [isAuthorized, loadLiveStreams, loadTaskCounts, loadCoinPurchases])
@@ -1120,6 +1123,7 @@ export default function AdminDashboard() {
          reset_maintenance: '/admin/reset-maintenance',
          export_data: '/admin/export-data',
          support_tickets: '/admin/support-tickets',
+         customer_service: '/admin/customer-service',
          send_notifications: '/admin/send-notifications',
        }) as Partial<Record<TabId, string>>,
      []

@@ -37,7 +37,6 @@ export default function EarningsPayout() {
 
   const earned_coins =
     (profile as any)?.cashout_coins ??
-    (profile as any)?.paid_coins_received ??
     (profile as any)?.paid_coins ??
     profile?.troll_coins ??
     0
@@ -111,16 +110,20 @@ export default function EarningsPayout() {
     }
   }, [profile?.id])
 
+  // SAFETY: use a ref to avoid recreating the channel on every loadRecent identity change
+  const loadRecentRef = useRef(loadRecent)
+  useEffect(() => { loadRecentRef.current = loadRecent }, [loadRecent])
+
   useEffect(() => {
     if (!profile?.id) return
     const channel = supabase
       .channel(`visa_redemptions_${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'visa_redemptions', filter: `user_id=eq.${profile.id}` }, () => {
-        loadRecent()
+        loadRecentRef.current()
       })
     channel.subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [profile?.id, loadRecent])
+  }, [profile?.id])
 
   useEffect(() => {
     startFlow('cashout')

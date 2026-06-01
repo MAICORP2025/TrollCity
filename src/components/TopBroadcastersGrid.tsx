@@ -231,10 +231,10 @@ export default function TopBroadcastersGrid() {
             );
           })()}
 
-          {/* Level */}
+          {/* T League */}
           {broadcaster.level && (
-            <div className="inline-block mb-3 px-2.5 py-1 bg-purple-600/60 rounded-full text-white text-xs font-bold border border-purple-400/30">
-              Level {broadcaster.level}
+            <div className="inline-block mb-3 px-2.5 py-1 bg-gradient-to-r from-violet-600/60 to-purple-500/60 rounded-full text-white text-xs font-bold border border-violet-400/30">
+              T League
             </div>
           )}
 

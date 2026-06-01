@@ -151,8 +151,8 @@ export default function TopBroadcasters() {
             <div className="flex items-center gap-2">
               <div className="text-white font-bold truncate">{currentBroadcaster.username}</div>
               {currentBroadcaster.level && (
-                <span className="px-2 py-0.5 bg-purple-600/80 rounded text-white text-[10px] font-bold">
-                  L{currentBroadcaster.level}
+                <span className="px-2 py-0.5 bg-gradient-to-r from-violet-600/80 to-purple-500/80 rounded text-white text-[10px] font-bold">
+                  T{currentBroadcaster.level}
                 </span>
               )}
             </div>

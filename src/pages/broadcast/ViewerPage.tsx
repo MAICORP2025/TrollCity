@@ -38,15 +38,16 @@ import ErrorBoundary from '../../components/ErrorBoundary'
 import GiftBoxModal from '../../components/broadcast/GiftBoxModal'
 import GiftVideoOverlay from '../../components/broadcast/GiftVideoOverlay'
 import UserActionModal from '../../components/broadcast/UserActionModal'
-import UserStatsOrb from '../../components/broadcast/UserStatsOrb'
 import HypeCoinPopup from '../../components/HypeCoinPopup'
 import { getGiftVisualConfig } from '../../lib/giftVisuals'
 
 
 import { GiftSystemProvider } from '../../lib/hooks/useGiftSystem'
+import BattleView from '../../components/broadcast/BattleView'
 import { useBoxCount } from '../../hooks/useBoxCount'
 import { useHypeCoins } from '../../lib/hooks/useHypeCoins'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useUserLeagues } from '../../hooks/useUserLeagues'
 import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
@@ -58,6 +59,11 @@ import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
 import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
 import { awardWatchHypeReward } from '../../lib/hypeRewards'
 import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
+import { useBroadcastTextPopup } from '../../hooks/useBroadcastTextPopup'
+import { useBroadcastViewerCap } from '../../hooks/useBroadcastViewerCap'
+import { logActiveChannels } from '../../lib/realtimeChannelDiagnostics'
+import BroadcastTextPopupOverlay from '../../components/broadcast/BroadcastTextPopupOverlay'
+import RandomBattleBanner from '../../components/broadcast/RandomBattleBanner'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -417,7 +423,25 @@ function ViewerPage() {
   const { isMobileWidth, hasMounted } = useIsMobile()
   const isMobileViewer = hasMounted && isMobileWidth
   const { recordHypeCoinsEarned, recordWatchTime } = useTrollFamilyActivity()
-  
+
+  // Broadcast Text Popup (viewers can only receive, not send)
+  const {
+    activePopup: activeTextPopup,
+  } = useBroadcastTextPopup({
+    streamId: streamId || '',
+    currentUserId: user?.id,
+    currentUsername: profile?.username,
+    canSend: false, // Viewers cannot send popups
+  })
+
+  // Broadcast viewer cap
+  const {
+    viewerCapEnabled,
+    viewerCapMax,
+    allRestrictionsDisabled,
+    isStreamViewerCapped,
+  } = useBroadcastViewerCap()
+
   // Mobile layout constants
   const MOBILE_CONTROL_BAR_HEIGHT = 76
   const MOBILE_CHAT_INPUT_HEIGHT = 68
@@ -425,6 +449,18 @@ function ViewerPage() {
   const CHAT_FLOAT_MS = isMobileViewer ? 10000 : 20000
 
    const [stream, setStream] = useState<Stream | null>(null)
+
+   // Random battle phase (derived from stream state for viewers)
+  const randomBattlePhase = useMemo((): 'regular' | 'queue' | 'starting' | 'active' | 'ended' => {
+    if (!stream) return 'regular';
+    if (stream.status === 'ended') return 'ended';
+    const isRandomBattle = stream.battle_mode === 'random_queue' && !!stream.battle_id && !!stream.is_battle;
+    if (isRandomBattle && stream.battle_status === 'starting') return 'starting';
+    if (isRandomBattle && (stream.battle_status === 'active' || !stream.battle_status)) return 'active';
+    if (stream.random_battle_queue_enabled) return 'queue';
+    return 'regular';
+  }, [stream, stream?.battle_mode, stream?.battle_id, stream?.is_battle, stream?.battle_status, stream?.random_battle_queue_enabled, stream?.status]);
+
    const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
    const [error, setError] = useState<string | null>(null)
    const [streamLoaded, setStreamLoaded] = useState(false)
@@ -459,9 +495,10 @@ function ViewerPage() {
      setLocalTracksVersion((version) => version + 1)
    }, [])
    const [isChatOpen, setIsChatOpen] = useState(true)
-   const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans'>('chat')
+   const [chatTab, setChatTab] = useState<'chat' | 'league' | 'gifts' | 'top-fans'>('chat')
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
+   const { myLeagues, myMemberships, leagueMissions, isLoading: isUserLeaguesLoading } = useUserLeagues()
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
    const [streamMods, setStreamMods] = useState<string[]>([])
    const processedGiftIdsRef = useRef<Set<string>>(new Set())
@@ -662,6 +699,7 @@ function ViewerPage() {
       return
     }
     seenGiftAnimationIdsRef.current.add(animationId)
+    window.setTimeout(() => seenGiftAnimationIdsRef.current.delete(animationId), 12_000)
 
     // Existing quick-dedupe (12 s window) for old-format giftIds too
     const giftId = animationId
@@ -793,15 +831,52 @@ function ViewerPage() {
        (mySeat.user_id === user?.id || mySeat.guest_id === user?.id),
    )
 
+  const [isBattleButtonBusy, setIsBattleButtonBusy] = useState(false)
+
+  const handleStartSeatBattle = useCallback(async () => {
+    if (!stream?.id || !user?.id || !isUserOnStage) return
+
+    setIsBattleButtonBusy(true)
+    try {
+      const { data, error } = await supabase.rpc('captain_click_battle', {
+        p_stream_id: stream.id,
+        p_captain_id: user.id,
+      })
+
+      if (error) {
+        console.error('[ViewerPage] captain_click_battle error:', error)
+        toast.error('Failed to start battle')
+        return
+      }
+
+      if (data?.matched) {
+        toast.success('Battle matched!')
+      } else if (data?.status === 'waiting_for_opponent') {
+        toast.success('Searching for opponent...')
+      } else {
+        toast.success('Battle search started')
+      }
+    } catch (err) {
+      console.error('[ViewerPage] start stage battle failed:', err)
+      toast.error('Failed to start battle')
+    } finally {
+      setIsBattleButtonBusy(false)
+    }
+  }, [isUserOnStage, stream?.id, user?.id])
+
   const availableSeatIndex = useMemo(() => {
     if (effectiveBoxCount <= 1) return null
 
-    for (let seatIndex = 1; seatIndex < effectiveBoxCount; seatIndex += 1) {
+    for (let seatIndex = 1; seatIndex <= effectiveBoxCount; seatIndex += 1) {
       const seat = seats?.[seatIndex]
-      if (!seat || !isSeatOpenStatus(seat.status)) {
-        continue
+      const seatStatus = normalizeSeatStatus(seat?.status)
+      const isOccupied = Boolean(
+        isSeatActiveStatus(seatStatus) &&
+        (seat?.user_id || seat?.guest_id),
+      )
+      if (!isOccupied) {
+        return seatIndex
       }
-      return seatIndex
     }
 
     return null
@@ -1071,8 +1146,17 @@ const isActive = isStreamActive(stream)
   }, [streamId, navigate])
 
 const handleLeaveSeat = useCallback(async () => {
-  await leaveSeat()
-}, [leaveSeat])
+    try {
+      await unpublishLocalTracks()
+    } catch (err) {
+      console.warn('[ViewerPage] unpublishLocalTracks on leave seat failed:', err)
+    }
+    try {
+      await leaveSeat()
+    } catch (err) {
+      console.warn('[ViewerPage] leaveSeat failed:', err)
+    }
+  }, [leaveSeat, unpublishLocalTracks])
 
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
 
@@ -1129,6 +1213,7 @@ const handleLeaveSeat = useCallback(async () => {
   const handleLeave = useCallback(async () => {
     try {
       if (mySeat) {
+        await unpublishLocalTracks()
         await leaveSeat()
       }
       await leaveAudience()
@@ -1141,7 +1226,7 @@ const handleLeaveSeat = useCallback(async () => {
     joiningAudienceRef.current = false
     currentRoomKeyRef.current = null
     navigate('/')
-  }, [leaveAudience, leaveLiveKitRoom, leaveSeat, mySeat, navigate])
+  }, [leaveAudience, leaveLiveKitRoom, leaveSeat, mySeat, navigate, unpublishLocalTracks])
 
   const handleShare = useCallback(async () => {
     const shareUrl = `${window.location.origin}/broadcast/${streamId}`
@@ -1337,7 +1422,7 @@ const handleLeaveSeat = useCallback(async () => {
 
   useEffect(() => {
     if (!streamId) return
-    const interval = window.setInterval(() => void refreshStream(), 2500)
+    const interval = window.setInterval(() => void refreshStream(), 30000)
     return () => window.clearInterval(interval)
   }, [streamId, refreshStream])
 
@@ -1427,28 +1512,34 @@ useStreamRealtime(
     stream?.battle_id ?? null,
   )
 
+  const floatingChatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   // ── Floating Chat: receive broadcasts ────────────────────────────────────
   useEffect(() => {
     if (!streamId) return
 
-     const channel = supabase.channel(`floating-chat:${streamId}`)
+    const channel = supabase.channel(`floating-chat:${streamId}`)
+    floatingChatChannelRef.current = channel;
 
-     channel
-       .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
-         const { username, content } = payload.payload || {}
-         if (!username || !content) return
-         // Filter out messages from blocked users
-         if (blockedUsernames.has(username.toLowerCase())) return
-         const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-         setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
+    channel
+      .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
+        const { username, content } = payload.payload || {}
+        if (!username || !content) return
+        // Filter out messages from blocked users
+        if (blockedUsernames.has(username.toLowerCase())) return
+        const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
 
-          setTimeout(() => {
-            setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
-          }, CHAT_FLOAT_MS)
-       })
-       .subscribe()
+        setTimeout(() => {
+          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+        }, CHAT_FLOAT_MS)
+      })
+      .subscribe()
 
-     return () => { supabase.removeChannel(channel) }
+    return () => {
+      floatingChatChannelRef.current = null;
+      supabase.removeChannel(channel)
+    }
   }, [streamId])
 
   useEffect(() => {
@@ -1495,7 +1586,6 @@ useStreamRealtime(
          leaveLiveKitRoom().catch(() => {})
          hasJoinedAudienceRef.current = false
          joiningAudienceRef.current = false
-         joiningPublisherRef.current = false
          currentRoomKeyRef.current = null
          navigate('/', { replace: true })
          return
@@ -1508,80 +1598,23 @@ useStreamRealtime(
 
      const audienceRoomKey = `${streamId}:${roomId}`
 
-     if (isUserOnStage) {
-       if (isPublishing) {
-         currentRoomKeyRef.current = audienceRoomKey
-         viewerIdentityRef.current = user?.id || viewerIdentityRef.current
-         return
-       }
-
+     if (isUserOnStage && !isPublishing) {
        if (joiningPublisherRef.current || joiningAudienceRef.current) return
-
-       if (hasJoinedAudienceRef.current) {
-         hasJoinedAudienceRef.current = false
-         joiningAudienceRef.current = false
-         currentRoomKeyRef.current = null
-         void leaveLiveKitRoom()
-           .catch(() => {})
-           .finally(() => {
-             joiningPublisherRef.current = true
-             currentRoomKeyRef.current = audienceRoomKey
-             const publisherIdentity = user?.id
-
-             if (!publisherIdentity) {
-               setViewerError('Unable to join stage: missing user id')
-               joiningPublisherRef.current = false
-               return
-             }
-
-             viewerIdentityRef.current = publisherIdentity
-
-             joinAsPublisher(publisherIdentity)
-               .then(async () => {
-                 setViewerError(null)
-                 if (mySeat?.seat_index != null) {
-                   await markSeatLive(mySeat.seat_index, String(user.id))
-                 }
-                 console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity: publisherIdentity })
-               })
-               .catch(async (err: any) => {
-                 const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit publisher join failed'
-                 console.warn('[ViewerPage] joinAsPublisher failed:', err, { errorDetail })
-                 setViewerError(errorDetail)
-                 if (mySeat?.id) {
-                   await leaveSeat()
-                 }
-               })
-               .finally(() => {
-                 joiningPublisherRef.current = false
-               })
-           })
-         return
-       }
 
        joiningPublisherRef.current = true
        currentRoomKeyRef.current = audienceRoomKey
-       const publisherIdentity = user?.id
 
-       if (!publisherIdentity) {
-         setViewerError('Unable to join stage: missing user id')
-         joiningPublisherRef.current = false
-         return
-       }
-
-       viewerIdentityRef.current = publisherIdentity
-
-       joinAsPublisher(publisherIdentity)
+       publishLocalTracks()
          .then(async () => {
            setViewerError(null)
            if (mySeat?.seat_index != null) {
-             await markSeatLive(mySeat.seat_index, String(user.id))
+             await markSeatLive(mySeat.seat_index, viewerIdentityRef.current || viewerIdentity)
            }
-           console.log('[ViewerPage] LiveKit publisher joined:', { streamId, roomId, identity: publisherIdentity })
+           console.log('[ViewerPage] seat tracks published:', { streamId, roomId })
          })
          .catch(async (err: any) => {
-           const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit publisher join failed'
-           console.warn('[ViewerPage] joinAsPublisher failed:', err, { errorDetail })
+           const errorDetail = err?.message || err?.statusText || String(err) || 'Failed to publish seat tracks'
+           console.warn('[ViewerPage] publishLocalTracks failed:', err, { errorDetail })
            setViewerError(errorDetail)
            if (mySeat?.id) {
              await leaveSeat()
@@ -1593,37 +1626,41 @@ useStreamRealtime(
        return
      }
 
-     if (isPublishing) {
-       hasJoinedAudienceRef.current = false
-       joiningPublisherRef.current = false
-       currentRoomKeyRef.current = null
-       void leaveLiveKitRoom().catch(() => {})
+     if (!isUserOnStage && isPublishing) {
+       joiningPublisherRef.current = true
+       unpublishLocalTracks()
+         .catch(() => {})
+         .finally(() => {
+           joiningPublisherRef.current = false
+         })
        return
      }
 
-     if (hasJoinedAudienceRef.current && currentRoomKeyRef.current === audienceRoomKey) return
-     if (joiningAudienceRef.current || joiningPublisherRef.current) return
+     if (isPublishing && !isUserOnStage) {
+       return
+     }
 
-     joiningAudienceRef.current = true
-     currentRoomKeyRef.current = audienceRoomKey
+     if (isActive && !isUserOnStage && !hasJoinedAudienceRef.current && !joiningAudienceRef.current) {
+       joiningAudienceRef.current = true
+       currentRoomKeyRef.current = audienceRoomKey
 
-     const identity = viewerIdentityRef.current
-
-     joinAsAudience(identity)
-       .then(() => {
-         hasJoinedAudienceRef.current = true
-         setViewerError(null)
-         console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId, identity })
-       })
-       .catch((err: any) => {
-         const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
-         console.warn('[ViewerPage] joinAsAudience failed:', err, { errorDetail })
-         setViewerError(errorDetail)
-       })
-       .finally(() => {
-         joiningAudienceRef.current = false
-       })
-   }, [streamId, roomId, isActive, isUserOnStage, isPublishing, joinAsAudience, joinAsPublisher, leaveLiveKitRoom, user?.id, navigate])
+       joinAsAudience(viewerIdentityRef.current)
+         .then(() => {
+           hasJoinedAudienceRef.current = true
+           setViewerError(null)
+           console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId })
+         })
+         .catch((err: any) => {
+           const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
+           console.warn('[ViewerPage] joinAsAudience failed:', err, { errorDetail })
+           setViewerError(errorDetail)
+         })
+         .finally(() => {
+           joiningAudienceRef.current = false
+         })
+       return
+     }
+   }, [streamId, roomId, isActive, isUserOnStage, isPublishing, joinAsAudience, publishLocalTracks, unpublishLocalTracks, leaveLiveKitRoom, user?.id, navigate])
 
   const stageSlots = useMemo(() => {
     const liveSeats = activeSeats.slice(0, Math.max(0, effectiveBoxCount - 1))
@@ -1662,6 +1699,20 @@ useStreamRealtime(
     })
   }, [effectiveBoxCount, seats, stream, user?.id])
 
+  // ── Channel diagnostics (dev only) ──
+  useEffect(() => {
+    logActiveChannels(`ViewerPage:mount:${streamId}`);
+    return () => logActiveChannels(`ViewerPage:unmount:${streamId}`);
+  }, [streamId]);
+
+  useEffect(() => {
+    if (stream?.is_battle && stream?.battle_id) {
+      logActiveChannels(`ViewerPage:battle-active:${stream.battle_id}`);
+    } else {
+      logActiveChannels(`ViewerPage:no-battle:${streamId}`);
+    }
+  }, [stream?.is_battle, stream?.battle_id, streamId]);
+
   if (error) {
     return (
       <div className={cn('flex flex-col items-center justify-center h-dvh text-white', theme.pageBg)}>
@@ -1669,7 +1720,7 @@ useStreamRealtime(
           <p className="text-red-300 font-bold">{error}</p>
         </div>
       </div>
-    )
+    ) 
   }
 
   if (!stream || !streamLoaded) {
@@ -1681,6 +1732,32 @@ useStreamRealtime(
         </div>
       </div>
     )
+  }
+
+  const shouldShowRandomBattleArena =
+    stream?.battle_mode === 'random_queue' &&
+    !!stream?.battle_id &&
+    stream?.is_battle === true &&
+    (stream?.battle_status === 'ready' || stream?.battle_status === 'starting' || stream?.battle_status === 'active');
+
+  // PHASE 2: Derive stable battleId for BattleView key — prevents remount on stream state updates
+  const activeBattleId = shouldShowRandomBattleArena ? stream?.battle_id ?? null : null;
+
+  if (shouldShowRandomBattleArena) {
+    return (
+      <ErrorBoundary>
+        <BattleView
+          key={activeBattleId}
+          battleId={stream.battle_id!}
+          currentStreamId={streamId}
+          viewerId={user?.id}
+          remoteUsers={remoteUsers}
+          onReturnToStream={() => {
+            refreshStream();
+          }}
+        />
+      </ErrorBoundary>
+    );
   }
 
   return (
@@ -1720,20 +1797,54 @@ useStreamRealtime(
                  isLive={isActive}
                  streamStartedAt={(stream as any).started_at} />
 {/* Audience Bubble Ticker and Top Subscribers Bar */}
-                <div className="flex items-center gap-3 px-4 py-2">
-                  <AudienceBubbleTicker
-                    streamId={streamId}
-                    audience={audience}
-                    currentUserId={user?.id}
-                    hostUserId={hostId || undefined}
-                    maxVisible={8}
-                    className="relative z-0 hidden sm:flex pointer-events-none"
-                  />
-                  {hostId && (
-                    <TopSubscribersBar broadcasterId={hostId} />
-                  )}
+                <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
+                  <div className="w-full max-w-7xl mx-auto flex items-center gap-3 px-4 sm:px-0">
+                    <AudienceBubbleTicker
+                      streamId={streamId}
+                      audience={audience}
+                      currentUserId={user?.id}
+                      hostUserId={hostId || undefined}
+                      maxVisible={8}
+                      className="relative z-0 hidden sm:flex pointer-events-none"
+                      onGiftUser={onGift}
+                    />
+                    {hostId && (
+                      <TopSubscribersBar broadcasterId={hostId} />
+                    )}
+                  </div>
                 </div>
+
+                {myLeagues.length > 0 && (
+                  <div className="px-4 pb-3">
+                    <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-3xl border border-cyan-500/10 bg-slate-950/90 p-4 text-sm text-slate-200 shadow-[0_0_30px_rgba(45,212,191,0.08)] sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
+                          {myLeagues[0].icon_emoji || '🏆'}
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-white">League: {myLeagues[0].name}</p>
+                          <p className="text-xs text-slate-400">
+                            {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} • {myLeagues[0].member_count}/{myLeagues[0].max_members} members
+                          </p>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-cyan-200">
+                        Open League tab for your status, missions, and leaderboard.
+                      </div>
+                    </div>
+                  </div>
+                )}
              </>
+           )}
+
+           {/* Random Battle Banner — prominent notice for queue/active battle */}
+           {stream && (
+             <RandomBattleBanner
+               phase={randomBattlePhase}
+               delayUntil={null}
+               isBroadcaster={false}
+               mobileSafe={isMobileViewer}
+             />
            )}
 
 <main
@@ -1785,7 +1896,7 @@ useStreamRealtime(
                       )}
                       <div className="mt-4 text-lg font-black">{hostName}</div>
                       <div className="mt-2 text-sm text-slate-300">
-                        {isActive ? 'Camera starting…' : 'Waiting for broadcast…'}
+                        {isActive ? 'Camera Off' : 'Waiting for broadcast…'}
                       </div>
                     </div>
                   </div>
@@ -2038,9 +2149,9 @@ useStreamRealtime(
                 'flex h-full min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
               )}
             >
-              <div className="grid shrink-0 grid-cols-3 border-b border-white/10 bg-black/10">
-                {['Chat', 'Gifts', 'Top Fans'].map((tab) => {
-                  const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'gifts' | 'top-fans'
+              <div className="grid shrink-0 grid-cols-4 border-b border-white/10 bg-black/10">
+                {['Chat', 'League', 'Gifts', 'Top Fans'].map((tab) => {
+                  const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'league' | 'gifts' | 'top-fans'
                   const active = chatTab === tabKey
                   return (
                     <button
@@ -2143,12 +2254,14 @@ useStreamRealtime(
                               }),
                             })
                           }
-                          const chatChannel = supabase.channel(`floating-chat:${streamId}`)
-                          chatChannel.send({
-                            type: 'broadcast',
-                            event: 'floating_chat',
-                            payload: { username, content: text },
-                          }).catch(() => { })
+                          const chatChannel = floatingChatChannelRef.current;
+                          if (chatChannel) {
+                            chatChannel.send({
+                              type: 'broadcast',
+                              event: 'floating_chat',
+                              payload: { username, content: text },
+                            }).catch(() => { })
+                          }
                         } catch {
                           // keep local optimistic message visible
                         }
@@ -2163,6 +2276,55 @@ useStreamRealtime(
                         className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                         maxLength={280} />
                     </form>
+                  </div>
+                ) : chatTab === 'league' ? (
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-slate-200 scrollbar-hide">
+                    <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">League Status</div>
+                    {isUserLeaguesLoading ? (
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">Loading league data...</div>
+                    ) : myLeagues.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
+                        You are not currently in a league.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {myLeagues.map((league) => {
+                          const membership = myMemberships[league.id]
+                          const leagueMissionsForLeague = leagueMissions.filter((mission) => mission.league_id === league.id)
+                          return (
+                            <div key={league.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
+                                  {league.icon_emoji || '🏆'}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-black text-white truncate">{league.name}</p>
+                                  <p className="text-xs text-slate-400 truncate">{league.description || 'League membership active'}</p>
+                                </div>
+                              </div>
+                              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                  <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Status</p>
+                                  <p className="mt-2 text-sm font-black text-white">{membership?.role || membership?.status || 'Member'}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                  <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Score</p>
+                                  <p className="mt-2 text-sm font-black text-white">{league.league_score.toLocaleString()}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                  <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Members</p>
+                                  <p className="mt-2 text-sm font-black text-white">{league.member_count}/{league.max_members}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                  <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Missions</p>
+                                  <p className="mt-2 text-sm font-black text-white">{leagueMissionsForLeague.length} active</p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 ) : chatTab === 'gifts' ? (
                   <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-slate-200 scrollbar-hide">
@@ -2268,12 +2430,14 @@ useStreamRealtime(
                       }),
                     })
                   }
-                  const chatChannel = supabase.channel(`floating-chat:${streamId}`)
-                  chatChannel.send({
-                    type: 'broadcast',
-                    event: 'floating_chat',
-                    payload: { username, content: text },
-                  }).catch(() => { })
+                  const chatChannel = floatingChatChannelRef.current;
+                  if (chatChannel) {
+                    chatChannel.send({
+                      type: 'broadcast',
+                      event: 'floating_chat',
+                      payload: { username, content: text },
+                    }).catch(() => { })
+                  }
                 } catch {
                   // keep local optimistic message visible
                 }
@@ -2356,6 +2520,19 @@ useStreamRealtime(
                 <Users className="h-4 w-4" />
                 {isUserOnStage ? 'Leave Stage' : typeof availableSeatIndex === 'number' ? 'Join Seat' : 'No Seats'}
               </button>
+              {isUserOnStage && (
+                <button
+                  onClick={handleStartSeatBattle}
+                  disabled={isBattleButtonBusy}
+                  className={cn(
+                    'inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black',
+                    theme.purpleButton,
+                  )}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Start Battle
+                </button>
+              )}
               <button
                 onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
                 className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.danger)}
@@ -2398,6 +2575,14 @@ useStreamRealtime(
           </div>
         </div>
       </div>
+
+      {/* Broadcast Text Popup Overlay */}
+      <BroadcastTextPopupOverlay
+        popup={activeTextPopup}
+        isBattleActive={!!stream?.is_battle && !!stream?.battle_id}
+        mobileSafe={isMobileViewer}
+      />
+
     </ErrorBoundary>
     <HypeCoinPopup
       isVisible={showHypeCoinPopup}

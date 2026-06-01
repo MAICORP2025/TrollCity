@@ -16,6 +16,7 @@ import {
   Radio,
   Sparkles,
   X,
+  Megaphone,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -40,14 +41,16 @@ interface MoreControlsDrawerProps {
   openStagePassCount?: number
 
   onAssignBroadofficer?: () => void
+  onPayBroadOfficers?: () => void
 
-  onToggleRGB?: () => void
-  hasRgbEffect?: boolean
+  onToggleRGB?: () => void;
+  hasRgbEffect?: boolean;
+  onTextPopup?: () => void;
 
-  isOfficer?: boolean
+  isOfficer?: boolean;
   onMuteUser?: (userId: string) => void
   onBanUser?: (userId: string) => void
-  onRemoveFromStage?: (userId: string) => void
+  onRemoveFromStage?: () => void
   onModGift?: (userId: string) => void
 }
 
@@ -69,7 +72,9 @@ export default function MoreControlsDrawer({
   openStagePassCount = 0,
   onToggleRGB,
   hasRgbEffect = false,
+  onTextPopup,
   onAssignBroadofficer,
+  onPayBroadOfficers,
   isHost = false,
   isOfficer = false,
   onMuteUser,
@@ -252,12 +257,28 @@ export default function MoreControlsDrawer({
                     />
                   )}
 
+                  {isHost && onPayBroadOfficers && (
+                    <ControlButton
+                      icon={Gift}
+                      label="Pay Officers"
+                      onClick={onPayBroadOfficers}
+                    />
+                  )}
+
                   {isHost && onToggleRGB && (
                     <ControlButton
                       icon={Sparkles}
                       label={hasRgbEffect ? 'RGB On' : 'RGB Off'}
                       onClick={onToggleRGB}
                       active={hasRgbEffect}
+                    />
+                  )}
+
+                  {isHost && onTextPopup && (
+                    <ControlButton
+                      icon={Megaphone}
+                      label="Text Popup"
+                      onClick={onTextPopup}
                     />
                   )}
                 </div>
@@ -291,7 +312,7 @@ export default function MoreControlsDrawer({
                     <ControlButton
                       icon={UserMinus}
                       label="Remove"
-                      onClick={() => {}}
+                      onClick={onRemoveFromStage}
                       danger
                     />
                   )}
@@ -299,7 +320,7 @@ export default function MoreControlsDrawer({
                   {onModGift && (
                     <ControlButton
                       icon={Gift}
-                      label="Mod Gift"
+                      label="Broadofficer Pay"
                       onClick={() => {}}
                     />
                   )}

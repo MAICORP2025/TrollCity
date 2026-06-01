@@ -471,11 +471,19 @@ export default function NeighborhoodMapHub() {
     dragRef.current.dragging = false
   }
 
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = (event: WheelEvent) => {
     event.preventDefault()
     const direction = event.deltaY > 0 ? -0.08 : 0.08
     setZoom((z) => clampZoom(z + direction))
   }
+
+  // Attach wheel with passive:false so preventDefault works
+  useEffect(() => {
+    const el = mapRef.current
+    if (!el) return
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => { el.removeEventListener('wheel', handleWheel) }
+  }, [])
 
   if (loading || mapLoading) {
     return (
@@ -547,7 +555,6 @@ export default function NeighborhoodMapHub() {
         onMouseMove={handleMouseMove}
         onMouseUp={stopDragging}
         onMouseLeave={stopDragging}
-        onWheel={handleWheel}
         className="absolute inset-0 cursor-grab overflow-hidden active:cursor-grabbing"
       >
         <div

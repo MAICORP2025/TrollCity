@@ -42,11 +42,15 @@ export default function EconomyDashboard() {
       try {
         // Fetch real data from coin_transactions (Source of Truth)
         // This ensures we catch all purchases even if the views are outdated
+        // SAFETY: scoped to last 30 days + limited rows to avoid full-table scan
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
         const { data: transactions, error: txError } = await supabase
           .from('coin_transactions')
           .select('amount, created_at, user_id, type, source, metadata, platform_profit, usd_amount, paypal_order_id')
           .or(COIN_PURCHASE_ROWS_OR)
+          .gte('created_at', thirtyDaysAgo)
           .order('created_at', { ascending: false })
+          .limit(5000)
 
         if (txError) throw txError
 
@@ -152,7 +156,8 @@ export default function EconomyDashboard() {
     }
 
     load()
-    const refreshTimer = window.setInterval(load, 60000)
+    // SAFETY: reduced from 60s to 5min to avoid repeated full-table scans
+    const refreshTimer = window.setInterval(load, 5 * 60 * 1000)
 
     return () => {
       window.clearInterval(refreshTimer)

@@ -408,7 +408,7 @@ export default function Sidebar() {
 
   const mainPaths = ['/', '/inventory', '/marketplace', '/leaderboard', '/credit-scores', '/store', '/creator-switch', '/troll-court', '/troll-games']
   const supportPaths = ['/support', '/safety']
-  const socialPaths = ['/tcps', '/pool', '/mai-talent', '/mai-class']
+  const socialPaths = ['/tcps', '/pool', '/mai-class']
   if (profile?.role === 'troll_family') {
     socialPaths.push('/family/home')
   } else {
@@ -585,7 +585,7 @@ export default function Sidebar() {
                       <div className="text-left leading-tight">
                         <div className="text-sm uppercase tracking-wide">Go Live</div>
                         <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                          {isBroadcastLockedDown ? 'Locked' : 'Broadcaster Only'}
+                          {isBroadcastLockedDown ? 'Locked' : 'License / Insurance Required'}
                         </div>
                       </div>
                     )}
@@ -630,7 +630,7 @@ export default function Sidebar() {
               {canAccessMaiClass && (
                 <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Mai Class" to="/mai-class" active={isActive('/mai-class')} highlight={isUpdated('/mai-class')} onClick={() => markAsViewed('/mai-class')} className="text-green-400" glow="green" tone="green" />
               )}
-              <GridItem collapsed={isSidebarCollapsed} icon={Star} label="Mai Talent" to="/mai-talent" active={isActive('/mai-talent')} highlight={isUpdated('/mai-talent')} onClick={() => markAsViewed('/mai-talent')} className="text-pink-400" tone="pink" glow="pink" underConstruction={!isAdmin} />
+
               <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} highlight={isUpdated('/marketplace')} onClick={() => markAsViewed('/marketplace')} tone="purple" />
               {canSeeAuctionStudio && (
                 <GridItem collapsed={isSidebarCollapsed} icon={List} label="My Shows" to="/auctions/my-shows" active={location.pathname.startsWith('/auctions/my-shows')} highlight={isUpdated('/auctions/my-shows')} onClick={() => markAsViewed('/auctions/my-shows')} className="text-green-400" tone="green" />

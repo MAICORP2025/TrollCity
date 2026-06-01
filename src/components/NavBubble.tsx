@@ -267,12 +267,7 @@ export default function NavBubble() {
             icon: Building2,
             requiresAuth: true,
           },
-          {
-            label: 'Mai Talent',
-            path: '/mai-talent',
-            icon: Star,
-            requiresAuth: true,
-          },
+
           {
             label: 'My Agency',
             path: '/agency-dashboard',

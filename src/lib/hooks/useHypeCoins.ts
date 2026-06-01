@@ -233,7 +233,7 @@ export function useHypeCoins() {
             })
           }
 
-          toast.success('Hype Coins converted to Troll Coins')
+          // Toast is shown by ConvertHypeCoinsModal with more detail
         } else {
           setError(response.message)
           toast.error(response.message)

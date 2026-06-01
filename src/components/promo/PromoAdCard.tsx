@@ -12,7 +12,7 @@ const AUTO_REDIRECT_DELAY = 5000;
 
 interface PromoAdCardProps {
   ad: CityAd;
-  variant?: 'sidebar' | 'featured' | 'horizontal';
+  variant?: 'sidebar' | 'featured' | 'horizontal' | 'rail';
   onClick?: () => void;
 }
 
@@ -28,6 +28,7 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
   const isSidebar = variant === 'sidebar';
   const isFeatured = variant === 'featured';
   const isHorizontal = variant === 'horizontal';
+  const isRail = variant === 'rail';
 
   // Check if URL is internal (Troll City route) vs external
   const isInternalLink = (url: string) => url.startsWith('/');
@@ -123,6 +124,8 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
   
   const sizeClasses = isHorizontal
     ? 'w-full h-full min-h-[100px] max-h-[140px]'
+    : isRail
+    ? 'w-full h-full min-h-[250px] max-h-[350px]'
     : isSidebar 
     ? 'w-full h-full min-h-[150px] max-h-[180px]' 
     : 'w-full h-full min-h-[350px] max-h-[500px]';
@@ -204,9 +207,9 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
                 </span>
               </div>
             )}
-            <h3 className={`font-bold text-white mb-0.5 ${isSidebar ? 'text-sm' : 'text-xl'}`}>
-              {ad.title}
-            </h3>
+             <h3 className={`font-bold text-white mb-0.5 ${isRail ? 'text-base' : isSidebar ? 'text-sm' : 'text-xl'}`}>
+               {ad.title}
+             </h3>
             {ad.subtitle && (
               <p className="text-xs text-purple-200 mb-1">{ad.subtitle}</p>
             )}

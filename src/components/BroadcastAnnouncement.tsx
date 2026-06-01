@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { X, Megaphone } from 'lucide-react';
+
+const HIDDEN_ROUTES = ['/auth', '/auth/callback', '/reset-password', '/access-denied', '/exit', '/legal', '/church'];
+
+function shouldHideAnnouncement(pathname: string): boolean {
+  return HIDDEN_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(route + '/')
+  );
+}
 
 interface Broadcast {
   id: string;
@@ -12,13 +21,14 @@ interface Broadcast {
 
 export default function BroadcastAnnouncement() {
   const { user } = useAuthStore();
+  const location = useLocation();
   const [broadcastQueue, setBroadcastQueue] = useState<Broadcast[]>([]);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    if (shouldHideAnnouncement(location.pathname)) return;
     const fetchBroadcasts = async () => {
       try {
-        // Only fetch broadcasts from the last 24 hours
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
 
@@ -26,6 +36,7 @@ export default function BroadcastAnnouncement() {
           .from('admin_broadcasts')
           .select('*')
           .gte('created_at', yesterday.toISOString())
+          .eq('is_active', true)
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -37,11 +48,9 @@ export default function BroadcastAnnouncement() {
 
         if (!data) return;
 
-        // Filter out dismissed broadcasts
         const dismissedBroadcasts = JSON.parse(localStorage.getItem('dismissedBroadcasts') || '[]');
-        let activeBroadcasts = data.filter(b => !dismissedBroadcasts.includes(b.id));
+        let activeBroadcasts = data.filter(b => !dismissedBroadcasts.includes(b.id) && b.type !== 'church');
 
-        // Deduplicate messages
         const seenMessages = new Set();
         activeBroadcasts = activeBroadcasts.filter(b => {
           if (seenMessages.has(b.message)) return false;
@@ -60,7 +69,6 @@ export default function BroadcastAnnouncement() {
 
     fetchBroadcasts();
 
-    // Poll for new broadcasts (every 2 minutes)
     const interval = setInterval(() => {
         if (user) fetchBroadcasts();
     }, 120000);
@@ -70,28 +78,31 @@ export default function BroadcastAnnouncement() {
     };
   }, [user]);
 
+  if (shouldHideAnnouncement(location.pathname)) {
+    return null;
+  }
+
   const handleClose = () => {
+    if (broadcastQueue.length === 0) return;
+    
+    const currentBroadcast = broadcastQueue[0];
+    const hasMore = broadcastQueue.length > 1;
+    
     setIsVisible(false);
+    
+    // Save to local storage
+    const dismissed = JSON.parse(localStorage.getItem('dismissedBroadcasts') || '[]');
+    if (!dismissed.includes(currentBroadcast.id)) {
+      dismissed.push(currentBroadcast.id);
+      localStorage.setItem('dismissedBroadcasts', JSON.stringify(dismissed));
+    }
     
     // Wait for animation to finish before removing from queue
     setTimeout(() => {
-        if (broadcastQueue.length > 0) {
-            const dismissedId = broadcastQueue[0].id;
-            
-            // Save to local storage
-            const dismissed = JSON.parse(localStorage.getItem('dismissedBroadcasts') || '[]');
-            if (!dismissed.includes(dismissedId)) {
-                dismissed.push(dismissedId);
-                localStorage.setItem('dismissedBroadcasts', JSON.stringify(dismissed));
-            }
-
-            setBroadcastQueue(prev => prev.slice(1));
-            
-            // If there are more broadcasts, show the next one after a delay
-            if (broadcastQueue.length > 1) {
-                setTimeout(() => setIsVisible(true), 500);
-            }
-        }
+      setBroadcastQueue(prev => prev.slice(1));
+      if (hasMore) {
+        setTimeout(() => setIsVisible(true), 500);
+      }
     }, 300);
   };
 

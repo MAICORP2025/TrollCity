@@ -15,6 +15,7 @@ import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import { Radio, Users, Play, Eye, X, ChevronRight, Link2, Sparkles, FileText, Trophy, Vote } from 'lucide-react'
 import LevelSystemShowcase from '@/components/home/LevelSystemShowcase'
+import FloatingPoster from '@/components/home/FloatingPoster'
 
 interface AuctionShow {
   id: string
@@ -37,6 +38,7 @@ const PWAInstallPrompt = lazy(() => import('../components/PWAInstallPrompt'))
 const TCNNPopupWidget = lazy(() => import('@/components/tcnn/TCNNPopupWidget'))
 const FeaturedBroadcasts = lazy(() => import('@/components/broadcast/FeaturedBroadcasts'))
 const PromoSlot = lazy(() => import('@/components/promo/PromoSlot'))
+const AdRail = lazy(() => import('@/components/promo/AdRail'))
 
 // Animated gradient background — multi-layer atmosphere for desktop
 const AnimatedGradient = React.memo(() => {
@@ -729,39 +731,45 @@ export default function Home() {
              </Suspense>
            </div>
            
-             {/* Main Content Area */}
-             <div className={`${activeTab === 'wall' ? '' : 'hidden'} mt-1 w-full`}>
-               <div className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-3">
-                 {liveAuctions.length > 0 ? (
-                   <>
-                     <div className="col-span-1 md:col-span-6 lg:col-span-8">
-                       <TrollWallFeed onRequireAuth={requireAuth} feedClassName="md:col-span-12 lg:col-span-12" />
-                     </div>
-                     <div className="col-span-1 md:col-span-4 lg:col-span-2">
-                       <LiveAuctionMiniWindow auction={liveAuctions[0]} onRequireAuth={requireAuth} />
-                     </div>
-                     <div className="hidden md:block md:col-span-2 lg:col-span-2 space-y-2">
-                       <LevelSystemShowcase className="mb-4" />
-                       <Suspense fallback={null}>
-                         <PromoSlot placement="right_panel_featured" variant="featured" />
-                       </Suspense>
-                     </div>
-                   </>
-                 ) : (
-                   <>
-                     <div className="col-span-1 md:col-span-8 lg:col-span-10 min-h-0 w-full">
-                       <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full md:col-span-12 lg:col-span-12" />
-                     </div>
-                     <div className="hidden md:block md:col-span-4 lg:col-span-2 space-y-2">
-                       <LevelSystemShowcase className="mb-4" />
-                       <Suspense fallback={null}>
-                         <PromoSlot placement="right_panel_featured" variant="featured" />
-                       </Suspense>
-                     </div>
-                   </>
-                 )}
-               </div>
-             </div>
+              {/* Main Content Area */}
+              <div className={`${activeTab === 'wall' ? '' : 'hidden'} mt-1 w-full`}>
+                <div className="grid grid-cols-1 lg:grid-cols-[140px_1fr_240px_140px] gap-3 items-start">
+                  {liveAuctions.length > 0 ? (
+                    <>
+                      <Suspense fallback={null}>
+                        <AdRail placement="left_rail" />
+                      </Suspense>
+                      <div className="min-h-0 w-full min-w-0">
+                        <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" />
+                      </div>
+                      <div className="hidden lg:flex flex-col gap-3 w-[240px] shrink-0">
+                        <LevelSystemShowcase className="mb-2" />
+                        <FloatingPoster className="mb-2" />
+                        <LiveAuctionMiniWindow auction={liveAuctions[0]} onRequireAuth={requireAuth} />
+                      </div>
+                      <Suspense fallback={null}>
+                        <AdRail placement="right_rail" />
+                      </Suspense>
+                    </>
+                  ) : (
+                    <>
+                      <Suspense fallback={null}>
+                        <AdRail placement="left_rail" />
+                      </Suspense>
+                      <div className="min-h-0 w-full min-w-0">
+                        <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" />
+                      </div>
+                      <div className="hidden lg:flex flex-col gap-3 w-[240px] shrink-0">
+                        <LevelSystemShowcase className="mb-2" />
+                        <FloatingPoster className="mb-2" />
+                      </div>
+                      <Suspense fallback={null}>
+                        <AdRail placement="right_rail" />
+                      </Suspense>
+                    </>
+                  )}
+                </div>
+              </div>
          </div>
         
 

@@ -102,7 +102,7 @@ export function useNeighborhood() {
     fetchNeighborhood()
   }, [fetchNeighborhood])
 
-  const createNeighborhood = async (name: string, zipCode: string, houseCount: number = 5) => {
+  const createNeighborhood = useCallback(async (name: string, zipCode: string, houseCount: number = 5) => {
     if (!user?.id) return { success: false, error: 'Not authenticated' }
 
     const safeHouseCount = Math.max(1, Math.min(15, houseCount))
@@ -200,7 +200,7 @@ export function useNeighborhood() {
       console.error('Error creating neighborhood:', error)
       return { success: false, error: error.message }
     }
-  }
+  }, [user?.id, profile?.credit_score])
 
   const inviteFollower = async (followerUsername: string) => {
     if (!user?.id) return { success: false, error: 'Not authenticated' }
@@ -235,7 +235,7 @@ export function useNeighborhood() {
     }
   }
 
-  const acceptInvite = async (leaderUserId?: string) => {
+  const acceptInvite = useCallback(async (leaderUserId?: string) => {
     if (!user?.id) return { success: false, error: 'Not authenticated' }
 
     try {
@@ -345,7 +345,7 @@ export function useNeighborhood() {
       console.error('Error accepting invite:', error)
       return { success: false, error: error.message }
     }
-  }
+  }, [user?.id])
 
   const getHouseFees = async (): Promise<HouseFees> => {
     return DEFAULT_HOUSE_FEES

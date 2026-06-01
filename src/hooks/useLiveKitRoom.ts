@@ -74,7 +74,7 @@ export function useLiveKitRoom({
 
   // Fetch LiveKit token via edge function
   const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string, isPublisherOverride?: boolean, metadataOverride?: string) => {
-    const isPublisher = typeof isPublisherOverride === 'boolean' ? isPublisherOverride : publish;
+    const isPublisher = true;
     const requestBody: Record<string, any> = {
       room: roomName,
       roomName,
@@ -668,6 +668,7 @@ export function useLiveKitRoom({
 
   // Publish local camera/mic tracks to the existing room without reconnecting.
   // Used when a viewer joins a seat — the room stays connected to keep broadcaster tracks.
+  // Token already has publish permission, just create and publish tracks on the existing room.
   const publishLocalTracks = useCallback(async () => {
     const room = roomRef.current
     if (!room || room.state !== 'connected') {

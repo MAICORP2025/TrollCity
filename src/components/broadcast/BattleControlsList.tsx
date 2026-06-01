@@ -5,6 +5,7 @@ import { Swords, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
 import { cn } from '../../lib/utils';
+import { usePageVisibilityContext } from '../../contexts/PageVisibilityContext';
 
 interface BattleControlsListProps {
   currentStream: Stream;
@@ -15,13 +16,17 @@ export default function BattleControlsList({ currentStream, onBattleAccepted }: 
   const [loading, setLoading] = useState(false);
   const [pendingBattle, setPendingBattle] = useState<any>(null);
   const [matchStatus, setMatchStatus] = useState<string>(''); // 'searching', 'found', 'none'
+  const { isVisible } = usePageVisibilityContext();
 
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [trollmersLeaderboard, setTrollmersLeaderboard] = useState<any[]>([]);
   const isTrollmers = currentStream.stream_kind === 'trollmers';
 
-  // Poll for pending challenges
+  // Poll for pending challenges — only when tab is visible AND not already in/searching for a battle
   useEffect(() => {
+    const isActive = matchStatus === 'searching' || pendingBattle !== null;
+    if (!isVisible || isActive) return;
+
     const fetchPending = async () => {
         // Check if I have been challenged (opponent_stream_id = my id)
         const { data } = await supabase
@@ -74,7 +79,7 @@ export default function BattleControlsList({ currentStream, onBattleAccepted }: 
         setTrollmersLeaderboard(leaders || []);
     };
 
-    const interval = setInterval(fetchPending, 3000);
+    const interval = setInterval(fetchPending, 5000);
     fetchPending();
     
     if (isTrollmers) {
@@ -84,7 +89,7 @@ export default function BattleControlsList({ currentStream, onBattleAccepted }: 
     }
 
     return () => clearInterval(interval);
-    }, [currentStream.id, isTrollmers]);
+    }, [currentStream.id, isTrollmers, isVisible, matchStatus, pendingBattle]);
 
   const findAndChallengeRandom = async () => {
     if (matchStatus === 'searching') return;

@@ -46,7 +46,9 @@ const PAYOUT_METHODS: { value: PayoutMethod; label: string; icon: React.ReactNod
   },
 ];
 
-const ID_BUCKET = 'id-verification';
+const MAX_MONTHLY_CASHOUTS = 4;
+
+const ID_BUCKET = 'verification_docs';
 
 export default function CashoutRequestPage() {
   const { profile, refreshProfile } = useAuthStore();
@@ -65,6 +67,7 @@ export default function CashoutRequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [recentRequests, setRecentRequests] = useState<CashoutRequest[]>([]);
+  const [monthlyCashoutCount, setMonthlyCashoutCount] = useState(0);
 
   const hasRecentApprovedPayout = useMemo(() => {
     if (!lastApprovedAt) return false;
@@ -78,8 +81,9 @@ export default function CashoutRequestPage() {
    const netCoins = selectedTier ? calculateNetCoins(selectedTier.coins, feeCoins) : 0;
    const usdAmount = selectedTier ? selectedTier.usd : 0;
 
-   const isFriday = isCashoutWindowOpen();
-   const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim();
+    const isFriday = isCashoutWindowOpen();
+    const monthlyCapReached = monthlyCashoutCount >= MAX_MONTHLY_CASHOUTS;
+    const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim() && !monthlyCapReached;
 
   // Load user's troll_coins balance and recent payout requests
   const getSavedPayoutUsername = useCallback((method: PayoutMethod) => {
@@ -150,6 +154,19 @@ export default function CashoutRequestPage() {
         if (lastApprovedError) throw lastApprovedError;
         setLastApprovedAt(lastApprovedData?.[0]?.created_at || null);
 
+        // Count this month's cashouts (non-rejected)
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const { count: monthCount, error: monthCountError } = await supabase
+          .from('payout_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', profile.id)
+          .not('status', 'in', '("rejected")')
+          .gte('created_at', monthStart);
+
+        if (monthCountError) throw monthCountError;
+        setMonthlyCashoutCount(monthCount || 0);
+
         // Auto-select highest eligible tier based on the loaded balance
         const eligibleTier = [...TIERS].reverse().find(t => t.coins <= eligibleTotal) || TIERS[0];
         if (eligibleTier) setSelectedTier(eligibleTier);
@@ -219,7 +236,7 @@ export default function CashoutRequestPage() {
       setIdUploading(true);
 
       // Upload to Supabase Storage
-      const fileName = `id-verification/${profile.id}/${Date.now()}-${file.name}`;
+      const fileName = `verification_docs/${profile.id}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from(ID_BUCKET)
         .upload(fileName, file, {
@@ -229,12 +246,13 @@ export default function CashoutRequestPage() {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
+      // Get signed URL (verification_docs is private)
+      const { data: urlData, error: signError } = await supabase.storage
         .from(ID_BUCKET)
-        .getPublicUrl(fileName);
+        .createSignedUrl(fileName, 600);
+      if (signError) throw signError;
 
-      setIdUrl(urlData.publicUrl);
+      setIdUrl(urlData.signedUrl);
       toast.success('ID uploaded successfully');
     } catch (err: any) {
       console.error('ID upload error:', err);
@@ -261,7 +279,12 @@ export default function CashoutRequestPage() {
        return;
      }
 
-    if (!providerUsername.trim()) {
+     if (monthlyCapReached) {
+       toast.error(`Monthly cashout limit reached. You have used ${monthlyCashoutCount} of ${MAX_MONTHLY_CASHOUTS} cashouts this month.`);
+       return;
+     }
+
+     if (!providerUsername.trim()) {
       toast.error('Please enter your ' + getPayoutLabel(payoutMethod) + ' username/email');
       return;
     }
@@ -330,42 +353,37 @@ export default function CashoutRequestPage() {
           </div>
 
           {/* Friday Gating Warning */}
-          {!isFriday && (
-            <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
-              <Lock className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-              <div>
-                <h4 className="font-bold text-red-400">Cashouts Are Closed</h4>
-                <p className="text-sm text-red-300/80">
-                  Cashout requests are only accepted on Friday, Saturday, and Sunday between 1:00 AM - 7:00 PM Mountain Time.
-                  Please come back during that window to submit your request.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Available Coins Card */}
-          <div className="mt-4 bg-[#151027] rounded-lg p-4 border border-purple-500/30">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-gray-400">Cashout Escrow Balance</p>
-                <p className="text-2xl font-bold text-troll-green-neon">{eligibleCoins.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Selected Tier</p>
-                 <p className="text-2xl font-bold text-white">
-                   {selectedTier ? selectedTier.coins.toLocaleString() : '0'} coins
+           {!isFriday && (
+             <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
+               <Lock className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+               <div>
+                 <h4 className="font-bold text-red-400">Cashouts Are Closed</h4>
+                 <p className="text-sm text-red-300/80">
+                   Cashout requests are only accepted on Friday, Saturday, and Sunday between 1:00 AM - 7:00 PM Mountain Time.
+                   Please come back during that window to submit your request.
                  </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-400">Net After Fee</p>
-                <p className="text-2xl font-bold text-troll-gold">{netCoins.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+               </div>
+             </div>
+           )}
 
-        {/* Cashout Form */}
-        <div className="bg-[#0E0A1A] rounded-xl border border-purple-700/40 p-6 shadow-lg space-y-6">
+           {/* Monthly Cashout Cap */}
+           {monthlyCapReached && (
+             <div className="mt-4 bg-amber-900/30 border border-amber-700 rounded-lg p-4 flex items-start gap-3">
+               <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+               <div>
+                 <h4 className="font-bold text-amber-400">Monthly Cashout Limit Reached</h4>
+                 <p className="text-sm text-amber-300/80">
+                   You have used {monthlyCashoutCount} of {MAX_MONTHLY_CASHOUTS} cashouts this month.
+                   Your cap resets on the 1st of each month.
+                 </p>
+               </div>
+             </div>
+           )}
+
+           </div>
+
+         {/* Cashout Form */}
+       <div className="bg-[#0E0A1A] rounded-xl border border-purple-700/40 p-6 shadow-lg space-y-6">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Coins className="text-troll-gold" />
             Cashout Details
@@ -582,6 +600,11 @@ export default function CashoutRequestPage() {
                <>
                  <Clock className="w-5 h-5" />
                  Weekend Cashout Window Closed
+               </>
+             ) : monthlyCapReached ? (
+               <>
+                 <AlertCircle className="w-5 h-5" />
+                 Monthly Limit Reached ({monthlyCashoutCount}/{MAX_MONTHLY_CASHOUTS})
                </>
              ) : eligibleCoins < (selectedTier?.coins || 0) ? (
                <>

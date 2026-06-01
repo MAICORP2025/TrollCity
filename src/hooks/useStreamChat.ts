@@ -43,9 +43,9 @@ interface UseStreamChatProps {
   isHost: boolean;
 }
 
-const MAX_MESSAGES = 200; // Max messages to keep in state
-const AUTO_DELETE_INTERVAL = 5000; // Check every 5 seconds for messages to delete
-const MESSAGE_LIFETIME_MS = 30000; // Messages disappear after 30 seconds
+const MAX_MESSAGES = 200;
+const AUTO_DELETE_INTERVAL = 5000;
+const MESSAGE_LIFETIME_MS = 30000;
 
 const getDisplayName = (profileLike: any): string => {
   const emailPrefix = typeof profileLike?.email === 'string'
@@ -67,26 +67,16 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
   const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const { trackChatMessage } = useMissionProgress(streamId);
-  
-  // Track processed message IDs to prevent duplicates from broadcast + postgres_changes
+
   const processedMessageIds = useRef<Set<string>>(new Set());
   const joinedUsersRef = useRef<Set<string>>(new Set());
-  const broadcastChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const channelsRef = useRef<any[]>([]);
 
-  // Fetch Stream Mods (simplified for now, BroadcastChat had this but it might not be needed for overlay)
-  const [streamMods, setStreamMods] = useState<string[]>([]);
-  useEffect(() => {
-      const fetchMods = async () => {
-          const { data } = await supabase
-            .from('stream_moderators')
-            .select('user_id')
-            .eq('broadcaster_id', hostId);
-          if (data) setStreamMods(data.map(d => d.user_id));
-      };
-      if (hostId) fetchMods();
-  }, [hostId]);
+  const cleanupChannels = useCallback(() => {
+    channelsRef.current.forEach(ch => supabase.removeChannel(ch));
+    channelsRef.current = [];
+  }, []);
 
-  // Host Chat Disabled by Officer state
   useEffect(() => {
     if (!hostId) return;
 
@@ -127,13 +117,13 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
     };
   }, [hostId]);
 
-  // Initial fetch and Realtime Subscriptions
   useEffect(() => {
     if (!streamId) return;
 
-    // Initial fetch of messages (last 50)
+    cleanupChannels();
+
     const fetchMessages = async () => {
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 400)); // Jitter
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 400));
 
       const { data } = await supabase
         .from('stream_messages')
@@ -141,7 +131,7 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
         .eq('stream_id', streamId)
         .order('created_at', { ascending: false })
         .limit(50);
-      
+
       if (data) {
         const processedMessages = data.reverse().map((m: any) => {
           const uProfile = {
@@ -155,11 +145,10 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
             rgb_username_expires_at: m.user_rgb_expires_at || m.user_profiles?.rgb_username_expires_at,
             glowing_username_color: m.user_glowing_username_color || m.user_profiles?.glowing_username_color
           };
-          // Track IDs to prevent duplicates
           if (m.id) processedMessageIds.current.add(m.id);
           return { ...m, type: 'chat', user_profiles: uProfile } as Message;
         });
-        
+
         setMessages(prev => {
           const existingIds = new Set(prev.map(p => p.id));
           const newHistory = processedMessages.filter(m => !existingIds.has(m.id));
@@ -169,251 +158,221 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
     };
     fetchMessages();
 
-    // Broadcast channel for INSTANT message delivery (primary delivery mechanism)
-    const broadcastChannel = supabase
+    const chatChannel = supabase
       .channel(`stream-chat:${streamId}`)
       .on(
         'broadcast',
         { event: 'chat' },
         (payload: any) => {
           const msg = payload.payload as Message;
-          
-          // Skip our own messages (already shown via optimistic update)
           if (msg.user_id === user?.id) return;
-          
-          // Deduplicate using txn_id and message id
           if (msg.txn_id && processedMessageIds.current.has(msg.txn_id)) return;
           if (msg.id && processedMessageIds.current.has(msg.id)) return;
-          
           if (msg.txn_id) processedMessageIds.current.add(msg.txn_id);
           if (msg.id) processedMessageIds.current.add(msg.id);
-          
-          // Add directly to state for instant display
+
           setMessages(prev => {
-            // Check for duplicates in current state
             if (msg.txn_id && prev.some(m => m.txn_id === msg.txn_id)) return prev;
             if (msg.id && prev.some(m => m.id === msg.id)) return prev;
-            
             const updated = [...prev, msg];
             if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
             return updated;
           });
         }
       )
-      .subscribe();
-    broadcastChannelRef.current = broadcastChannel;
-
-    // Note: Backup via postgres_changes is disabled to reduce DB load.
-    // Messages are delivered via broadcast events with optimistic UI.
-    // Initial message fetch on mount ensures history is loaded.
-
-    // Presence Channel for join/leave messages
-    const presenceChannel = supabase
-      .channel(`stream:${streamId}`)
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-          newPresences.forEach((p: any) => {
-              // Skip our own user
-              if (p.user_id === user?.id) return;
-              // Skip if we already showed a join for this user
-              if (joinedUsersRef.current.has(p.user_id)) return;
-              joinedUsersRef.current.add(p.user_id);
+        newPresences.forEach((p: any) => {
+          if (p.user_id === user?.id) return;
+          if (joinedUsersRef.current.has(p.user_id)) return;
+          joinedUsersRef.current.add(p.user_id);
 
-              const systemMsg: Message = {
-                  id: `sys-join-${p.user_id}-${Date.now()}`,
-                  user_id: p.user_id,
-                  content: 'joined the broadcast',
-                  created_at: new Date().toISOString(),
-                  type: 'system',
-                  user_profiles: {
-                      username: p.username || 'Guest',
-                      avatar_url: p.avatar_url || '',
-                      created_at: p.joined_at,
-                      role: p.role,
-                      troll_role: p.troll_role
-                  }
-              };
-              setMessages(prev => {
-                  const updated = [...prev, systemMsg];
-                  if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
-                  return updated;
-              });
+          const systemMsg: Message = {
+            id: `sys-join-${p.user_id}-${Date.now()}`,
+            user_id: p.user_id,
+            content: 'joined the broadcast',
+            created_at: new Date().toISOString(),
+            type: 'system',
+            user_profiles: {
+              username: p.username || 'Guest',
+              avatar_url: p.avatar_url || '',
+              created_at: p.joined_at,
+              role: p.role,
+              troll_role: p.troll_role
+            }
+          };
+          setMessages(prev => {
+            const updated = [...prev, systemMsg];
+            if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
+            return updated;
           });
+        });
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-          leftPresences.forEach((p: any) => {
-              // Skip our own user
-              if (p.user_id === user?.id) return;
-              // Only show leave if we showed a join for this user
-              if (!joinedUsersRef.current.has(p.user_id)) return;
-              joinedUsersRef.current.delete(p.user_id);
+        leftPresences.forEach((p: any) => {
+          if (p.user_id === user?.id) return;
+          if (!joinedUsersRef.current.has(p.user_id)) return;
+          joinedUsersRef.current.delete(p.user_id);
 
-              const systemMsg: Message = {
-                  id: `sys-leave-${p.user_id}-${Date.now()}`,
-                  user_id: p.user_id,
-                  content: 'left the broadcast',
-                  created_at: new Date().toISOString(),
-                  type: 'system',
-                  user_profiles: {
-                      username: p.username || 'Guest',
-                      avatar_url: p.avatar_url || '',
-                      created_at: p.joined_at,
-                      role: p.role,
-                      troll_role: p.troll_role
-                  }
-              };
-              setMessages(prev => {
-                  const updated = [...prev, systemMsg];
-                  if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
-                  return updated;
-              });
+          const systemMsg: Message = {
+            id: `sys-leave-${p.user_id}-${Date.now()}`,
+            user_id: p.user_id,
+            content: 'left the broadcast',
+            created_at: new Date().toISOString(),
+            type: 'system',
+            user_profiles: {
+              username: p.username || 'Guest',
+              avatar_url: p.avatar_url || '',
+              created_at: p.joined_at,
+              role: p.role,
+              troll_role: p.troll_role
+            }
+          };
+          setMessages(prev => {
+            const updated = [...prev, systemMsg];
+            if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
+            return updated;
           });
+        });
       })
       .subscribe();
 
-    // Auto-delete messages
+    channelsRef.current = [chatChannel];
+
     const autoDeleteInterval = setInterval(() => {
-        const now = Date.now();
-        setMessages(prev => prev.filter(msg => {
-            const messageAge = now - new Date(msg.created_at).getTime();
-            return messageAge < MESSAGE_LIFETIME_MS;
-        }));
+      const now = Date.now();
+      setMessages(prev => prev.filter(msg => {
+        const messageAge = now - new Date(msg.created_at).getTime();
+        return messageAge < MESSAGE_LIFETIME_MS;
+      }));
     }, AUTO_DELETE_INTERVAL);
 
     return () => {
       clearInterval(autoDeleteInterval);
-      supabase.removeChannel(broadcastChannel);
-      if (broadcastChannelRef.current === broadcastChannel) {
-        broadcastChannelRef.current = null;
-      }
-      supabase.removeChannel(presenceChannel);
+      cleanupChannels();
     };
-  }, [streamId, user?.id]);
+  }, [streamId, user?.id, cleanupChannels]);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!user || !profile) {
-        toast.error('You must be logged in to send messages.');
-        return;
+      toast.error('You must be logged in to send messages.');
+      return;
     }
-    if (!content.trim()) {
-        return;
-    }
+    if (!content.trim()) return;
     if (hostChatDisabledByOfficer) {
-        toast.error('Chat is disabled for this broadcaster by officer control');
-        return;
+      toast.error('Chat is disabled for this broadcaster by officer control');
+      return;
     }
     if (userChatDisabled) {
-        toast.error(`Your chat is disabled.${chatDisabledRemainingMinutes ? ` Try again in ${chatDisabledRemainingMinutes} minute(s).` : ''}`);
-        return;
+      toast.error(`Your chat is disabled.${chatDisabledRemainingMinutes ? ` Try again in ${chatDisabledRemainingMinutes} minute(s).` : ''}`);
+      return;
     }
 
     const canBypassModeration = isHost || isStaffProfile(profile);
     if (!canBypassModeration) {
-        const { data: blocked, error: blockError } = await supabase.rpc('is_user_chat_blocked', {
-            p_user_id: user.id,
-            p_stream_id: streamId,
-        });
+      const { data: blocked, error: blockError } = await supabase.rpc('is_user_chat_blocked', {
+        p_user_id: user.id,
+        p_stream_id: streamId,
+      });
 
-        if (!blockError && blocked) {
-            toast.error('Your chat is disabled by moderation action.');
-            return;
-        }
+      if (!blockError && blocked) {
+        toast.error('Your chat is disabled by moderation action.');
+        return;
+      }
     }
 
     setIsSendingMessage(true);
 
     const txnId = generateUUID();
     const optimisticMessage: Message = {
-        id: `temp-${txnId}`,
-        user_id: user.id,
-        content,
-        created_at: new Date().toISOString(),
-        type: 'chat',
-        user_profiles: {
-            username: getDisplayName(profile),
-            display_name: (profile as any).display_name,
-            email: (profile as any).email,
-            avatar_url: profile.avatar_url,
-            role: profile.role,
-            troll_role: profile.troll_role,
-            created_at: profile.created_at,
-            rgb_username_expires_at: profile.rgb_username_expires_at,
-            glowing_username_color: profile.glowing_username_color
-        }
+      id: `temp-${txnId}`,
+      user_id: user.id,
+      content,
+      created_at: new Date().toISOString(),
+      type: 'chat',
+      user_profiles: {
+        username: getDisplayName(profile),
+        display_name: (profile as any).display_name,
+        email: (profile as any).email,
+        avatar_url: profile.avatar_url,
+        role: profile.role,
+        troll_role: profile.troll_role,
+        created_at: profile.created_at,
+        rgb_username_expires_at: profile.rgb_username_expires_at,
+        glowing_username_color: profile.glowing_username_color
+      }
     };
 
     setMessages(prev => {
-        const updated = [...prev, optimisticMessage];
-        if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
-        return updated;
+      const updated = [...prev, optimisticMessage];
+      if (updated.length > MAX_MESSAGES) return updated.slice(updated.length - MAX_MESSAGES);
+      return updated;
     });
-    
-    // Track ID to prevent duplicates when received via broadcast/postgres
+
     processedMessageIds.current.add(txnId);
 
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-        const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                type: 'chat',
-                stream_id: streamId,
-                txn_id: txnId,
-                data: { content }
-            })
-        });
+      const response = await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'chat',
+          stream_id: streamId,
+          txn_id: txnId,
+          data: { content }
+        })
+      });
 
-        const contentType = response.headers.get('content-type') || '';
-        const rawText = await response.text();
-        const hasJsonBody = contentType.toLowerCase().includes('application/json') && rawText.trim().length > 0;
-        const parsedBody = hasJsonBody ? JSON.parse(rawText) : undefined;
+      const contentType = response.headers.get('content-type') || '';
+      const rawText = await response.text();
+      const hasJsonBody = contentType.toLowerCase().includes('application/json') && rawText.trim().length > 0;
+      const parsedBody = hasJsonBody ? JSON.parse(rawText) : undefined;
 
-        if (!response.ok) {
-            const msg = (parsedBody as any)?.error || (parsedBody as any)?.message || rawText || response.statusText;
-            throw new Error(`Failed to send message (${response.status}): ${msg}`);
-        }
+      if (!response.ok) {
+        const msg = (parsedBody as any)?.error || (parsedBody as any)?.message || rawText || response.statusText;
+        throw new Error(`Failed to send message (${response.status}): ${msg}`);
+      }
 
-        // Broadcast only after server-side moderation and insert succeed.
-        broadcastChannelRef.current?.send({
-            type: 'broadcast',
-            event: 'chat',
-            payload: optimisticMessage
+      const chatChannel = channelsRef.current[0];
+      if (chatChannel) {
+        chatChannel.send({
+          type: 'broadcast',
+          event: 'chat',
+          payload: optimisticMessage
         }).catch(err => {
-            console.warn('[useStreamChat] Broadcast send failed:', err);
+          console.warn('[useStreamChat] Broadcast send failed:', err);
         });
+      }
 
-        // Track mission progress
-        trackChatMessage();
+      trackChatMessage();
 
     } catch (err: any) {
-        console.error('Error sending message:', err);
-        if (String(err.message || '').toLowerCase().includes('rate limit')) {
-            toast.error('You are sending messages too fast. Please slow down.');
-        } else {
-            toast.error('Failed to send message: ' + err.message);
-        }
-        setMessages(prev => prev.filter(m => m.id !== `temp-${txnId}`));
+      console.error('Error sending message:', err);
+      if (String(err.message || '').toLowerCase().includes('rate limit')) {
+        toast.error('You are sending messages too fast. Please slow down.');
+      } else {
+        toast.error('Failed to send message: ' + err.message);
+      }
+      setMessages(prev => prev.filter(m => m.id !== `temp-${txnId}`));
     } finally {
-        setIsSendingMessage(false);
+      setIsSendingMessage(false);
     }
   }, [user, profile, streamId, hostChatDisabledByOfficer, userChatDisabled, chatDisabledRemainingMinutes]);
 
   return {
-      messages: messages.filter(msg => {
-        // Only show chat and system messages for floating overlay for now
-        return msg.type === 'chat' || msg.type === 'system';
-      }),
-      sendMessage,
-      hostChatDisabledByOfficer,
-      userChatDisabled,
-      chatDisabledRemainingMinutes,
-      streamMods,
-      isSendingMessage,
-      // user, profile // Pass user/profile if needed for rendering within overlay
-    };
+    messages: messages.filter(msg => {
+      return msg.type === 'chat' || msg.type === 'system';
+    }),
+    sendMessage,
+    hostChatDisabledByOfficer,
+    userChatDisabled,
+    chatDisabledRemainingMinutes,
+    streamMods: [],
+    isSendingMessage,
+  };
 };

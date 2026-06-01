@@ -1,6 +1,7 @@
  import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { usePageVisibilityContext } from '../contexts/PageVisibilityContext'
 
 // Query keys
 export const queryKeys = {
@@ -14,6 +15,9 @@ export const queryKeys = {
 
 // Live streams query
 export function useLiveStreams(options?: { refetchInterval?: number; enabled?: boolean }) {
+  const { isVisible } = usePageVisibilityContext()
+  const refetchInterval = options?.refetchInterval ?? 30000
+
   return useQuery({
     queryKey: queryKeys.liveStreams,
     queryFn: async () => {
@@ -42,13 +46,15 @@ export function useLiveStreams(options?: { refetchInterval?: number; enabled?: b
         }
       }))
     },
-    refetchInterval: options?.refetchInterval ?? 10000,
+    refetchInterval: isVisible ? refetchInterval : false,
     enabled: options?.enabled ?? true,
   })
 }
 
 // New users query
 export function useNewUsers() {
+  const { isVisible } = usePageVisibilityContext()
+
   return useQuery({
     queryKey: queryKeys.newUsers,
     queryFn: async () => {
@@ -75,7 +81,7 @@ export function useNewUsers() {
         return isRealUser && isNotBanned
       }).slice(0, 20) // Take top 20
     },
-    refetchInterval: 30000, // Poll every 30 seconds
+    refetchInterval: isVisible ? 30000 : false,
   })
 }
 

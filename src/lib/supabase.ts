@@ -576,6 +576,7 @@ export enum UserRole {
   TEMP_ADMIN = 'temp_admin',
   EXECUTIVE_SECRETARY = 'executive_secretary',
   MARKETING_READONLY = 'marketing_readonly',
+  CEO = 'ceo',
 }
 
 export enum Permission {

@@ -1,28 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 
 import { supabase } from '../lib/supabase'
 
 export function useStreamStats(streamerId: string | null) {
   const [viewerCount, setViewerCount] = useState(1)
-  const [duration, setDuration] = useState('00:00:00')
   const [streamerStats, setStreamerStats] = useState<any>(null)
+  const startRef = useRef(Date.now())
+  const [, forceUpdate] = useState(0)
 
-  // Live timer
+  // Update duration every 10s instead of every 1s to reduce re-renders
   useEffect(() => {
-    const start = Date.now()
     const timer = setInterval(() => {
-      const diff = Date.now() - start
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setDuration(
-        `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-      )
-    }, 1000)
+      forceUpdate(n => n + 1)
+    }, 10000)
     return () => clearInterval(timer)
   }, [])
 
-
+  const getDuration = useCallback(() => {
+    const diff = Date.now() - startRef.current
+    const h = Math.floor(diff / 3600000)
+    const m = Math.floor((diff % 3600000) / 60000)
+    const s = Math.floor((diff % 60000) / 1000)
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }, [])
 
   // Fetch streamer stats (coins, level, badge)
   useEffect(() => {
@@ -47,17 +47,16 @@ export function useStreamStats(streamerId: string | null) {
     fetchStreamerStats()
     
     // Polling for streamer stats (coins/level) instead of Realtime
-    // This reduces DB load when many viewers are watching one streamer
-    // Reduced from 30s to 60s to reduce disk I/O
+    // Reduced frequency to minimize DB load when many viewers watch one streamer
     const interval = setInterval(() => {
         fetchStreamerStats();
-    }, 60000); // Poll every 60s
+    }, 120000); // Poll every 60s
 
     return () => {
       clearInterval(interval);
     }
   }, [streamerId])
 
-  return { viewerCount, duration, streamerStats }
+  return { viewerCount, getDuration, streamerStats }
 }
 

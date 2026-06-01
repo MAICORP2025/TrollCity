@@ -402,7 +402,7 @@ export default function BroadcastStageLayout({
                   <UserRound size={92} className="text-cyan-200/80" />
                 )}
                 <div className="mt-1 text-sm text-cyan-200/70">
-                  {hostIsScreenSharing ? 'Screen share active' : hostIsCamOn ? 'Camera starting...' : 'Camera off'}
+                  {hostIsScreenSharing ? 'Screen share active' : hostIsCamOn ? 'Camera Off...' : 'Camera off'}
                 </div>
               </div>
             )}

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import UserNameWithAge from '../../../components/UserNameWithAge'
 import BroadcastLockdownControl from '../../../components/admin/BroadcastLockdownControl'
+import BroadcastRestrictionControl from '../../../components/admin/BroadcastRestrictionControl'
 
 
 export default function AdminControlPanel() {
@@ -261,6 +262,9 @@ export default function AdminControlPanel() {
     <div className="space-y-6">
       {/* Broadcast Lockdown Control - Top Priority */}
       <BroadcastLockdownControl />
+
+      {/* Broadcast Restriction Controls - Viewer Cap, Start Cap, Remove All */}
+      <BroadcastRestrictionControl />
 
       {/* Rest of Admin Controls */}
       <div className="bg-black/60 border border-purple-600/30 rounded-xl p-6">

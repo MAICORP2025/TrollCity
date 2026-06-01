@@ -11,6 +11,8 @@ import { PreflightStore } from '../../lib/preflightStore';
 import { Loader2, Coins, User, MicOff, VideoOff, Plus, Minus, Crown, Flame, ArrowLeft, Skull, Gem, X } from 'lucide-react';
 import { useCoins } from '../../lib/hooks/useCoins';
 import useTrollFamilyActivity from '../../hooks/useTrollFamilyActivity';
+import { useBattleRealtime } from '../../hooks/useBattleRealtime';
+import { logActiveChannels } from '../../lib/realtimeChannelDiagnostics';
 import BattleChat from './BattleChat';
 import MuteHandler from './MuteHandler';
 import GiftTray from './GiftTray';
@@ -1545,14 +1547,13 @@ const BattleArena = ({
   const opponentIsSingleHost = opponentSlots.length === 1 && opponentSlots[0]?.type === 'host';
 
   const getGridClass = (totalSlots: number) => {
-    // Mobile-first: prioritize readability over density
     if (totalSlots === 1) return 'grid-cols-1 grid-rows-1';
-    if (totalSlots === 2) return 'grid-cols-1 grid-rows-2 md:grid-cols-2 md:grid-rows-1'; // Stack vertically on mobile
-    if (totalSlots === 3) return 'grid-cols-1 grid-rows-3 md:grid-cols-2 md:grid-rows-2'; // Single column on mobile
-    if (totalSlots === 4) return 'grid-cols-2 grid-rows-2'; // 2x2 grid readable on mobile
-    if (totalSlots === 5) return 'grid-cols-1 grid-rows-5 md:grid-cols-2 md:grid-rows-3'; // Single column on mobile
-    if (totalSlots === 6) return 'grid-cols-2 grid-rows-3 md:grid-cols-3 md:grid-rows-2'; // 2x3 on mobile, 3x2 on desktop
-    return 'grid-cols-2 grid-rows-3 md:grid-cols-3 md:grid-rows-2'; // Fallback
+    if (totalSlots === 2) return 'grid-cols-1 grid-rows-2';
+    if (totalSlots === 3) return 'grid-cols-1 grid-rows-3';
+    if (totalSlots === 4) return 'grid-cols-2 grid-rows-2';
+    if (totalSlots === 5) return 'grid-cols-1 grid-rows-5 md:grid-cols-2 md:grid-rows-3';
+    if (totalSlots === 6) return 'grid-cols-2 grid-rows-3 md:grid-cols-3 md:grid-rows-2';
+    return 'grid-cols-2 grid-rows-3 md:grid-cols-3 md:grid-rows-2';
   };
 
   return (
@@ -1566,10 +1567,10 @@ const BattleArena = ({
           Gift Side A
         </button>
         
-        {/* Unified Grid for Host + Guests - match BroadcastGrid layout */}
-        <div className={`grid gap-2 auto-rows-[minmax(200px,1fr)] md:auto-rows-fr ${getGridClass(challengerSlots.length)} h-full`}>
-          {challengerSlots.map((slot, idx) => (
-            <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
+        {/* Unified Grid for Host + Guests */}
+         <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} h-full`}>
+           {challengerSlots.map((slot, idx) => (
+             <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
               {slot.type === 'host' ? (
                 <div
                   className={cn(
@@ -1670,7 +1671,7 @@ const BattleArena = ({
         </button>
         
         {/* Unified Grid for Host + Guests - match BroadcastGrid layout */}
-        <div className={`grid gap-2 auto-rows-[minmax(200px,1fr)] md:auto-rows-fr ${getGridClass(opponentSlots.length)} h-full`}>
+        <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} h-full`}>
           {opponentSlots.map((slot, idx) => (
             <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
               {slot.type === 'host' ? (
@@ -1821,13 +1822,30 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   const isReusingRoomRef = useRef(false);
   const battleRoomRef = useRef<Room | null>(null); // FIX 1: Prevent double connection
   const isConnectingRef = useRef(false); // FIX 1: Track connection state
+  const connectedBattleIdRef = useRef<string | null>(null); // PHASE 3: Track which battleId the room is connected for
+  const previousBattleIdRef = useRef<string | null>(null); // PHASE 3: Track battleId changes for cleanup
   const [livekitRoom, setLivekitRoom] = useState<Room | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'failed'>('connecting');
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 768;
   });
+
+  // ── Channel diagnostics (dev only) ──
+  useEffect(() => {
+    logActiveChannels(`BattleView:mount:${battleId}`);
+    return () => logActiveChannels(`BattleView:unmount:${battleId}`);
+  }, [battleId]);
   
+  // PHASE 5: Dev-only mount/unmount log to identify StrictMode double-mount vs real spam
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[BattleView] MOUNT battleId=', battleId);
+      return () => console.log('[BattleView] UNMOUNT battleId=', battleId);
+    }
+    return;
+  }, [battleId]);
+
   const { user, profile } = useAuthStore();
   const navigate = useNavigate();
   const effectiveUserId = viewerId || user?.id;
@@ -1840,7 +1858,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   }, []);
 
   const resolvedBattleRole = useMemo<'host' | 'stage' | 'viewer' | null>(() => {
-    if (!effectiveUserId || !challengerStream || !opponentStream) return null;
+    if (!effectiveUserId || !challengerStream?.user_id || !opponentStream?.user_id) return null;
     if (effectiveUserId === challengerStream.user_id || effectiveUserId === opponentStream.user_id) return 'host';
     if (participantInfo?.role === 'host' || participantInfo?.role === 'stage' || participantInfo?.role === 'viewer') {
       return participantInfo.role;
@@ -1909,20 +1927,35 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   useEffect(() => {
     // Skip if battle isn't ready yet
     if (!battle || !effectiveUserId || !resolvedBattleRole) return;
-    
-    // FIX 1: Prevent double connection - check if already connected or connecting
-    if (battleRoomRef.current && battleRoomRef.current.state === 'connected') {
-      console.log('[BattleView] Already connected to battle room, skipping connection');
+
+    // PHASE 3: If battleId changed, disconnect old room first
+    const previousBattleId = previousBattleIdRef.current;
+    if (previousBattleId !== battleId) {
+      // BattleId changed — disconnect old room if exists
+      if (battleRoomRef.current && previousBattleId !== null) {
+        if (import.meta.env.DEV) {
+          console.log('[BattleView] battleId changed, disconnecting old room:', previousBattleId, '→', battleId);
+        }
+        battleRoomRef.current.disconnect();
+        battleRoomRef.current = null;
+        connectedBattleIdRef.current = null;
+        isConnectingRef.current = false;
+      }
+      previousBattleIdRef.current = battleId;
+    }
+
+    // PHASE 3: If already connected for this battleId, skip
+    if (connectedBattleIdRef.current === battleId && battleRoomRef.current && battleRoomRef.current.state === 'connected') {
       return;
     }
-    
+
+    // FIX 1: Prevent double connection - check if already connecting
     if (isConnectingRef.current) {
-      console.log('[BattleView] Connection in progress, skipping');
       return;
     }
     
     // Always create a new room for battle - don't reuse existing room from PreflightStore
-    console.log('[BattleView] Creating new battle room connection (battle-' + battle.id + ')');
+    if (import.meta.env.DEV) console.log('[BattleView] Creating new battle room connection (battle-' + battle.id + ')');
     isConnectingRef.current = true;
     isReusingRoomRef.current = false;
     const client = new Room({ mode: 'rtc', codec: 'vp8' });
@@ -2289,13 +2322,17 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     });
     
     client.on(RoomEvent.ConnectionStateChanged, (state) => {
-      console.log('[BattleView] Connection state changed:', state);
+      if (import.meta.env.DEV) {
+        console.log('[BattleView] Connection state changed:', state);
+      }
       if (state === 'connected') {
         setConnectionStatus('connected');
         isRoomConnectedRef.current = true;
+        connectedBattleIdRef.current = battleId; // PHASE 3: Mark as connected for this battleId
       } else if (state === 'disconnected') {
         setConnectionStatus('disconnected');
         isRoomDisconnectedRef.current = true;
+        connectedBattleIdRef.current = null; // PHASE 3: Clear on disconnect
       } else if (state === 'connecting' || state === 'reconnecting') {
         setConnectionStatus('connecting');
       }
@@ -2307,6 +2344,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       mounted = false;
       isRoomDisconnectedRef.current = true;
       isConnectingRef.current = false; // FIX 1: Reset connecting flag on cleanup
+      connectedBattleIdRef.current = null; // PHASE 3: Clear connected battleId on cleanup
       
       // FIX 5: Don't destroy connection mid-flow - only disconnect when explicitly leaving
       // Only disconnect if the component is truly unmounting (not just re-rendering)
@@ -2322,17 +2360,17 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         
         // Only stop tracks if they were created in this component (not passed in)
         if (createdAudioTrack) {
-          console.log('[BattleView] Cleanup: stopping created audio track');
+          if (import.meta.env.DEV) console.log('[BattleView] Cleanup: stopping created audio track');
           createdAudioTrack.stop();
         }
         if (createdVideoTrack) {
-          console.log('[BattleView] Cleanup: stopping created video track');
+          if (import.meta.env.DEV) console.log('[BattleView] Cleanup: stopping created video track');
           createdVideoTrack.stop();
         }
         
         // Only disconnect if room is still connected - FIX 5: Don't destroy mid-flow
         if (client.state === 'connected') {
-          console.log('[BattleView] Cleanup: disconnecting room');
+          if (import.meta.env.DEV) console.log('[BattleView] Cleanup: disconnecting room');
           client.disconnect();
         }
         
@@ -2342,7 +2380,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       // Do NOT call PreflightStore.clear() - tracks belong to the main broadcast
       // clearTracks();
     };
-  }, [battleId, battle, effectiveUserId, resolvedBattleRole, isBroadcaster]);
+  }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster]);
 
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showMobileGiftTray, setShowMobileGiftTray] = useState(false);
@@ -2433,10 +2471,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       try {
         // Set battle mode flag to hide TrollEngine during battles
         // FIX 7: Only set if not already set to avoid repeated updates
-        if (!preflightSetInBattleRef.current && !PreflightStore.getState().isInBattle) {
+        if (!preflightSetInBattleRef.current && !PreflightStore.getInBattle()) {
           PreflightStore.setInBattle(true);
           preflightSetInBattleRef.current = true;
-          console.log('[BattleView] Set isInBattle = true');
+          if (import.meta.env.DEV) console.log('[BattleView] Set isInBattle = true');
         }
         
         const { data: battleData, error: battleError } = await supabase.from('battles').select('*').eq('id', battleId).maybeSingle();
@@ -2511,73 +2549,48 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     };
     initBattle();
 
-    const channel = supabase.channel(`battle:${battleId}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'battles',
-        filter: `id=eq.${battleId}`
-      }, (payload) => {
-        logRealtime('Battle update received', payload.new);
-        const newBattle = payload.new;
-        setBattle(newBattle);
-        if (newBattle.status === 'ended') {
-          setShowResults(true);
-        }
-      })
-      .subscribe();
-
+    // Consolidated battle realtime: replaces 6 separate channels with 1
+    // Channels removed: battle:${battleId}, battle_participants:${battleId},
+    //   battle_arena:${battleId}, battle_stream_${challengerId},
+    //   battle_stream_${opponentId}, battle-sync-gifts:${streamId} (×2)
     return () => {
-      supabase.removeChannel(channel);
       // Clear battle mode flag when leaving battle
       PreflightStore.setInBattle(false);
       preflightSetInBattleRef.current = false;
-      console.log('[BattleView] Set isInBattle = false (cleanup)');
+      if (import.meta.env.DEV) console.log('[BattleView] Set isInBattle = false (cleanup)');
     };
   }, [battleId]);
 
-  // Participants channel
+  // Consolidated battle realtime hook (replaces 6 separate channel subscriptions)
+  const { state: battleRealtime } = useBattleRealtime(battleId || null);
+
+  // Sync consolidated realtime state into BattleView state
   useEffect(() => {
-    if (!battleId) return;
-    const participantsChannel = supabase
-      .channel(`battle_participants:${battleId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'battle_participants', filter: `battle_id=eq.${battleId}` },
-        async () => {
-          logParticipants('Participants update received');
-          const { data } = await supabase
-            .from('battle_participants')
-            .select('user_id, role')
-            .eq('battle_id', battleId);
-          setParticipantSnapshots((data as Array<{ user_id: string; role: 'host' | 'stage' | 'viewer' }>) || []);
-        }
-      )
-      .subscribe();
+    if (!battleRealtime.battle) return;
+    setBattle((prev: any) => {
+      // PHASE 2: Avoid unnecessary re-renders — only update if battle data actually changed
+      if (!prev) return battleRealtime.battle;
+      const keys = ['score_challenger', 'score_opponent', 'status', 'started_at', 'ends_at', 'winner_id', 'sudden_death'];
+      const changed = keys.some((k) => (prev as any)[k] !== (battleRealtime.battle as any)[k]);
+      return changed ? { ...prev, ...battleRealtime.battle } : prev;
+    });
+    if (battleRealtime.battle.status === 'ended') {
+      setShowResults(true);
+    }
+  }, [battleRealtime.battle]);
 
-    return () => {
-      supabase.removeChannel(participantsChannel);
-    };
-  }, [battleId]);
-
-  // Arena ready channel
   useEffect(() => {
-    if (!battleId) return;
+    if (battleRealtime.participants.length > 0) {
+      setParticipantSnapshots(battleRealtime.participants);
+    }
+  }, [battleRealtime.participants]);
 
-    const arenaChannel = supabase.channel(`battle_arena:${battleId}`);
-    arenaChannel
-      .on('broadcast', { event: 'arena_ready' }, (payload) => {
-        const readyAtMs = Number(payload?.payload?.ready_at_ms || 0);
-        if (!readyAtMs || arenaReadyAtMs) return;
-        setArenaReadyAtMs(readyAtMs);
-        setArenaReady(true);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(arenaChannel);
-    };
-  }, [battleId, arenaReadyAtMs]);
+  useEffect(() => {
+    if (battleRealtime.arenaReady && !arenaReady) {
+      setArenaReady(true);
+      setArenaReadyAtMs(Date.now());
+    }
+  }, [battleRealtime.arenaReady]);
 
   // Arena readiness check
   useEffect(() => {
@@ -2619,7 +2632,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         const videoPubs = getTrackPublications(remoteUser, 'video');
         const audioPubs = getTrackPublications(remoteUser, 'audio');
         const hasAnyPublication = Boolean(videoPubs.length || audioPubs.length);
-        if (!hasAnyPublication) {
+        if (!hasAnyPublication && import.meta.env.DEV) {
           console.log('[BattleView] Host connected without media publications yet:', remoteUser.identity);
         }
       }
@@ -2676,10 +2689,11 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     setArenaReady(true);
   }, [battle?.status, battle?.started_at, arenaReady]);
 
-  // Stream updates
+
+  // Stream updates — kept as minimal postgres_changes on streams table
+  // (these are per-stream, not per-battle, and are needed for box_count/seat changes)
   useEffect(() => {
     if (!challengerStream?.id && !opponentStream?.id) return;
-
     const channels: ReturnType<typeof supabase.channel>[] = [];
 
     if (challengerStream?.id) {
@@ -2721,14 +2735,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     };
   }, [challengerStream?.id, opponentStream?.id]);
 
-  // Keep battle state synchronized even if a realtime event is missed.
+  // Fallback poll — 15s interval (widened from 10s since consolidated realtime is more reliable)
   useEffect(() => {
     if (!battleId) return;
     const interval = setInterval(async () => {
       try {
         const { data } = await supabase
           .from('battles')
-          .select('*')
+          .select('id, score_challenger, score_opponent, status, started_at, ends_at, winner_id, sudden_death')
           .eq('id', battleId)
           .maybeSingle();
         if (data) {
@@ -2747,36 +2761,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
           });
         }
       } catch {}
-    }, 2000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [battleId]);
 
-  // Gift-driven refresh for instant side score updates across clients.
-  useEffect(() => {
-    if (!battleId || (!challengerStream?.id && !opponentStream?.id)) return;
-    const channels: ReturnType<typeof supabase.channel>[] = [];
-    const refetchBattle = async () => {
-      const { data } = await supabase
-        .from('battles')
-        .select('*')
-        .eq('id', battleId)
-        .maybeSingle();
-      if (data) setBattle(data);
-    };
-
-    for (const sid of [challengerStream?.id, opponentStream?.id].filter(Boolean) as string[]) {
-      const channel = supabase
-        .channel(`battle-sync-gifts:${sid}`)
-        .on('broadcast', { event: 'gift_sent' }, () => {
-          refetchBattle();
-        })
-        .subscribe();
-      channels.push(channel);
-    }
-    return () => {
-      channels.forEach((c) => supabase.removeChannel(c));
-    };
-  }, [battleId, challengerStream?.id, opponentStream?.id]);
 
   // Timer Logic - 3 minutes with 10 second sudden death
   const [timeLeft, setTimeLeft] = useState<number>(180);
@@ -3265,9 +3253,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
 
   if (loading || !battle || !challengerStream || !opponentStream) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-0 bg-black text-amber-500 gap-4">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-amber-500 gap-4" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <Loader2 className="animate-spin" size={48} />
-        <span className="font-medium animate-pulse">Joining Battle Arena...</span>
+        <span className="font-black text-lg animate-pulse">Entering Battle Arena...</span>
+        <span className="text-sm text-amber-400/60">Connecting to battle room</span>
       </div>
     );
   }
@@ -3365,12 +3354,12 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   return (
     <div className="fixed inset-0 overflow-hidden z-50 relative bg-black">
       {/* Header - Troll Battle Royale with Balance */}
-      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-3 md:px-6 py-2 md:py-4">
+      <div className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-3 md:px-6 py-2 md:py-4 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
             <span className="text-white font-black text-lg">T</span>
           </div>
-          <h1 className="text-xl font-black text-white tracking-wide">Troll Battle Royale</h1>
+          <h1 className="text-xl font-black text-white tracking-wide hidden sm:inline">Troll Battle Royale</h1>
         </div>
         
         {/* Crown & Coin Balance Display */}
@@ -3411,16 +3400,16 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       {/* Back Button */}
       <button
         onClick={() => navigate('/')}
-        className="absolute top-4 md:top-5 left-3 md:left-6 z-50 flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white rounded-full border border-white/10 transition-all hover:scale-105"
+        className="absolute top-[max(1rem,calc(env(safe-area-inset-top)+0.75rem))] left-3 md:left-6 z-50 flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white rounded-full border border-white/10 transition-all hover:scale-105"
       >
         <ArrowLeft size={18} />
-        <span className="text-sm font-medium">Home</span>
+        <span className="text-sm font-medium hidden sm:inline">Home</span>
       </button>
 
       {/* Main Content Container */}
-        <div className="relative z-10 flex flex-col h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] min-h-0 pt-16 overflow-hidden">
+        <div className="relative z-10 flex flex-col h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] min-h-0 pt-16 md:pt-16 overflow-hidden" style={{ paddingTop: 'max(4rem, calc(env(safe-area-inset-top) + 3.5rem))' }}>
           {/* Battle Arena - Shows all participants with scores */}
-          <div className="flex-1 min-h-0 h-full flex items-stretch justify-stretch px-1 md:px-2 pb-0 pr-0 lg:pr-80 pl-0 lg:pl-20 overflow-hidden">
+          <div className="flex-1 min-h-0 h-full flex items-stretch justify-stretch px-1 md:px-2 pb-0 pr-0 lg:pr-80 pl-0 lg:pl-20 overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="relative flex w-full h-full min-h-0 items-start justify-center overflow-hidden">
               {/* Battle Arena */}
               <MemoBattleArena
@@ -3689,7 +3678,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         )}
 
         {/* Mobile Bottom Action Bar */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-md border-t border-white/10">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-md border-t border-white/10" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <div className="flex items-center justify-around px-4 py-3">
             {/* Gift Button */}
             <button

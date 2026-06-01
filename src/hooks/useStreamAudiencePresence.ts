@@ -74,8 +74,14 @@ export function useStreamAudiencePresence(
   const [topAudience, setTopAudience] = useState<StreamAudienceMember[]>([])
   const [myPresence, setMyPresence] = useState<StreamAudienceMember | null>(null)
 
-  const heartbeatRef = useRef<NodeJS.Timeout | null>(null)
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastGiftUpdateRef = useRef<Record<string, number>>({})
+  const channelsRef = useRef<any[]>([])
+
+  const cleanupChannels = useCallback(() => {
+    channelsRef.current.forEach(ch => supabase.removeChannel(ch))
+    channelsRef.current = []
+  }, [])
 
   const fetchAudience = useCallback(async () => {
     if (!streamId) return
@@ -95,13 +101,11 @@ export function useStreamAudiencePresence(
       const audienceList = dedupeAudienceMembers((data || []).map(normalizeAudienceMember))
       setAudience(audienceList)
 
-      // Active audience: those with is_active true and left_at null
       const active = audienceList.filter(
         (member) => member.is_active && !member.left_at
       )
       setActiveAudience(active)
 
-      // Top audience: sorted by gift_total descending, then joined_at ascending
       const top = [...audienceList].sort((a, b) => {
         if (b.gift_total !== a.gift_total) {
           return b.gift_total - a.gift_total
@@ -110,7 +114,6 @@ export function useStreamAudiencePresence(
       })
       setTopAudience(top)
 
-      // My presence
       if (effectiveUserId) {
         const myMember = audienceList.find(
           (member) => member.user_id === effectiveUserId
@@ -143,51 +146,51 @@ export function useStreamAudiencePresence(
         return false
       }
 
-       if (existingRow) {
-         const { error: updateError } = await supabase
-           .from('stream_audience_presence')
-           .update({
-             is_active: true,
-             is_present: true,
-             left_at: null,
-             last_seen_at: now,
-             username,
-             avatar_url: avatarUrl,
-             gift_score: 0,
-             seat_id: null,
-             seat_index: null,
-             seat_status: 'audience',
-             role: 'audience',
-           })
-           .eq('id', existingRow.id)
+      if (existingRow) {
+        const { error: updateError } = await supabase
+          .from('stream_audience_presence')
+          .update({
+            is_active: true,
+            is_present: true,
+            left_at: null,
+            last_seen_at: now,
+            username,
+            avatar_url: avatarUrl,
+            gift_score: 0,
+            seat_id: null,
+            seat_index: null,
+            seat_status: 'audience',
+            role: 'audience',
+          })
+          .eq('id', existingRow.id)
 
         if (updateError) {
           console.warn('[useStreamAudiencePresence] joinAudience update error', updateError)
           toast.error('Failed to join audience')
           return false
         }
-       } else {
-         const { error: insertError } = await supabase
-           .from('stream_audience_presence')
-           .insert({
-             stream_id: streamId,
-             user_id: effectiveUserId,
-             username,
-             avatar_url: avatarUrl,
-             joined_at: now,
-             left_at: null,
-             is_active: true,
-             is_present: true,
-             gift_total: 0,
-             gift_total_coins: 0,
-             gift_score: 0,
-             message_count: 0,
-             seat_id: null,
-             seat_index: null,
-             seat_status: 'audience',
-             role: 'audience',
-             last_seen_at: now,
-           })
+      } else {
+        const { error: insertError } = await supabase
+          .from('stream_audience_presence')
+          .insert({
+            stream_id: streamId,
+            user_id: effectiveUserId,
+            username,
+            avatar_url: avatarUrl,
+            joined_at: now,
+            left_at: null,
+            is_active: true,
+            is_present: true,
+            gift_total: 0,
+            gift_total_coins: 0,
+            gift_score: 0,
+            message_count: 0,
+            seat_id: null,
+            seat_index: null,
+            seat_status: 'audience',
+            role: 'audience',
+            last_seen_at: now,
+          })
 
         if (insertError) {
           console.warn('[useStreamAudiencePresence] joinAudience insert error', insertError)
@@ -204,32 +207,32 @@ export function useStreamAudiencePresence(
     }
   }, [streamId, effectiveUserId, profile?.avatar_url, profile?.username, user?.email])
 
-   const leaveAudience = useCallback(async () => {
-     if (!effectiveUserId || !streamId) return
-     const now = new Date().toISOString()
+  const leaveAudience = useCallback(async () => {
+    if (!effectiveUserId || !streamId) return
+    const now = new Date().toISOString()
 
-     try {
-       const { error } = await supabase
-         .from('stream_audience_presence')
-         .update({
-           is_active: false,
-           is_present: false,
-           left_at: now,
-           last_seen_at: now,
-           seat_id: null,
-           seat_index: null,
-           seat_status: 'audience',
-         })
-         .eq('stream_id', streamId)
-         .eq('user_id', effectiveUserId)
+    try {
+      const { error } = await supabase
+        .from('stream_audience_presence')
+        .update({
+          is_active: false,
+          is_present: false,
+          left_at: now,
+          last_seen_at: now,
+          seat_id: null,
+          seat_index: null,
+          seat_status: 'audience',
+        })
+        .eq('stream_id', streamId)
+        .eq('user_id', effectiveUserId)
 
-       if (error) {
-         console.warn('[useStreamAudiencePresence] leaveAudience error', error)
-       }
-     } catch (err) {
-       console.warn('[useStreamAudiencePresence] leaveAudience failed', err)
-     }
-   }, [streamId, effectiveUserId])
+      if (error) {
+        console.warn('[useStreamAudiencePresence] leaveAudience error', error)
+      }
+    } catch (err) {
+      console.warn('[useStreamAudiencePresence] leaveAudience failed', err)
+    }
+  }, [streamId, effectiveUserId])
 
   const heartbeatAudience = useCallback(async () => {
     if (!effectiveUserId || !streamId) return
@@ -301,16 +304,16 @@ export function useStreamAudiencePresence(
     }
   }, [streamId, effectiveUserId])
 
-  // Fetch initial data
   useEffect(() => {
     void fetchAudience()
   }, [fetchAudience])
 
-  // Subscribe to realtime audience presence changes
   useEffect(() => {
     if (!streamId) return
 
-    const channel = supabase
+    cleanupChannels()
+
+    const audienceChannel = supabase
       .channel(`stream-audience-presence:${streamId}`)
       .on(
         'postgres_changes',
@@ -347,7 +350,6 @@ export function useStreamAudiencePresence(
               return dedupeAudienceMembers(next)
             })
 
-            // Update active audience
             setActiveAudience((prev) => {
               let next = [...prev]
               if (evt === 'DELETE') {
@@ -374,11 +376,8 @@ export function useStreamAudiencePresence(
               return dedupeAudienceMembers(next)
             })
 
-            // Update top audience (we'll refetch on gift updates or use a more complex sort)
-            // For simplicity, we refetch on any change that might affect order
             void fetchAudience()
 
-            // Update my presence
             if (effectiveUserId) {
               setMyPresence((prev) => {
                 if (!newRow && !oldRow) return prev
@@ -394,20 +393,6 @@ export function useStreamAudiencePresence(
           }
         }
       )
-      .subscribe()
-
-    return () => {
-      try {
-        supabase.removeChannel(channel)
-      } catch {}
-    }
-  }, [streamId, effectiveUserId, fetchAudience])
-
-  useEffect(() => {
-    if (!streamId) return
-
-    const channel = supabase
-      .channel(`stream-gifts-audience:${streamId}`)
       .on(
         'postgres_changes',
         {
@@ -446,16 +431,18 @@ export function useStreamAudiencePresence(
       )
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [streamId, fetchAudience])
+    channelsRef.current = [audienceChannel]
 
-  // Heartbeat every 30 seconds to keep presence active
+    return () => {
+      cleanupChannels()
+    }
+  }, [streamId, effectiveUserId, fetchAudience, cleanupChannels])
+
   useEffect(() => {
     if (!effectiveUserId || !streamId) return
 
     heartbeatRef.current = setInterval(() => {
+      if (document.hidden) return
       void heartbeatAudience()
     }, 30 * 1000)
 
@@ -467,12 +454,10 @@ export function useStreamAudiencePresence(
     }
   }, [effectiveUserId, streamId, heartbeatAudience])
 
-  // Refetch audience on gift updates (if we don't want to rely solely on realtime for sorting)
   useEffect(() => {
     if (!effectiveUserId || !streamId) return
     const now = Date.now()
     const lastUpdate = lastGiftUpdateRef.current[effectiveUserId] || 0
-    // Refetch if gift was updated in the last 5 seconds to avoid excessive requests
     if (now - lastUpdate < 5000) {
       void fetchAudience()
     }

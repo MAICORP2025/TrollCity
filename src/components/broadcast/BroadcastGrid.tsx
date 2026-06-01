@@ -109,7 +109,7 @@ interface BroadcastGridProps {
 
     // Modal state callbacks (for lifting modal state to parent)
     onOpenUserAction?: (info: { userId: string; username?: string; role?: string; createdAt?: string }) => void;
-    onOpenUserStats?: (info: { userId: string; username: string; trollCoins: number; trollmonds: number; licensePlate: string | null; isSeatUser: boolean }) => void;
+    onOpenUserStats?: (info: { userId: string; username: string; trollCoins: number; trollmonds: number; licensePlate: string | null; isSeatUser: boolean; streamId?: string }) => void;
     onCloseUserStats?: () => void;
     onOpenHostStats?: () => void;
     onCloseHostStats?: () => void;
@@ -1632,7 +1632,8 @@ boxClass,
                       trollCoins: displayProfile.troll_coins || 0,
                       trollmonds: (((displayProfile as any).trollmonds || displayProfile.trollmonds_balance || 0) as number),
                       licensePlate: (displayProfile as any).license_plate || licensePlates[userId] || null,
-                      isSeatUser: localUserId === stream.user_id || Object.values(seats || {}).some(s => s?.user_id === localUserId || s?.guest_id === localUserId)
+                      isSeatUser: localUserId === stream.user_id || Object.values(seats || {}).some(s => s?.user_id === localUserId || s?.guest_id === localUserId),
+                      streamId: stream?.id,
                     });
                   }}
                  role="button"
@@ -1646,7 +1647,8 @@ boxClass,
                          trollCoins: displayProfile.troll_coins || 0,
                          trollmonds: (((displayProfile as any).trollmonds || displayProfile.trollmonds_balance || 0) as number),
                          licensePlate: (displayProfile as any).license_plate || licensePlates[userId] || null,
-                         isSeatUser: localUserId === stream.user_id || Object.values(seats || {}).some(s => s?.user_id === localUserId || s?.guest_id === localUserId)
+                         isSeatUser: localUserId === stream.user_id || Object.values(seats || {}).some(s => s?.user_id === localUserId || s?.guest_id === localUserId),
+                         streamId: stream?.id,
                        });
                      }
                    }}
@@ -1687,7 +1689,8 @@ boxClass,
                            trollCoins: displayProfile.troll_coins || 0,
                            trollmonds: (((displayProfile as any).trollmonds || displayProfile.trollmonds_balance || 0) as number),
                            licensePlate: (displayProfile as any).license_plate || licensePlates[userId] || null,
-                           isSeatUser: localUserId === stream.user_id || Object.values(seats || {}).some(s => s?.user_id === localUserId || s?.guest_id === localUserId)
+                           isSeatUser: localUserId === stream.user_id || Object.values(seats || {}).some(s => s?.user_id === localUserId || s?.guest_id === localUserId),
+                           streamId: stream?.id,
                          });
                        }
                      }}

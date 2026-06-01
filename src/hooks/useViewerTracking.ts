@@ -126,7 +126,9 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
       })
 
     // Heartbeat for stream_viewers table every 60s (reduced from 30s to reduce DB load)
+    // Pauses when tab is hidden to reduce unnecessary writes
     const heartbeatInterval = setInterval(async () => {
+      if (document.hidden) return;
       if (streamId && isValidUUID(user?.id)) {
         await supabase.from('stream_viewers').upsert({
           stream_id: streamId,
@@ -200,6 +202,7 @@ export function useLiveViewerCount(streamId: string | null) {
     // Reduced from 5s to 30s to reduce disk I/O on Supabase
     const interval = setInterval(async () => {
         if (!mounted) return;
+        if (document.hidden) return;
         const { data } = await supabase
             .from('streams')
             .select('current_viewers')

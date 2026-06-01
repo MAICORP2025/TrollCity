@@ -431,7 +431,7 @@ export default function CityMapGuidePreview() {
     neighborhood: { path: '/neighborhood-map',             auth: false },
     coins:        { path: '/coin-store',                   auth: false },
     tcnn:         { path: '/tcnn',                         auth: false },
-    mai:          { path: '/mai-talent',                   auth: false },
+
   }
 
   const goToDistrict = (d: District) => {

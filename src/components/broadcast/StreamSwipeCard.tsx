@@ -342,8 +342,8 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
                 {broadcaster?.username || 'Broadcaster'}
               </span>
               {broadcaster?.level && (
-                <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full sm:text-xs sm:px-2">
-                  Lvl {broadcaster.level}
+                <span className="text-[10px] bg-gradient-to-r from-violet-500/20 to-purple-500/20 text-violet-300 px-1.5 py-0.5 rounded-full sm:text-xs sm:px-2 border border-violet-500/20">
+                  T League
                 </span>
               )}
             </div>

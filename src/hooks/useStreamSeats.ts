@@ -268,9 +268,20 @@ export function useStreamSeats(
     [streamId, applySeatRows],
   )
 
+  // SAFETY: dedupe guard — if the same reason fires within 200ms, skip the
+  // duplicate to prevent 3-5 rapid fetches for a single seat_joined/seat_live.
+  const lastRefreshReasonRef = useRef<Record<string, number>>({})
+
   const scheduleRefresh = useCallback(
     (reason: string, delays: number[] = [0, 300, 800]) => {
       if (!streamId) return
+
+      const now = Date.now()
+      const lastFired = lastRefreshReasonRef.current[reason] || 0
+      if (now - lastFired < 200) {
+        return
+      }
+      lastRefreshReasonRef.current[reason] = now
 
       for (const delay of delays) {
         if (delay <= 0) {

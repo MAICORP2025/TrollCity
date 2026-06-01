@@ -24,19 +24,8 @@ export function useTrollToe({ streamId, isHost, enabled = true }: UseTrollToeOpt
   const originalBoxCountRef = useRef<number | null>(null);
 
    const channelName = `trolltoe-${streamId}`;
-   const boxChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-    // Secondary channel for stream-level state (box_count) sync
-    useEffect(() => {
-      if (!streamId) return;
-      const channel = supabase.channel(`stream:${streamId}`);
-      boxChannelRef.current = channel;
-      channel.subscribe(); // No-op callback; just need subscription for broadcast
-      return () => {
-        supabase.removeChannel(channel);
-        boxChannelRef.current = null;
-      };
-    }, [streamId]);
+   // SAFETY: removed orphaned stream:<streamId> subscription.
+   // box_count_changed broadcasts are now sent via the main trolltoe channel.
 
    const broadcastState = useCallback(
     async (event: string, payload: any) => {
@@ -141,8 +130,9 @@ export function useTrollToe({ streamId, isHost, enabled = true }: UseTrollToeOpt
          .update({ box_count: 9 })
          .eq('id', streamId);
        // Broadcast box_count change so all clients (including useBoxCount) update instantly
-       if (boxChannelRef.current) {
-         await boxChannelRef.current.send({
+       // SAFETY: send via main trolltoe channel instead of separate stream: channel
+       if (channelRef.current) {
+         await channelRef.current.send({
            type: 'broadcast',
            event: 'box_count_changed',
            payload: { box_count: 9, stream_id: streamId },
@@ -181,8 +171,8 @@ export function useTrollToe({ streamId, isHost, enabled = true }: UseTrollToeOpt
            .from('streams')
            .update({ box_count: originalBoxCountRef.current })
            .eq('id', streamId);
-         if (boxChannelRef.current) {
-           await boxChannelRef.current.send({
+         if (channelRef.current) {
+           await channelRef.current.send({
              type: 'broadcast',
              event: 'box_count_changed',
              payload: { box_count: originalBoxCountRef.current, stream_id: streamId },
@@ -227,8 +217,8 @@ export function useTrollToe({ streamId, isHost, enabled = true }: UseTrollToeOpt
            .from('streams')
            .update({ box_count: originalBoxCountRef.current })
            .eq('id', streamId);
-         if (boxChannelRef.current) {
-           await boxChannelRef.current.send({
+         if (channelRef.current) {
+           await channelRef.current.send({
              type: 'broadcast',
              event: 'box_count_changed',
              payload: { box_count: originalBoxCountRef.current, stream_id: streamId },

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Ban, Search, Unban, UserX, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Ban, Search, UserX, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
@@ -201,7 +201,7 @@ export default function BlockedUsers() {
                   disabled={unblockingId === blockedUser.blocked_id}
                   className="flex shrink-0 items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
                 >
-                  <Unban className="h-4 w-4" />
+                  <Ban className="h-4 w-4 rotate-180" />
                   Unblock
                 </button>
               </div>

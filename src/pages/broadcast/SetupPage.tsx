@@ -609,41 +609,55 @@ export default function SetupPage() {
     fetchFollowerCount();
   }, [user?.id]);
 
-  // Check monthly broadcaster limit
+  // Check weekly broadcaster limit (10 per week, first-come-first-served)
   useEffect(() => {
     async function checkBroadcasterLimit() {
       if (!user?.id) return;
 
-      // Get start of current month
+      // Get start of current week (Sunday)
       const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const dayOfWeek = now.getDay();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - dayOfWeek);
+      startOfWeek.setHours(0, 0, 0, 0);
+      const startOfWeekIso = startOfWeek.toISOString();
 
-      // Count unique broadcasters who have started a stream this month
+      // Count unique broadcasters who have started a stream this week
       const { data, error } = await supabase
         .from('streams')
-        .select('user_id')
-        .gte('started_at', startOfMonth)
-        .not('started_at', 'is', null);
+        .select('user_id, started_at')
+        .gte('started_at', startOfWeekIso)
+        .not('started_at', 'is', null)
+        .order('started_at', { ascending: true });
 
       if (error) {
         console.error('Error checking broadcaster limit:', error);
         return;
       }
 
-      // Get unique user_ids
-      const uniqueBroadcasters = new Set(data?.map(s => s.user_id) || []);
-      const currentCount = uniqueBroadcasters.size;
-      
-      // Max limit is fixed at 50 broadcasters per month
-      const maxLimit = 20;
+      // Get unique user_ids in order of first broadcast (first-come-first-served)
+      const seen = new Set<string>();
+      const orderedBroadcasters: string[] = [];
+      for (const row of data || []) {
+        if (row.user_id && !seen.has(row.user_id)) {
+          seen.add(row.user_id);
+          orderedBroadcasters.push(row.user_id);
+        }
+      }
+      const currentCount = orderedBroadcasters.length;
 
-      // Check if current user has already broadcasted this month (they get a free pass)
-      const hasUserBroadcasted = uniqueBroadcasters.has(user.id);
+      // Max limit is 10 broadcasters per week
+      const maxLimit = 10;
+
+      // Check if current user is already in the first 10
+      const userPosition = orderedBroadcasters.indexOf(user.id);
+      const hasUserBroadcasted = userPosition !== -1;
+      const canStart = currentCount < maxLimit || (hasUserBroadcasted && userPosition < maxLimit);
 
       setBroadcasterLimitInfo({
         current: currentCount,
         max: maxLimit,
-        canStart: currentCount < maxLimit || hasUserBroadcasted
+        canStart,
       });
     }
     checkBroadcasterLimit();
@@ -1607,9 +1621,9 @@ export default function SetupPage() {
 
     if (!user) return;
 
-    // Check monthly broadcaster limit before starting
+    // Check weekly broadcaster limit before starting
     if (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) {
-      toast.error(`Monthly broadcaster limit reached (${broadcasterLimitInfo.current}/${broadcasterLimitInfo.max}). Please try again next month.`);
+      toast.error(`Weekly broadcaster limit reached (${broadcasterLimitInfo.current}/${broadcasterLimitInfo.max}). You are not in the first 10. Please try again next week.`);
       return;
     }
 
@@ -2163,7 +2177,7 @@ export default function SetupPage() {
               "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold border",
               broadcasterLimitInfo.canStart ? "bg-blue-500/10 border-blue-500/20 text-blue-400" : "bg-red-500/10 border-red-500/20 text-red-400"
             )}>
-              {broadcasterLimitInfo.current}/{broadcasterLimitInfo.max} broadcasters
+              {broadcasterLimitInfo.current}/{broadcasterLimitInfo.max} this week
             </div>
           )}
         </div>
@@ -2576,7 +2590,8 @@ export default function SetupPage() {
                   (categoryRequiresReligion && !selectedReligion) ||
                   (shouldForceRearCamera && !hasRearCamera) ||
                   showPermissionPrompt ||
-                  (broadcasterLimitInfo && !broadcasterLimitInfo.canStart)
+                  (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ||
+                  (isBroadcastLocked && !canBroadcast())
                 }
                 className="w-full md:w-auto px-8 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-black font-bold text-sm hover:from-amber-300 hover:to-orange-400 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 whitespace-nowrap"
               >
@@ -2587,6 +2602,8 @@ export default function SetupPage() {
                   </span>
                 ) : showPermissionPrompt ? (
                   'Grant Permissions'
+                ) : (isBroadcastLocked && !canBroadcast()) ? (
+                  'Broadcast Locked'
                 ) : (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ? (
                   'Limit Reached'
                 ) : (

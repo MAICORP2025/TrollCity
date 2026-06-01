@@ -235,13 +235,19 @@ export function createParticleSystem(
     return null;
   }
   
-  // Check particle limit
+  // Check particle limit and scale down on lower quality / mobile
   const currentParticles = Array.from(state.particleSystems.values())
     .reduce((sum, mesh) => sum + mesh.count, 0);
-  
-  if (currentParticles + config.count > state.quality.maxParticles) {
+  const availableParticles = state.quality.maxParticles - currentParticles;
+  if (availableParticles <= 0) {
     console.warn(`[ThreeEngine] Particle limit reached: ${currentParticles}/${state.quality.maxParticles}`);
     return null;
+  }
+  const particleCount = Math.min(config.count, availableParticles);
+  if (particleCount < config.count) {
+    console.warn(
+      `[ThreeEngine] Reducing particle count from ${config.count} to ${particleCount} due to quality limits (${currentParticles}/${state.quality.maxParticles})`
+    );
   }
   
   // Geometry based on particle type
@@ -299,17 +305,15 @@ export function createParticleSystem(
   // Store metadata on mesh for updates
   (mesh as any).particleData = {
     config,
-    velocities: Array(config.count).fill(0).map(() => ({
-      x: (Math.random() - 0.5) * config.velocity.max,
-      y: (Math.random() - 0.5) * config.velocity.max,
-      z: (Math.random() - 0.5) * config.velocity.max,
-    })),
-    lifetimes: Array(config.count).fill(0).map(() =>
-      config.lifetime.min + Math.random() * (config.lifetime.max - config.lifetime.min)
-    ),
-    ages: Array(config.count).fill(0),
-  };
-  
+      velocities: Array(particleCount).fill(0).map(() => ({
+        x: (Math.random() - 0.5) * config.velocity.max,
+        y: (Math.random() - 0.5) * config.velocity.max,
+        z: (Math.random() - 0.5) * config.velocity.max,
+      })),
+      lifetimes: Array(particleCount).fill(0).map(() =>
+        config.lifetime.min + Math.random() * (config.lifetime.max - config.lifetime.min)
+      ),
+      ages: Array(particleCount).fill(0),
   state.scene.add(mesh);
   state.particleSystems.set(systemId, mesh);
   

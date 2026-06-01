@@ -64,13 +64,16 @@ export function useLeagueSnapshot({
     setError(null)
 
     try {
-      const { error: ensureError } = await supabase.rpc('ensure_league_system_ready')
-      if (ensureError && ensureError.code !== 'PGRST104') {
-        console.warn('[useLeagueSnapshot] ensure_league_system_ready failed', ensureError)
+      // Ensure league system is ready (creates event if needed)
+      try {
+        await supabase.rpc('ensure_league_system_ready')
+      } catch {
+        // RPC may not exist yet if migrations haven't been applied
       }
 
+      // Fetch active league event
       const now = new Date().toISOString()
-      const { data: eventData, error: eventError } = await supabase
+      let { data: eventData, error: eventError } = await supabase
         .from('league_events')
         .select('id, name, slug, type, status, starts_at, ends_at, metadata, points_multiplier')
         .eq('status', 'active')
@@ -79,17 +82,15 @@ export function useLeagueSnapshot({
         .order('starts_at', { ascending: false })
         .limit(1)
 
-      if (eventError && eventError.code !== 'PGRST104') {
-        throw eventError
-      }
-
       let event = Array.isArray(eventData) && eventData.length > 0 ? eventData[0] : null
+
       if (!event) {
-        const { data: createdEvent, error: createError } = await supabase.rpc('create_system_league_event')
-        if (createError && createError.code !== 'PGRST104') {
-          throw createError
+        try {
+          const { data: createdEvent } = await supabase.rpc('create_system_league_event')
+          event = createdEvent as any
+        } catch {
+          // RPC may not exist yet
         }
-        event = createdEvent as any
       }
 
       if (!event) {
@@ -113,38 +114,36 @@ export function useLeagueSnapshot({
         points_multiplier: event.points_multiplier,
       })
 
-      const leaderboardQuery = supabase
-        .from('league_leaderboard_snapshots')
-        .select(
-          'user_id, username, display_name, avatar_url, stream_id, rank, score, total_gifts, stream_count, battle_count, mission_count'
-        )
-        .eq('league_event_id', event.id)
-        .order('rank', { ascending: true })
-        .limit(limit)
-
-      if (streamId) {
-        leaderboardQuery.eq('stream_id', streamId)
-      }
-
-      const { data: snapshotData, error: snapshotError } = await leaderboardQuery
-      if (snapshotError && snapshotError.code !== 'PGRST104') {
-        throw snapshotError
-      }
-
-      let leaderboardRows = Array.isArray(snapshotData) ? snapshotData : []
-      if (leaderboardRows.length === 0 && streamId) {
-        const fallback = await supabase
+      // Fetch leaderboard snapshots
+      let leaderboardRows: any[] = []
+      try {
+        let leaderboardQuery = supabase
           .from('league_leaderboard_snapshots')
-          .select('user_id, username, display_name, avatar_url, stream_id, rank, score, total_gifts, stream_count, battle_count, mission_count')
+          .select(
+            'user_id, username, display_name, avatar_url, stream_id, rank, score, total_gifts, stream_count, battle_count, mission_count'
+          )
           .eq('league_event_id', event.id)
           .order('rank', { ascending: true })
           .limit(limit)
 
-        if (fallback.error && fallback.error.code !== 'PGRST104') {
-          throw fallback.error
+        if (streamId) {
+          leaderboardQuery = leaderboardQuery.eq('stream_id', streamId)
         }
 
-        leaderboardRows = Array.isArray(fallback.data) ? fallback.data : []
+        const { data: snapshotData } = await leaderboardQuery
+        leaderboardRows = Array.isArray(snapshotData) ? snapshotData : []
+
+        if (leaderboardRows.length === 0 && streamId) {
+          const { data: fallbackData } = await supabase
+            .from('league_leaderboard_snapshots')
+            .select('user_id, username, display_name, avatar_url, stream_id, rank, score, total_gifts, stream_count, battle_count, mission_count')
+            .eq('league_event_id', event.id)
+            .order('rank', { ascending: true })
+            .limit(limit)
+          leaderboardRows = Array.isArray(fallbackData) ? fallbackData : []
+        }
+      } catch {
+        // Table may not exist yet
       }
 
       setLeaderboard(
@@ -161,31 +160,41 @@ export function useLeagueSnapshot({
         }))
       )
 
+      // Fetch user rank
       if (user?.id) {
-        const { data: rankData } = await supabase
-          .from('league_leaderboard_snapshots')
-          .select('rank')
-          .eq('league_event_id', event.id)
-          .eq('user_id', user.id)
-          .single()
-
-        setUserRank(rankData?.rank ?? null)
+        try {
+          const { data: rankData } = await supabase
+            .from('league_leaderboard_snapshots')
+            .select('rank')
+            .eq('league_event_id', event.id)
+            .eq('user_id', user.id)
+            .single()
+          setUserRank(rankData?.rank ?? null)
+        } catch {
+          setUserRank(null)
+        }
       }
 
-      if (user?.id) {
-        const { data: statsData } = await supabase
-          .from('user_stats')
-          .select('level, xp_total, xp_to_next_level, xp_progress')
-          .eq('user_id', user.id)
-          .maybeSingle()
-
-        setUserLeagueProgress(buildUserLeagueProgress(statsData ?? undefined, profile ?? undefined))
-      } else {
+      // Fetch user stats for league progress
+      try {
+        if (user?.id) {
+          const { data: statsData } = await supabase
+            .from('user_stats')
+            .select('level, xp_total, xp_to_next_level, xp_progress')
+            .eq('user_id', user.id)
+            .maybeSingle()
+          setUserLeagueProgress(buildUserLeagueProgress(statsData ?? undefined, profile ?? undefined))
+        } else {
+          setUserLeagueProgress(buildUserLeagueProgress(undefined, profile ?? undefined))
+        }
+      } catch {
         setUserLeagueProgress(buildUserLeagueProgress(undefined, profile ?? undefined))
       }
     } catch (err) {
-      console.error('[useLeagueSnapshot] Error fetching league snapshot:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch league data')
+      // Silently handle errors — league system may not be set up yet
+      if (import.meta.env.DEV) {
+        console.warn('[useLeagueSnapshot] League data unavailable:', err)
+      }
     } finally {
       setIsLoading(false)
     }

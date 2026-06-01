@@ -78,9 +78,10 @@ export function useRandomBattleQueueController({
     setBattleStartsAt(null);
   }, []);
 
-  const findMatch = useCallback(async () => {
+  const findMatch = useCallback(async (force: boolean = false) => {
     if (!stream?.id || !userId || matchingRef.current) return;
-    if (!canUseRandomBattles || !isQueueEnabled || isBattleActive || stream.status !== 'live') return;
+    if (!canUseRandomBattles || isBattleActive || stream.status !== 'live') return;
+    if (!isQueueEnabled && !force) return;
 
     matchingRef.current = true;
     try {
@@ -162,12 +163,17 @@ export function useRandomBattleQueueController({
       } as Partial<Stream>);
       shouldAutoQueueRef.current = true;
       toast.success('Random Battle Queue enabled');
+
+      // Immediately attempt to match if possible, even before local stream state refreshes.
+      if (stream?.status === 'live' && !isBattleActive) {
+        void findMatch(true);
+      }
     } catch (err: any) {
       toast.error(err?.message || 'Failed to start random battles');
     } finally {
       setIsBusy(false);
     }
-  }, [canUseRandomBattles, onStreamUpdate, stream?.id]);
+  }, [canUseRandomBattles, findMatch, isBattleActive, onStreamUpdate, stream?.id, stream?.status]);
 
   const stopQueue = useCallback(async () => {
     if (!stream?.id) return;

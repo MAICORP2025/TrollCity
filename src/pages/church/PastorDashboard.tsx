@@ -312,6 +312,14 @@ export default function PastorDashboard() {
         })
         .eq('id', sessionId);
 
+      // Remove the "Troll Church is LIVE" broadcast when service ends
+      await supabase
+        .from('admin_broadcasts')
+        .delete()
+        .eq('created_by', profile.id)
+        .eq('type', 'church')
+        .eq('is_active', true);
+
       setSessionId(null);
       toast.success('Church service ended');
     } catch (err: any) {

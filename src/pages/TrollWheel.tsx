@@ -205,7 +205,7 @@ export default function TrollWheel() {
   }
 
   return (
-    <div className={`relative h-dvh flex flex-col overflow-hidden ${trollCityTheme.backgrounds.primary} text-white`}>
+    <div className={`relative flex flex-col overflow-x-hidden ${trollCityTheme.backgrounds.primary} text-white`}>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(147,51,234,0.18),transparent)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(45,212,191,0.14),transparent)]" />
@@ -214,7 +214,7 @@ export default function TrollWheel() {
       </div>
       <div className="pointer-events-none absolute inset-0 opacity-[0.18] bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:48px_48px]" />
 
-      <div className="relative z-10 flex h-full flex-col">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <header className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6 md:pt-6">
           <ArcadePanel className="overflow-hidden p-4 md:p-5">
             <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -252,7 +252,7 @@ export default function TrollWheel() {
           </ArcadePanel>
         </header>
 
-        <main className="mx-auto grid min-h-0 w-full max-w-7xl flex-1 grid-cols-1 gap-4 overflow-hidden px-4 pb-4 pt-4 md:px-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="mx-auto grid min-h-0 w-full max-w-7xl flex-1 grid-cols-1 gap-4 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-4 md:px-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
             <div className="lg:hidden">
               <ArcadePanel className={cx('transition-all duration-300', showMobileInfo ? 'p-3' : 'p-2')}>

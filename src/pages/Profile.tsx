@@ -218,16 +218,17 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
 
   const fetchInventory = useCallback(async (uid: string) => {
     try {
+      // SAFETY: narrowed select columns to avoid fetching unnecessary data
       const [perksRes, effectsRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes, marketplaceItemsRes, vehiclesRes, inventoryRes] = await Promise.all([
-        supabase.from('user_perks').select('*').eq('user_id', uid).order('purchased_at', { ascending: false }),
-        supabase.from('user_entrance_effects').select('*').eq('user_id', uid),
-        supabase.from('user_insurances').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
-        supabase.from('call_minutes').select('*').eq('user_id', uid).maybeSingle(),
-        supabase.from('properties').select('*').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
-        supabase.from('vehicle_listings').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
-        supabase.from('marketplace_items').select('*').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
+        supabase.from('user_perks').select('id,user_id,perk_id,purchased_at,metadata').eq('user_id', uid).order('purchased_at', { ascending: false }),
+        supabase.from('user_entrance_effects').select('id,user_id,effect_id,metadata').eq('user_id', uid),
+        supabase.from('user_insurances').select('id,user_id,insurance_id,plan_id,status,created_at,metadata').eq('user_id', uid).order('created_at', { ascending: false }),
+        supabase.from('call_minutes').select('id,user_id,minutes_remaining,metadata').eq('user_id', uid).maybeSingle(),
+        supabase.from('properties').select('id,owner_user_id,title,price,created_at').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
+        supabase.from('vehicle_listings').select('id,seller_id,title,price,created_at').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
+        supabase.from('marketplace_items').select('id,seller_id,title,price,status,created_at').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
         supabase.from('user_vehicles').select('*, vehicles_catalog(*)').eq('user_id', uid).order('purchased_at', { ascending: false }),
-        supabase.from('user_inventory').select('*').eq('user_id', uid),
+        supabase.from('user_inventory').select('id,user_id,item_id,quantity,metadata').eq('user_id', uid),
       ]);
 
       let titlesAndDeedsData = inventoryRes.data || [];
@@ -352,7 +353,9 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
         subscribeToXP(currentUser.id);
       }
 
-      let query = supabase.from('user_profiles').select('*');
+      // SAFETY: narrowed select to columns actually used by the profile page
+      const PROFILE_COLS = 'id,username,display_name,email,avatar_url,troll_coins,free_coins,reserved_troll_coins,cashout_coins,paid_coins,message_cost,profile_view_cost,organization_id,role,is_admin,level,xp,created_at,updated_at'
+      let query = supabase.from('user_profiles').select(PROFILE_COLS);
       if (userId) query = query.eq('id', userId);
       else if (username) query = query.eq('username', username);
       else if (currentUser?.id) query = query.eq('id', currentUser.id);
@@ -372,9 +375,9 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
       initialLoadRef.current = false;
 
       const [followersRes, followingRes, postsRes, statsRes] = await Promise.all([
-        supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', data.id),
-        supabase.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', data.id),
-        supabase.from('troll_posts').select('*', { count: 'exact', head: true }).eq('user_id', data.id),
+        supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', data.id),
+        supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', data.id),
+        supabase.from('troll_posts').select('id', { count: 'exact', head: true }).eq('user_id', data.id),
         supabase.from('user_stats').select('level').eq('user_id', data.id).maybeSingle(),
       ]);
 
@@ -400,7 +403,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
         if (data.organization_id) {
           try {
             const [{ data: adminData }, { data: orgData }] = await Promise.all([
-              supabase.from('organization_admins').select('*').eq('user_id', data.id).eq('organization_id', data.organization_id).maybeSingle(),
+              supabase.from('organization_admins').select('id,user_id,organization_id').eq('user_id', data.id).eq('organization_id', data.organization_id).maybeSingle(),
               supabase.from('organizations').select('name').eq('id', data.organization_id).single(),
             ]);
             setOrganization(orgData ? { name: orgData.name, role: adminData ? 'Admin' : 'Member' } : null);

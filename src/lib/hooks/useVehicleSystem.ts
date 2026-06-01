@@ -1,64 +1,37 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabase'
 import { useAuthStore } from '../store'
-import { deductCoins, recordCoinTransaction } from '../coinTransactions'
+import { deductCoins } from '../coinTransactions'
 import type { Vehicle, VehicleLoan, DriverTest, UserLicense } from '../../types/neighborhood'
 
-const LOAN_AMOUNT = 10000 // 10k troll coins
-const MONTHLY_PAYMENT = 500 // Monthly payment amount
+const LOAN_AMOUNT = 10000
+const MONTHLY_PAYMENT = 500
+const LICENSE_EXPIRY_DAYS = 30
 
-const DRIVER_TEST_QUESTIONS = [
-  {
-    question: 'What is required to legally drive in Troll City?',
-    options: ['Just a car', 'A license and registered vehicle', 'Coins only', 'Nothing'],
-    correct: 1
-  },
-  {
-    question: 'What happens if you drive without a license?',
-    options: ['Nothing', 'You earn coins', 'You may be suspended', 'You get a free upgrade'],
-    correct: 2
-  },
-  {
-    question: 'What does an ACTIVE license mean?',
-    options: ['You can repair cars', 'You can drive and use vehicles', 'You get free coins', 'You own multiple cars'],
-    correct: 1
-  },
-  {
-    question: 'What is required to broadcast in Troll City?',
-    options: ['A vehicle only', 'Active license', 'Coins', 'Followers'],
-    correct: 1
-  },
-  {
-    question: 'Can a suspended user join a broadcast seat?',
-    options: ['No', 'Yes'],
-    correct: 1
-  },
-  {
-    question: 'Can you broadcast while your license is suspended?',
-    options: ['Yes', 'No'],
-    correct: 1
-  },
-  {
-    question: 'What must you do after a driving violation if insurance is required?',
-    options: ['Nothing', 'Buy insurance and pass the driver test', 'Log out', 'Join a stream'],
-    correct: 1
-  },
-  {
-    question: 'What does car insurance help cover?',
-    options: ['Vehicle damage and vandalism', 'Free followers', 'Free broadcast themes', 'Avatar colors'],
-    correct: 0
-  },
-  {
-    question: 'Without active insurance, vehicle repairs cost:',
-    options: ['Nothing', 'Full repair cost', 'Free after one day', 'Half price always'],
-    correct: 1
-  },
-  {
-    question: 'What is a deductible?',
-    options: ['A partial amount paid before insurance covers damage', 'A free coin bonus', 'A license plate', 'A broadcast seat'],
-    correct: 0
-  }
-]
+function generateLicensePlate() {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const numbers = '0123456789'
+
+  const letter1 = letters[Math.floor(Math.random() * letters.length)]
+  const letter2 = letters[Math.floor(Math.random() * letters.length)]
+  const letter3 = letters[Math.floor(Math.random() * letters.length)]
+  const num1 = numbers[Math.floor(Math.random() * numbers.length)]
+  const num2 = numbers[Math.floor(Math.random() * numbers.length)]
+  const num3 = numbers[Math.floor(Math.random() * numbers.length)]
+
+  return `${letter1}${letter2}${letter3}${num1}${num2}${num3}`
+}
+
+function generateLicenseNumber() {
+  return `TC${Date.now().toString(36).toUpperCase()}${Math.random()
+    .toString(36)
+    .slice(2, 5)
+    .toUpperCase()}`
+}
+
+function getLicenseExpiry(days = LICENSE_EXPIRY_DAYS) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+}
 
 export function useVehicleSystem() {
   const { user, profile } = useAuthStore()
@@ -67,10 +40,16 @@ export function useVehicleSystem() {
   const [loading, setLoading] = useState(true)
 
   const fetchVehicles = useCallback(async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      setVehicles([])
+      setActiveVehicle(null)
+      setLoading(false)
+      return
+    }
 
     try {
       setLoading(true)
+
       const { data, error } = await supabase
         .from('vehicles')
         .select('*')
@@ -78,15 +57,23 @@ export function useVehicleSystem() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setVehicles(data || [])
 
-      // Set active vehicle
-      if (data && data.length > 0) {
-        const active = data.find(v => v.id === profile?.active_vehicle) || data[0]
+      const vehicleRows = data || []
+      setVehicles(vehicleRows)
+
+      if (vehicleRows.length > 0) {
+        const active =
+          vehicleRows.find((vehicle) => vehicle.id === profile?.active_vehicle) ||
+          vehicleRows[0]
+
         setActiveVehicle(active)
+      } else {
+        setActiveVehicle(null)
       }
     } catch (error) {
       console.error('Error fetching vehicles:', error)
+      setVehicles([])
+      setActiveVehicle(null)
     } finally {
       setLoading(false)
     }
@@ -96,44 +83,26 @@ export function useVehicleSystem() {
     fetchVehicles()
   }, [fetchVehicles])
 
-  const purchaseVehicle = async (vehicleName: string, make: string, model: string, year: number, price: number, withLoan: boolean = false) => {
-    if (!user?.id) return { success: false, error: 'Not authenticated' }
+  const purchaseVehicle = async (
+    vehicleName: string,
+    make: string,
+    model: string,
+    year: number,
+    price: number,
+    withLoan = false
+  ) => {
+    if (!user?.id) {
+      return { success: false, error: 'Not authenticated' }
+    }
 
     try {
       let finalPrice = price
-
-      if (withLoan) {
-        finalPrice = 0 // Finance the full amount
-        const { error: loanError } = await supabase
-          .from('vehicle_loans')
-          .insert({
-            vehicle_id: '', // Will update after vehicle creation
-            total_amount: LOAN_AMOUNT,
-            remaining_amount: LOAN_AMOUNT,
-            monthly_payment: MONTHLY_PAYMENT,
-            is_default: false,
-            cashout_hold_until: null
-          })
-
-        if (loanError) throw loanError
-      }
-
-      // Generate license plate
-      const generateLicensePlate = () => {
-        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        const numbers = '0123456789'
-        const letter1 = letters[Math.floor(Math.random() * letters.length)]
-        const letter2 = letters[Math.floor(Math.random() * letters.length)]
-        const letter3 = letters[Math.floor(Math.random() * letters.length)]
-        const num1 = numbers[Math.floor(Math.random() * numbers.length)]
-        const num2 = numbers[Math.floor(Math.random() * numbers.length)]
-        const num3 = numbers[Math.floor(Math.random() * numbers.length)]
-        return `${letter1}${letter2}${letter3}${num1}${num2}${num3}`
-      }
-
       const licensePlate = generateLicensePlate()
 
-      // Deduct coins before creating vehicle
+      if (withLoan) {
+        finalPrice = 0
+      }
+
       if (finalPrice > 0) {
         const { success: deductSuccess, error: deductError } = await deductCoins({
           userId: user.id,
@@ -141,16 +110,23 @@ export function useVehicleSystem() {
           type: 'purchase',
           coinType: 'troll_coins',
           description: `Vehicle purchase: ${vehicleName}`,
-          metadata: { vehicle_name: vehicleName, make, model, year }
+          metadata: {
+            vehicle_name: vehicleName,
+            make,
+            model,
+            year,
+          },
         })
 
         if (!deductSuccess) {
-          return { success: false, error: deductError || 'Insufficient coins to purchase vehicle' }
+          return {
+            success: false,
+            error: deductError || 'Insufficient coins to purchase vehicle',
+          }
         }
       }
 
-      // Create vehicle
-      const { data: vehicle, error } = await supabase
+      const { data: vehicle, error: vehicleError } = await supabase
         .from('vehicles')
         .insert({
           owner_user_id: user.id,
@@ -159,55 +135,87 @@ export function useVehicleSystem() {
           model,
           year,
           plate_number: licensePlate,
-          plate_status: 'active'
+          plate_status: 'active',
         })
         .select()
         .single()
 
-      if (error) throw error
+      if (vehicleError) throw vehicleError
 
-      // Update user profile with vehicle and license plate
+      if (withLoan) {
+        const { error: loanError } = await supabase.from('vehicle_loans').insert({
+          vehicle_id: vehicle.id,
+          total_amount: LOAN_AMOUNT,
+          remaining_amount: LOAN_AMOUNT,
+          monthly_payment: MONTHLY_PAYMENT,
+          is_default: false,
+          cashout_hold_until: null,
+        })
+
+        if (loanError) throw loanError
+      }
+
       await supabase
         .from('user_profiles')
         .update({
           vehicle_id: vehicle.id,
-          license_plate: licensePlate
+          license_plate: licensePlate,
         })
         .eq('id', user.id)
 
       await fetchVehicles()
+
       return { success: true, vehicle }
     } catch (error: any) {
       console.error('Error purchasing vehicle:', error)
-      return { success: false, error: error.message }
+      return {
+        success: false,
+        error: error?.message || 'Unable to purchase vehicle',
+      }
     }
   }
 
   const updatePlate = async (plateText: string) => {
-    if (!user?.id || !activeVehicle) return { success: false, error: 'No vehicle' }
+    if (!user?.id || !activeVehicle) {
+      return { success: false, error: 'No vehicle' }
+    }
 
     try {
-      const { error } = await supabase
+      const normalizedPlate = plateText.trim().toUpperCase()
+
+      if (!normalizedPlate) {
+        return { success: false, error: 'License plate cannot be empty' }
+      }
+
+      const { error: vehicleError } = await supabase
         .from('vehicles')
-        .update({ 
-          plate_number: plateText.toUpperCase(),
-          plate_status: 'active'
+        .update({
+          plate_number: normalizedPlate,
+          plate_status: 'active',
         })
         .eq('id', activeVehicle.id)
+        .eq('owner_user_id', user.id)
 
-      if (error) throw error
+      if (vehicleError) throw vehicleError
 
-      // Update profile display
-      await supabase
+      const { error: profileError } = await supabase
         .from('user_profiles')
-        .update({ license_plate: plateText.toUpperCase() })
+        .update({
+          license_plate: normalizedPlate,
+        })
         .eq('id', user.id)
 
+      if (profileError) throw profileError
+
       await fetchVehicles()
+
       return { success: true }
     } catch (error: any) {
       console.error('Error updating plate:', error)
-      return { success: false, error: error.message }
+      return {
+        success: false,
+        error: error?.message || 'Unable to update license plate',
+      }
     }
   }
 
@@ -221,7 +229,8 @@ export function useVehicleSystem() {
         .maybeSingle()
 
       if (error) throw error
-      return data
+
+      return data || null
     } catch (error) {
       console.error('Error fetching loan:', error)
       return null
@@ -230,23 +239,31 @@ export function useVehicleSystem() {
 
   const hasActiveLoan = async (): Promise<boolean> => {
     if (!activeVehicle) return false
+
     const loan = await getActiveLoan(activeVehicle.id)
-    return loan !== null
+    return !!loan
   }
 
   const isCashoutOnHold = async (): Promise<boolean> => {
     if (!activeVehicle) return false
+
     const loan = await getActiveLoan(activeVehicle.id)
+
     if (!loan?.cashout_hold_until) return false
+
     return new Date(loan.cashout_hold_until) > new Date()
   }
 
-  const recordDrivingViolation = async (): Promise<{success: boolean, message: string}> => {
-    if (!user?.id) return { success: false, message: 'Not authenticated' }
+  const recordDrivingViolation = async (): Promise<{
+    success: boolean
+    message: string
+  }> => {
+    if (!user?.id) {
+      return { success: false, message: 'Not authenticated' }
+    }
 
     try {
-      // Get current profile
-      const { data: profile, error: profileError } = await supabase
+      const { data: currentProfile, error: profileError } = await supabase
         .from('user_profiles')
         .select('license_status, license_strikes, insurance_required')
         .eq('id', user.id)
@@ -254,35 +271,62 @@ export function useVehicleSystem() {
 
       if (profileError) throw profileError
 
-      // Update profile for violation
-      const newStrikes = (profile.license_strikes || 0) + 1
-      const updateData: any = {
-        license_status: 'suspended',
-        license_strikes: newStrikes,
-        insurance_required: true,
-        license_suspended_at: new Date().toISOString()
-      }
+      const newStrikes = Number(currentProfile?.license_strikes || 0) + 1
 
-      await supabase
+      const { error: updateProfileError } = await supabase
         .from('user_profiles')
-        .update(updateData)
+        .update({
+          license_status: 'suspended',
+          license_strikes: newStrikes,
+          insurance_required: true,
+          license_suspended_at: new Date().toISOString(),
+        })
         .eq('id', user.id)
 
-      return { 
-        success: true, 
-        message: 'Driving without an active license is not allowed. Your license status has been suspended and insurance is now required.' 
+      if (updateProfileError) throw updateProfileError
+
+      await supabase
+        .from('user_licenses')
+        .update({
+          status: 'suspended',
+          suspended_until: null,
+        })
+        .eq('user_id', user.id)
+
+      await supabase
+        .from('vehicles')
+        .update({
+          plate_status: 'suspended',
+        })
+        .eq('owner_user_id', user.id)
+
+      return {
+        success: true,
+        message:
+          'Driving without an active license is not allowed. Your license has been suspended and insurance is now required.',
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error recording violation:', error)
-      return { success: false, message: 'Failed to record violation' }
+      return {
+        success: false,
+        message: 'Failed to record violation',
+      }
     }
   }
 
-  const canUserDrive = async (): Promise<{canDrive: boolean, message?: string}> => {
-    if (!user?.id) return { canDrive: false, message: 'Not authenticated' }
+  const canUserDrive = async (): Promise<{
+    canDrive: boolean
+    message?: string
+  }> => {
+    if (!user?.id) {
+      return {
+        canDrive: false,
+        message: 'Not authenticated',
+      }
+    }
 
     try {
-      const { data: profile, error } = await supabase
+      const { data: currentProfile, error } = await supabase
         .from('user_profiles')
         .select('license_status, insurance_required')
         .eq('id', user.id)
@@ -290,24 +334,28 @@ export function useVehicleSystem() {
 
       if (error) throw error
 
-      if (profile.license_status === 'active') {
+      if (currentProfile?.license_status === 'active') {
         return { canDrive: true }
       }
 
-      if (profile.license_status === 'suspended') {
-        return { 
-          canDrive: false, 
-          message: 'Your license is suspended. Complete the driver test and ensure you have active insurance to restore your license.' 
+      if (currentProfile?.license_status === 'suspended') {
+        return {
+          canDrive: false,
+          message:
+            'Your license is suspended. Get your license restored and make sure insurance requirements are handled before driving.',
         }
       }
 
-      return { 
-        canDrive: false, 
-        message: 'You need an active driver license to use vehicles. Take the driver test to get licensed.' 
+      return {
+        canDrive: false,
+        message: 'You need an active Troll City license to use vehicles.',
       }
     } catch (error) {
       console.error('Error checking drive permission:', error)
-      return { canDrive: false, message: 'Unable to verify license status' }
+      return {
+        canDrive: false,
+        message: 'Unable to verify license status',
+      }
     }
   }
 
@@ -322,7 +370,7 @@ export function useVehicleSystem() {
     isCashoutOnHold,
     getActiveLoan,
     recordDrivingViolation,
-    canUserDrive
+    canUserDrive,
   }
 }
 
@@ -333,12 +381,16 @@ export function useDriverTest() {
   const [loading, setLoading] = useState(true)
 
   const fetchLicense = useCallback(async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      setTest(null)
+      setLicense(null)
+      setLoading(false)
+      return
+    }
 
     try {
       setLoading(true)
 
-      // Get latest test
       const { data: testData, error: testError } = await supabase
         .from('driver_tests')
         .select('*')
@@ -347,16 +399,23 @@ export function useDriverTest() {
         .limit(1)
         .maybeSingle()
 
-      if (!testError) setTest(testData)
+      if (testError) {
+        console.warn('Unable to fetch latest driver test:', testError)
+      } else {
+        setTest(testData || null)
+      }
 
-      // Get license
       const { data: licenseData, error: licenseError } = await supabase
         .from('user_licenses')
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle()
 
-      if (!licenseError) setLicense(licenseData)
+      if (licenseError) {
+        console.warn('Unable to fetch user license:', licenseError)
+      } else {
+        setLicense(licenseData || null)
+      }
     } catch (error) {
       console.error('Error fetching license:', error)
     } finally {
@@ -368,223 +427,269 @@ export function useDriverTest() {
     fetchLicense()
   }, [fetchLicense])
 
-const takeTest = async (answers: number[], correctAnswers: number[] = [1, 2, 1, 1, 1, 1, 1, 0, 1, 0]): Promise<{success: boolean, passed: boolean, score: number, message?: string}> => {
-    if (!user?.id) return { success: false, passed: false, score: 0 }
-
-    const score = answers.reduce((sum, answer, index) => {
-      return sum + (answer === correctAnswers[index] ? 1 : 0)
-    }, 0)
-
-    const totalQuestions = DRIVER_TEST_QUESTIONS.length
-    const passingScore = Math.ceil(totalQuestions * 0.8) // 80%
-    const passed = score >= passingScore
+  const grantLicense = async (): Promise<{
+    success: boolean
+    passed: boolean
+    score: number
+    message?: string
+    licenseNumber?: string
+  }> => {
+    if (!user?.id) {
+      return {
+        success: false,
+        passed: false,
+        score: 0,
+        message: 'Not authenticated',
+      }
+    }
 
     try {
-      // Get current profile to check insurance_required
-      const { data: profile, error: profileError } = await supabase
+      setLoading(true)
+
+      const now = new Date().toISOString()
+      const licenseNumber = generateLicenseNumber()
+      const expiry = getLicenseExpiry()
+
+      /**
+       * Pull current profile only to preserve existing fields in Zustand sync.
+       * The license is granted directly now. There is no actual quiz.
+       */
+      const { data: currentProfile, error: profileFetchError } = await supabase
         .from('user_profiles')
-        .select('insurance_required, license_status')
+        .select('*')
         .eq('id', user.id)
         .single()
 
-      if (profileError) throw profileError
+      if (profileFetchError) throw profileFetchError
 
-      let newLicenseStatus = 'none'
-      let message = ''
-
-      if (passed) {
-        // Check if insurance is required and active
-        let hasActiveInsurance = false
-        if (profile.insurance_required) {
-          const { data: insurance } = await supabase
-            .from('car_insurances')
-            .select('status, expires_at')
-            .eq('user_id', user.id)
-            .eq('status', 'active')
-            .gt('expires_at', new Date().toISOString())
-            .maybeSingle()
-          hasActiveInsurance = !!insurance
-        }
-
-        // For first-time users without insurance_required, they get active license immediately
-        // For users with insurance_required, they need insurance to activate
-        if (profile.insurance_required && !hasActiveInsurance) {
-          newLicenseStatus = 'suspended'
-          message = 'You passed, but insurance is required before your license can be restored. Please purchase car insurance.'
-        } else {
-          newLicenseStatus = 'active'
-          message = 'Congratulations! You passed the driver test and your license is now active.'
-        }
-      } else {
-        newLicenseStatus = 'none'
-        message = 'You did not pass the test. Please review the material and try again.'
+      const profileUpdate: Record<string, any> = {
+        license_status: 'active',
+        driver_test_passed_at: now,
+        license_activated_at: now,
+        drivers_license_expiry: expiry,
       }
 
-      // Update profile
-      const updateData: any = {
-        license_status: newLicenseStatus,
-        driver_test_passed_at: passed ? new Date().toISOString() : null
-      }
-
-      if (passed && newLicenseStatus === 'active') {
-        updateData.license_activated_at = new Date().toISOString()
-        // Set expiry 30 days from now for the license
-        const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        updateData.drivers_license_expiry = expiry
-      }
-
-      await supabase
+      /**
+       * Keep insurance_required as-is.
+       * This means the user can get the license, but your other vehicle/insurance
+       * systems can still enforce insurance where needed.
+       */
+      const { error: profileUpdateError } = await supabase
         .from('user_profiles')
-        .update(updateData)
+        .update(profileUpdate)
         .eq('id', user.id)
 
-      // Also insert into user_licenses table for consistency
-      if (passed) {
-        const licenseNumber = `TC${Date.now().toString(36).toUpperCase()}`
-        const expiry = newLicenseStatus === 'active'
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+      if (profileUpdateError) throw profileUpdateError
 
-        // Check if license row already exists
-        const { data: existingLicense } = await supabase
+      const { data: existingLicense, error: existingLicenseError } = await supabase
+        .from('user_licenses')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (existingLicenseError) throw existingLicenseError
+
+      if (existingLicense?.id) {
+        const { error: licenseUpdateError } = await supabase
           .from('user_licenses')
-          .select('id')
+          .update({
+            license_number: licenseNumber,
+            status: 'active',
+            issued_at: now,
+            expires_at: expiry,
+            suspended_until: null,
+          })
           .eq('user_id', user.id)
-          .maybeSingle()
 
-        if (existingLicense) {
-          await supabase
-            .from('user_licenses')
-            .update({
-              license_number: licenseNumber,
-              status: newLicenseStatus,
-              issued_at: new Date().toISOString(),
-              expires_at: expiry
-            })
-            .eq('user_id', user.id)
-        } else {
-          await supabase.from('user_licenses').insert({
+        if (licenseUpdateError) throw licenseUpdateError
+      } else {
+        const { error: licenseInsertError } = await supabase
+          .from('user_licenses')
+          .insert({
             user_id: user.id,
             license_number: licenseNumber,
-            status: newLicenseStatus,
-            issued_at: new Date().toISOString(),
-            expires_at: expiry
+            status: 'active',
+            issued_at: now,
+            expires_at: expiry,
+            suspended_until: null,
           })
-        }
+
+        if (licenseInsertError) throw licenseInsertError
       }
 
-      // Save test result
-      await supabase.from('driver_tests').insert({
-        user_id: user.id,
-        score,
-        passed,
-        test_date: new Date().toISOString(),
-        license_number: passed ? `TC${Date.now().toString(36).toUpperCase()}` : null
-      })
+      /**
+       * Keep writing to driver_tests so old dashboards, onboarding checks,
+       * and neighborhood logic that look for a passed driver_tests row still work.
+       */
+      const { error: testInsertError } = await supabase
+        .from('driver_tests')
+        .insert({
+          user_id: user.id,
+          score: 10,
+          passed: true,
+          test_date: now,
+          license_number: licenseNumber,
+        })
 
-      // Sync Zustand profile with license status
-      if (passed && profile) {
-        const expiry = newLicenseStatus === 'active'
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          : (profile as any).drivers_license_expiry
+      if (testInsertError) throw testInsertError
 
-        setProfile({
-          ...profile,
-          license_status: newLicenseStatus,
-          driver_test_passed_at: new Date().toISOString(),
-          drivers_license_expiry: expiry,
-        } as any)
-      }
+      setProfile({
+        ...(profile || currentProfile),
+        ...profileUpdate,
+      } as any)
 
       await fetchLicense()
-      return { success: true, passed, score, message }
+
+      return {
+        success: true,
+        passed: true,
+        score: 10,
+        message: 'Troll City license granted. Your license is now active.',
+        licenseNumber,
+      }
     } catch (error: any) {
-      console.error('Error taking test:', error)
-      return { success: false, passed: false, score: 0, message: error.message }
+      console.error('Error granting license:', error)
+
+      return {
+        success: false,
+        passed: false,
+        score: 0,
+        message: error?.message || 'Unable to grant license',
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
-  const checkSuspension = async (): Promise<{suspended: boolean, reason: string}> => {
-    if (!license) return { suspended: false, reason: '' }
+  /**
+   * Compatibility wrapper.
+   * Old DriverTest pages may still call takeTest(answers, correctAnswers).
+   * Now it simply grants the license without checking answers.
+   */
+  const takeTest = async (): Promise<{
+    success: boolean
+    passed: boolean
+    score: number
+    message?: string
+    licenseNumber?: string
+  }> => {
+    return grantLicense()
+  }
 
-    // Check reports (5 per week = suspended)
-    if (license.reports_count_week >= 5) {
-      return { suspended: true, reason: '5+ reports this week' }
+  const checkSuspension = async (): Promise<{
+    suspended: boolean
+    reason: string
+  }> => {
+    if (!license) {
+      return {
+        suspended: false,
+        reason: '',
+      }
     }
 
-    // Check arrests (2 per week = suspended)
-    if (license.arrests_count_week >= 2) {
-      return { suspended: true, reason: '2+ arrests this week' }
+    if ((license as any).reports_count_week >= 5) {
+      return {
+        suspended: true,
+        reason: '5+ reports this week',
+      }
     }
 
-    // Check if currently suspended
+    if ((license as any).arrests_count_week >= 2) {
+      return {
+        suspended: true,
+        reason: '2+ arrests this week',
+      }
+    }
+
     if (license.suspended_until && new Date(license.suspended_until) > new Date()) {
-      return { suspended: true, reason: 'License suspended' }
+      return {
+        suspended: true,
+        reason: 'License suspended',
+      }
     }
 
-    return { suspended: false, reason: '' }
+    if (license.status === 'suspended') {
+      return {
+        suspended: true,
+        reason: 'License suspended',
+      }
+    }
+
+    return {
+      suspended: false,
+      reason: '',
+    }
   }
 
   const checkAndSuspendExpiredInsurance = async () => {
-    if (!user?.id) return;
+    if (!user?.id) return
 
     try {
-      // Get all users with licenses
       const { data: licenses, error: licenseError } = await supabase
         .from('user_licenses')
         .select('user_id, status')
-        .eq('status', 'active');
+        .eq('status', 'active')
 
-      if (licenseError || !licenses) return;
+      if (licenseError) throw licenseError
+      if (!licenses?.length) return
 
-      for (const license of licenses) {
-        // Check car insurance
-        const { data: carInsurance, error: carError } = await supabase
+      for (const licenseRow of licenses) {
+        const { data: carInsurance } = await supabase
           .from('car_insurances')
           .select('expires_at')
-          .eq('user_id', license.user_id)
-          .maybeSingle();
+          .eq('user_id', licenseRow.user_id)
+          .maybeSingle()
 
-        // Check homeowners insurance
-        const { data: homeInsurance, error: homeError } = await supabase
+        const { data: homeInsurance } = await supabase
           .from('homeowners_insurances')
           .select('expires_at')
-          .eq('user_id', license.user_id)
-          .maybeSingle();
+          .eq('user_id', licenseRow.user_id)
+          .maybeSingle()
 
-        const now = new Date();
-        const carExpired = carInsurance && new Date(carInsurance.expires_at) < now;
-        const homeExpired = homeInsurance && new Date(homeInsurance.expires_at) < now;
+        const now = new Date()
+        const carExpired =
+          !!carInsurance?.expires_at && new Date(carInsurance.expires_at) < now
+        const homeExpired =
+          !!homeInsurance?.expires_at && new Date(homeInsurance.expires_at) < now
 
-        // If both insurances are expired, suspend license
         if (carExpired && homeExpired) {
           await supabase
             .from('user_licenses')
             .update({
               status: 'suspended',
-              suspended_until: null // Indefinite suspension until insurance is renewed
+              suspended_until: null,
             })
-            .eq('user_id', license.user_id);
+            .eq('user_id', licenseRow.user_id)
 
-          // Also update vehicle plate status
+          await supabase
+            .from('user_profiles')
+            .update({
+              license_status: 'suspended',
+              license_suspended_at: new Date().toISOString(),
+            })
+            .eq('id', licenseRow.user_id)
+
           await supabase
             .from('vehicles')
-            .update({ plate_status: 'suspended' })
-            .eq('owner_user_id', license.user_id);
+            .update({
+              plate_status: 'suspended',
+            })
+            .eq('owner_user_id', licenseRow.user_id)
         }
       }
     } catch (error) {
-      console.error('Error checking and suspending expired insurance:', error);
+      console.error('Error checking and suspending expired insurance:', error)
     }
-  };
+  }
 
   return {
     test,
     license,
     loading,
+    grantLicense,
     takeTest,
     checkSuspension,
     fetchLicense,
-    checkAndSuspendExpiredInsurance
+    checkAndSuspendExpiredInsurance,
   }
 }

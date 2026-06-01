@@ -21,6 +21,7 @@ import {
 } from '../../lib/anonymousIdentity'
 
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useUserLeagues } from '../../hooks/useUserLeagues'
 import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
 
 import { Stream } from '../../types/broadcast'
@@ -29,6 +30,7 @@ import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import AudienceBubbleTicker from '@/components/broadcast/AudienceBubbleTicker'
 import BroadcastOfficerModal from '../../components/broadcast/BroadcastOfficerModal'
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
+import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersModal'
 import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton'
 import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
@@ -306,19 +308,27 @@ function findSeatRemoteParticipant(
 
   const userId = String(seatUserId || '').trim()
   const identity = String(seatIdentity || '').trim()
+  const candidates = [identity, userId].filter(Boolean)
 
   return (
     list.find((participant: any) => {
       const participantIdentity = String(participant?.identity || '').trim()
       const metadata = getRemoteParticipantMetadata(participant)
+      const participantUserId = String(metadata?.user_id || metadata?.userId || participant?.user_id || participant?.userId || '').trim()
 
-      return (
-        (!!identity && participantIdentity === identity) ||
-        (!!userId && participantIdentity === userId) ||
-        (!!userId && participantIdentity.endsWith(`-${userId}`)) ||
-        metadata?.user_id === userId ||
-        metadata?.userId === userId
-      )
+      if (participantUserId && candidates.includes(participantUserId)) {
+        return true
+      }
+
+      return candidates.some((candidate) => {
+        if (!candidate) return false
+
+        return (
+          participantIdentity === candidate ||
+          participantIdentity.endsWith(`-${candidate}`) ||
+          candidate.endsWith(`-${participantIdentity}`)
+        )
+      })
     }) || null
   )
 }
@@ -326,34 +336,44 @@ function isUuidLike(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
-function getParticipantLabel(participant: any, fallback = 'Viewer') {
-  if (!participant) return fallback
+function getParticipantLabel(participant: any, fallbackOrSeat: string | any = 'Viewer') {
+  const seat = typeof fallbackOrSeat === 'object' ? fallbackOrSeat : null
+  const fallback = typeof fallbackOrSeat === 'string' ? fallbackOrSeat : 'Viewer'
 
-  const metadata = getRemoteParticipantMetadata(participant)
+  if (!participant && !seat) return fallback
+
+  const seatProfile =
+    seat?.user_profile ||
+    seat?.profile ||
+    seat?.user_profiles ||
+    null
+
+  let metadata: any = null
+  try {
+    metadata = participant?.metadata
+      ? JSON.parse(participant.metadata)
+      : null
+  } catch {
+    metadata = null
+  }
+
   const identity = getRemoteParticipantIdentity(participant)
   const normalizedIdentity = normalizeIdentityToken(identity)
 
-  const resolvedName =
-    metadata.display_name ||
-    metadata.displayName ||
-    metadata.username ||
+  return (
+    seatProfile?.display_name ||
+    seatProfile?.username ||
+    seat?.display_name ||
+    seat?.username ||
+    metadata?.display_name ||
+    metadata?.username ||
     participant?.name ||
-    ''
-
-  if (resolvedName) {
-    return String(resolvedName)
-  }
-
-  const strippedIdentity = identity?.replace(/^viewer-[^-]+-/, '') || ''
-  if (strippedIdentity && !isUuidLike(strippedIdentity)) {
-    return strippedIdentity
-  }
-
-  if (normalizedIdentity && !isUuidLike(normalizedIdentity) && !normalizedIdentity.startsWith('viewer-')) {
-    return normalizedIdentity
-  }
-
-  return fallback
+    (seat?.user_id ? `User ${String(seat.user_id).slice(0, 6)}` : '') ||
+    (normalizedIdentity && !isUuidLike(normalizedIdentity) && !normalizedIdentity.startsWith('viewer-')
+      ? normalizedIdentity
+      : '') ||
+    fallback
+  )
 }
 
 function getParticipantList(
@@ -421,8 +441,13 @@ import { useBattleState } from '@/hooks/useBattleState'
 import { useBroadcastAbilities } from '@/hooks/useBroadcastAbilities'
 import { useBroadcastPinnedProducts } from '@/hooks/useBroadcastPinnedProducts'
 import { BroadcastGift } from '@/hooks/useBroadcastRealtime'
-import { useBroadcastTicker } from '@/hooks/useBroadcastTicker'
 import { useRandomBattleQueueController } from '@/hooks/useRandomBattleQueueController'
+import { useBroadcastTextPopup } from '@/hooks/useBroadcastTextPopup'
+import { useBroadcastViewerCap } from '@/hooks/useBroadcastViewerCap'
+import { logActiveChannels } from '@/lib/realtimeChannelDiagnostics'
+import BroadcastTextPopupOverlay from '@/components/broadcast/BroadcastTextPopupOverlay'
+import BroadcastTextPopupComposer from '@/components/broadcast/BroadcastTextPopupComposer'
+import RandomBattleBanner from '@/components/broadcast/RandomBattleBanner'
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStreamSeats } from '@/hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '@/hooks/useStreamAudiencePresence'
@@ -434,8 +459,8 @@ import { getGiftVisualConfig } from '@/lib/giftVisuals'
 
 import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
-import { useTickerStore } from '@/stores/tickerStore'
 import { AnimatePresence } from 'framer-motion'
+import { Megaphone } from 'lucide-react'
 import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, ShieldCheck, Sparkles, Skull, Users, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
@@ -448,9 +473,10 @@ import GiftBoxModal from '@/components/broadcast/GiftBoxModal'
 import GiftVideoOverlay from '@/components/broadcast/GiftVideoOverlay'
 import OpenStagePassModal from '@/components/broadcast/OpenStagePassModal'
 import PinProductModal from '@/components/broadcast/PinProductModal'
-import TickerControlPanel from '@/components/broadcast/TickerControlPanel'
 import UserActionModal from '@/components/broadcast/UserActionModal'
-import UserStatsModal from '@/components/broadcast/UserStatsModal'
+import CityStatusPanel from '@/components/city/CityStatusPanel'
+import CityStatusOrb from '@/components/city/CityStatusOrb'
+import { useCityStatusOrb } from '@/lib/hooks/useCityStatusOrb'
 
 // Debug counters for broadcast stability verification
 const DEBUG_COUNTERS = {
@@ -520,10 +546,12 @@ export function BroadcastPage() {
   useEffect(() => {
     DEBUG_COUNTERS.broadcastPageMountCount++
     console.log(`[BroadcastPage] MOUNT COUNT: ${DEBUG_COUNTERS.broadcastPageMountCount} for streamId: ${streamId}`)
+    logActiveChannels(`BroadcastPage:mount:${streamId}`)
 
     return () => {
       DEBUG_COUNTERS.broadcastPageUnmountCount++
       console.log(`[BroadcastPage] UNMOUNT COUNT: ${DEBUG_COUNTERS.broadcastPageUnmountCount} for streamId: ${streamId}`)
+      logActiveChannels(`BroadcastPage:unmount:${streamId}`)
     }
   }, [])
 
@@ -539,6 +567,16 @@ export function BroadcastPage() {
 
    const [stream, setStream] = useState<Stream | null>(null)
    const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
+
+   // ── Channel diagnostics (dev only) ──
+  useEffect(() => {
+    if (stream?.is_battle && stream?.battle_id) {
+      logActiveChannels(`BroadcastPage:battle:${stream.battle_id}`)
+    } else {
+      logActiveChannels(`BroadcastPage:live:${streamId}`)
+    }
+  }, [stream?.is_battle, stream?.battle_id, streamId]);
+
    const [streamMods, setStreamMods] = useState<string[]>([]);
    // Accumulate gift amounts received while broadcasterProfile is still loading (null);
    // applied once the profile arrives via @see applyPendingGiftsEffect
@@ -569,6 +607,14 @@ export function BroadcastPage() {
 
    const isHost = stream?.user_id === user?.id
    const isBroadcaster = isHost;
+
+   // CityStatusOrb for broadcaster box display
+   const broadcasterCityStatus = useCityStatusOrb({
+     userId: stream?.user_id || '',
+     broadcasterId: user?.id,
+     isBroadcaster: isHost,
+     isBroadOfficer: isOfficer,
+   })
 
 const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
     const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
@@ -927,21 +973,35 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
 
     const channel = supabase
       .channel(`stream-seat-events:${streamId}`)
-      .on('broadcast', { event: 'seat_joined' }, async () => {
+      // SAFETY: useStreamSeats already handles refresh scheduling with
+      // scheduleRefresh([0, 300, 800, 1500]) for these events.
+      // Only update local seatJoinTimes state here — do NOT duplicate refreshSeats calls.
+      .on('broadcast', { event: 'seat_joined' }, (payload: any) => {
         console.log('[BroadcastPage] seat_joined event')
-        await refreshSeats()
+        const seatIdx = payload?.payload?.seat_index
+        if (seatIdx) {
+          const now = Date.now()
+          seatJoinTimesRef.current[seatIdx] = now
+          setSeatJoinTimes(prev => ({ ...prev, [seatIdx]: now }))
+        }
       })
-      .on('broadcast', { event: 'seat_live' }, async () => {
+      .on('broadcast', { event: 'seat_live' }, () => {
         console.log('[BroadcastPage] seat_live event')
-        await refreshSeats()
       })
-      .on('broadcast', { event: 'seat_left' }, async () => {
+      .on('broadcast', { event: 'seat_left' }, (payload: any) => {
         console.log('[BroadcastPage] seat_left event')
-        await refreshSeats()
+        const seatIdx = payload?.payload?.seat_index
+        if (seatIdx) {
+          seatJoinTimesRef.current[seatIdx] = 0
+          setSeatJoinTimes(prev => {
+            const next = { ...prev }
+            delete next[seatIdx]
+            return next
+          })
+        }
       })
-      .on('broadcast', { event: 'seat_refreshed' }, async () => {
+      .on('broadcast', { event: 'seat_refreshed' }, () => {
         console.log('[BroadcastPage] seat_refreshed event')
-        await refreshSeats()
       })
       .subscribe((status) => {
         console.log('[BroadcastPage] seat event channel:', status)
@@ -951,6 +1011,15 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
       supabase.removeChannel(channel)
     }
   }, [streamId, refreshSeats])
+
+  // Tick every second to re-evaluate "Camera unavailable" 8s timeout
+  const [, setSeatTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeatTick(t => t + 1)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     console.log('[BroadcastSeatState]', {
@@ -975,10 +1044,16 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
    const [seatModalPrices, setSeatModalPrices] = useState<number[]>([0])
    const [selectedSeatIndex, setSelectedSeatIndex] = useState(0)
    const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
-   const [chatTab, setChatTab] = useState<'chat' | 'gifts' | 'top-fans' | 'settings'>('chat')
+   const [chatTab, setChatTab] = useState<'chat' | 'league' | 'gifts' | 'top-fans' | 'settings'>('chat')
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
    const [giftNameMap, setGiftNameMap] = useState<Record<string, string>>({})
+   const {
+     myLeagues,
+     myMemberships,
+     leagueMissions,
+     isLoading: isUserLeaguesLoading,
+   } = useUserLeagues()
 
    useEffect(() => {
      setSeatModalPrices((current) => {
@@ -1004,6 +1079,38 @@ const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{
   sender_id: string; sender_username: string; sender_avatar_url: string | null; total_gift_coins: number; last_gift_at: string | null
 }>>([])
     const [isAllTimeTopGiftersLoading, setIsAllTimeTopGiftersLoading] = useState(false)
+    const giftSummaryBySender = useMemo(() => {
+      const totals = new Map<string, { sender_username: string; sender_avatar_url?: string | null; total_coins: number; gift_count: number; lastGiftAt: string | null }>()
+
+      recentGifts.forEach((gift) => {
+        const senderId = String(gift.sender_id || gift.user_id || gift.senderId || gift.user_id || '')
+        if (!senderId) return
+
+        const sender_name = String(gift.sender_username || gift.sender_name || gift.username || 'Anonymous')
+        const amount = Number(gift.coins_amount ?? gift.amount ?? gift.total_coins ?? 0)
+        const createdAt = gift.created_at || gift.timestamp || null
+
+        const current = totals.get(senderId) ?? {
+          sender_username: sender_name,
+          sender_avatar_url: (gift as any).sender_avatar_url ?? null,
+          total_coins: 0,
+          gift_count: 0,
+          lastGiftAt: null,
+        }
+
+        totals.set(senderId, {
+          sender_username: current.sender_username || sender_name,
+          sender_avatar_url: current.sender_avatar_url,
+          total_coins: current.total_coins + (Number.isFinite(amount) ? amount : 0),
+          gift_count: current.gift_count + 1,
+          lastGiftAt: createdAt && (!current.lastGiftAt || new Date(createdAt).getTime() > new Date(current.lastGiftAt).getTime()) ? createdAt : current.lastGiftAt,
+        })
+      })
+
+      return Array.from(totals.entries())
+        .map(([sender_id, entry]) => ({ sender_id, ...entry }))
+        .sort((a, b) => b.total_coins - a.total_coins)
+    }, [recentGifts])
     const { subscriberUsernames } = useSubscriberUsernames(stream?.user_id)
 
     // ── Floating Chat ─────────────────────────────────────────────────────────
@@ -1146,7 +1253,11 @@ const ranked = senderIds
       username?: string;
       role?: string;
       createdAt?: string;
+      seatSessionId?: string;
     } | null>(null)
+    // Track when each seat index joined for "Camera unavailable" timeout
+    const seatJoinTimesRef = useRef<Record<number, number>>({})
+    const [seatJoinTimes, setSeatJoinTimes] = useState<Record<number, number>>({})
     const [showHostStats, setShowHostStats] = useState(false)
     const [showUserStats, setShowUserStats] = useState<{
       userId: string;
@@ -1155,7 +1266,9 @@ const ranked = senderIds
       trollmonds: number;
       licensePlate: string | null;
       isSeatUser: boolean;
+      streamId?: string;
     } | null>(null)
+  const [showPayBroadOfficersModal, setShowPayBroadOfficersModal] = useState(false)
   // Broadcast Abilities
   const {
     abilities: userAbilities,
@@ -1546,7 +1659,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
        }));
      }
 
-// Dispatch balance update event for UserStatsModal and auth store
+// Dispatch balance update event for CityStatusPanel and auth store
       // Use consistent snake_case field names
       window.dispatchEvent(new CustomEvent('broadcast-balance-update', {
         detail: {
@@ -1668,23 +1781,26 @@ useEffect(() => {
   return () => clearInterval(checkInterval)
 }, [stream, isHost, viewerCount, hasReceivedChatMessage])
 
-  // Broadcast Global Ticker
+  // Broadcast Text Popup
+  const [isTextPopupComposerOpen, setIsTextPopupComposerOpen] = useState(false)
   const {
-    sendMessage: tickerSendMessage,
-    sendPriority: tickerSendPriority,
-    clearPriority: tickerClearPriority,
-    deleteMessage: tickerDeleteMessage,
-    broadcastSettings: tickerBroadcastSettings,
-    generateSystemMessage: tickerGenerateSystemMessage,
-  } = useBroadcastTicker({
+    activePopup: activeTextPopup,
+    sendPopup: sendTextPopup,
+    sending: sendingTextPopup,
+  } = useBroadcastTextPopup({
     streamId: streamId || '',
-    userId: user?.id || '',
-    isHost,
-    enabled: !!streamId && !!user,
+    currentUserId: user?.id,
+    currentUsername: profile?.username,
+    canSend: isHost,
   })
-  const [isTickerPanelOpen, setIsTickerPanelOpen] = useState(false)
-  const handleCloseTickerPanel = useCallback(() => setIsTickerPanelOpen(false), [])
-  const tickerSettings = useTickerStore((s) => s.settings)
+
+  // Broadcast viewer cap
+  const {
+    viewerCapEnabled,
+    viewerCapMax,
+    allRestrictionsDisabled,
+    isStreamViewerCapped,
+  } = useBroadcastViewerCap()
 
    // Quick Coin Store
    const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false)
@@ -2644,17 +2760,20 @@ useStreamRealtime(streamId, {
     };
     }, [streamId, navigate, user?.id, isHost]);
 
+  const floatingChatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
    // ── Floating Chat: receive broadcasts ────────────────────────────────────
-useEffect(() => {
-  if (!streamId) return;
+ useEffect(() => {
+   if (!streamId) return;
 
-  const timers = new Set<number>();
-  const channel = supabase.channel(`floating-chat:${streamId}`);
+   const timers = new Set<number>();
+   const channel = supabase.channel(`floating-chat:${streamId}`);
+   floatingChatChannelRef.current = channel;
 
-  channel
-    .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
-      const { username, content } = payload.payload || {};
-      if (!username || !content) return;
+   channel
+     .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
+       const { username, content } = payload.payload || {};
+       if (!username || !content) return;
 
       const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -2680,10 +2799,11 @@ useEffect(() => {
     .subscribe();
 
   return () => {
-    timers.forEach(timer => window.clearTimeout(timer));
-    timers.clear();
-    supabase.removeChannel(channel);
-  };
+     timers.forEach(timer => window.clearTimeout(timer));
+     timers.clear();
+     floatingChatChannelRef.current = null;
+     supabase.removeChannel(channel);
+   };
 }, [streamId, supabase]);
 
   // ★ Gift animations are now driven exclusively by useStreamRealtime.onGift
@@ -3627,7 +3747,10 @@ const toggleMicrophone = useCallback(async () => {
      setGiftRecipientId(userId)
      setIsGiftModalOpen(true)
    }, [])
-   const handleCloseGiftModal = useCallback(() => setIsGiftModalOpen(false), [])
+   const handleCloseGiftModal = useCallback(() => {
+     setIsGiftModalOpen(false)
+     setGiftRecipientId(null)
+   }, [])
 
    const onGiftAll = useCallback((ids: string[]) => {
      toast.info(`Gift sent to ${ids.length} users`)
@@ -4440,6 +4563,9 @@ const handleLike = useCallback(async () => {
     stream?.is_battle === true &&
     (stream?.battle_status === 'ready' || stream?.battle_status === 'starting' || stream?.battle_status === 'active');
 
+  // PHASE 2: Derive stable battleId for BattleView key — prevents remount on stream state updates
+  const activeBattleId = shouldShowRandomBattleArena ? stream?.battle_id ?? null : null;
+
    function handleMute(userId: string, reason?: string) {
      toast.info(`Mute user ${userId}`);
    }
@@ -4447,10 +4573,12 @@ const handleLike = useCallback(async () => {
     function handleGeneralKick() {
       if (!userActionTarget) return
       const targetUserId = userActionTarget.userId
-      const seatSessionId = (userActionTarget as any).seatSessionId as string | undefined
+      const seatSessionId = userActionTarget.seatSessionId
 
       const doKick = async () => {
         try {
+          let kicked = false
+
           if (seatSessionId) {
             const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seatSessionId })
             if (error) {
@@ -4458,6 +4586,7 @@ const handleLike = useCallback(async () => {
               toast.error('Failed to remove user from seat')
               return
             }
+            kicked = true
           } else {
             const seat = Object.values(seats).find(
               (s: any) => s.user_id === targetUserId || s.guest_id === targetUserId,
@@ -4469,13 +4598,18 @@ const handleLike = useCallback(async () => {
                 toast.error('Failed to remove user from seat')
                 return
               }
-            } else {
-              toast.error('Seat session not found')
-              return
+              kicked = true
             }
           }
+
+          if (!kicked) {
+            toast.error('Seat session not found')
+            return
+          }
+
           toast.success('User removed from seat')
           setUserActionTarget(null)
+          refreshSeats()
         } catch (err) {
           console.error('[BroadcastPage] handleGeneralKick error:', err)
           toast.error('Failed to remove user from seat')
@@ -4526,7 +4660,14 @@ const handleLike = useCallback(async () => {
     setIsAssignOfficerModalOpen(true)
   }, [isHost]);
 
-  
+  const handlePayBroadOfficers = useCallback(() => {
+    if (!isHost) {
+      toast.error('Only the broadcaster can pay officers');
+      return;
+    }
+    setShowPayBroadOfficersModal(true)
+  }, [isHost]);
+
   function startDrag(event: React.MouseEvent<HTMLDivElement>): void {
     // Start a horizontal resize for the desktop chat panel
     try {
@@ -4593,6 +4734,7 @@ const handleLike = useCallback(async () => {
     return (
       <ErrorBoundary>
         <BattleView
+          key={activeBattleId}
           battleId={stream.battle_id!}
           currentStreamId={streamId || stream.id}
           viewerId={memoizedViewerId}
@@ -4652,19 +4794,54 @@ const handleLike = useCallback(async () => {
                />
              )}
 
+             {/* Random Battle Banner — prominent notice for queue/active battle */}
+             {stream && (
+               <RandomBattleBanner
+                 phase={randomBattleQueue.phase}
+                 delayUntil={randomBattleQueue.delayUntil}
+                 isBroadcaster={isHost}
+                 onStartQueue={randomBattleQueue.startQueue}
+                 onStopQueue={randomBattleQueue.stopQueue}
+                 isBusy={randomBattleQueue.isBusy}
+                 mobileSafe={isMobileWidth}
+               />
+             )}
+
              {/* --- AUDIENCE TICKER: full-width, neon style, always visible --- */}
              <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
                <div className="w-full max-w-7xl mx-auto">
-                 <AudienceBubbleTicker
-                   streamId={streamId || ''}
-                   audience={audience}
-                   currentUserId={user?.id}
-                   hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
-                   maxVisible={8}
-                   className="relative z-0 hidden sm:flex pointer-events-none"
-                 />
+                  <AudienceBubbleTicker
+                    streamId={streamId || ''}
+                    audience={audience}
+                    currentUserId={user?.id}
+                    hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
+                    maxVisible={8}
+                    className="relative z-0 hidden sm:flex pointer-events-none"
+                    onGiftUser={onGift}
+                  />
                </div>
              </div>
+
+             {myLeagues.length > 0 && (
+               <div className="w-full z-20 px-0 py-3 bg-black/10 border-b border-white/10">
+                 <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-3xl border border-cyan-500/10 bg-slate-950/90 p-4 text-sm text-slate-200 shadow-[0_0_30px_rgba(45,212,191,0.08)] sm:flex-row sm:items-center sm:justify-between">
+                   <div className="flex items-center gap-3">
+                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
+                       {myLeagues[0].icon_emoji || '🏆'}
+                     </div>
+                     <div>
+                       <p className="text-sm font-black text-white">League: {myLeagues[0].name}</p>
+                       <p className="text-xs text-slate-400">
+                         {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} • {myLeagues[0].member_count}/{myLeagues[0].max_members} members
+                       </p>
+                     </div>
+                   </div>
+                   <div className="rounded-2xl bg-white/5 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-cyan-200">
+                     Open League tab for your status, missions, and leaderboard.
+                   </div>
+                 </div>
+               </div>
+             )}
 
             {/* ── MAIN CONTENT GRID (3-column) ── */}
             <main
@@ -4735,9 +4912,30 @@ const handleLike = useCallback(async () => {
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
                 {/* Host badge — top-left */}
-                <div className="absolute left-5 top-5 z-10 flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/18 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(45,212,191,0.25)] backdrop-blur-xl">
-                  <Crown className="h-4 w-4" />
-                  Host
+                <div className="absolute left-5 top-5 z-10 flex flex-col gap-2">
+                  <div className="flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/18 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(45,212,191,0.25)] backdrop-blur-xl">
+                    <Crown className="h-4 w-4" />
+                    Host
+                  </div>
+                  {/* City Status Orb — compact inline (clickable for broadcaster) */}
+                  {broadcasterCityStatus.data && (
+                    <div className="pointer-events-auto">
+                      <CityStatusOrb
+                        data={broadcasterCityStatus.data}
+                        permissions={{ isSelf: isHost, canCheckLicense: false, canRaid: false, canRepair: false, canEnforce: false, canRemoveFromSeat: false, canAccessAll: false }}
+                        compact
+                        onHouseClick={() => setShowUserStats({
+                          userId: stream?.user_id || '',
+                          username: broadcasterProfile?.username || '',
+                          trollCoins: broadcasterProfile?.troll_coins || 0,
+                          trollmonds: broadcasterProfile?.trollmonds || 0,
+                          licensePlate: broadcasterProfile?.license_plate || null,
+                          isSeatUser: false,
+                          streamId: streamId,
+                        })}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Mic / Camera media pills — top-right */}
@@ -4832,7 +5030,8 @@ const handleLike = useCallback(async () => {
                       ? getParticipantLabel(matchedParticipant, seat.displayName)
                       : seat.displayName
 
-                    if (import.meta.env.DEV) {
+                    // SAFETY: gated behind DEV + explicit flag to avoid render-loop spam
+                    if (import.meta.env.DEV && (window as any).DEBUG_BROADCAST_SEATS) {
                       console.log('[BroadcastSeatRenderDebug]', {
                         seatIndex: seat.seatIndex,
                         seatStatus: seat.seatStatus,
@@ -4861,6 +5060,20 @@ const handleLike = useCallback(async () => {
                       canInteractWithSeats && seat.isOccupied && seatActionUserId
                         ? { userId: String(seatActionUserId), username: seatActionUsername, role: seatActionRole, seatSessionId: seat.seatSessionId }
                         : null
+
+                     // Determine seat connection state for loading/unavailable UI
+                      const seatConnectedAt = seatJoinTimes[seat.seatIndex] || 0
+                      const isCameraConnecting = seat.isOccupied && !matchedParticipant && (Date.now() - seatConnectedAt < 8000 || seatConnectedAt === 0)
+                      const isCameraUnavailable = seat.isOccupied && !matchedParticipant && seatConnectedAt > 0 && (Date.now() - seatConnectedAt >= 8000)
+
+                      const handleRetrySeat = async () => {
+                        await refreshSeats()
+                      }
+
+                      const handleRemoveSeatUser = async () => {
+                        if (!seatActionInfo) return
+                        await handleGeneralKick()
+                      }
 
                     const clickProps = seatActionInfo
                       ? {
@@ -4897,11 +5110,43 @@ const handleLike = useCallback(async () => {
                                 <Users className="h-6 w-6 text-purple-200/80" />
                               </div>
                               <div className="mt-3 px-3 text-sm font-black text-white">{participantDisplayName}</div>
-                              <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200/70">Camera starting</div>
+                              <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200/70">Camera connecting...</div>
                             </div>
                           }
                         />
-                      ) : seat.isOccupied ? (
+                      ) : isCameraUnavailable ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.08),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.10),transparent_48%)]">
+                          {seat.avatarUrl ? (
+                            <img
+                              src={seat.avatarUrl}
+                              alt={participantDisplayName}
+                              className="h-11 w-11 rounded-full border border-red-400/30 object-cover opacity-60"
+                            />
+                          ) : (
+                            <div className="grid h-11 w-11 place-items-center rounded-full border border-red-400/25 bg-red-500/10">
+                              <VideoOff className="h-5 w-5 text-red-300/60" />
+                            </div>
+                          )}
+                          <div className="px-3 text-center text-xs font-black text-white">{participantDisplayName}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-300/80">Camera unavailable</div>
+                          <div className="mt-1 flex gap-1.5">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleRetrySeat() }}
+                              className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-200 transition-colors hover:bg-cyan-500/20"
+                            >
+                              Retry
+                            </button>
+                            {canInteractWithSeats && seatActionUserId && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleRemoveSeatUser() }}
+                                className="rounded-lg border border-red-400/30 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-red-200 transition-colors hover:bg-red-500/20"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : isCameraConnecting ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
                           {seat.avatarUrl ? (
                             <img
@@ -4910,10 +5155,14 @@ const handleLike = useCallback(async () => {
                               className="h-12 w-12 rounded-full border border-emerald-300/50 object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]"
                             />
                           ) : (
-                            <Users className="h-10 w-10 text-cyan-200/35" />
+                            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-300/30 bg-emerald-500/10">
+                              <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
+                            </div>
                           )}
-                          <div className="mt-3 text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
-                            Camera starting
+                          <div className="mt-3 text-sm font-black text-white">{participantDisplayName}</div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+                            <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Camera connecting...</span>
                           </div>
                         </div>
                       ) : (
@@ -4934,11 +5183,15 @@ const handleLike = useCallback(async () => {
                         </div>
                         <div className={cn(
                           'mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em]',
-                          matchedParticipant || seat.isOccupied
+                          matchedParticipant
                             ? 'border-emerald-300/30 bg-emerald-500/15 text-emerald-200'
-                            : 'border-purple-300/30 bg-purple-500/15 text-purple-200'
+                            : isCameraUnavailable
+                              ? 'border-red-300/30 bg-red-500/15 text-red-200'
+                              : isCameraConnecting
+                                ? 'border-cyan-300/30 bg-cyan-500/15 text-cyan-200'
+                                : 'border-purple-300/30 bg-purple-500/15 text-purple-200'
                         )}>
-                          {matchedParticipant ? 'On Camera' : seat.isOccupied ? 'Camera starting' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                          {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Camera connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
                         </div>
                       </div>
                     </div>
@@ -4953,9 +5206,9 @@ const handleLike = useCallback(async () => {
     'flex min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
   )}>
                 {/* Chat tabs */}
-                <div className="grid grid-cols-3 border-b border-white/10 bg-black/10">
-                  {['Chat',  'Top Fans', 'Settings'].map((tab) => {
-                    const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'gifts' | 'top-fans' | 'settings'
+                <div className="grid grid-cols-5 border-b border-white/10 bg-black/10">
+                  {['Chat', 'League', 'Gifts', 'Top Fans', 'Settings'].map((tab) => {
+                    const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'league' | 'gifts' | 'top-fans' | 'settings'
                     const active = chatTab === tabKey
                     return (
                       <button
@@ -5054,12 +5307,14 @@ const handleLike = useCallback(async () => {
                               })
                             }
                             // Broadcast to other viewers via Supabase channel
-                            const chatChannel = supabase.channel(`floating-chat:${streamId}`)
-                            chatChannel.send({
-                              type: 'broadcast',
-                              event: 'floating_chat',
-                              payload: { username, content: text },
-                            }).catch(() => {})
+                            const chatChannel = floatingChatChannelRef.current;
+                            if (chatChannel) {
+                              chatChannel.send({
+                                type: 'broadcast',
+                                event: 'floating_chat',
+                                payload: { username, content: text },
+                              }).catch(() => {})
+                            }
                           } catch { /* silent */ }
                         }}
                         className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
@@ -5074,23 +5329,72 @@ const handleLike = useCallback(async () => {
                         />
                       </form>
                     </div>
-                  ) : chatTab === 'gifts' ? (
+                  ) : chatTab === 'league' ? (
                     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
-                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>
-                      {recentGifts.length === 0 ? (
+                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">League Status</div>
+                      {isUserLeaguesLoading ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">Loading league data...</div>
+                      ) : myLeagues.length === 0 ? (
                         <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
-                          No gifts yet.
+                          You are not currently in a league.
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {recentGifts.slice(0, 12).map((gift) => (
-                            <div key={gift.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                          {myLeagues.map((league) => {
+                            const membership = myMemberships[league.id]
+                            const leagueMissionsForLeague = leagueMissions.filter((mission) => mission.league_id === league.id)
+                            return (
+                              <div key={league.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
+                                    {league.icon_emoji || '🏆'}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-black text-white truncate">{league.name}</p>
+                                    <p className="text-xs text-slate-400 truncate">{league.description || 'League membership active'}</p>
+                                  </div>
+                                </div>
+                                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Status</p>
+                                    <p className="mt-2 text-sm font-black text-white">{membership?.role || membership?.status || 'Member'}</p>
+                                  </div>
+                                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Score</p>
+                                    <p className="mt-2 text-sm font-black text-white">{league.league_score.toLocaleString()}</p>
+                                  </div>
+                                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Members</p>
+                                    <p className="mt-2 text-sm font-black text-white">{league.member_count}/{league.max_members}</p>
+                                  </div>
+                                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Missions</p>
+                                    <p className="mt-2 text-sm font-black text-white">{leagueMissionsForLeague.length} active</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : chatTab === 'gifts' ? (
+                    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-200">
+                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Gifts by Supporter</div>
+                      {giftSummaryBySender.length === 0 ? (
+                        <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-center text-slate-500">
+                          No gift activity to show yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {giftSummaryBySender.map((entry) => (
+                            <div key={entry.sender_id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
                               <div className="flex items-center justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="text-sm font-bold text-white truncate">{gift.sender_username || 'Anonymous'}</div>
-                                  <div className="text-xs text-slate-400 truncate">Sent {gift.quantity || 1} {gift.gift_name || 'gift'}</div>
+                                  <div className="text-sm font-bold text-white truncate">{entry.sender_username || 'Anonymous'}</div>
+                                  <div className="text-xs text-slate-400 truncate">{entry.gift_count} gift{entry.gift_count === 1 ? '' : 's'} sent</div>
                                 </div>
-                                <div className="text-xs font-semibold text-cyan-300">{gift.coins_amount?.toLocaleString() || gift.amount?.toLocaleString() || '0'} coins</div>
+                                <div className="text-xs font-semibold text-cyan-300">{entry.total_coins.toLocaleString()} coins</div>
                               </div>
                             </div>
                           ))}
@@ -5215,12 +5519,14 @@ const handleLike = useCallback(async () => {
             {/* OVERLAYS — absolutely positioned, renders above all grid content */}
             <div className="absolute inset-0 pointer-events-none">
               {isGiftModalOpen && (
-                <GiftBoxModal
-                  isOpen={isGiftModalOpen}
-                  onClose={handleCloseGiftModal}
-                  streamId={streamId}
-                  recipientId={giftRecipientId}
-                />
+                <div className="pointer-events-auto">
+                  <GiftBoxModal
+                    isOpen={isGiftModalOpen}
+                    onClose={handleCloseGiftModal}
+                    streamId={streamId}
+                    recipientId={giftRecipientId}
+                  />
+                </div>
               )}
 
             </div>
@@ -5447,21 +5753,16 @@ const handleLike = useCallback(async () => {
                 </div>
               )}
 
-              {/* User Stats Modal */}
+              {/* City Status Panel */}
               {showUserStats && (
-                <div className="pointer-events-auto">
-                <UserStatsModal
-                  isOpen={true}
-                  onClose={handleCloseUserStats}
+                <CityStatusPanel
                   userId={showUserStats.userId}
-                  username={showUserStats.username}
-                  trollCoins={showUserStats.trollCoins}
-                  trollmonds={showUserStats.trollmonds}
-                  licensePlate={showUserStats.licensePlate}
-                  isSeatUser={showUserStats.isSeatUser}
+                  onClose={handleCloseUserStats}
+                  isBroadcaster={true}
+                  isSeatHolder={showUserStats.isSeatUser}
+                  broadcasterId={user?.id}
                 />
-                </div>
-              )}
+              )}]
 
               {/* Coin Store Modal */}
               {isCoinStoreOpen && (
@@ -5503,16 +5804,6 @@ const handleLike = useCallback(async () => {
                 />
               )}
 
-              {/* Ticker Control Panel */}
-              {isTickerPanelOpen && (
-                <TickerControlPanel
-                  onClose={handleCloseTickerPanel}
-                  onBroadcastSettings={tickerBroadcastSettings}
-                  onSendMessage={tickerSendMessage}
-                  onDeleteMessage={tickerDeleteMessage}
-                />
-              )}
-
               {/* More Controls Drawer */}
               {isMoreControlsOpen && (
                 <div className="pointer-events-auto">
@@ -5534,12 +5825,17 @@ const handleLike = useCallback(async () => {
                     onManageStagePass={handleOpenSeatsModal}
                     openStagePassCount={currentViewerSeatCount}
                     onAssignBroadofficer={handleAssignBroadofficer}
+                    onPayBroadOfficers={handlePayBroadOfficers}
                     onMuteUser={handleMute}
                     onBanUser={handleBlock}
-                    onRemoveFromStage={() => {}}
+                    onRemoveFromStage={handleGeneralKick}
                     onModGift={handleGiftHost}
                     onToggleRGB={toggleStreamRgb}
                     hasRgbEffect={!!stream?.has_rgb_effect}
+                    onTextPopup={() => {
+                      handleCloseMoreMenu()
+                      setIsTextPopupComposerOpen(true)
+                    }}
                   />
                 </div>
               )}
@@ -5552,6 +5848,33 @@ const handleLike = useCallback(async () => {
                   onClose={() => setIsAssignOfficerModalOpen(false)}
                 />
               )}
+
+              {showPayBroadOfficersModal && (
+                <PayBroadOfficersModal
+                  isOpen={showPayBroadOfficersModal}
+                  onClose={() => setShowPayBroadOfficersModal(false)}
+                  broadcasterId={user?.id || ''}
+                  broadcasterBalance={broadcasterProfile?.troll_coins || 0}
+                  streamId={streamId || ''}
+                />
+              )}
+
+              {/* Broadcast Text Popup Composer */}
+              {isHost && (
+                <BroadcastTextPopupComposer
+                  open={isTextPopupComposerOpen}
+                  onOpenChange={setIsTextPopupComposerOpen}
+                  onSend={sendTextPopup}
+                  sending={sendingTextPopup}
+                />
+              )}
+
+              {/* Broadcast Text Popup Overlay (visible to broadcaster too) */}
+              <BroadcastTextPopupOverlay
+                popup={activeTextPopup}
+                isBattleActive={shouldShowRandomBattleArena}
+                mobileSafe={isMobileWidth}
+              />
 
         </ErrorBoundary>
       </GiftSystemProvider>

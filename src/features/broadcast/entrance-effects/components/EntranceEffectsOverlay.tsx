@@ -25,6 +25,7 @@ import {
   registerThreeObject,
   getActiveEffect,
 } from '../engine/queue';
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import {
   initThreeEngine,
   cleanupThreeEngine,
@@ -81,6 +82,7 @@ export default function EntranceEffectsOverlay({
   const threeContainerRef = useRef<HTMLDivElement>(null);
   
   // State
+  const { isMobile } = useIsMobile()
   const [isAllowed, setIsAllowed] = useState(false);
   const [activeEffect, setActiveEffect] = useState<ActiveEntranceEffect | null>(null);
   const [effectPhase, setEffectPhase] = useState<AnimationPhase | null>(null);
@@ -117,7 +119,8 @@ export default function EntranceEffectsOverlay({
       
       // Three.js engine (after container is mounted)
       if (threeContainerRef.current) {
-        const success = initThreeEngine(threeContainerRef.current, quality);
+        const chosenQuality = isMobile ? 'low' : quality;
+        const success = initThreeEngine(threeContainerRef.current, chosenQuality);
         if (success) {
           setIsReady(true);
         }

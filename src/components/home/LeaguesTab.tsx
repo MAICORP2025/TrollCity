@@ -6,12 +6,14 @@ import {
   Flame,
   Gift,
   Medal,
+  Plus,
   Radio,
   ShieldCheck,
   Sparkles,
   Timer,
   Trophy,
   Users,
+  X,
   Zap,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -19,6 +21,9 @@ import { formatDistanceToNowStrict, isAfter, isBefore } from 'date-fns'
 import { trollCityTheme } from '@/styles/trollCityTheme'
 import { useLeagueSnapshot } from '@/hooks/useLeagueSnapshot'
 import { useLeagueStandings, useMyFamilyLeagueStanding } from '@/hooks/useFamilyLeagues'
+import { useUserLeagues } from '@/hooks/useUserLeagues'
+import { useLeagues } from '@/hooks/useLeagues'
+import { useAuthStore } from '@/lib/store'
 
 interface LeaguesTabProps {
   streamId?: string | null
@@ -350,6 +355,69 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
     [standings]
   )
 
+  const {
+    myLeagues,
+    myMemberships,
+    leagueMissions,
+    isLoading: isUserLeaguesLoading,
+    isCreating,
+    isJoining,
+    error: userLeaguesError,
+    createLeague,
+    joinLeague,
+    leaveLeague,
+    claimMission: claimLeagueMission,
+    refreshLeagues: refreshUserLeagues,
+  } = useUserLeagues()
+
+  const { publicLeagues, isLoading: isPublicLeaguesLoading } = useLeagues()
+  const { profile } = useAuthStore()
+
+  const userLevel = profile?.level ?? 0
+  const isAdmin = profile?.is_admin === true || String(profile?.role) === 'admin' || String(profile?.role) === 'ceo' || String(profile?.role) === 'superadmin'
+  const hasRole = profile?.role != null && String(profile.role) !== '' && String(profile.role) !== 'user'
+  const canCreateLeague = userLevel >= 10 || isAdmin || hasRole
+
+  const [selectedFilter, setSelectedFilter] = useState<'Weekly' | 'Monthly' | 'All-Time'>('Weekly')
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showBrowseLeagues, setShowBrowseLeagues] = useState(false)
+  const [newLeagueName, setNewLeagueName] = useState('')
+  const [newLeagueDesc, setNewLeagueDesc] = useState('')
+  const [newLeagueType, setNewLeagueType] = useState('standard')
+
+  const handleCreateLeague = async () => {
+    if (!newLeagueName.trim()) return
+    const id = await createLeague({
+      name: newLeagueName.trim(),
+      description: newLeagueDesc.trim() || undefined,
+      leagueType: newLeagueType,
+    })
+    if (id) {
+      setShowCreateForm(false)
+      setNewLeagueName('')
+      setNewLeagueDesc('')
+      setNewLeagueType('standard')
+    }
+  }
+
+  const handleJoinLeague = async (leagueId: string) => {
+    await joinLeague(leagueId)
+  }
+
+  const handleLeaveLeague = async (leagueId: string) => {
+    await leaveLeague(leagueId)
+  }
+
+  const activeLeagueMissions = useMemo(
+    () => leagueMissions.filter(m => m.status === 'active'),
+    [leagueMissions]
+  )
+
+  const completedLeagueMissions = useMemo(
+    () => leagueMissions.filter(m => m.status === 'completed'),
+    [leagueMissions]
+  )
+
   const seasonDateRange = familySeason
     ? `${new Date(familySeason.season_start_date).toLocaleDateString('en-US', {
         month: 'short',
@@ -359,8 +427,6 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
         day: 'numeric',
       })}`
     : ''
-
-  const [selectedFilter, setSelectedFilter] = useState<'Weekly' | 'Monthly' | 'All-Time'>('Weekly')
 
   const event = activeEvent as LeagueEventLike | null
   const timeStatus = getTimeStatus(event)
@@ -601,6 +667,263 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* ═══ MY LEAGUES SECTION ═══ */}
+        <div className="rounded-[1.75rem] border border-purple-300/15 bg-purple-500/[0.06] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">
+                My Leagues
+              </p>
+              <p className="mt-1 text-sm text-slate-300">
+                {canCreateLeague
+                  ? 'Create your own league or join existing ones to compete together.'
+                  : 'Join a league to compete with others. Reach level 10 to create your own.'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBrowseLeagues(!showBrowseLeagues)}
+                className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20"
+              >
+                Browse Leagues
+              </button>
+              {canCreateLeague && (
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(!showCreateForm)}
+                  className="inline-flex items-center gap-1 rounded-full border border-purple-300/20 bg-purple-400/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-purple-100 transition hover:bg-purple-400/20"
+                >
+                  <Plus className="h-3 w-3" />
+                  Create League
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Create League Form */}
+          {showCreateForm && canCreateLeague && (
+            <div className="mt-4 rounded-2xl border border-purple-300/20 bg-black/30 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-black text-white">Create New League</p>
+                <button onClick={() => setShowCreateForm(false)} className="text-slate-400 hover:text-white">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="League name"
+                  value={newLeagueName}
+                  onChange={(e) => setNewLeagueName(e.target.value)}
+                  maxLength={50}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-purple-400/50"
+                />
+                <input
+                  type="text"
+                  placeholder="Description (optional)"
+                  value={newLeagueDesc}
+                  onChange={(e) => setNewLeagueDesc(e.target.value)}
+                  maxLength={200}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-purple-400/50"
+                />
+                <div className="flex gap-2">
+                  {['standard', 'competitive', 'casual', 'tournament'].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setNewLeagueType(t)}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] transition ${
+                        newLeagueType === t
+                          ? 'border-purple-400 bg-purple-400/20 text-purple-100'
+                          : 'border-white/10 bg-white/5 text-slate-400'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                {userLeaguesError && (
+                  <p className="text-xs text-red-400">{userLeaguesError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCreateLeague}
+                  disabled={isCreating || !newLeagueName.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-sm font-black text-white transition hover:bg-purple-500 disabled:opacity-50"
+                >
+                  {isCreating ? 'Creating...' : 'Create League'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Browse Public Leagues */}
+          {showBrowseLeagues && (
+            <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-black/30 p-4">
+              <p className="text-sm font-black text-white mb-3">Public Leagues</p>
+              {isPublicLeaguesLoading ? (
+                <p className="text-sm text-slate-400">Loading...</p>
+              ) : publicLeagues.length === 0 ? (
+                <p className="text-sm text-slate-400">No public leagues available yet. Be the first to create one!</p>
+              ) : (
+                <div className="space-y-2">
+                  {publicLeagues.map((league) => {
+                    const isMember = !!myMemberships[league.id]
+                    const isMyLeague = league.creator_id === profile?.id
+                    return (
+                      <div
+                        key={league.id}
+                        className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-lg">{league.icon_emoji || '🏆'}</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-white truncate">{league.name}</p>
+                            <p className="text-[10px] text-slate-400">
+                              {league.member_count}/{league.max_members} members • {league.league_type} • Score: {league.league_score.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="shrink-0">
+                          {isMyLeague ? (
+                            <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-[10px] font-black text-yellow-300">Owner</span>
+                          ) : isMember ? (
+                            <button
+                              type="button"
+                              onClick={() => handleLeaveLeague(league.id)}
+                              className="rounded-full border border-red-400/20 bg-red-400/10 px-3 py-1 text-[10px] font-black text-red-300 transition hover:bg-red-400/20"
+                            >
+                              Leave
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleJoinLeague(league.id)}
+                              disabled={isJoining}
+                              className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[10px] font-black text-cyan-200 transition hover:bg-cyan-300/20 disabled:opacity-50"
+                            >
+                              Join
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* My Current Leagues */}
+          {myLeagues.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <p className="text-sm font-black text-white">Your Leagues</p>
+              {myLeagues.map((league) => {
+                const membership = myMemberships[league.id]
+                return (
+                  <div
+                    key={league.id}
+                    className="rounded-xl border border-white/10 bg-white/5 p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-lg">{league.icon_emoji || '🏆'}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{league.name}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {league.member_count}/{league.max_members} members • Score: {league.league_score.toLocaleString()}
+                            {membership && ` • Your pts: ${membership.contribution_score.toLocaleString()}`}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-black ${
+                        membership?.role === 'creator'
+                          ? 'bg-yellow-500/10 text-yellow-300'
+                          : membership?.role === 'admin'
+                          ? 'bg-purple-500/10 text-purple-300'
+                          : 'bg-white/5 text-slate-400'
+                      }`}>
+                        {membership?.role || 'member'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* League Missions for User's Leagues */}
+          {(activeLeagueMissions.length > 0 || completedLeagueMissions.length > 0) && (
+            <div className="mt-4">
+              <p className="text-sm font-black text-white mb-3">League Missions</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[...completedLeagueMissions, ...activeLeagueMissions].map((mission) => {
+                  const progress = mission.target_value
+                    ? Math.min(100, Math.round((mission.current_value / mission.target_value) * 100))
+                    : 0
+                  return (
+                    <div
+                      key={mission.id}
+                      className="rounded-2xl border border-white/10 bg-white/5 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-white truncate">{mission.title}</p>
+                          <p className="mt-1 text-xs text-slate-400 line-clamp-2">{mission.description}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                          mission.status === 'completed'
+                            ? 'bg-emerald-500/10 text-emerald-300'
+                            : mission.status === 'claimed'
+                            ? 'bg-slate-700/60 text-slate-300'
+                            : 'bg-cyan-500/10 text-cyan-300'
+                        }`}>
+                          {mission.status}
+                        </span>
+                      </div>
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-[10px] text-white/45 mb-1">
+                          <span>{mission.current_value}/{mission.target_value}</span>
+                          <span>{mission.reward_points} pts</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full rounded-full bg-cyan-400 transition-all"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400">
+                        <span>{mission.reward_xp} XP</span>
+                        <span>{mission.reward_coins} coins</span>
+                      </div>
+                      {mission.status === 'completed' && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await claimLeagueMission(mission.id)
+                            refreshUserLeagues()
+                          }}
+                          className="mt-3 w-full rounded-xl border border-cyan-300/20 bg-cyan-300/10 py-1.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-300/20"
+                        >
+                          Claim Reward
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {myLeagues.length === 0 && !showCreateForm && !showBrowseLeagues && (
+            <p className="mt-3 text-sm text-slate-400">
+              You haven't joined any leagues yet. Browse public leagues or create your own!
+            </p>
+          )}
         </div>
 
         <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-4">

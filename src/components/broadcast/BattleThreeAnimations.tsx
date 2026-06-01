@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { usePageVisibilityContext } from '../../contexts/PageVisibilityContext';
 
 interface BattleThreeAnimationsProps {
   containerRef: React.RefObject<HTMLDivElement>;
@@ -525,10 +527,12 @@ export const BattleThreeAnimations: React.FC<BattleThreeAnimationsProps> = ({
   isActive,
   onComplete
 }) => {
+  const { isMobile } = useIsMobile();
+  const { isVisible } = usePageVisibilityContext();
   const animationRef = useRef<{ cleanup: () => void; updateTime?: (time: number) => void } | null>(null);
 
   useEffect(() => {
-    if (!isActive || !containerRef.current) return;
+    if (!isActive || !containerRef.current || !isVisible || isMobile) return;
 
     const container = containerRef.current;
 
@@ -582,7 +586,7 @@ export const BattleThreeAnimations: React.FC<BattleThreeAnimationsProps> = ({
         animationRef.current = null;
       }
     };
-  }, [isActive, type, containerRef, onComplete]);
+  }, [isActive, type, containerRef, onComplete, isMobile, isVisible]);
 
   return null;
 };

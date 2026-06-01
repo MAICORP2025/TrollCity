@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { reportSupabaseError } from '../lib/bugReporter'
+import { usePageVisibilityContext } from '../contexts/PageVisibilityContext'
 
 // Types for finance data
 export interface FinanceSummary {
@@ -245,10 +246,18 @@ export function useAdminFinanceRealtime() {
     staleTime: 1 * 60 * 1000,
   })
 
+  const { isVisible } = usePageVisibilityContext()
+
   // Admin finance is not a hot-path realtime surface. Poll instead of opening
   // broad listeners on transaction, cashout, and profile tables.
   useEffect(() => {
-    setIsConnected(true)
+    setIsConnected(isVisible)
+    if (!isVisible) {
+      return () => {
+        setIsConnected(false)
+      }
+    }
+
     const refresh = () => {
       queryClient.invalidateQueries({ queryKey: ['admin-finance-summary'] })
       queryClient.invalidateQueries({ queryKey: ['admin-finance-feed'] })
@@ -256,13 +265,14 @@ export function useAdminFinanceRealtime() {
       queryClient.invalidateQueries({ queryKey: ['admin-cashouts'] })
       setLastSync(new Date())
     }
-    const interval = window.setInterval(refresh, 60_000)
+    // SAFETY: reduced from 60s to 5min — admin finance is not a hot-path surface
+    const interval = window.setInterval(refresh, 5 * 60 * 1000)
 
     return () => {
       window.clearInterval(interval)
       setIsConnected(false)
     }
-  }, [queryClient])
+  }, [queryClient, isVisible])
 
   // Manual refresh function
   const refreshFinance = () => {

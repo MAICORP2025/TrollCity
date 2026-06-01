@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Radio, Play, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -120,7 +120,8 @@ export default function ExploreFeed() {
             )
           `)
           .eq('is_live', true)
-          .order('viewer_count', { ascending: false });
+          .order('viewer_count', { ascending: false })
+          .limit(50);
 
         if (!podsError && podsData) {
           formattedPods = podsData.map(pod => ({
@@ -172,6 +173,7 @@ export default function ExploreFeed() {
     
     // Polling every 60s as a fallback - resets list to keep "Top" fresh
     const interval = setInterval(() => {
+       if (document.hidden) return;
        if (window.scrollY < 500) {
          fetchBroadcasts(0, false);
        }
@@ -236,19 +238,26 @@ export default function ExploreFeed() {
       </div>
 
       {/* Floating Particles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-cyan-400/30 rounded-full"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `float-particle ${5 + Math.random() * 10}s ease-in-out infinite`,
-              animationDelay: `${Math.random() * 5}s`,
-            }}
-          />
-        ))}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none max-md:hidden">
+        {useMemo(() => Array.from({ length: 10 }).map((_, i) => {
+          const seed = i * 137.508;
+          const left = ((seed * 7.31) % 100);
+          const top = ((seed * 13.17) % 100);
+          const duration = 5 + (i % 5) * 2;
+          const delay = (i % 5);
+          return (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-cyan-400/30 rounded-full"
+              style={{
+                left: `${left}%`,
+                top: `${top}%`,
+                animation: `float-particle ${duration}s ease-in-out infinite`,
+                animationDelay: `${delay}s`,
+              }}
+            />
+          );
+        }), [])}
       </div>
 
       {/* Content */}
@@ -390,8 +399,8 @@ export default function ExploreFeed() {
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         {broadcast.user_profiles?.level && (
-                          <span className={`px-2 py-0.5 ${trollCityTheme.gradients.primary} rounded text-white font-bold`}>
-                            Lvl {broadcast.user_profiles.level}
+                          <span className="px-2 py-0.5 bg-gradient-to-r from-violet-600 to-purple-500 rounded text-white font-bold text-xs">
+                            T League
                           </span>
                         )}
                         <span className={trollCityTheme.text.muted}>

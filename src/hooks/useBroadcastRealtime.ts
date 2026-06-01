@@ -3,28 +3,15 @@ import { supabase } from '../lib/supabase';
 import { generateUUID } from '../lib/uuid';
 
 export interface BroadcastRealtimeState {
-  // Stream data
   stream: any | null;
-  
-  // Stats
   totalLikes: number;
   boxCount: number;
   viewerCount: number;
-  
-  // Messages (chat)
   messages: BroadcastMessage[];
-  
-  // Gifts
   recentGifts: BroadcastGift[];
-  
-  // Participants
   participants: Participant[];
-  
-  // Status
   isLive: boolean;
   hasEnded: boolean;
-  
-  // Loading states
   isLoading: boolean;
 }
 
@@ -113,7 +100,6 @@ export function useBroadcastRealtime({
   const MAX_MESSAGES = 100;
   const FLUSH_INTERVAL = 100;
 
-  // Cleanup all channels
   const cleanup = useCallback(() => {
     channelsRef.current.forEach(channel => {
       supabase.removeChannel(channel);
@@ -121,17 +107,15 @@ export function useBroadcastRealtime({
     channelsRef.current = [];
   }, []);
 
-  // Set up realtime subscriptions
   useEffect(() => {
     if (!streamId) return;
 
-    // Clean up previous subscriptions
     cleanup();
 
-    const channels: any[] = [];
+    const channels: any[]];
 
     // ============================================
-    // 1. STREAM DATA REALTIME (box_count, likes, status)
+    // 1. UNIFIED STREAM CHANNEL: postgres_changes for stream data + broadcast for chat/gifts/likes
     // ============================================
     const streamChannel = supabase
       .channel(`broadcast-stream-${streamId}`)
@@ -146,14 +130,10 @@ export function useBroadcastRealtime({
         (payload) => {
           const newData = payload.new as any;
           const oldData = payload.old as any;
-          
-          console.log('[useBroadcastRealtime] Stream update:', payload);
-          
+
           setState(prev => {
-            // Check for stream end
             if (newData.status === 'ended' || newData.is_live === false) {
               if (!prev.hasEnded) {
-                console.log('[useBroadcastRealtime] Stream ended, triggering callback');
                 onStreamEnd?.();
               }
               return {
@@ -163,8 +143,7 @@ export function useBroadcastRealtime({
                 isLive: false,
               };
             }
-            
-            // Update stream data
+
             return {
               ...prev,
               stream: newData,
@@ -176,22 +155,11 @@ export function useBroadcastRealtime({
           });
         }
       )
-      .subscribe();
-
-    channels.push(streamChannel);
-
-    // ============================================
-    // 2. CHAT MESSAGES REALTIME
-    // ============================================
-    const messageChannel = supabase
-      .channel(`broadcast-messages-${streamId}`)
       .on(
         'broadcast',
         { event: 'message' },
         (payload) => {
           const envelope = payload.payload;
-          
-          // Check version and stream match
           if (envelope.v !== 1 || envelope.stream_id !== streamId) return;
 
           const newMessage: BroadcastMessage = {
@@ -210,41 +178,30 @@ export function useBroadcastRealtime({
           onMessageReceived?.(newMessage);
         }
       )
-      .subscribe();
+      .on(
+        'broadcast',
+        { event: 'gift_sent' },
+        (payload) => {
+          const envelope = payload.payload;
+          if (envelope.v !== 1 || envelope.stream_id !== streamId) return;
 
-    channels.push(messageChannel);
+          const giftData = envelope.d;
 
-     // ============================================
-     // 3. GIFT REALTIME
-     // ============================================
-     const giftChannel = supabase
-       .channel(`stream-gifts:${streamId}`)
-       .on(
-         'broadcast',
-         { event: 'gift_sent' },
-         (payload) => {
-           const envelope = payload.payload;
-           
-           // Check version and stream match (similar to message handling)
-           if (envelope.v !== 1 || envelope.stream_id !== streamId) return;
-           
-           const giftData = envelope.d;
-           
-           const newGift = {
-             id: giftData.id,
-             gift_id: giftData.gift_id,
-             gift_name: giftData.gift_name,
-             gift_icon: giftData.gift_icon || '🎁',
-             gift_slug: giftData.gift_slug,
-             animation_type: giftData.animation_type,
-             amount: giftData.amount,
-             quantity: giftData.quantity || 1,
-             sender_id: giftData.sender_id,
-             sender_name: giftData.sender_name || 'Someone',
-             receiver_id: giftData.receiver_id,
-             receiver_name: giftData.receiver_name,
-             created_at: giftData.timestamp || new Date().toISOString(),
-           } as BroadcastGift
+          const newGift = {
+            id: giftData.id,
+            gift_id: giftData.gift_id,
+            gift_name: giftData.gift_name,
+            gift_icon: giftData.gift_icon || '🎁',
+            gift_slug: giftData.gift_slug,
+            animation_type: giftData.animation_type,
+            amount: giftData.amount,
+            quantity: giftData.quantity || 1,
+            sender_id: giftData.sender_id,
+            sender_name: giftData.sender_name || 'Someone',
+            receiver_id: giftData.receiver_id,
+            receiver_name: giftData.receiver_name,
+            created_at: giftData.timestamp || new Date().toISOString(),
+          } as BroadcastGift;
 
           setState(prev => ({
             ...prev,
@@ -254,12 +211,31 @@ export function useBroadcastRealtime({
           onGiftReceived?.(newGift);
         }
       )
+      .on(
+        'broadcast',
+        { event: 'like_sent' },
+        (payload) => {
+          const likeData = payload.payload;
+
+          if (likeData.total_likes !== undefined) {
+            setState(prev => ({
+              ...prev,
+              totalLikes: likeData.total_likes,
+            }));
+          } else {
+            setState(prev => ({
+              ...prev,
+              totalLikes: prev.totalLikes + 1,
+            }));
+          }
+        }
+      )
       .subscribe();
 
-    channels.push(giftChannel);
+    channels.push(streamChannel);
 
     // ============================================
-    // 4. PARTICIPANTS (Presence)
+    // 2. PARTICIPANTS (Presence) — single presence channel
     // ============================================
     const presenceChannel = supabase
       .channel(`broadcast-presence-${streamId}`)
@@ -305,7 +281,6 @@ export function useBroadcastRealtime({
       })
       .subscribe();
 
-    // Track presence
     if (userId) {
       presenceChannel.track({
         user_id: userId,
@@ -315,41 +290,8 @@ export function useBroadcastRealtime({
 
     channels.push(presenceChannel);
 
-    // ============================================
-    // 5. LIKE EVENTS (Optional: Listen for like broadcasts)
-    // ============================================
-    const likeChannel = supabase
-      .channel(`broadcast-likes-${streamId}`)
-      .on(
-        'broadcast',
-        { event: 'like_sent' },
-        (payload) => {
-          const likeData = payload.payload;
-          console.log('[useBroadcastRealtime] Like received:', likeData);
-
-          // Use the actual total_likes from the server response if available,
-          // otherwise fall back to incrementing by 1
-          if (likeData.total_likes !== undefined) {
-            setState(prev => ({
-              ...prev,
-              totalLikes: likeData.total_likes,
-            }));
-          } else {
-            setState(prev => ({
-              ...prev,
-              totalLikes: prev.totalLikes + 1,
-            }));
-          }
-        }
-      )
-      .subscribe();
-
-    channels.push(likeChannel);
-
-    // Store channels
     channelsRef.current = channels;
 
-    // Message buffer flush interval
     const flushInterval = setInterval(() => {
       if (messageBufferRef.current.length === 0) return;
 
@@ -358,7 +300,6 @@ export function useBroadcastRealtime({
 
       setState(prev => {
         const updated = [...prev.messages, ...newMessages];
-        // Keep only last MAX_MESSAGES
         if (updated.length > MAX_MESSAGES) {
           return {
             ...prev,
@@ -372,24 +313,17 @@ export function useBroadcastRealtime({
       });
     }, FLUSH_INTERVAL);
 
-    // Cleanup on unmount
     return () => {
       clearInterval(flushInterval);
       cleanup();
     };
   }, [streamId, userId, cleanup, onStreamEnd, onGiftReceived, onMessageReceived, onParticipantJoin, onParticipantLeave]);
 
-  // ============================================
-  // ACTION METHODS
-  // ============================================
-
-  // Send a message
   const sendMessage = useCallback(async (content: string, userProfile: any) => {
     if (!userId || !content.trim()) return;
 
     const txnId = generateUUID();
-    
-    // Optimistic update
+
     const optimisticMessage: BroadcastMessage = {
       id: txnId,
       user_id: userId,
@@ -407,55 +341,54 @@ export function useBroadcastRealtime({
       messages: [...prev.messages, optimisticMessage],
     }));
 
-    // Send via broadcast channel
-    const channel = supabase.channel(`broadcast-messages-${streamId}`);
-    await channel.send({
-      type: 'broadcast',
-      event: 'message',
-      payload: {
-        v: 1,
-        txn_id: txnId,
-        s: userId,
-        ts: Date.now(),
-        stream_id: streamId,
-        d: {
-          content: content.trim(),
-          user_name: userProfile?.username,
-          user_avatar: userProfile?.avatar_url,
-          user_role: userProfile?.role,
-          user_troll_role: userProfile?.troll_role,
-          user_created_at: userProfile?.created_at,
-          user_rgb_expires_at: userProfile?.rgb_username_expires_at,
-          user_glowing_username_color: userProfile?.glowing_username_color,
+    const channel = channelsRef.current[0];
+    if (channel) {
+      await channel.send({
+        type: 'broadcast',
+        event: 'message',
+        payload: {
+          v: 1,
+          txn_id: txnId,
+          s: userId,
+          ts: Date.now(),
+          stream_id: streamId,
+          d: {
+            content: content.trim(),
+            user_name: userProfile?.username,
+            user_avatar: userProfile?.avatar_url,
+            user_role: userProfile?.role,
+            user_troll_role: userProfile?.troll_role,
+            user_created_at: userProfile?.created_at,
+            user_rgb_expires_at: userProfile?.rgb_username_expires_at,
+            user_glowing_username_color: userProfile?.glowing_username_color,
+          },
         },
-      },
-    });
+      });
+    }
   }, [streamId, userId]);
 
-  // Send a like
   const sendLike = useCallback(async () => {
     if (!userId) return;
 
-    // Broadcast like event
-    const channel = supabase.channel(`broadcast-likes-${streamId}`);
-    await channel.send({
-      type: 'broadcast',
-      event: 'like_sent',
-      payload: {
-        user_id: userId,
-        stream_id: streamId,
-        timestamp: Date.now(),
-      },
-    });
+    const channel = channelsRef.current[0];
+    if (channel) {
+      await channel.send({
+        type: 'broadcast',
+        event: 'like_sent',
+        payload: {
+          user_id: userId,
+          stream_id: streamId,
+          timestamp: Date.now(),
+        },
+      });
+    }
 
-    // Optimistic update
     setState(prev => ({
       ...prev,
       totalLikes: prev.totalLikes + 1,
     }));
   }, [streamId, userId]);
 
-  // Clear recent gifts (after animation completes)
   const clearGiftAnimation = useCallback((giftId: string) => {
     setState(prev => ({
       ...prev,

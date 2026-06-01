@@ -92,13 +92,16 @@ export default function IdVerifyClient({onComplete}:{onComplete:(r:Result)=>void
       const selfiePath = `verification_docs/${uid}/selfie.jpg`
       await supabase.storage.from('verification_docs').upload(idPath, idBlob, {upsert:true})
       await supabase.storage.from('verification_docs').upload(selfiePath, selfieBlob, {upsert:true})
-      const { data: idUrl } = await supabase.storage.from('verification_docs').getPublicUrl(idPath)
-      const { data: selfieUrl } = await supabase.storage.from('verification_docs').getPublicUrl(selfiePath)
+      // Use signed URLs since verification_docs is a private bucket
+      const { data: idSigned, error: idSignErr } = await supabase.storage.from('verification_docs').createSignedUrl(idPath, 900)
+      const { data: selfieSigned, error: selfieSignErr } = await supabase.storage.from('verification_docs').createSignedUrl(selfiePath, 900)
+      if (idSignErr) throw idSignErr
+      if (selfieSignErr) throw selfieSignErr
 
       await supabase.from('user_profiles').upsert({
         user_id: uid,
-        id_document_url: idUrl.publicUrl,
-        id_selfie_url: selfieUrl.publicUrl,
+        id_document_url: idSigned.signedUrl,
+        id_selfie_url: selfieSigned.signedUrl,
         id_verification_status: status,
         id_verification_ocr: ocrText || null,
         id_verification_score: matchScore || null,

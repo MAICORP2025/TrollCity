@@ -148,6 +148,22 @@ html.tc-battery-ultra .tc-page-surface {
   background: #020617 !important;
 }
 
+/* ── Mobile GPU: reduce backdrop-blur on small screens ── */
+@media (max-width: 768px) {
+  .backdrop-blur-2xl {
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+  }
+  .backdrop-blur-xl {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+  }
+  .backdrop-blur-md {
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+  }
+}
+
 .tc-theme-exempt.tc-page-surface,
 .tc-theme-exempt .tc-page-surface {
   background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #020617 100%);
@@ -1518,6 +1534,16 @@ button:focus-visible {
   }
 }
 
+/* ── Mobile GPU reduction ── */
+@media (max-width: 768px) {
+  .animate-bg-drift-1,
+  .animate-bg-drift-2,
+  .animate-bg-drift-3,
+  .animate-bg-drift-4 {
+    display: none !important;
+  }
+}
+
 /* ═══════════════════════════════════════════
    FALLING COIN SPRITES — gold + green TC coins
    ═══════════════════════════════════════════ */
@@ -1552,5 +1578,24 @@ button:focus-visible {
   100% {
     transform: translateY(105vh) rotate(-480deg) scale(0.6);
     opacity: 0;
+  }
+}
+
+/* Seat connecting pulse */
+@keyframes seat-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.seat-connecting-dot {
+  animation: seat-pulse 1.4s ease-in-out infinite;
+}
+
+/* ── Mobile GPU: disable coin fall animations ── */
+@media (max-width: 768px) {
+  [class*="coin-"],
+  [class*="CoinSprite"],
+  .animate-float-slow {
+    animation: none !important;
   }
 }

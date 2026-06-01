@@ -65,36 +65,36 @@ export function useLeagueMissions(leagueEventId?: string | null): UseLeagueMissi
         }
       }
 
-      const { data, error: missionError } = await supabase
-        .from('user_league_missions')
-        .select('*')
-        .eq('user_id', user.id)
-        .in('status', ['active', 'completed'])
-        .order('created_at', { ascending: false })
+      let loadedMissions: any[] = []
+      try {
+        const { data, error: missionError } = await supabase
+          .from('user_league_missions')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('status', ['active', 'completed'])
+          .order('created_at', { ascending: false })
 
-      if (missionError && missionError.code !== 'PGRST116') {
-        throw missionError
+        if (missionError && missionError.code !== 'PGRST116') {
+          throw missionError
+        }
+        loadedMissions = Array.isArray(data) ? data : []
+      } catch {
+        // Table may not exist yet — missions will be empty
       }
 
-      const loadedMissions = Array.isArray(data) ? data : []
       setMissions(loadedMissions as LeagueMission[])
 
-      const activeCount = loadedMissions.filter((mission) => mission.status === 'active').length
+      const activeCount = loadedMissions.filter((mission: any) => mission.status === 'active').length
       if (activeCount < 3 && user?.id) {
-        const { error: generateError } = await supabase.rpc('generate_user_league_missions', {
-          p_user_id: user.id,
-          p_league_event_id: null,
-          p_count: 3,
-        })
-        if (generateError) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('[useLeagueMissions] generate_user_league_missions failed:', generateError)
-          }
+        try {
+          await supabase.rpc('generate_user_league_missions', {
+            p_user_id: user.id,
+            p_league_event_id: null,
+            p_count: 3,
+          })
+        } catch {
+          // RPC may not exist yet
         }
-      }
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[useLeagueMissions] fetched missions:', loadedMissions)
       }
     } catch (err) {
       if (process.env.NODE_ENV === 'development') {
