@@ -729,6 +729,8 @@ export default function NeighborhoodOnboarding() {
         vehicle_id: currentVehicleId,
         expires_at: expiry,
         deductible_paid: 0,
+        status: 'active',
+        starts_at: new Date().toISOString(),
       })
 
       if (carInsuranceError) throw carInsuranceError
@@ -741,6 +743,15 @@ export default function NeighborhoodOnboarding() {
             house_id: houseId,
             expires_at: expiry,
             deductible_paid: 0,
+            status: 'active',
+            is_active: true,
+            plan_id: 'basic_week',
+            coverage_type: 'basic',
+            cost_paid: 0,
+            deductible: 25,
+            duration_hours: 720,
+            purchased_at: new Date().toISOString(),
+            claims_made: 0,
           })
 
         if (homeInsuranceError) throw homeInsuranceError
