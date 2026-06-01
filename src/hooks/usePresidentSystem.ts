@@ -467,7 +467,13 @@ const fetchCurrentElection = useCallback(async () => {
         .from('president_elections')
         .select('status')
         .eq('id', electionId)
-        .single();
+        .maybeSingle();
+
+      if (!election) {
+        toast.error('Election not found');
+        setLoading(false);
+        return;
+      }
 
       if (election?.status === 'open') {
         await supabase
@@ -604,16 +610,16 @@ const fetchCurrentElection = useCallback(async () => {
        }
        
        // Check if user has background jail status (released within last 24 hours)
-       const { data: profileData, error: profileError } = await supabase
-         .from('user_profiles')
-         .select('is_background_jailed')
-         .eq('id', user?.id)
-         .single();
-         
-       if (profileError) {
-         console.error('Error fetching profile for background jail check:', profileError);
-         // Don't block signup on profile fetch error, but log it
-       } else if (profileData?.is_background_jailed) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('is_background_jailed')
+          .eq('id', user?.id)
+          .maybeSingle();
+          
+        if (profileError) {
+          console.error('Error fetching profile for background jail check:', profileError);
+          // Don't block signup on profile fetch error, but log it
+        } else if (profileData?.is_background_jailed) {
          toast.error('You cannot run for president while your jail record is recent. Please wait 24 hours after release.');
          setLoading(false);
          return;

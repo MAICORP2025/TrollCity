@@ -2438,6 +2438,13 @@ useEffect(() => {
           console.log('[BroadcastPage] Poll detected stream ended, redirecting to summary');
           clearInterval(pollInterval);
           stopLocalTracks();
+          // Hard disconnect LiveKit room
+          const room = roomRef.current;
+          if (room) {
+            room.disconnect().catch(() => {});
+            roomRef.current = null;
+          }
+          setRemoteParticipants(new Map());
           navigate(`/broadcast/summary/${streamId}`);
           return;
         }
@@ -2539,6 +2546,13 @@ useEffect(() => {
 
     if (nextStream.status === 'ended') {
       stopLocalTracksRef.current();
+      // Hard disconnect LiveKit room to ensure clean exit
+      const room = roomRef.current;
+      if (room) {
+        room.disconnect().catch(() => {});
+        roomRef.current = null;
+      }
+      setRemoteParticipants(new Map());
       setTimeout(() => {
         navigate(`/broadcast/summary/${streamId}`);
       }, 100);

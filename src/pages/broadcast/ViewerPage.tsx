@@ -266,8 +266,20 @@ function RemoteVideoSurface({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  const videoTrack = useMemo(() => getVideoTrackFromParticipant(participant), [participant])
-  const audioTrack = useMemo(() => getAudioTrackFromParticipant(participant), [participant])
+  // Tick every 2s to re-evaluate video track — critical for mobile PWA where
+  // LiveKit mutates the same RemoteParticipant instance on track subscribe
+  // without triggering a React re-render.
+  const [, setTrackTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setTrackTick(t => t + 1), 2000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Do NOT memoize these by participant object. LiveKit mutates the same
+  // RemoteParticipant instance when tracks subscribe, so memoization can keep
+  // returning null even after TrackSubscribed fires. (Same fix as BroadcastPage's RemoteSeatSurface.)
+  const videoTrack = getVideoTrackFromParticipant(participant)
+  const audioTrack = getAudioTrackFromParticipant(participant)
 
   useEffect(() => {
     const videoEl = videoRef.current
@@ -1137,6 +1149,11 @@ const isActive = isStreamActive(stream)
     if (!data) return
 
     if (isStreamEnded(data as Stream)) {
+      // Hard disconnect from LiveKit before navigating
+      leaveLiveKitRoom().catch(() => {})
+      hasJoinedAudienceRef.current = false
+      joiningAudienceRef.current = false
+      currentRoomKeyRef.current = null
       navigate(`/broadcast/summary/${streamId}`, { replace: true })
       return
     }
@@ -1466,6 +1483,11 @@ useStreamRealtime(
         if (!next) return
 
         if (isStreamEnded(next as Stream)) {
+          // Hard disconnect from LiveKit before navigating
+          leaveLiveKitRoom().catch(() => {})
+          hasJoinedAudienceRef.current = false
+          joiningAudienceRef.current = false
+          currentRoomKeyRef.current = null
           navigate(`/broadcast/summary/${streamId}`, { replace: true })
           return
         }
@@ -1490,6 +1512,11 @@ useStreamRealtime(
         if (!next) return
 
         if (isStreamEnded(next as Stream)) {
+          // Hard disconnect from LiveKit before navigating
+          leaveLiveKitRoom().catch(() => {})
+          hasJoinedAudienceRef.current = false
+          joiningAudienceRef.current = false
+          currentRoomKeyRef.current = null
           navigate(`/broadcast/summary/${streamId}`, { replace: true })
           return
         }
@@ -1863,7 +1890,7 @@ useStreamRealtime(
                         : 'minmax(560px, 1fr) 360px',
                   }
                 : {
-                    paddingBottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT}px + ${MOBILE_SAFE_BOTTOM})`,
+                    paddingBottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT}px + env(safe-area-inset-bottom))`,
                   }
             }
           >
@@ -1981,7 +2008,7 @@ useStreamRealtime(
                 <div
                   className="pointer-events-none absolute inset-x-3 z-30 flex flex-col-reverse gap-2 overflow-hidden"
                   style={{
-                    bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT + 12}px + env(safe-area-inset-bottom))`,
+                    bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + 12}px + env(safe-area-inset-bottom))`,
                     maxHeight: '34vh',
                   }}
                 >
@@ -2473,12 +2500,12 @@ useStreamRealtime(
   className={cn(
     'relative z-20 shrink-0 border-t border-white/10 px-4 py-3',
     theme.bottomBar,
-    isMobileViewer && 'absolute inset-x-0'
+    isMobileViewer && 'fixed inset-x-0 bottom-0'
   )}
   style={
     isMobileViewer
       ? {
-          bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
+          paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
         }
       : undefined
   }
@@ -2512,14 +2539,15 @@ useStreamRealtime(
                 <Share2 className="h-4 w-4" />
                 Share
               </button>
+              {isUserOnStage && (
               <button
-                onClick={isUserOnStage ? handleLeaveSeat : handleJoinAvailableSeat}
-                disabled={!isUserOnStage && typeof availableSeatIndex !== 'number'}
-                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', !isUserOnStage && typeof availableSeatIndex === 'number' ? theme.purpleButton : 'bg-white/5 text-slate-400')}
+                onClick={handleLeaveSeat}
+                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.purpleButton)}
               >
                 <Users className="h-4 w-4" />
-                {isUserOnStage ? 'Leave Stage' : typeof availableSeatIndex === 'number' ? 'Join Seat' : 'No Seats'}
+                Leave Stage
               </button>
+              )}
               {isUserOnStage && (
                 <button
                   onClick={handleStartSeatBattle}

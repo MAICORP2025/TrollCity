@@ -288,6 +288,24 @@ export function useLiveKitRoom({
           getParticipantIdentity(item) === identity ? participant : item
         );
       });
+
+      // Double-update on next animation frame to ensure React re-renders
+      // even when LiveKit mutates the same participant object reference.
+      // Critical for mobile PWA where track subscribe doesn't change the
+      // participant reference but adds tracks to it.
+      window.requestAnimationFrame(() => {
+        setRemoteUsers(prev => {
+          const exists = prev.some(
+            (item: any) => getParticipantIdentity(item) === identity
+          );
+
+          if (!exists) return [...prev, participant];
+
+          return prev.map((item: any) =>
+            getParticipantIdentity(item) === identity ? participant : item
+          );
+        });
+      });
     },
     []
   );

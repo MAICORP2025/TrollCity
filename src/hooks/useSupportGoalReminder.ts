@@ -122,10 +122,10 @@ export const useSupportGoalReminder = () => {
           .eq('viewer_user_id', user.id)
           .eq('broadcaster_user_id', profile.id)
           .eq('cashout_tier', nextTier.coin_amount)
-          .gte('dismissed_at', new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()) // Last 12 hours
-          .single();
+          .gte('dismissed_at', new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString())
+          .maybeSingle();
 
-        if (dismissalError && dismissalError.code !== 'PGRST116') { // PGRST116 means no rows returned
+        if (dismissalError) {
           throw dismissalError;
         }
 

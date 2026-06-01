@@ -200,8 +200,13 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
     url.includes('analytics.google.com') ||
     url.includes('googletagmanager.com') ||
     url.includes('google-analytics.com') ||
+    url.includes('google.com/measurement/conversion') ||
+    url.includes('googleadservices.com') ||
+    url.includes('doubleclick.net') ||
     url.includes('/g/collect') ||
-    url.includes('/collect?v=2')
+    url.includes('/collect?v=2') ||
+    url.includes('facebook.net') ||
+    url.includes('connect.facebook.net')
   )
 }
 

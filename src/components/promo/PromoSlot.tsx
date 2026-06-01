@@ -86,7 +86,7 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
           .from(table)
           .select('impressions_count')
           .eq('id', adId)
-          .single();
+          .maybeSingle();
         
         if (data) {
           await supabase

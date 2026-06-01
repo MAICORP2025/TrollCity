@@ -62,9 +62,9 @@ export const useLevelStore = create<LevelState>((set, get) => ({
         .from('user_stats')
         .select('*')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+      if (error) {
         console.error('Error fetching levels:', error)
         return
       }

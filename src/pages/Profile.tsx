@@ -222,8 +222,8 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
       const [perksRes, effectsRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes, marketplaceItemsRes, vehiclesRes, inventoryRes] = await Promise.all([
         supabase.from('user_perks').select('id,user_id,perk_id,purchased_at,metadata').eq('user_id', uid).order('purchased_at', { ascending: false }),
         supabase.from('user_entrance_effects').select('id,user_id,effect_id,metadata').eq('user_id', uid),
-        supabase.from('user_insurances').select('id,user_id,insurance_id,plan_id,status,created_at,metadata').eq('user_id', uid).order('created_at', { ascending: false }),
-        supabase.from('call_minutes').select('id,user_id,minutes_remaining,metadata').eq('user_id', uid).maybeSingle(),
+        supabase.from('user_insurances').select('id,user_id,insurance_id,is_active,expires_at,purchased_at,metadata').eq('user_id', uid).order('purchased_at', { ascending: false }),
+        supabase.from('call_minutes').select('id,user_id,audio_minutes,video_minutes').eq('user_id', uid).maybeSingle(),
         supabase.from('properties').select('id,owner_user_id,title,price,created_at').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
         supabase.from('vehicle_listings').select('id,seller_id,title,price,created_at').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
         supabase.from('marketplace_items').select('id,seller_id,title,price,status,created_at').eq('seller_id', uid).eq('status', 'active').order('created_at', { ascending: false }),
@@ -249,7 +249,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
 
       let insuranceList = insuranceUserRes.data || [];
       try {
-        const rawIds = insuranceList.map((p: any) => p.insurance_id || p.plan_id).filter(Boolean);
+        const rawIds = insuranceList.map((p: any) => p.insurance_id).filter(Boolean);
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const uuidIds = rawIds.filter((id: string) => uuidRegex.test(id));
         const slugIds = rawIds.filter((id: string) => !uuidRegex.test(id));
@@ -265,7 +265,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
         }
 
         insuranceList = insuranceList.map((row: any) => {
-          const id = row.insurance_id || row.plan_id;
+          const id = row.insurance_id;
           const plan = planMap.get(id);
           return {
             ...row,

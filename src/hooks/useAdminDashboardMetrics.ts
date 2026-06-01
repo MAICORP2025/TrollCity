@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-// TODO: Replace with RPC get_admin_dashboard_metrics_v1 when backend SQL is ready.
-// That RPC should return: coinRevenue, coinsSold, totalUsers, activeStreams,
-// pendingApplications, trollOfficers, platformProfit, coinsInCirculation.
-// For now we use narrow count queries + a single RPC for coinsInCirculation.
+// Uses RPC get_admin_dashboard_metrics_v1 for production metrics.
+// Still runs narrow count queries as supplementary data sources.
+// Fallback: use the finance summary view if RPC not available.
 
 interface DashboardMetrics {
   coinRevenue: number
@@ -169,10 +168,16 @@ export function useAdminDashboardMetrics() {
 
   async function loadCoinsInCirculation(): Promise<Partial<DashboardMetrics>> {
     try {
-      // SAFETY: use RPC instead of client-side SUM over all user_profiles
       const { data, error } = await supabase.rpc('get_admin_dashboard_metrics_v1')
-      if (!error && data && typeof data.coins_in_circulation === 'number') {
-        return { coinsInCirculation: data.coins_in_circulation }
+      if (!error && data && typeof data === 'object') {
+        return {
+          coinsInCirculation: Number(data.coins_in_circulation || 0),
+          coinRevenue: Number(data.coin_revenue || 0),
+          coinsSold: Number(data.coins_sold || 0),
+          platformProfit: Number(data.platform_profit || 0),
+          totalUsers: Number(data.total_users || 0),
+          trollOfficers: Number(data.troll_officer_count || 0),
+        }
       }
       // Fallback: use the finance summary view if RPC not yet deployed
       try {

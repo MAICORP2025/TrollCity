@@ -172,11 +172,11 @@ export const useXPStore = create<XPState>((set) => {
             .from('user_stats')
             .select('*')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
           console.log('[XP Store] user_stats query result:', { data, error });
 
-          if (error && error.code !== 'PGRST116') throw error;
+          if (error) throw error;
 
           if (data) {
             const { levelValue, totalXp, xpToNext, progressValue, nextLevelAbsolute } = _computeXpState(data);
