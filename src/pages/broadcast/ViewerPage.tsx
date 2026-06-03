@@ -269,16 +269,10 @@ function RemoteVideoSurface({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Track version tick — incremented on room events and by interval fallback.
+  // Track version tick — incremented on room events only.
   // LiveKit mutates RemoteParticipant objects in place, so the videoTrack
   // dependency alone won't trigger re-attach when a track is subscribed.
   const [trackTick, setTrackTick] = useState(0)
-
-  // Interval fallback for mobile PWA where room events may not propagate to React state.
-  useEffect(() => {
-    const interval = setInterval(() => setTrackTick(t => t + 1), 2000)
-    return () => clearInterval(interval)
-  }, [])
 
   // Listen to room events to force re-evaluation when tracks change.
   useEffect(() => {
