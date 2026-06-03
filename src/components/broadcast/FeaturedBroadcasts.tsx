@@ -29,7 +29,7 @@ export default function FeaturedBroadcasts() {
           featured_at,
           current_viewers,
           thumbnail_url,
-          user_profiles:user_profiles!streams_user_id_fkey (
+          user_profiles:user_profiles!streams_broadcaster_id_fkey (
             username,
             avatar_url
           )

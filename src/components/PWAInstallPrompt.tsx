@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { X, GripHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInstallPrompt } from '../pwa/useInstallPrompt';
-import { isStandalone, shouldShowIosInstructions } from '../pwa/install';
+import { isStandalone, shouldShowIosInstructions, getInstallStatus } from '../pwa/install';
 import IosInstallModal from './IosInstallModal';
 import InstallButton from './InstallButton';
 
@@ -17,6 +17,9 @@ export default function PWAInstallPrompt() {
   const [showIOSPrompt, setShowIOSPrompt] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const standalone = isStandalone();
+  
+  const installStatus = getInstallStatus(canPromptInstall);
+  const shouldShowButton = installStatus !== 'installed' && installStatus !== 'unsupported';
 
   useEffect(() => {
     // Auto-show iOS instructions after delay (only if applicable)
@@ -30,9 +33,11 @@ export default function PWAInstallPrompt() {
   }, [isDismissed]);
 
   const handleInstallClick = async () => {
-    const outcome = await promptInstall();
-    if (outcome === 'accepted') {
-      setIsDismissed(true);
+    if (canPromptInstall) {
+      const outcome = await promptInstall();
+      if (outcome === 'accepted') {
+        setIsDismissed(true);
+      }
     }
   };
 
@@ -43,7 +48,7 @@ export default function PWAInstallPrompt() {
     <>
       {/* Android / Chrome Floating Install Button */}
       <AnimatePresence>
-        {canPromptInstall && (
+        {shouldShowButton && (
           <motion.div 
             drag
             dragMomentum={false}

@@ -8,6 +8,7 @@ import {
   Crown,
   FileText,
   Gamepad2,
+  Gavel,
   Gift,
   Heart,
   Link2,
@@ -58,7 +59,7 @@ interface AuctionShow {
 interface LiveItem {
   id: string
   title: string
-  type: 'stream' | 'podcast'
+  type: 'stream' | 'podcast' | 'auction'
   viewerCount: number
   streamerName: string
   streamerAvatar: string | null
@@ -588,7 +589,11 @@ function LiveGrid({
                   className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-slate-900 text-left transition hover:border-cyan-300/60"
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-slate-950 to-cyan-900/50" />
-                  {item.streamerAvatar ? (
+                  {item.type === 'auction' ? (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Gavel className="h-16 w-16 text-cyan-300/40" />
+                    </div>
+                  ) : item.streamerAvatar ? (
                     <img src={item.streamerAvatar} alt={item.streamerName} className="absolute inset-0 h-full w-full object-cover opacity-80" />
                   ) : (
                     <Play className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-white/20" />
@@ -682,6 +687,19 @@ export default function Home() {
       : 'President Office'
 
   const battleItems = useMemo(() => liveItems.filter((item) => item.isBattle), [liveItems])
+
+  const auctionItems = useMemo(() => liveAuctions.map((auction) => ({
+    id: auction.id,
+    title: auction.title || 'Untitled Auction',
+    type: 'auction' as const,
+    viewerCount: 0,
+    streamerName: 'Auction',
+    streamerAvatar: null,
+    isFeatured: false,
+    isBattle: false,
+  })), [liveAuctions])
+
+  const allLiveItems = useMemo(() => [...liveItems, ...auctionItems], [liveItems, auctionItems])
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -812,7 +830,11 @@ export default function Home() {
   )
 
   const handleLiveItemClick = (item: LiveItem) => {
-    navigate(`/watch/${item.id}`)
+    if (item.type === 'auction') {
+      navigate(`/auctions/${item.id}`)
+    } else {
+      navigate(`/watch/${item.id}`)
+    }
   }
 
   const goLive = () => {
@@ -856,7 +878,7 @@ export default function Home() {
         <HomeTabs
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          liveCount={liveItems.length}
+          liveCount={allLiveItems.length}
           battleCount={battleItems.length}
           presidentTabLabel={presidentTabLabel}
         />
@@ -918,9 +940,9 @@ export default function Home() {
 
         {activeTab === 'live' && (
           <LiveGrid
-            liveItems={liveItems}
+            liveItems={allLiveItems}
             loadingLive={loadingLive}
-            totalViewers={totalViewers}
+            totalViewers={allLiveItems.reduce((sum, item) => sum + item.viewerCount, 0)}
             showLiveGrid={showLiveGrid}
             setShowLiveGrid={setShowLiveGrid}
             onClickItem={handleLiveItemClick}

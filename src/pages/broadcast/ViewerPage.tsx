@@ -1979,16 +1979,18 @@ useStreamRealtime(
   if (shouldShowRandomBattleArena) {
     return (
       <ErrorBoundary>
-        <BattleView
-          key={activeBattleId}
-          battleId={stream.battle_id!}
-          currentStreamId={streamId}
-          viewerId={user?.id}
-          remoteUsers={remoteUsers}
-          onReturnToStream={() => {
-            refreshStream();
-          }}
-        />
+        <GiftSystemProvider streamId={streamId} defaultReceiverId={hostId}>
+          <BattleView
+            key={activeBattleId}
+            battleId={stream.battle_id!}
+            currentStreamId={streamId}
+            viewerId={user?.id}
+            remoteUsers={remoteUsers}
+            onReturnToStream={() => {
+              refreshStream();
+            }}
+          />
+        </GiftSystemProvider>
       </ErrorBoundary>
     );
   }

@@ -372,51 +372,52 @@ if (typeof window !== 'undefined') {
   const enableDevSw = env.DEV && localStorage.getItem('enable_sw_dev') === '1'
   const enableProdSw = env.PROD && (isHttps && (!isLocalhost || forceLocalhostSw))
 
-   if (enableDevSw || enableProdSw) {
-     // We use vite-plugin-pwa's virtual module to handle registration and updates
-     // @ts-expect-error - Virtual module
-     import('virtual:pwa-register').then(({ registerSW }) => {
-       const updateSW = registerSW({
-         onNeedRefresh() {
-           console.log('[SW] update ready, dispatching in-app update event')
-           if (typeof window !== 'undefined') {
-             window.dispatchEvent(new CustomEvent('pwa-update-available'))
-           }
-         },
-         onOfflineReady() {
-           console.log('App ready to work offline')
-         }
-       })
+  // Always register SW in dev mode if force_sw is set, or in prod on HTTPS
+  if (enableDevSw || enableProdSw || forceLocalhostSw) {
+    // We use vite-plugin-pwa's virtual module to handle registration and updates
+    // @ts-expect-error - Virtual module
+    import('virtual:pwa-register').then(({ registerSW }) => {
+      const updateSW = registerSW({
+        onNeedRefresh() {
+          console.log('[SW] update ready, dispatching in-app update event')
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('pwa-update-available'))
+          }
+        },
+        onOfflineReady() {
+          console.log('App ready to work offline')
+        }
+      })
 
-       const checkForUpdate = () => {
-         if (typeof updateSW === 'function') {
-           void updateSW()
-         }
-       }
+      const checkForUpdate = () => {
+        if (typeof updateSW === 'function') {
+          void updateSW()
+        }
+      }
 
-       const runPeriodicUpdateCheck = () => {
-         if (typeof window === 'undefined') return
+      const runPeriodicUpdateCheck = () => {
+        if (typeof window === 'undefined') return
 
-         checkForUpdate()
-         const interval = window.setInterval(checkForUpdate, 1000 * 60 * 30)
-         window.addEventListener('beforeunload', () => {
-           window.clearInterval(interval)
-         })
-       }
+        checkForUpdate()
+        const interval = window.setInterval(checkForUpdate, 1000 * 60 * 30)
+        window.addEventListener('beforeunload', () => {
+          window.clearInterval(interval)
+        })
+      }
 
-       runPeriodicUpdateCheck()
-     })
+      runPeriodicUpdateCheck()
+    })
 
-     const urlBase64ToUint8Array = (base64String: string) => {
-       const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-       const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-       const rawData = window.atob(base64)
-       const outputArray = new Uint8Array(rawData.length)
-       for (let i = 0; i < rawData.length; ++i) {
-         outputArray[i] = rawData.charCodeAt(i)
-       }
-       return outputArray
-     }
+    const urlBase64ToUint8Array = (base64String: string) => {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+      const rawData = window.atob(base64)
+      const outputArray = new Uint8Array(rawData.length)
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i)
+      }
+      return outputArray
+    }
 
      const initPushNotifications = async () => {
        try {

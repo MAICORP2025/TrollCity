@@ -321,7 +321,7 @@ export default function LiveAuctionMiniWindow({ auction, onRequireAuth }: LiveAu
         'rounded-2xl border border-cyan-300/20 bg-slate-950/65 p-4 cursor-pointer hover:bg-slate-950/75 transition-colors',
         'group'
       )}
-      onClick={() => navigate(`/auctions/studio/${auction.id}/live`)}
+      onClick={() => navigate(`/auctions/${auction.id}`)}
     >
       {/* Auction Title */}
       <div className="mb-3">
@@ -354,9 +354,13 @@ export default function LiveAuctionMiniWindow({ auction, onRequireAuth }: LiveAu
           </div>
         </div>
       ) : (
-        <p className="text-xs text-slate-400 text-center">
-          No active lot
-        </p>
+        <div className="text-xs text-slate-400 text-center py-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-cyan-500/20 mb-2">
+            <AlertCircle className="w-5 h-5 text-cyan-300" />
+          </div>
+          <p className="font-medium text-cyan-200">Auction in Progress</p>
+          <p className="mt-1 text-[10px] text-slate-500">Waiting for first lot...</p>
+        </div>
       )}
 
       {/* Bidding Section */}

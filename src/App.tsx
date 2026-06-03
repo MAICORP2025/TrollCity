@@ -54,6 +54,7 @@ import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
 import { RequireLeadOrOwner } from "./components/auth/RequireLeadOrOwner";
 import ErrorBoundary from "./components/ErrorBoundary";
+import UnderConstructionPage from "./components/UnderConstructionPage";
 
 // Agency Pages (lazy-loaded)
 const AgenciesPage = lazyWithRetry(() => import("./pages/agencies"));
@@ -216,6 +217,10 @@ const isPublicRoute = (pathname: string) => {
     return true
   }
 
+  // Live auctions browse/watch are public — anyone can view
+  if (pathname === '/auctions') return true
+  if (pathname.startsWith('/auctions/') && !pathname.startsWith('/auctions/studio')) return true
+
   return (
     pathname.startsWith('/broadcast/') &&
     !pathname.startsWith('/broadcast/setup') &&
@@ -372,7 +377,6 @@ import ProfileSettings from "./pages/ProfileSettings.js";
 import DeleteAccount from "./pages/DeleteAccount.js";
 import TrollBank from "./pages/TrollBank.js";
 import Leaderboard from "./pages/Leaderboard.js";
-import UnderConstructionPage from "./pages/UnderConstructionPage.js";
 import TrollCityWall from "./pages/TrollCityWall.js";
 import WallPostPage from "./pages/WallPostPage.js";
 import DistrictTour from "./pages/DistrictTour.js";
@@ -1332,7 +1336,7 @@ const handleVisibilityChange = async () => {
                 <Route path="/explore" element={<ExploreFeed />} />
                 <Route path="/live-swipe" element={<StreamSwipePage />} />
                 <Route path="/embed/:id" element={<EmbedPage />} />
-                <Route path="/hytrogaming" element={<HytroGaming />} />
+                <Route path="/hytrogaming" element={<UnderConstructionPage pageName="HytroGaming" />} />
                 <Route path="/hytro/:id" element={<HytroViewerPage />} />
                 <Route path="/agora-player" element={<AgoraPlayerPage />} />
                 <Route path="/dev/theme-preview" element={<ThemePreviewPage />} />
@@ -1359,6 +1363,10 @@ const handleVisibilityChange = async () => {
                 {/* 🏠 Home - Public with limited auth for interactions */}
                 <Route path="/home" element={<AuthenticatedHome />} />
                  <Route path="/" element={<AuthenticatedHome />} />
+
+                {/* 🎤 Live Auctions — Public browse/watch, studio gated below */}
+                <Route path="/auctions" element={<AuctionsPage />} />
+                <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
 
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
@@ -1579,7 +1587,6 @@ const handleVisibilityChange = async () => {
                    <Route path="/tromail" element={<TromailPage />} />
 
                    {/* 🎥 Team Meeting Room */}
-<Route path="/auctions" element={<AuctionsPage />} />
                    <Route
                      path="/auctions/studio"
                      element={
@@ -1654,7 +1661,6 @@ const handleVisibilityChange = async () => {
                        </RequireRole>
                      }
                    />
-                   <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
                    
                    {/* 🎙️ Podcast Central */}
                    <Route path="/podcast" element={<PodcastCentral />} />

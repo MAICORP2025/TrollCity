@@ -1,11 +1,6 @@
-/**
- * IosInstallModal Component
- * Shows iOS Safari "Add to Home Screen" instructions in a bottom sheet
- */
-
 import React from 'react';
-import { X, Share, Plus } from 'lucide-react';
-import { dismissIosInstructions } from '../pwa/install';
+import { X, Share, Plus, Monitor } from 'lucide-react';
+import { dismissIosInstructions, isIos } from '../pwa/install';
 
 interface IosInstallModalProps {
   isOpen: boolean;
@@ -19,6 +14,7 @@ export default function IosInstallModal({
   enableDontShowAgain = true 
 }: IosInstallModalProps) {
   const [dontShowAgain, setDontShowAgain] = React.useState(false);
+  const isIosDevice = isIos();
 
   const handleClose = () => {
     if (dontShowAgain && enableDontShowAgain) {
@@ -58,56 +54,71 @@ export default function IosInstallModal({
           {/* Content */}
           <div className="px-6 pb-6">
             <p className="text-slate-400 mb-6 text-sm">
-              Install our app for the best experience. Get instant access from your home screen!
+              {isIosDevice 
+                ? 'Install our app for the best experience. Get instant access from your home screen!'
+                : 'Install Troll City for the best experience. Use your browser\'s install menu.'
+              }
             </p>
 
-            {/* Steps */}
-            <div className="flex flex-col gap-4 mb-6">
-              {/* Step 1 */}
-              <div className="flex items-start gap-4 p-3 bg-slate-800/50 rounded-xl border border-purple-500/10">
-                <div className="flex-shrink-0 p-3 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-lg border border-blue-400/20">
-                  <Share size={24} className="text-blue-400" />
-                </div>
-                <div className="flex-1 pt-1">
-                  <p className="text-white font-medium mb-1">
-                    1. Tap the Share button
-                  </p>
-                  <p className="text-slate-400 text-xs">
-                    Look for <Share size={12} className="inline" /> in your Safari toolbar
-                  </p>
-                </div>
+            {/* Desktop Instructions */}
+            {!isIosDevice && (
+              <div className="mb-4 p-3 bg-slate-800/50 rounded-xl border border-cyan-500/20">
+                <p className="text-cyan-300 text-xs font-medium mb-1">Desktop Instructions:</p>
+                <p className="text-slate-400 text-xs">
+                  Click the <Monitor size={12} className="inline mr-1" /> menu icon in Chrome/Edge, then look for the <span className="text-white font-bold">⊡</span> or <span className="text-white font-bold">Install</span> button.
+                </p>
               </div>
+            )}
 
-              {/* Step 2 */}
-              <div className="flex items-start gap-4 p-3 bg-slate-800/50 rounded-xl border border-purple-500/10">
-                <div className="flex-shrink-0 p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg border border-purple-400/20">
-                  <Plus size={24} className="text-purple-400" />
+            {/* Steps for mobile */}
+            {isIosDevice && (
+              <div className="flex flex-col gap-4 mb-6">
+                {/* Step 1 */}
+                <div className="flex items-start gap-4 p-3 bg-slate-800/50 rounded-xl border border-purple-500/10">
+                  <div className="flex-shrink-0 p-3 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-lg border border-blue-400/20">
+                    <Share size={24} className="text-blue-400" />
+                  </div>
+                  <div className="flex-1 pt-1">
+                    <p className="text-white font-medium mb-1">
+                      1. Tap the Share button
+                    </p>
+                    <p className="text-slate-400 text-xs">
+                      Look for <Share size={12} className="inline" /> in your Safari toolbar
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 pt-1">
-                  <p className="text-white font-medium mb-1">
-                    2. Select &quot;Add to Home Screen&quot;
-                  </p>
-                  <p className="text-slate-400 text-xs">
-                    Scroll down if you don&apos;t see it immediately
-                  </p>
-                </div>
-              </div>
 
-              {/* Step 3 */}
-              <div className="flex items-start gap-4 p-3 bg-slate-800/50 rounded-xl border border-purple-500/10">
-                <div className="flex-shrink-0 p-3 bg-gradient-to-br from-cyan-500/20 to-teal-500/20 rounded-lg border border-cyan-400/20">
-                  <div className="text-2xl">✓</div>
+                {/* Step 2 */}
+                <div className="flex items-start gap-4 p-3 bg-slate-800/50 rounded-xl border border-purple-500/10">
+                  <div className="flex-shrink-0 p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg border border-purple-400/20">
+                    <Plus size={24} className="text-purple-400" />
+                  </div>
+                  <div className="flex-1 pt-1">
+                    <p className="text-white font-medium mb-1">
+                      2. Select &quot;Add to Home Screen&quot;
+                    </p>
+                    <p className="text-slate-400 text-xs">
+                      Scroll down if you don&apos;t see it immediately
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 pt-1">
-                  <p className="text-white font-medium mb-1">
-                    3. Tap &quot;Add&quot;
-                  </p>
-                  <p className="text-slate-400 text-xs">
-                    The app will appear on your home screen
-                  </p>
+
+                {/* Step 3 */}
+                <div className="flex items-start gap-4 p-3 bg-slate-800/50 rounded-xl border border-purple-500/10">
+                  <div className="flex-shrink-0 p-3 bg-gradient-to-br from-cyan-500/20 to-teal-500/20 rounded-lg border border-cyan-400/20">
+                    <div className="text-2xl">✓</div>
+                  </div>
+                  <div className="flex-1 pt-1">
+                    <p className="text-white font-medium mb-1">
+                      3. Tap &quot;Add&quot;
+                    </p>
+                    <p className="text-slate-400 text-xs">
+                      The app will appear on your home screen
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Don't Show Again Option */}
             {enableDontShowAgain && (
@@ -134,11 +145,13 @@ export default function IosInstallModal({
           </div>
 
           {/* Visual indicator arrow pointing to Safari toolbar */}
-          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-cyan-400/50 animate-bounce pointer-events-none">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" transform="rotate(90 12 12)" />
-            </svg>
-          </div>
+          {isIosDevice && (
+            <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-cyan-400/50 animate-bounce pointer-events-none">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" transform="rotate(90 12 12)" />
+              </svg>
+            </div>
+          )}
         </div>
       </div>
 

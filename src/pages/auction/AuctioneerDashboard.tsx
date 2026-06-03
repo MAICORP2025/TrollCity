@@ -32,6 +32,7 @@ import { toast } from 'sonner'
 
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
+import { useAuctionTimer } from '../../hooks/useAuctionTimer'
 
 interface AuctionLot {
   id: string
@@ -99,7 +100,13 @@ export default function AuctioneerDashboard() {
   const [displayTextDraft, setDisplayTextDraft] = useState('')
   const [savingDisplayText, setSavingDisplayText] = useState(false)
   const [displayTextSaved, setDisplayTextSaved] = useState(false)
+  const [agoraDebugLog, setAgoraDebugLog] = useState<string[]>([])
   const MAX_DISPLAY_LENGTH = 5000
+
+  const logAgora = useCallback((msg: string) => {
+    console.log(msg)
+    setAgoraDebugLog((prev) => [...prev.slice(-19), `${new Date().toLocaleTimeString()} ${msg}`])
+  }, [])
 
   const localVideoRef = useRef<HTMLDivElement | null>(null)
   const agoraClientRef = useRef<IAgoraRTCClient | null>(null)
@@ -109,17 +116,43 @@ export default function AuctioneerDashboard() {
   const agoraConnectingRef = useRef(false)
   const activeAgoraKeyRef = useRef<string | null>(null)
 
+  // Fetch the user's auctioneer_profiles.id to compare against show.auctioneer_id
+  // (show.auctioneer_id references auctioneer_profiles.id, NOT auth.users.id)
+  const [auctioneerProfileId, setAuctioneerProfileId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user?.id) { setAuctioneerProfileId(null); return }
+    supabase
+      .from('auctioneer_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle()
+      .then(({ data }) => setAuctioneerProfileId(data?.id ?? null))
+  }, [user?.id])
+
   const isAuctioneer = useMemo(() => {
-    if (!user?.id || !show) return false
-    return show.auctioneer_id === user.id
-  }, [show, user?.id])
+    if (!show) return false
+    // Admins can always access
+    if (profile?.role === 'admin' || profile?.is_admin) return true
+    // Check if this user's auctioneer_profile matches the show's auctioneer_id
+    if (auctioneerProfileId && show.auctioneer_id === auctioneerProfileId) return true
+    return false
+  }, [show, auctioneerProfileId, profile?.role, profile?.is_admin])
 
   const getAgoraToken = useCallback(async (channelName: string, uid: number, role: 'publisher' | 'audience') => {
     const { data, error } = await supabase.functions.invoke('agora-token', {
       body: { channelName, channel: channelName, uid, role, isPublisher: role === 'publisher' },
     })
-    if (error) throw error
-    if (!data?.token) throw new Error('No Agora token returned')
+    if (error) {
+      // supabase.functions.invoke wraps edge function errors generically.
+      // Try to extract the actual error message from the edge function response.
+      const edgeError = error as any
+      const details = edgeError?.context?.error?.error || edgeError?.context?.error?.details
+        || edgeError?.context?.error?.hint || edgeError?.message
+      throw new Error(details || 'Agora token service unavailable. Make sure AGORA_APP_ID and AGORA_APP_CERTIFICATE are set in Supabase secrets.')
+    }
+    if (!data?.token) throw new Error('No Agora token returned — check Supabase edge function logs')
     return data.token as string
   }, [])
 
@@ -151,8 +184,13 @@ export default function AuctioneerDashboard() {
   }, [])
 
   const connectAuctioneerAgora = useCallback(async () => {
-    if (!show || !showId || !user?.id || !isAuctioneer) return
+    console.log('[Agora] connectAuctioneerAgora clicked', { hasShow: !!show, showId, hasUser: !!user?.id, isAuctioneer, showStatus: show?.status, auctioneerId: show?.auctioneer_id, userId: user?.id })
+    if (!show) { toast.error('Cannot connect: show not loaded'); return }
+    if (!showId) { toast.error('Cannot connect: missing show ID'); return }
+    if (!user?.id) { toast.error('Cannot connect: not logged in'); return }
+    if (!isAuctioneer) { toast.error(`Cannot connect: you are not the auctioneer (show.auctioneer_id=${show.auctioneer_id}, your id=${user?.id})`); return }
     const appId = import.meta.env.VITE_AGORA_APP_ID
+    console.log('[Agora] App ID:', appId ? `${appId.substring(0, 8)}...` : 'MISSING')
     if (!appId) {
       toast.error('Agora App ID is not configured')
       return
@@ -161,9 +199,27 @@ export default function AuctioneerDashboard() {
     const channelName = getAgoraChannelName(show)
     const uid = makeAgoraUid(user.id, 'auctioneer')
     const agoraKey = `${channelName}:${uid}:auctioneer`
+    console.log('[Agora] Connection params:', { channelName, uid, agoraKey })
 
-    if (activeAgoraKeyRef.current === agoraKey || agoraConnectingRef.current || agoraJoinedRef.current || agoraClientRef.current) return
-    if (GLOBAL_AGORA_JOIN_LOCKS.has(agoraKey)) return
+    if (agoraConnectingRef.current) {
+      console.warn('[Agora] Already connecting')
+      toast.info('Camera connection already in progress...')
+      return
+    }
+    if (agoraJoinedRef.current || agoraClientRef.current) {
+      console.warn('[Agora] Already joined or client exists')
+      toast.info('Camera is already connected')
+      return
+    }
+    if (activeAgoraKeyRef.current === agoraKey) {
+      console.warn('[Agora] Same key active')
+      toast.info('Already connected to this auction channel')
+      return
+    }
+    if (GLOBAL_AGORA_JOIN_LOCKS.has(agoraKey)) {
+      console.log('[Agora] Clearing stale lock')
+      GLOBAL_AGORA_JOIN_LOCKS.delete(agoraKey)
+    }
 
     GLOBAL_AGORA_JOIN_LOCKS.add(agoraKey)
     activeAgoraKeyRef.current = agoraKey
@@ -171,45 +227,71 @@ export default function AuctioneerDashboard() {
     setAuctioneerConnecting(true)
 
     try {
+      console.log('[Agora] Creating Agora client...')
       const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' })
       agoraClientRef.current = client
       await client.setClientRole('host')
+      console.log('[Agora] Client role set to host')
 
+      console.log('[Agora] Requesting token...')
       const token = await getAgoraToken(channelName, uid, 'publisher')
-      await client.join(appId, channelName, token, uid)
+      console.log('[Agora] Token received:', token ? `${token.substring(0, 16)}...` : 'EMPTY')
 
+      console.log('[Agora] Joining channel...')
+      await client.join(appId, channelName, token, uid)
+      console.log('[Agora] Joined channel successfully')
+
+      console.log('[Agora] Requesting camera + mic permissions...')
       const [micTrack, camTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
         { AEC: true, ANS: true, AGC: true },
         { encoderConfig: '720p_2', facingMode: 'user' }
       )
+      console.log('[Agora] Camera + mic tracks created')
 
       localAudioTrackRef.current = micTrack
       localVideoTrackRef.current = camTrack
 
-      if (localVideoRef.current) camTrack.play(localVideoRef.current)
+      if (localVideoRef.current) {
+        camTrack.play(localVideoRef.current)
+        console.log('[Agora] Playing local video')
+      }
 
+      console.log('[Agora] Publishing tracks...')
       await client.publish([micTrack, camTrack])
+      console.log('[Agora] Tracks published')
 
       agoraJoinedRef.current = true
       setAgoraConnected(true)
       setAuctioneerMicOn(true)
       setAuctioneerCamOn(true)
-      toast.success('Agora camera connected')
+      toast.success('Agora camera connected!')
     } catch (error: any) {
-      console.error('Auctioneer Agora connection failed:', error)
-      toast.error(error?.message || 'Failed to connect camera')
+      console.error('[Agora] Connection failed:', error)
+      const msg = error?.message || 'Failed to connect camera'
+      toast.error(`Camera error: ${msg}`)
       GLOBAL_AGORA_JOIN_LOCKS.delete(agoraKey)
       activeAgoraKeyRef.current = null
-      await cleanupAgora()
+      agoraConnectingRef.current = false
+      agoraJoinedRef.current = false
+      agoraClientRef.current = null
+      localAudioTrackRef.current = null
+      localVideoTrackRef.current = null
+      setAgoraConnected(false)
+      setAuctioneerConnecting(false)
     } finally {
       setAuctioneerConnecting(false)
       agoraConnectingRef.current = false
     }
-  }, [show, showId, user?.id, isAuctioneer, getAgoraToken, cleanupAgora])
+  }, [show, showId, user?.id, isAuctioneer, getAgoraToken])
+
+  const isInitialLoadRef = useRef(true)
 
   const fetchData = useCallback(async () => {
     if (!showId) return
-    setLoading(true)
+    // Only show loading spinner on the initial load, not on background polling
+    if (isInitialLoadRef.current) {
+      setLoading(true)
+    }
     try {
       const [showRes, lotsRes] = await Promise.all([
         supabase.from('auction_shows').select('*').eq('id', showId).maybeSingle(),
@@ -226,7 +308,10 @@ export default function AuctioneerDashboard() {
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
-      setLoading(false)
+      if (isInitialLoadRef.current) {
+        setLoading(false)
+        isInitialLoadRef.current = false
+      }
     }
   }, [showId])
 
@@ -262,14 +347,32 @@ export default function AuctioneerDashboard() {
     }
   }, [showId])
 
+  // Use refs for connect/cleanup so the effect never re-fires due to callback identity changes
+  const connectAgoraRef = useRef(connectAuctioneerAgora)
+  const cleanupAgoraRef = useRef(cleanupAgora)
+  useEffect(() => { connectAgoraRef.current = connectAuctioneerAgora }, [connectAuctioneerAgora])
+  useEffect(() => { cleanupAgoraRef.current = cleanupAgora }, [cleanupAgora])
+
+  // Track whether auto-connect has been attempted to avoid re-firing on every show state change
+  const autoConnectAttemptedRef = useRef<string | null>(null)
+  // Track whether Agora is connected so we don't auto-reconnect after manual disconnect
+  const agoraManuallyDisconnectedRef = useRef(false)
+
   useEffect(() => {
-    if (show && user?.id && isAuctioneer && show.status === 'live') {
-      void connectAuctioneerAgora()
+    if (show?.id && user?.id && isAuctioneer && show.status === 'live') {
+      if (autoConnectAttemptedRef.current !== show.id && !agoraManuallyDisconnectedRef.current) {
+        autoConnectAttemptedRef.current = show.id
+        void connectAgoraRef.current()
+      }
     }
+    // Always return cleanup — must be outside the if so it runs on unmount
     return () => {
-      void cleanupAgora()
+      autoConnectAttemptedRef.current = null
+      void cleanupAgoraRef.current()
     }
-  }, [show, user?.id, isAuctioneer, connectAuctioneerAgora, cleanupAgora])
+    // Only re-run when these stable values change — NOT the callbacks
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show?.id, show?.status, user?.id, isAuctioneer])
 
   const toggleAuctioneerMic = useCallback(async () => {
     const track = localAudioTrackRef.current
@@ -387,6 +490,9 @@ export default function AuctioneerDashboard() {
   const upcomingLots = lots.filter((l) => l.status === 'queued' || l.status === 'upcoming').sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0))
   const soldLots = lots.filter((l) => l.status === 'sold')
   const isLive = show?.status === 'live'
+
+  // Timer for the current lot
+  const timer = useAuctionTimer(currentLot?.id ?? null, isAuctioneer)
 
   if (loading) {
     return (
@@ -546,14 +652,65 @@ export default function AuctioneerDashboard() {
                 <Stat label="Reserve" value={currentLot.reserve_price ? `${formatCoins(currentLot.reserve_price)} TC` : 'None'} />
               </div>
 
-              {currentLot.countdown_end_at && (
-                <p className="text-sm text-slate-400"><Clock className="mr-1 inline h-4 w-4" /> Ends: {new Date(currentLot.countdown_end_at).toLocaleTimeString()}</p>
-              )}
+              {/* Timer Controls */}
+              <div className="rounded-2xl border border-cyan-300/15 bg-black/30 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-cyan-300" />
+                    <span className="text-sm font-black uppercase tracking-[0.18em] text-cyan-200">Lot Timer</span>
+                  </div>
+                  <div className={`font-mono text-3xl font-black ${timer.isExpired ? 'text-red-400 animate-pulse' : timer.isRunning ? 'text-emerald-300' : 'text-slate-300'}`}>
+                    {timer.formatted}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {!timer.isRunning && !timer.isExpired && (
+                    <button onClick={() => timer.startTimer(120)} disabled={actionLoading} className="rounded-xl border border-green-300/30 bg-green-500/20 px-3 py-1.5 text-xs font-bold text-green-100 hover:bg-green-500/30">
+                      <Play className="mr-1 inline h-3 w-3" /> Start 2:00
+                    </button>
+                  )}
+                  {!timer.isRunning && !timer.isExpired && (
+                    <button onClick={() => timer.startTimer(60)} disabled={actionLoading} className="rounded-xl border border-green-300/20 bg-green-400/10 px-3 py-1.5 text-xs font-bold text-green-200 hover:bg-green-400/20">
+                      <Play className="mr-1 inline h-3 w-3" /> Start 1:00
+                    </button>
+                  )}
+                  {!timer.isRunning && !timer.isExpired && (
+                    <button onClick={() => timer.startTimer(30)} disabled={actionLoading} className="rounded-xl border border-green-300/20 bg-green-400/10 px-3 py-1.5 text-xs font-bold text-green-200 hover:bg-green-400/20">
+                      <Play className="mr-1 inline h-3 w-3" /> Start 0:30
+                    </button>
+                  )}
+                  {timer.isRunning && (
+                    <button onClick={() => timer.pauseTimer()} disabled={actionLoading} className="rounded-xl border border-amber-300/30 bg-amber-500/20 px-3 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-500/30">
+                      <Pause className="mr-1 inline h-3 w-3" /> Pause
+                    </button>
+                  )}
+                  {!timer.isRunning && timer.secondsLeft > 0 && !timer.isExpired && (
+                    <button onClick={() => timer.resumeTimer()} disabled={actionLoading} className="rounded-xl border border-green-300/30 bg-green-500/20 px-3 py-1.5 text-xs font-bold text-green-100 hover:bg-green-500/30">
+                      <Play className="mr-1 inline h-3 w-3" /> Resume
+                    </button>
+                  )}
+                  {!timer.isRunning && timer.secondsLeft > 0 && (
+                    <button onClick={() => timer.addTime(30)} disabled={actionLoading} className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-400/20">
+                      +30s
+                    </button>
+                  )}
+                  {!timer.isRunning && timer.secondsLeft > 0 && (
+                    <button onClick={() => timer.addTime(60)} disabled={actionLoading} className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-400/20">
+                      +60s
+                    </button>
+                  )}
+                  {(timer.secondsLeft > 0 || timer.isExpired) && (
+                    <button onClick={() => timer.resetTimer()} disabled={actionLoading} className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/10">
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-10 text-center">
               <Gavel className="mx-auto mb-4 h-12 w-12 text-slate-600" />
-              <p className="text-slate-400">{isLive ? 'No lot currently active' : 'Go live and activate a lot to begin'}</p>
+              <p className="text-slate-400">{isLive ? 'No lot currently active — start a lot below' : 'Go live and activate a lot to begin'}</p>
             </div>
           )}
 
@@ -571,7 +728,9 @@ export default function AuctioneerDashboard() {
                       </div>
                     </div>
                     {isLive && (
-                      <button onClick={() => activateLot(lot.id)} disabled={actionLoading} className="rounded-xl border border-green-300/20 bg-green-400/10 px-3 py-1 text-sm font-bold text-green-100">Go Live</button>
+                      <div className="flex gap-2">
+                        <button onClick={() => activateLot(lot.id)} disabled={actionLoading} className="rounded-xl border border-green-300/20 bg-green-400/10 px-3 py-1 text-sm font-bold text-green-100 hover:bg-green-400/20">Start Lot</button>
+                      </div>
                     )}
                   </div>
                 ))}

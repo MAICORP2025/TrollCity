@@ -105,7 +105,7 @@ export default function TCNNViewerPage() {
         .from('streams')
         .select(`
           id, title, user_id, is_live, viewer_count, total_likes, agora_channel,
-          broadcaster:user_profiles!streams_user_id_fkey(username, avatar_url)
+          broadcaster:user_profiles!streams_broadcaster_id_fkey(username, avatar_url)
         `)
         .eq('id', streamId)
         .maybeSingle();

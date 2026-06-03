@@ -51,11 +51,14 @@ interface LiveGamingStream {
 
 const PAGE_SIZE = 10
 
+const POST_BUFFER_FLUSH_MS = 150
+
 export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWallFeedProps) {
   const { user, isAdmin } = useAuthStore()
   const isPwa = useIsPwa()
   const isMountedRef = useRef(true)
   const latestRequestId = useRef(0)
+  const postBufferRef = useRef<WallPost[]>([]);
 
   const [posts, setPosts] = useState<WallPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,12 +74,13 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   const [lightboxTitle, setLightboxTitle] = useState<string | null>(null)
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set())
+  const blockedIdsRef = useRef(blockedIds)
   const [sharingPost, setSharingPost] = useState<WallPost | null>(null)
   const [liveGamingStreams, setLiveGamingStreams] = useState<LiveGamingStream[]>([])
 
   const fetchLiveGamingStreams = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const { data: streamsData, error: streamsError } = await supabase
         .from('streams')
         .select(`
           id,
@@ -84,21 +88,42 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           title,
           game_title,
           is_live,
-          user_profiles(username)
+          category,
+          broadcaster_id
         `)
         .eq('is_live', true)
         .eq('category', 'gaming')
         .limit(10)
 
-      if (error) throw error
+      if (streamsError) throw streamsError
 
-      const streams = (data || []).map((stream: any) => ({
-        id: stream.id,
-        user_id: stream.user_id,
-        title: stream.title || 'Live stream',
-        game_title: stream.game_title,
-        broadcaster_name: stream.user_profiles?.username || 'Gamer',
-      }))
+      const broadcasterIds = [...new Set(streamsData
+        .map((s: any) => s.broadcaster_id || s.user_id)
+        .filter(Boolean))]
+
+      let profilesMap: Record<string, string> = {}
+      if (broadcasterIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('user_profiles')
+          .select('id, username')
+          .in('id', broadcasterIds)
+
+        profilesMap = (profilesData || []).reduce((acc: Record<string, string>, p: any) => {
+          acc[p.id] = p.username
+          return acc
+        }, {})
+      }
+
+      const streams = (streamsData || []).map((stream: any) => {
+        const broadcasterId = stream.broadcaster_id || stream.user_id
+        return {
+          id: stream.id,
+          user_id: broadcasterId,
+          title: stream.title || 'Live stream',
+          game_title: stream.game_title,
+          broadcaster_name: profilesMap[broadcasterId] || 'Gamer',
+        }
+      })
 
       setLiveGamingStreams(streams)
     } catch (err) {
@@ -116,12 +141,21 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   useEffect(() => {
     if (!user?.id) {
       setBlockedIds(new Set())
+      blockedIdsRef.current = new Set()
       return
     }
     getBlockedUserIds().then(ids => {
-      if (isMountedRef.current) setBlockedIds(new Set(ids))
+      if (isMountedRef.current) {
+        const newSet = new Set(ids)
+        setBlockedIds(newSet)
+        blockedIdsRef.current = newSet
+      }
     }).catch(() => {})
   }, [user?.id])
+
+  useEffect(() => {
+    blockedIdsRef.current = blockedIds
+  }, [blockedIds])
 
   const loadPosts = useCallback(
     async (pageIndex: number, append: boolean) => {
@@ -152,7 +186,8 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         if (error) throw error
         if (!isActiveRequest()) return
 
-        const rows = ((data as any[]) || []).filter((row) => !blockedIds.has(row.user_id))
+        const currentBlockedIds = blockedIdsRef.current
+        const rows = ((data as any[]) || []).filter((row) => !currentBlockedIds.has(row.user_id))
         const postIds = rows.map((row) => row.id)
 
         let likedPostIds = new Set<string>()
@@ -194,7 +229,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         })
 
         const parentPosts = normalized.filter((post: WallPost) => !post.reply_to_post_id)
-        const replies = normalized.filter((post: WallPost) => post.reply_to_post_id && !blockedIds.has(post.user_id))
+        const replies = normalized.filter((post: WallPost) => post.reply_to_post_id && !currentBlockedIds.has(post.user_id))
 
         const repliesMap: Record<string, WallPost[]> = {}
 
@@ -233,15 +268,67 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         setLoadingMore(false)
       }
     },
-    [user, blockedIds]
+    [user]
   )
 
   useEffect(() => {
     isMountedRef.current = true
     loadPosts(0, false)
 
+    const channel = supabase.channel('public:troll_wall_posts_feed')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'troll_wall_posts' },
+        (payload) => {
+          postBufferRef.current.push(payload.new as WallPost)
+        }
+      )
+      .subscribe()
+
+    const flushInterval = setInterval(() => {
+      if (postBufferRef.current.length === 0) return
+
+      const updates = [...postBufferRef.current]
+      postBufferRef.current = []
+
+      setPosts(prev => {
+        let next = [...prev]
+        updates.forEach(newPost => {
+          if (newPost.reply_to_post_id) {
+            const parentIdx = next.findIndex(p => p.id === newPost.reply_to_post_id)
+            if (parentIdx !== -1) {
+              const parent = next[parentIdx]
+              const existingReplies = parent.replies || []
+              const replyIdx = existingReplies.findIndex(r => r.id === newPost.id)
+              if (replyIdx !== -1) {
+                const updatedReplies = [...existingReplies]
+                updatedReplies[replyIdx] = { ...updatedReplies[replyIdx], ...newPost }
+                next[parentIdx] = { ...parent, replies: updatedReplies }
+              } else {
+                next[parentIdx] = {
+                  ...parent,
+                  replies: [...existingReplies, newPost as WallPost]
+                }
+              }
+            }
+          } else {
+            const idx = next.findIndex(p => p.id === newPost.id)
+            if (idx !== -1) {
+              const existingReplies = next[idx].replies || []
+              next[idx] = { ...next[idx], ...newPost, replies: existingReplies }
+            } else {
+              next = [{ ...newPost, replies: [] }, ...next]
+            }
+          }
+        })
+        return next.slice(0, 100)
+      })
+    }, POST_BUFFER_FLUSH_MS)
+
     return () => {
       isMountedRef.current = false
+      clearInterval(flushInterval)
+      supabase.removeChannel(channel)
     }
   }, [loadPosts])
 

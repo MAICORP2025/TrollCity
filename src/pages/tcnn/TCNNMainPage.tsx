@@ -69,7 +69,7 @@ export default function TCNNMainPage() {
             viewer_count,
             current_viewers,
             agora_channel,
-            broadcaster:user_profiles!streams_user_id_fkey(username, avatar_url)
+            broadcaster:user_profiles!streams_broadcaster_id_fkey(username, avatar_url)
           `)
           .eq('category', 'tcnn')
           .eq('is_live', true)

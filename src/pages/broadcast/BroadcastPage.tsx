@@ -960,57 +960,44 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   const stageTouchStartYRef = useRef<number | null>(null)
   const stageTouchCurrentYRef = useRef<number | null>(null)
   
-  // Debug: Log when remoteParticipants changes
+  // Debug: Log when remoteParticipants changes (throttled)
+  const lastRemoteLogRef = useRef(0);
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const now = Date.now();
+    if (now - lastRemoteLogRef.current < 2000) return;
+    lastRemoteLogRef.current = now;
     console.log('[BroadcastPage] remoteParticipants changed:', {
       count: remoteParticipants.size,
       participants: Array.from(remoteParticipants.keys())
     })
   }, [remoteParticipants])
 
+  // Seat events: useStreamSeats hook already subscribes to stream-seat-events:${streamId}
+  // and handles seat refresh scheduling. We only update local seatJoinTimes here
+  // by deriving from seat state changes — no duplicate channel needed.
   useEffect(() => {
-    if (!streamId) return
-
-    const channel = supabase
-      .channel(`stream-seat-events:${streamId}`)
-      // SAFETY: useStreamSeats already handles refresh scheduling with
-      // scheduleRefresh([0, 300, 800, 1500]) for these events.
-      // Only update local seatJoinTimes state here — do NOT duplicate refreshSeats calls.
-      .on('broadcast', { event: 'seat_joined' }, (payload: any) => {
-        console.log('[BroadcastPage] seat_joined event')
-        const seatIdx = payload?.payload?.seat_index
-        if (seatIdx) {
-          const now = Date.now()
-          seatJoinTimesRef.current[seatIdx] = now
-          setSeatJoinTimes(prev => ({ ...prev, [seatIdx]: now }))
+    if (!streamId) return;
+    // Track seat join times from current seats state
+    Object.values(seats).forEach((seat: any) => {
+      if (seat?.joined_at && !seatJoinTimesRef.current[seat.seat_index]) {
+        seatJoinTimesRef.current[seat.seat_index] = Date.now();
+        setSeatJoinTimes(prev => ({ ...prev, [seat.seat_index]: Date.now() }));
+      }
+    });
+    // Clean up times for seats that are no longer occupied
+    setSeatJoinTimes(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(key => {
+        const idx = Number(key);
+        if (!seats[idx] || !seats[idx]?.id) {
+          delete next[idx];
+          seatJoinTimesRef.current[idx] = 0;
         }
-      })
-      .on('broadcast', { event: 'seat_live' }, () => {
-        console.log('[BroadcastPage] seat_live event')
-      })
-      .on('broadcast', { event: 'seat_left' }, (payload: any) => {
-        console.log('[BroadcastPage] seat_left event')
-        const seatIdx = payload?.payload?.seat_index
-        if (seatIdx) {
-          seatJoinTimesRef.current[seatIdx] = 0
-          setSeatJoinTimes(prev => {
-            const next = { ...prev }
-            delete next[seatIdx]
-            return next
-          })
-        }
-      })
-      .on('broadcast', { event: 'seat_refreshed' }, () => {
-        console.log('[BroadcastPage] seat_refreshed event')
-      })
-      .subscribe((status) => {
-        console.log('[BroadcastPage] seat event channel:', status)
-      })
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [streamId, refreshSeats])
+      });
+      return next;
+    });
+  }, [streamId, seats]);
 
   // Tick every second to re-evaluate "Camera unavailable" 8s timeout
   const [, setSeatTick] = useState(0)
@@ -1022,6 +1009,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   }, [])
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
     console.log('[BroadcastSeatState]', {
       streamId,
       seats,
@@ -1030,6 +1018,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   }, [streamId, seats, viewerSeatCards])
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
     console.log('[BroadcastRemoteParticipants]', {
       streamId,
       count: remoteParticipants.size,
@@ -2932,6 +2921,8 @@ useStreamRealtime(streamId, {
   const handleLiveKitParticipantConnected = useCallback((participant: RemoteParticipant) => {
     if (!participant?.identity) return
     setRemoteParticipants(prev => {
+      // Skip update if participant already in map with same reference
+      if (prev.get(participant.identity) === participant) return prev;
       const next = new Map(prev)
       next.set(participant.identity, participant)
       return next
@@ -2941,6 +2932,8 @@ useStreamRealtime(streamId, {
   const handleLiveKitParticipantDisconnected = useCallback((participant: RemoteParticipant) => {
     const identity = participant.identity
     setRemoteParticipants(prev => {
+      // Skip update if participant not in map
+      if (!prev.has(identity)) return prev;
       const next = new Map(prev)
       next.delete(identity)
       return next
@@ -2952,17 +2945,11 @@ useStreamRealtime(streamId, {
     if (!participant?.identity) return
 
     setRemoteParticipants(prev => {
+      // Skip update if participant already in map with same reference
+      if (prev.get(participant.identity) === participant) return prev;
       const next = new Map(prev)
       next.set(participant.identity, participant)
       return next
-    })
-
-    window.requestAnimationFrame(() => {
-      setRemoteParticipants(prev => {
-        const next = new Map(prev)
-        next.set(participant.identity, participant)
-        return next
-      })
     })
   }, [])
 
@@ -2973,6 +2960,8 @@ useStreamRealtime(streamId, {
 
     if (!remainingVideo && !remainingAudio) {
       setRemoteParticipants(prev => {
+        // Skip update if participant not in map
+        if (!prev.has(participant.identity)) return prev;
         const next = new Map(prev)
         next.delete(participant.identity)
         return next
@@ -4801,34 +4790,38 @@ const handleLike = useCallback(async () => {
   }
 
   if (shouldShowRandomBattleArena) {
+    // Allow partial tracks - audio-only or video-only should still work
+    // On mobile, video track might not be immediately available
     const battleLocalTracks =
-      localTracks?.[0] && localTracks?.[1]
-        ? ([localTracks[0], localTracks[1]] as [LocalAudioTrack, LocalVideoTrack])
+      localTracks?.[0] || localTracks?.[1]
+        ? ([localTracks?.[0], localTracks?.[1]] as [LocalAudioTrack | undefined, LocalVideoTrack | undefined])
         : null;
 
     return (
       <ErrorBoundary>
-        <BattleView
-          key={activeBattleId}
-          battleId={stream.battle_id!}
-          currentStreamId={streamId || stream.id}
-          viewerId={memoizedViewerId}
-          localTracks={battleLocalTracks}
-           remoteUsers={remoteUsers}
-          onReturnToStream={() => {
-            setStream((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    is_battle: false,
-                    battle_id: null,
-                    battle_mode: 'none' as any,
-                    battle_status: 'waiting' as any,
-                  }
-                : prev
-            );
-          }}
-        />
+        <GiftSystemProvider streamId={streamId} defaultReceiverId={stream?.user_id}>
+          <BattleView
+            key={activeBattleId}
+            battleId={stream.battle_id!}
+            currentStreamId={streamId || stream.id}
+            viewerId={memoizedViewerId}
+            localTracks={battleLocalTracks}
+            remoteUsers={remoteUsers}
+            onReturnToStream={() => {
+              setStream((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      is_battle: false,
+                      battle_id: null,
+                      battle_mode: 'none' as any,
+                      battle_status: 'waiting' as any,
+                    }
+                  : prev
+              );
+            }}
+          />
+        </GiftSystemProvider>
       </ErrorBoundary>
     );
   }

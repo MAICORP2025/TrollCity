@@ -662,6 +662,221 @@ interface BattleParticipantTileProps extends BattleParticipant {
   playbackMode: 'livekit' | 'mux';
 }
 
+const BattleVideoRenderer = ({
+  videoTrack,
+  fallbackHlsUrl,
+  isHost,
+  playbackMode,
+}: {
+  videoTrack?: LocalVideoTrack | RemoteVideoTrack;
+  fallbackHlsUrl?: string | null;
+  isHost: boolean;
+  playbackMode: 'livekit' | 'mux';
+}) => {
+  const shouldUseMux = playbackMode === 'mux' && !isHost;
+  const hasPlayableVideo = shouldUseMux ? !!fallbackHlsUrl : !!videoTrack || !!fallbackHlsUrl;
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [needsUserInteraction, setNeedsUserInteraction] = useState(false);
+  const hlsConfig = useMemo(() => ({
+    enableWorker: true,
+    lowLatencyMode: true,
+    maxBufferLength: 10,
+    maxMaxBufferLength: 20,
+    levelLoadingMaxRetry: 3,
+    levelLoadingMaxRetryTimeout: 2000,
+    startLevel: -1,
+    fragLoadingMaxRetry: 3,
+    fragLoadingMaxRetryTimeout: 2000,
+  }), []);
+
+  useEffect(() => {
+    if (!hasPlayableVideo) return;
+
+    const hlsUrl = shouldUseMux ? fallbackHlsUrl : null;
+    if (hlsUrl && videoRef.current) {
+      const video = videoRef.current;
+      logMux('Initializing HLS fallback player', { hlsUrl });
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
+      video.setAttribute('x5-video-player-type', 'h5');
+      video.setAttribute('x5-video-player-fullscreen', 'true');
+      video.setAttribute('x-webkit-airplay', 'allow');
+      video.setAttribute('airplay', 'allow');
+      video.muted = true;
+      video.preload = 'metadata';
+
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      const isIOSSafari = isIOS && isSafari;
+      const isAndroid = /Android/.test(navigator.userAgent);
+      const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl;
+        const tryPlay = () => {
+          video.play().then(() => {
+            setIsPlaying(true);
+            setNeedsUserInteraction(false);
+          }).catch(() => {
+            setNeedsUserInteraction(true);
+          });
+        };
+        if (isIOSSafari) {
+          setNeedsUserInteraction(true);
+        } else {
+          tryPlay();
+        }
+        return;
+      }
+
+      if (Hls.isSupported()) {
+        const hls = new Hls(hlsConfig);
+        hlsRef.current = hls;
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          logMux('Mux manifest parsed, starting playback');
+          video.play().then(() => {
+            setIsPlaying(true);
+            setNeedsUserInteraction(false);
+          }).catch(() => {
+            if (isAndroid && isChrome) {
+              setNeedsUserInteraction(true);
+            }
+          });
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.warn('[BattleVideoRenderer] HLS Error:', data);
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.log('[BattleVideoRenderer] Network error, attempting recovery');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('[BattleVideoRenderer] Media error, attempting recovery');
+                hls.recoverMediaError();
+                break;
+              default:
+                hls.destroy();
+                break;
+            }
+          }
+        });
+        return () => {
+          logMux('Destroying HLS player');
+          hls.destroy();
+          hlsRef.current = null;
+        };
+      }
+    }
+  }, [hasPlayableVideo, shouldUseMux, fallbackHlsUrl, hlsConfig]);
+
+  useEffect(() => {
+    if (!videoTrack || !containerRef.current) return;
+    const currentTrackId = videoTrack.sid || (videoTrack as any).id;
+    if (currentTrackId && videoRef.current) {
+      return;
+    }
+    const existingVideoElement = containerRef.current.querySelector('video');
+    if (existingVideoElement) {
+      try {
+        if (videoRef.current) {
+          videoTrack.detach(videoRef.current);
+        }
+      } catch (e) {
+        console.warn('[BattleVideoRenderer] Failed to detach existing video element:', e);
+      }
+      existingVideoElement.remove();
+      videoRef.current = null;
+    }
+    try {
+      const videoElement = videoTrack.attach() as HTMLVideoElement;
+      videoRef.current = videoElement;
+      videoElement.style.width = '100%';
+      videoElement.style.height = '100%';
+      videoElement.style.objectFit = 'cover';
+      videoElement.style.display = 'block';
+      videoElement.style.backgroundColor = 'black';
+      videoElement.autoplay = true;
+      videoElement.playsInline = true;
+      videoElement.setAttribute('playsinline', 'true');
+      videoElement.setAttribute('webkit-playsinline', 'true');
+      videoElement.controls = false;
+      (videoElement as any).disablePictureInPicture = true;
+      videoElement.muted = true;
+      containerRef.current.appendChild(videoElement);
+      const mediaTrack = videoTrack?.mediaStreamTrack;
+      const trackSettings = mediaTrack ? (mediaTrack.getSettings?.() || {}) : {};
+      const isFrontCamera = (trackSettings as any).facingMode !== 'environment';
+      if (containerRef.current) {
+        containerRef.current.style.transform = isFrontCamera ? 'scaleX(-1)' : '';
+      }
+      containerRef.current.appendChild(videoElement);
+    } catch (err) {
+      console.error('[BattleVideoRenderer] attach() threw error:', err);
+    }
+  }, [videoTrack]);
+
+  const handleUserInteraction = () => {
+    const video = videoRef.current;
+    if (video && needsUserInteraction) {
+      video.play().then(() => {
+        setIsPlaying(true);
+        setNeedsUserInteraction(false);
+      }).catch(console.error);
+    }
+  };
+
+  if (!hasPlayableVideo) {
+    return null;
+  }
+
+  if (videoTrack) {
+    return (
+      <div
+        ref={containerRef}
+        className="relative w-full h-full min-h-0 object-cover overflow-hidden"
+        style={{ minWidth: '100%', minHeight: '100%' }}
+      />
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full">
+      <video
+        ref={videoRef}
+        className="w-full h-full object-cover bg-black pointer-events-none"
+        autoPlay
+        muted
+        preload="auto"
+        playsInline
+        controls={false}
+        onClick={handleUserInteraction}
+      />
+      {needsUserInteraction && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <button
+            onClick={handleUserInteraction}
+            className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white px-4 py-2 rounded-full font-bold shadow-lg border border-purple-400/50"
+          >
+            ▶️ Tap to start battle video
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BattleParticipantTile = ({
   identity,
   name,
@@ -681,9 +896,8 @@ const BattleParticipantTile = ({
   playbackMode,
 }: BattleParticipantTileProps) => {
   const isHost = role === 'host' || metadata?.role === 'host';
-  const shouldUseMux = playbackMode === 'mux';
-  const isMicMuted = !isMicrophoneEnabled;
-  const hasPlayableVideo = shouldUseMux ? !!fallbackHlsUrl : !!videoTrack || !!fallbackHlsUrl;
+  const shouldUseMux = playbackMode === 'mux' && !isHost;
+  const micMuted = !isMicrophoneEnabled;
 
   const handleTileClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!onTileClick) return;
@@ -699,8 +913,12 @@ const BattleParticipantTile = ({
     }
   };
 
+  const lastTileLogRef = useRef(0);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
+    const now = Date.now();
+    if (now - lastTileLogRef.current < 3000) return;
+    lastTileLogRef.current = now;
     console.log('[BattleParticipantTile] Rendering:', {
       identity,
       name,
@@ -710,13 +928,14 @@ const BattleParticipantTile = ({
       hasMuxFallback: !!fallbackHlsUrl,
       playbackMode,
       side,
+      isLocal,
+      videoTrackSid: videoTrack?.sid,
     });
   }, [identity, isSingleHost, isHost, name, side, videoTrack, fallbackHlsUrl, playbackMode]);
 
-  const containerBg = hasPlayableVideo ? 'bg-black' : 'bg-black/60';
   const containerClass = isSingleHost
-    ? `relative w-full aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden ${containerBg} transition-all duration-300`
-    : `relative w-full aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 ${side === 'challenger' ? 'border-cyan-400/60 shadow-[0_0_22px_rgba(34,211,238,0.24)]' : 'border-fuchsia-400/60 shadow-[0_0_22px_rgba(217,70,239,0.24)]'} ${containerBg} ${hasPlayableVideo ? '' : 'backdrop-blur-sm'}`;
+    ? `relative w-full aspect-square md:h-full min-h-0 rounded-2xl overflow-hidden bg-black transition-all duration-300`
+    : `relative w-full aspect-square md:aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 ${side === 'challenger' ? 'border-cyan-400/60 shadow-[0_0_22px_rgba(34,211,238,0.24)]' : 'border-fuchsia-400/60 shadow-[0_0_22px_rgba(217,70,239,0.24)]'} bg-black`;
 
   return (
     <div
@@ -729,32 +948,14 @@ const BattleParticipantTile = ({
       {/* Video or Avatar.
           Critical: the actual video layer is pointer-events-none so mobile taps hit the tile.
           The explicit tap-to-start overlay inside the HLS player still uses a button. */}
-      {shouldUseMux && fallbackHlsUrl ? (
-        <div className="absolute inset-0 pointer-events-none">
-          <BattleHlsFallbackPlayer hlsUrl={fallbackHlsUrl} />
-        </div>
-      ) : videoTrack ? (
-        <div className="absolute inset-0 pointer-events-none">
-          <LiveKitVideoPlayer videoTrack={videoTrack} isLocal={isLocal} />
-        </div>
-      ) : fallbackHlsUrl ? (
-        <div className="absolute inset-0 pointer-events-none">
-          <BattleHlsFallbackPlayer hlsUrl={fallbackHlsUrl} />
-        </div>
-      ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90">
-          <div className={cn(
-            'rounded-full flex items-center justify-center border-2 mb-2 bg-white/5',
-            isHost ? 'w-16 h-16 md:w-20 md:h-20 border-cyan-400/50' : 'w-12 h-12 md:w-14 md:h-14 border-white/20'
-          )}>
-            <User className="text-slate-400" size={isHost ? 32 : 24} />
-          </div>
-          <div className="flex items-center gap-2 text-slate-400 text-xs">
-            <VideoOff size={14} />
-            <span>{isHost && shouldUseMux ? 'Waiting for Mux feed...' : 'Connecting video...'}</span>
-          </div>
-        </div>
-      )}
+      <div className="absolute inset-0 pointer-events-none">
+        <BattleVideoRenderer
+          videoTrack={videoTrack}
+          fallbackHlsUrl={fallbackHlsUrl}
+          isHost={isHost}
+          playbackMode={playbackMode}
+        />
+      </div>
 
       {isHost && crownInfo && crownInfo.crowns > 0 && (
         <div className="absolute -top-1 -right-1 z-20 pointer-events-none">
@@ -821,7 +1022,7 @@ const BattleParticipantTile = ({
           )}
         </div>
 
-        {isMicMuted && !shouldUseMux && (
+        {micMuted && !shouldUseMux && (
           <div className="bg-red-500 p-1.5 rounded-full shadow-lg">
             <MicOff size={12} className="text-white" />
           </div>
@@ -869,6 +1070,8 @@ interface BattleArenaProps {
   currentUserProfile?: any;
   onOpenStaffActions?: (participant: BattleParticipant) => void;
   trackRevision: number;
+  currentUserId?: string | null;
+  isBroadcaster?: boolean;
 }
 
 const BattleArena = ({
@@ -900,6 +1103,8 @@ const BattleArena = ({
   shouldUseMuxPlayback,
   currentUserProfile,
   onOpenStaffActions,
+  currentUserId,
+  isBroadcaster = false,
 }: BattleArenaProps) => {
   const { user } = useAuthStore();
   const lastKnownTrackRef = useRef<Record<string, { video?: RemoteVideoTrack; audio?: RemoteAudioTrack }>>({});
@@ -915,6 +1120,8 @@ const BattleArena = ({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  const isMobileViewport = isMobileLayout;
 
   const STAFF_ROLES = useMemo(() => new Set([
     'admin',
@@ -935,8 +1142,20 @@ const BattleArena = ({
   const getUsername = (participant: any, fallback = 'Anonymous'): string => {
     return participant?.profile?.username || participant?.username || fallback;
   };
+
+  // Track last remote users identities and trackRevision to avoid redundant re-fetches
+  const lastRemoteIdentitiesRef = useRef<string>('');
+  const lastTrackRevisionRef = useRef<number>(-1);
   
   useEffect(() => {
+    // Skip fetch if remoteUsers identities haven't changed AND trackRevision hasn't changed
+    const currentIdentities = remoteUsers.map(u => u?.identity || '').sort().join(',');
+    if (currentIdentities === lastRemoteIdentitiesRef.current && trackRevision === lastTrackRevisionRef.current) {
+      return;
+    }
+    lastRemoteIdentitiesRef.current = currentIdentities;
+    lastTrackRevisionRef.current = trackRevision;
+
     const fetchParticipantData = async () => {
       try {
       const getSupabaseParticipant = async (userId: string) => {
@@ -1044,6 +1263,24 @@ const BattleArena = ({
           return participant.profile?.username || participant.username || 'You';
         };
         
+        // Determine the local user's team and role
+        let localTeam: 'challenger' | 'opponent' | null = localSupabaseParticipant?.team;
+        let localRole: 'host' | 'stage' | 'viewer' = localSupabaseParticipant?.role;
+        
+        // If not set from database, infer from stream ownership
+        if (!localTeam) {
+          if (user.id === challengerHostId) {
+            localTeam = 'challenger';
+          } else if (user.id === opponentHostId) {
+            localTeam = 'opponent';
+          }
+        }
+        
+        // If broadcaster, they should be host
+        if (isBroadcaster && !localRole) {
+          localRole = 'host';
+        }
+        
         participantsData.push({
           identity: user.id,
           name: getUsername(localSupabaseParticipant) || user.user_metadata?.username || 'You',
@@ -1055,8 +1292,8 @@ const BattleArena = ({
           // Be more lenient with camera check - use explicit state if available, otherwise check track
           isCameraEnabled: localIsCameraEnabled ?? !!localVideoTrack,
           metadata: localMetadata,
-          role: localSupabaseParticipant?.role,
-          team: localSupabaseParticipant?.team,
+          role: localRole,
+          team: localTeam,
           sourceStreamId: localMetadata.sourceStreamId,
           seatIndex: localMetadata.seatIndex,
           profile: localSupabaseParticipant?.profile,
@@ -1264,6 +1501,15 @@ const BattleArena = ({
         // Keep previously known tracks during reconnect churn so tiles don't disappear instantly.
         const hasVideoTrack = !!resolvedVideoTrack;
         const hasAudioTrack = !!resolvedAudioTrack;
+
+        console.log('[BattleArena] Adding participant to list:', {
+          matchedUserId,
+          matchedTeam,
+          hasVideoTrack,
+          hasAudioTrack,
+          resolvedVideoTrackSid: resolvedVideoTrack?.sid,
+          resolvedAudioTrackSid: resolvedAudioTrack?.sid,
+        });
         
         // Update existing participant or add new one
         const existingIdx = participantsData.findIndex(p => p.identity === matchedUserId);
@@ -1322,8 +1568,21 @@ const BattleArena = ({
         });
         if (!remote) return;
 
-        const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribed && p.track);
-        const audioPub = getTrackPublications(remote, 'audio').find((p) => p.isSubscribed && p.track);
+const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribed && p.track)
+            || getTrackPublications(remote, 'video').find((p) => p.track);
+          const audioPub = getTrackPublications(remote, 'audio').find((p) => p.isSubscribed && p.track)
+            || getTrackPublications(remote, 'audio').find((p) => p.track);
+
+        console.log('[BattleArena] ensureHostFallback found tracks:', {
+          team,
+          label,
+          hostUserId,
+          liveKitIdentity,
+          hasVideo: !!videoPub?.track,
+          hasAudio: !!audioPub?.track,
+          videoPubTrackSid: videoPub?.track?.sid,
+          audioPubTrackSid: audioPub?.track?.sid,
+        });
 
         participantsData.push({
           identity: hostUserId,
@@ -1390,6 +1649,65 @@ const BattleArena = ({
         }
         if (!hasOpponentHost && remainingRemotes[1]) {
           buildHostFromRemote(remainingRemotes[1], opponentHostId, 'opponent', 'Opponent');
+        }
+
+        // ULTRA-FALLBACK: If still no hosts with tracks, assign ANY remote user with video to the missing slots
+        // This handles cases where identity mapping completely fails on mobile
+        const finalChallengerHost = participantsData.find(p => p.role === 'host' && p.team === 'challenger' && p.videoTrack);
+        const finalOpponentHost = participantsData.find(p => p.role === 'host' && p.team === 'opponent' && p.videoTrack);
+
+        if (!finalChallengerHost) {
+          const anyRemoteWithVideo = remoteUsers.find(u => {
+            const pubs = getTrackPublications(u, 'video');
+            return pubs.some(p => p.track);
+          });
+          if (anyRemoteWithVideo) {
+            const p = anyRemoteWithVideo;
+            const videoPub = getTrackPublications(p, 'video').find((pb: any) => pb.track);
+            const audioPub = getTrackPublications(p, 'audio').find((pb: any) => pb.track);
+            participantsData.push({
+              identity: p.identity,
+              name: p.name || 'User',
+              isLocal: false,
+              videoTrack: videoPub?.track as RemoteVideoTrack | undefined,
+              audioTrack: audioPub?.track as RemoteAudioTrack | undefined,
+              isMicrophoneEnabled: !!audioPub?.track,
+              isCameraEnabled: !!videoPub?.track,
+              metadata: {},
+              role: 'host',
+              team: 'challenger',
+              sourceStreamId: undefined,
+              seatIndex: 0,
+            });
+            console.log('[BattleArena] ULTRA-FALLBACK: Assigned remote user to challenger slot', p.identity?.substring(0, 8));
+          }
+        }
+
+        if (!finalOpponentHost) {
+          const anyRemoteWithVideo = remoteUsers.find(u => {
+            const pubs = getTrackPublications(u, 'video');
+            return pubs.some(p => p.track) && u.identity !== participantsData.find(p => p.videoTrack)?.identity;
+          });
+          if (anyRemoteWithVideo) {
+            const p = anyRemoteWithVideo;
+            const videoPub = getTrackPublications(p, 'video').find((pb: any) => pb.track);
+            const audioPub = getTrackPublications(p, 'audio').find((pb: any) => pb.track);
+            participantsData.push({
+              identity: p.identity,
+              name: p.name || 'User',
+              isLocal: false,
+              videoTrack: videoPub?.track as RemoteVideoTrack | undefined,
+              audioTrack: audioPub?.track as RemoteAudioTrack | undefined,
+              isMicrophoneEnabled: !!audioPub?.track,
+              isCameraEnabled: !!videoPub?.track,
+              metadata: {},
+              role: 'host',
+              team: 'opponent',
+              sourceStreamId: undefined,
+              seatIndex: 0,
+            });
+            console.log('[BattleArena] ULTRA-FALLBACK: Assigned remote user to opponent slot', p.identity?.substring(0, 8));
+          }
         }
       }
 
@@ -1485,31 +1803,29 @@ const BattleArena = ({
   };
 
   // Generate placeholder slots based on box_count for each team - show ALL slots including empty ones
-  const generateSlots = (team: 'challenger' | 'opponent') => {
-    const teamData = categorized[team];
+  const challengerSlots = useMemo(() => {
+    const teamData = categorized.challenger;
     const boxCount = Math.min(teamData.boxCount, 6);
     const slots: Array<{ type: 'host' | 'guest'; participant?: BattleParticipant | null; index?: number }> = [];
-    
-    // Always include host slot (can be empty)
     slots.push({ type: 'host', participant: teamData.host || null });
-    
-    // Generate guest slots based on box_count
     const guestSlots = Math.max(0, boxCount - 1);
     for (let i = 0; i < guestSlots; i++) {
-      const guest = teamData.guests[i];
-      slots.push({ type: 'guest', participant: guest || null, index: i + 1 });
+      slots.push({ type: 'guest', participant: teamData.guests[i] || null, index: i + 1 });
     }
-
-    // Mobile viewer layout: keep host slots visible even when the partner hasn't connected yet.
-    if (isMobileLayout) {
-      return slots.filter((slot) => slot.type === 'host' || !!slot.participant);
-    }
-
     return slots;
-  };
+  }, [categorized.challenger.boxCount, categorized.challenger.host, categorized.challenger.guests]);
 
-  const challengerSlots = generateSlots('challenger');
-  const opponentSlots = generateSlots('opponent');
+  const opponentSlots = useMemo(() => {
+    const teamData = categorized.opponent;
+    const boxCount = Math.min(teamData.boxCount, 6);
+    const slots: Array<{ type: 'host' | 'guest'; participant?: BattleParticipant | null; index?: number }> = [];
+    slots.push({ type: 'host', participant: teamData.host || null });
+    const guestSlots = Math.max(0, boxCount - 1);
+    for (let i = 0; i < guestSlots; i++) {
+      slots.push({ type: 'guest', participant: teamData.guests[i] || null, index: i + 1 });
+    }
+    return slots;
+  }, [categorized.opponent.boxCount, categorized.opponent.host, categorized.opponent.guests]);
 
   const remoteAudioEntries = useMemo(() => {
     const unique = new Map<string, { label: string; audioTrack: LocalAudioTrack | RemoteAudioTrack }>();
@@ -1532,21 +1848,51 @@ const BattleArena = ({
     }));
   }, [battleParticipants]);
 
-  // DEBUG: Log slot counts to diagnose single-host scenarios
+  // DEBUG: Log slot counts to diagnose single-host scenarios (throttled)
+  const lastDebugLogRef = useRef(0);
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const now = Date.now();
+    if (now - lastDebugLogRef.current < 2000) return;
+    lastDebugLogRef.current = now;
+    console.log('[BattleArena] Remote users for track lookup:', {
+      remoteUsersCount: remoteUsers.length,
+      challengerHostId,
+      opponentHostId,
+      userIdToLiveKitIdentity,
+      remoteUsersIdentities: remoteUsers.map(u => u?.identity?.substring(0, 12)),
+    });
     console.log('[BattleArena] Slot counts:', {
       challengerSlots: challengerSlots.length,
       opponentSlots: opponentSlots.length,
       challengerGuests: categorized.challenger.guests.length,
-      opponentGuests: categorized.opponent.guests.length
+      opponentGuests: categorized.opponent.guests.length,
+      battleParticipantsCount: battleParticipants.length,
+      challengeHostTrack: !!battleParticipants.find(p => p.team === 'challenger' && p.role === 'host')?.videoTrack,
+      opponentHostTrack: !!battleParticipants.find(p => p.team === 'opponent' && p.role === 'host')?.videoTrack,
     });
-  }, [challengerSlots.length, opponentSlots.length, categorized.challenger.guests.length, categorized.opponent.guests.length]);
+  }, [remoteUsers.length, challengerHostId, opponentHostId, userIdToLiveKitIdentity, challengerSlots.length, opponentSlots.length, categorized.challenger.guests.length, categorized.opponent.guests.length, battleParticipants.length]);
 
   // Determine if a side has only the host (no guests) - for single-host styling
   const challengerIsSingleHost = challengerSlots.length === 1 && challengerSlots[0]?.type === 'host';
   const opponentIsSingleHost = opponentSlots.length === 1 && opponentSlots[0]?.type === 'host';
 
+  // Mobile-optimized grid layout: horizontal layout for mobile, vertical split for desktop
   const getGridClass = (totalSlots: number) => {
+    // Mobile: Always use horizontal layout (2 columns) for both sides
+    // Desktop: Use existing vertical split logic
+    if (isMobileViewport) {
+      // On mobile, each side shows its own grid independently
+      // Host + guests for each team in a row
+      // Use square aspect ratio for mobile battle arena
+      if (totalSlots === 1) return 'grid-cols-1';
+      if (totalSlots === 2) return 'grid-cols-2';
+      if (totalSlots === 3) return 'grid-cols-3';
+      if (totalSlots <= 4) return 'grid-cols-2';
+      if (totalSlots <= 6) return 'grid-cols-3';
+      return 'grid-cols-3';
+    }
+    // Desktop layout
     if (totalSlots === 1) return 'grid-cols-1 grid-rows-1';
     if (totalSlots === 2) return 'grid-cols-1 grid-rows-2';
     if (totalSlots === 3) return 'grid-cols-1 grid-rows-3';
@@ -1556,210 +1902,402 @@ const BattleArena = ({
     return 'grid-cols-2 grid-rows-3 md:grid-cols-3 md:grid-rows-2';
   };
 
-  return (
+return (
     <div className="w-full h-full min-h-0 flex overflow-hidden p-2 md:p-4 gap-2 md:gap-4">
-      {/* Challenger Side */}
-      <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pr-1 scrollbar-hide">
-        <button
-          onClick={() => handleSideGiftClick('challenger')}
-          className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
-        >
-          Gift Side A
-        </button>
-        
-        {/* Unified Grid for Host + Guests */}
-         <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} h-full`}>
-           {challengerSlots.map((slot, idx) => (
-             <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
-              {slot.type === 'host' ? (
-                <div
-                  className={cn(
-                    "transform transition-transform hover:scale-[1.02] h-full",
-                    !slot.participant && "opacity-50"
-                  )}
-                >
-                  {slot.participant ? (
-                    <BattleParticipantTile 
-                      {...slot.participant} 
-                      side="challenger" 
-                      crownInfo={challengerCrownInfo}
-                      isSuddenDeath={isSuddenDeath}
-                      canTroll={canTroll && currentUserTeam === 'opponent'}
-                      onTroll={() => handleTrollClick('challenger')}
-                      onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                      isSingleHost={challengerIsSingleHost}
-                      fallbackHlsUrl={challengerHostHlsUrl}
-                      playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
-                    />
+      {/* Mobile Layout: Horizontal split (side-by-side) */}
+      {isMobileViewport ? (
+        <>
+          {/* Challenger Side - Left half */}
+          <div className="flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden">
+            <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} w-full`}>
+              {challengerSlots.map((slot, idx) => (
+                <div key={`challenger-slot-${idx}`} className="min-h-0 aspect-square">
+                  {slot.type === 'host' ? (
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile 
+                          {...slot.participant} 
+                          side="challenger" 
+                          crownInfo={challengerCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'opponent'}
+                          onTroll={() => handleTrollClick('challenger')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={challengerIsSingleHost}
+                          fallbackHlsUrl={challengerHostHlsUrl}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        challengerHostHlsUrl ? (
+                          <BattleParticipantTile
+                            identity={challengerHostId}
+                            name={challengerHostName || 'Challenger'}
+                            isLocal={false}
+                            isMicrophoneEnabled={true}
+                            isCameraEnabled={true}
+                            metadata={{ role: 'host' }}
+                            role="host"
+                            team="challenger"
+                            sourceStreamId={challengerStreamId}
+                            side="challenger"
+                            crownInfo={challengerCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'opponent'}
+                            onTroll={() => handleTrollClick('challenger')}
+                            isSingleHost={challengerIsSingleHost}
+                            fallbackHlsUrl={challengerHostHlsUrl}
+                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                            onTileClick={() => handleParticipantBoxClick({
+                              identity: challengerHostId,
+                              name: challengerHostName || 'Challenger',
+                              isLocal: false,
+                              isMicrophoneEnabled: false,
+                              isCameraEnabled: true,
+                              metadata: { role: 'host' },
+                              role: 'host',
+                              team: 'challenger',
+                              sourceStreamId: challengerStreamId,
+                            })}
+                          />
+                        ) : (
+                          <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
+                            <User className="text-purple-500/50" size={48} />
+                            <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
+                          </div>
+                        )
+                      )}
+                    </div>
                   ) : (
-                    challengerHostHlsUrl ? (
-                      <BattleParticipantTile
-                        identity={challengerHostId}
-                        name={challengerHostName || 'Challenger'}
-                        isLocal={false}
-                        isMicrophoneEnabled={true}
-                        isCameraEnabled={true}
-                        metadata={{ role: 'host' }}
-                        role="host"
-                        team="challenger"
-                        sourceStreamId={challengerStreamId}
-                        side="challenger"
-                        crownInfo={challengerCrownInfo}
-                        isSuddenDeath={isSuddenDeath}
-                        canTroll={canTroll && currentUserTeam === 'opponent'}
-                        onTroll={() => handleTrollClick('challenger')}
-                        isSingleHost={challengerIsSingleHost}
-                        fallbackHlsUrl={challengerHostHlsUrl}
-                        playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
-                        onTileClick={() => handleParticipantBoxClick({
-                          identity: challengerHostId,
-                          name: challengerHostName || 'Challenger',
-                          isLocal: false,
-                          isMicrophoneEnabled: false,
-                          isCameraEnabled: true,
-                          metadata: { role: 'host' },
-                          role: 'host',
-                          team: 'challenger',
-                          sourceStreamId: challengerStreamId,
-                        })}
-                      />
-                    ) : (
-                      <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
-                        <User className="text-purple-500/50" size={48} />
-                        <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
-                      </div>
-                    )
-                  )}
-                </div>
-              ) : (
-                <div
-                  className={cn(
-                    "transform transition-transform hover:scale-[1.02] h-full",
-                    !slot.participant && "opacity-50"
-                  )}
-                >
-                  {slot.participant ? (
-                    <BattleParticipantTile
-                      {...slot.participant}
-                      side="challenger"
-                      onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                      playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
-                    />
-                  ) : (
-                    <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
-                      <User className="text-purple-500/30" size={24} />
-                      <span className="text-purple-500/30 text-xs mt-1">Empty</span>
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="challenger"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-purple-500/30" size={24} />
+                          <span className="text-purple-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      {/* VS Divider */}
-      <div className="w-px bg-gradient-to-b from-transparent via-amber-500/50 to-transparent" />
-
-      {/* Opponent Side */}
-      <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pl-1 scrollbar-hide">
-        <button
-          onClick={() => handleSideGiftClick('opponent')}
-          className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-        >
-          Gift Side B
-        </button>
-        
-        {/* Unified Grid for Host + Guests - match BroadcastGrid layout */}
-        <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} h-full`}>
-          {opponentSlots.map((slot, idx) => (
-            <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
-              {slot.type === 'host' ? (
-                <div
-                  className={cn(
-                    "transform transition-transform hover:scale-[1.02] h-full",
-                    !slot.participant && "opacity-50"
-                  )}
-                >
-                  {slot.participant ? (
-                    <BattleParticipantTile 
-                      {...slot.participant} 
-                      side="opponent" 
-                      crownInfo={opponentCrownInfo}
-                      isSuddenDeath={isSuddenDeath}
-                      canTroll={canTroll && currentUserTeam === 'challenger'}
-                      onTroll={() => handleTrollClick('opponent')}
-                      onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                      isSingleHost={opponentIsSingleHost}
-                      fallbackHlsUrl={opponentHostHlsUrl}
-                      playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
-                    />
+          {/* Opponent Side - Right half */}
+          <div className="flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden">
+            <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} w-full`}>
+              {opponentSlots.map((slot, idx) => (
+                <div key={`opponent-slot-${idx}`} className="min-h-0 aspect-square">
+                  {slot.type === 'host' ? (
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile 
+                          {...slot.participant} 
+                          side="opponent" 
+                          crownInfo={opponentCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'challenger'}
+                          onTroll={() => handleTrollClick('opponent')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={opponentIsSingleHost}
+                          fallbackHlsUrl={opponentHostHlsUrl}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        opponentHostHlsUrl ? (
+                          <BattleParticipantTile
+                            identity={opponentHostId}
+                            name={opponentHostName || 'Opponent'}
+                            isLocal={false}
+                            isMicrophoneEnabled={true}
+                            isCameraEnabled={true}
+                            metadata={{ role: 'host' }}
+                            role="host"
+                            team="opponent"
+                            sourceStreamId={opponentStreamId}
+                            side="opponent"
+                            crownInfo={opponentCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'challenger'}
+                            onTroll={() => handleTrollClick('opponent')}
+                            isSingleHost={opponentIsSingleHost}
+                            fallbackHlsUrl={opponentHostHlsUrl}
+                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                            onTileClick={() => handleParticipantBoxClick({
+                              identity: opponentHostId,
+                              name: opponentHostName || 'Opponent',
+                              isLocal: false,
+                              isMicrophoneEnabled: false,
+                              isCameraEnabled: true,
+                              metadata: { role: 'host' },
+                              role: 'host',
+                              team: 'opponent',
+                              sourceStreamId: opponentStreamId,
+                            })}
+                          />
+                        ) : (
+                          <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
+                            <User className="text-emerald-500/50" size={48} />
+                            <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
+                          </div>
+                        )
+                      )}
+                    </div>
                   ) : (
-                    opponentHostHlsUrl ? (
-                      <BattleParticipantTile
-                        identity={opponentHostId}
-                        name={opponentHostName || 'Opponent'}
-                        isLocal={false}
-                        isMicrophoneEnabled={true}
-                        isCameraEnabled={true}
-                        metadata={{ role: 'host' }}
-                        role="host"
-                        team="opponent"
-                        sourceStreamId={opponentStreamId}
-                        side="opponent"
-                        crownInfo={opponentCrownInfo}
-                        isSuddenDeath={isSuddenDeath}
-                        canTroll={canTroll && currentUserTeam === 'challenger'}
-                        onTroll={() => handleTrollClick('opponent')}
-                        isSingleHost={opponentIsSingleHost}
-                        fallbackHlsUrl={opponentHostHlsUrl}
-                        playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
-                        onTileClick={() => handleParticipantBoxClick({
-                          identity: opponentHostId,
-                          name: opponentHostName || 'Opponent',
-                          isLocal: false,
-                          isMicrophoneEnabled: false,
-                          isCameraEnabled: true,
-                          metadata: { role: 'host' },
-                          role: 'host',
-                          team: 'opponent',
-                          sourceStreamId: opponentStreamId,
-                        })}
-                      />
-                    ) : (
-                      <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
-                        <User className="text-emerald-500/50" size={48} />
-                        <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
-                      </div>
-                    )
-                  )}
-                </div>
-              ) : (
-                <div
-                  className={cn(
-                    "transform transition-transform hover:scale-[1.02] h-full",
-                    !slot.participant && "opacity-50"
-                  )}
-                >
-                  {slot.participant ? (
-                    <BattleParticipantTile
-                      {...slot.participant}
-                      side="opponent"
-                      onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                      playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
-                    />
-                  ) : (
-                    <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
-                      <User className="text-emerald-500/30" size={24} />
-                      <span className="text-emerald-500/30 text-xs mt-1">Empty</span>
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="opponent"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-emerald-500/30" size={24} />
+                          <span className="text-emerald-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
+        </>
+      ) : (
+        /* Desktop Layout: Vertical split */
+        <>
+          {/* Challenger Side */}
+          <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pr-1 scrollbar-hide">
+            <button
+              onClick={() => handleSideGiftClick('challenger')}
+              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
+            >
+              Gift Side A
+            </button>
+            
+            {/* Unified Grid for Host + Guests */}
+             <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} h-full`}>
+              {challengerSlots.map((slot, idx) => (
+                <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
+                  {slot.type === 'host' ? (
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile 
+                          {...slot.participant} 
+                          side="challenger" 
+                          crownInfo={challengerCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'opponent'}
+                          onTroll={() => handleTrollClick('challenger')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={challengerIsSingleHost}
+                          fallbackHlsUrl={challengerHostHlsUrl}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        challengerHostHlsUrl ? (
+                          <BattleParticipantTile
+                            identity={challengerHostId}
+                            name={challengerHostName || 'Challenger'}
+                            isLocal={false}
+                            isMicrophoneEnabled={true}
+                            isCameraEnabled={true}
+                            metadata={{ role: 'host' }}
+                            role="host"
+                            team="challenger"
+                            sourceStreamId={challengerStreamId}
+                            side="challenger"
+                            crownInfo={challengerCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'opponent'}
+                            onTroll={() => handleTrollClick('challenger')}
+                            isSingleHost={challengerIsSingleHost}
+                            fallbackHlsUrl={challengerHostHlsUrl}
+                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                            onTileClick={() => handleParticipantBoxClick({
+                              identity: challengerHostId,
+                              name: challengerHostName || 'Challenger',
+                              isLocal: false,
+                              isMicrophoneEnabled: false,
+                              isCameraEnabled: true,
+                              metadata: { role: 'host' },
+                              role: 'host',
+                              team: 'challenger',
+                              sourceStreamId: challengerStreamId,
+                            })}
+                          />
+                        ) : (
+                          <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
+                            <User className="text-purple-500/50" size={48} />
+                            <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="challenger"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-purple-500/30" size={24} />
+                          <span className="text-purple-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* VS Divider */}
+          <div className="w-px bg-gradient-to-b from-transparent via-amber-500/50 to-transparent" />
+
+          {/* Opponent Side */}
+          <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pl-1 scrollbar-hide">
+            <button
+              onClick={() => handleSideGiftClick('opponent')}
+              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
+            >
+              Gift Side B
+            </button>
+            
+            {/* Unified Grid for Host + Guests - match BroadcastGrid layout */}
+            <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} h-full`}>
+              {opponentSlots.map((slot, idx) => (
+                <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
+                  {slot.type === 'host' ? (
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile 
+                          {...slot.participant} 
+                          side="opponent" 
+                          crownInfo={opponentCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'challenger'}
+                          onTroll={() => handleTrollClick('opponent')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={opponentIsSingleHost}
+                          fallbackHlsUrl={opponentHostHlsUrl}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        opponentHostHlsUrl ? (
+                          <BattleParticipantTile
+                            identity={opponentHostId}
+                            name={opponentHostName || 'Opponent'}
+                            isLocal={false}
+                            isMicrophoneEnabled={true}
+                            isCameraEnabled={true}
+                            metadata={{ role: 'host' }}
+                            role="host"
+                            team="opponent"
+                            sourceStreamId={opponentStreamId}
+                            side="opponent"
+                            crownInfo={opponentCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'challenger'}
+                            onTroll={() => handleTrollClick('opponent')}
+                            isSingleHost={opponentIsSingleHost}
+                            fallbackHlsUrl={opponentHostHlsUrl}
+                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                            onTileClick={() => handleParticipantBoxClick({
+                              identity: opponentHostId,
+                              name: opponentHostName || 'Opponent',
+                              isLocal: false,
+                              isMicrophoneEnabled: false,
+                              isCameraEnabled: true,
+                              metadata: { role: 'host' },
+                              role: 'host',
+                              team: 'opponent',
+                              sourceStreamId: opponentStreamId,
+                            })}
+                          />
+                        ) : (
+                          <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
+                            <User className="text-emerald-500/50" size={48} />
+                            <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "transform transition-transform hover:scale-[1.02] h-full",
+                        !slot.participant && "opacity-50"
+                      )}
+                    >
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="opponent"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-emerald-500/30" size={24} />
+                          <span className="text-emerald-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {!shouldUseMuxPlayback && <BattleAudioRenderer entries={remoteAudioEntries} />}
     </div>
@@ -1774,7 +2312,7 @@ interface BattleViewProps {
   battleId: string;
   currentStreamId: string;
   viewerId?: string;
-  localTracks?: [LocalAudioTrack, LocalVideoTrack] | null;
+  localTracks?: [LocalAudioTrack | undefined, LocalVideoTrack | undefined] | null;
   remoteUsers?: RemoteParticipant[];
   userIdToLiveKitIdentity?: Record<string, string>;
   onReturnToStream?: () => void;
@@ -1785,6 +2323,9 @@ interface BattleViewProps {
 export default function BattleView({ battleId, currentStreamId, viewerId, localTracks: passedLocalTracks, remoteUsers: _passedRemoteUsers, userIdToLiveKitIdentity, onReturnToStream }: BattleViewProps) {
   // Track connection phases to avoid repeated renders from track events
   const [trackRevision, setTrackRevision] = useState(0);
+  // Debounce track revision to prevent flashing from rapid track events
+  const trackRevisionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTrackRevisionRef = useRef(0);
   const [connectionPhase, setConnectionPhase] = useState<'idle' | 'connecting' | 'room-connected' | 'local-ready' | 'remote-ready'>('idle');
   const roomConnectedAtRef = useRef<number | null>(null);
   const preflightSetInBattleRef = useRef(false);
@@ -1811,6 +2352,11 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   // Local track state - used for publishing to battle room (managed by component, not hook)
   const [battleLocalAudioTrack, setBattleLocalAudioTrack] = useState<LocalAudioTrack | null>(null);
   const [battleLocalVideoTrack, setBattleLocalVideoTrack] = useState<LocalVideoTrack | null>(null);
+  // Cache tracks in refs to prevent disappearance during re-renders / effect re-runs
+  const cachedAudioTrackRef = useRef<LocalAudioTrack | null>(null);
+  const cachedVideoTrackRef = useRef<LocalVideoTrack | null>(null);
+  // Track whether we've already connected for this battle to prevent re-connect loops
+  const hasPublishedTracksRef = useRef(false);
   const [participantSnapshots, setParticipantSnapshots] = useState<Array<{ user_id: string; role: 'host' | 'stage' | 'viewer' }>>([]);
   const [arenaReadyAtMs, setArenaReadyAtMs] = useState<number | null>(null);
   const [arenaReady, setArenaReady] = useState(false);
@@ -1831,31 +2377,9 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     return window.innerWidth < 768;
   });
 
-  // ── Channel diagnostics (dev only) ──
-  useEffect(() => {
-    logActiveChannels(`BattleView:mount:${battleId}`);
-    return () => logActiveChannels(`BattleView:unmount:${battleId}`);
-  }, [battleId]);
-  
-  // PHASE 5: Dev-only mount/unmount log to identify StrictMode double-mount vs real spam
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.log('[BattleView] MOUNT battleId=', battleId);
-      return () => console.log('[BattleView] UNMOUNT battleId=', battleId);
-    }
-    return;
-  }, [battleId]);
-
   const { user, profile } = useAuthStore();
   const navigate = useNavigate();
   const effectiveUserId = viewerId || user?.id;
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onResize = () => setIsMobileViewport(window.innerWidth < 768);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   const resolvedBattleRole = useMemo<'host' | 'stage' | 'viewer' | null>(() => {
     if (!effectiveUserId || !challengerStream?.user_id || !opponentStream?.user_id) return null;
@@ -1867,11 +2391,78 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   }, [effectiveUserId, challengerStream?.user_id, opponentStream?.user_id, participantInfo?.role]);
 
   const isBroadcaster = resolvedBattleRole === 'host' || resolvedBattleRole === 'stage';
-  const shouldUseMuxPlayback = !isBroadcaster;
+  // Broadcasters always use LiveKit. Mobile viewers also use LiveKit for PWA.
+  // Desktop viewers can use Mux for better quality.
+  const shouldUseMuxPlayback = !isBroadcaster && !isMobileViewport;
   const isRandomBattle = challengerStream?.battle_mode === 'random_queue' || opponentStream?.battle_mode === 'random_queue';
 
+  // ── Channel diagnostics (dev only) ──
+  useEffect(() => {
+    logActiveChannels(`BattleView:mount:${battleId}`);
+    return () => logActiveChannels(`BattleView:unmount:${battleId}`);
+  }, [battleId]);
+
+  // DEBUG: Log battle state
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log('[BattleView] State:', {
+      battleId,
+      effectiveUserId,
+      resolvedBattleRole,
+      isBroadcaster,
+      shouldUseMuxPlayback,
+    });
+  }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster, shouldUseMuxPlayback]);
+
+  // PHASE 5: Dev-only mount/unmount log to identify StrictMode double-mount vs real spam
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[BattleView] MOUNT battleId=', battleId);
+      return () => console.log('[BattleView] UNMOUNT battleId=', battleId);
+    }
+    return;
+  }, [battleId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setIsMobileViewport(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Prefer tracks passed from BroadcastPage; fallback to PreflightStore when page refresh/race drops props.
-  const localTracksFromPreflight = passedLocalTracks || PreflightStore.getTracks() || null;
+  // Normalize: ensure we always have a tuple [audio, video] even if one is undefined
+  const normalizeTracks = (tracks: any): [LocalAudioTrack | undefined, LocalVideoTrack | undefined] | null => {
+    if (!tracks) return null;
+    // Already a tuple
+    if (Array.isArray(tracks)) {
+      return [tracks[0] || undefined, tracks[1] || undefined];
+    }
+    // Object with audio/video keys
+    if (tracks.audio || tracks.video) {
+      return [tracks.audio, tracks.video];
+    }
+    return null;
+  };
+  const localTracksFromPreflight = normalizeTracks(passedLocalTracks) || normalizeTracks(PreflightStore.getTracks()) || null;
+
+  // Mobile retry: if no tracks yet, retry PreflightStore after a short delay
+  // This handles the race condition where BattleView mounts before PreflightStore is populated
+  const [retryTracks, setRetryTracks] = useState<[LocalAudioTrack | undefined, LocalVideoTrack | undefined] | null>(null);
+  useEffect(() => {
+    if (localTracksFromPreflight) return;
+    if (!isBroadcaster) return;
+    const timer = setTimeout(() => {
+      const tracks = normalizeTracks(PreflightStore.getTracks());
+      if (tracks) {
+        if (import.meta.env.DEV) console.log('[BattleView] Mobile retry: found PreflightStore tracks');
+        setRetryTracks(tracks);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [localTracksFromPreflight, isBroadcaster]);
+
+  const effectiveLocalTracks = localTracksFromPreflight || retryTracks;
 
   // REMOVED useBattleRoom hook - using legacy connection only to avoid conflicts
   // The legacy code uses room name: battle-{battleId}
@@ -2101,45 +2692,60 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
             }
           }
 
-          if (localTracksFromPreflight) {
-            // Handle tracks independently - publish whatever is available
-            if (localTracksFromPreflight[0]) {
-              const audioTrack = cloneLocalTrackForBattle(localTracksFromPreflight[0], 'audio');
+          // Prevent re-publishing tracks on effect re-runs (causes track disappearance)
+          if (hasPublishedTracksRef.current) {
+            if (import.meta.env.DEV) {
+              console.log('[BattleView] Tracks already published for this battle, skipping re-publish');
+            }
+          } else if (effectiveLocalTracks?.[0] || effectiveLocalTracks?.[1]) {
+            // Handle tracks independently - publish whatever is available (audio-only, video-only, or both)
+            // This is critical for mobile where video track might not be immediately available
+            const tracksToPublish: string[] = [];
+            if (effectiveLocalTracks?.[0]) {
+              const audioTrack = cloneLocalTrackForBattle(effectiveLocalTracks[0], 'audio');
               if (audioTrack) {
                 createdAudioTrack = audioTrack;
+                cachedAudioTrackRef.current = audioTrack;
                 setBattleLocalAudioTrack(audioTrack);
               } else {
-                setBattleLocalAudioTrack(localTracksFromPreflight[0]);
+                cachedAudioTrackRef.current = effectiveLocalTracks[0];
+                setBattleLocalAudioTrack(effectiveLocalTracks[0]);
               }
               setIsMicEnabled(true);
-              const audioTrackToPublish = audioTrack || localTracksFromPreflight[0];
+              const audioTrackToPublish = audioTrack || effectiveLocalTracks[0];
               if (audioTrackToPublish) {
                 try {
-                  // Pass trackName to ensure proper identification in battle room
                   await publishLocalTrack(audioTrackToPublish, { name: 'audio' }, 'audio');
+                  tracksToPublish.push('audio');
                 } catch (e) {
                   console.warn('[BattleView] Failed to publish audio track:', e);
                 }
               }
             }
-            if (localTracksFromPreflight[1]) {
-              const videoTrack = cloneLocalTrackForBattle(localTracksFromPreflight[1], 'video');
+            if (effectiveLocalTracks?.[1]) {
+              const videoTrack = cloneLocalTrackForBattle(effectiveLocalTracks[1], 'video');
               if (videoTrack) {
                 createdVideoTrack = videoTrack;
+                cachedVideoTrackRef.current = videoTrack;
                 setBattleLocalVideoTrack(videoTrack);
               } else {
-                setBattleLocalVideoTrack(localTracksFromPreflight[1]);
+                cachedVideoTrackRef.current = effectiveLocalTracks[1];
+                setBattleLocalVideoTrack(effectiveLocalTracks[1]);
               }
               setIsCameraEnabled(true);
-              const videoTrackToPublish = videoTrack || localTracksFromPreflight[1];
+              const videoTrackToPublish = videoTrack || effectiveLocalTracks[1];
               if (videoTrackToPublish) {
                 try {
-                  // Pass trackName to ensure proper identification in battle room
                   await publishLocalTrack(videoTrackToPublish, { name: 'video' }, 'video');
+                  tracksToPublish.push('video');
                 } catch (e) {
                   console.warn('[BattleView] Failed to publish video track:', e);
                 }
               }
+            }
+            hasPublishedTracksRef.current = true;
+            if (import.meta.env.DEV) {
+              console.log('[BattleView] Published tracks to battle room:', tracksToPublish.join(', ') || 'none');
             }
           } else {
             // Do not request fresh media in battle view; it is unstable after route transitions
@@ -2201,23 +2807,21 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
 
     // Handle participant connected - FIX 4: Listen for participants correctly
     const handleParticipantConnected = (participant: RemoteParticipant) => {
-      console.log('[BattleView] ✅ Participant connected:', participant.identity);
       setRemoteUsers(prev => {
         if (prev.some(p => p.identity === participant.identity)) {
-          console.log('[BattleView] Participant already in list, skipping');
           return prev;
         }
-        console.log('[BattleView] Adding new participant to list, total:', prev.length + 1);
+        if (import.meta.env.DEV) console.log('[BattleView] ✅ Participant connected:', participant.identity, 'total:', prev.length + 1);
         return [...prev, participant];
       });
     };
 
     // Handle participant disconnected
     const handleParticipantDisconnected = (participant: RemoteParticipant) => {
-      console.log('[BattleView] ❌ Participant disconnected:', participant.identity);
       setRemoteUsers(prev => {
+        // Skip update if participant not in list
+        if (!prev.some(p => p.identity === participant.identity)) return prev;
         const newList = prev.filter(p => p.identity !== participant.identity);
-        console.log('[BattleView] Remaining participants:', newList.length);
         return newList;
       });
     };
@@ -2236,8 +2840,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         trackSid: track.sid,
         participantIdentity: participant.identity,
       });
-      // ONLY increment trackRevision on TrackSubscribed to trigger participant selection
-      setTrackRevision((v) => v + 1);
+      // Debounce trackRevision to prevent flashing — batch rapid track events into single update
+      if (trackRevisionTimerRef.current) {
+        clearTimeout(trackRevisionTimerRef.current);
+      }
+      trackRevisionTimerRef.current = setTimeout(() => {
+        setTrackRevision((v) => v + 1);
+        trackRevisionTimerRef.current = null;
+      }, 300);
     };
 
     // Handle track unsubscribed
@@ -2252,8 +2862,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         trackSid: track.sid,
         participantIdentity: participant.identity,
       });
-      // Track unsubscribed is less common; still increment to trigger reselection
-      setTrackRevision((v) => v + 1);
+      // Track unsubscribed — also debounced
+      if (trackRevisionTimerRef.current) {
+        clearTimeout(trackRevisionTimerRef.current);
+      }
+      trackRevisionTimerRef.current = setTimeout(() => {
+        setTrackRevision((v) => v + 1);
+        trackRevisionTimerRef.current = null;
+      }, 300);
     };
 
     // Handle track published (local participant published a track)
@@ -2344,12 +2960,15 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     return () => {
       mounted = false;
       isRoomDisconnectedRef.current = true;
-      isConnectingRef.current = false; // FIX 1: Reset connecting flag on cleanup
-      connectedBattleIdRef.current = null; // PHASE 3: Clear connected battleId on cleanup
+      isConnectingRef.current = false;
+      connectedBattleIdRef.current = null;
+      // Reset publish flag and clear track debounce timer on unmount
+      hasPublishedTracksRef.current = false;
+      if (trackRevisionTimerRef.current) {
+        clearTimeout(trackRevisionTimerRef.current);
+        trackRevisionTimerRef.current = null;
+      }
       
-      // FIX 5: Don't destroy connection mid-flow - only disconnect when explicitly leaving
-      // Only disconnect if the component is truly unmounting (not just re-rendering)
-      // The battleRoomRef check ensures we only clean up the room created by this effect
       if (battleRoomRef.current === client) {
         // Remove all listeners first to prevent events during cleanup
         client.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
@@ -2359,7 +2978,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         client.off(RoomEvent.TrackPublished, handleTrackPublished);
         client.off(RoomEvent.TrackUnpublished, handleTrackUnpublished);
         
-        // Only stop tracks if they were created in this component (not passed in)
+        // Only stop tracks if they were created/cloned in this component (not passed in)
         if (createdAudioTrack) {
           if (import.meta.env.DEV) console.log('[BattleView] Cleanup: stopping created audio track');
           createdAudioTrack.stop();
@@ -2369,17 +2988,15 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
           createdVideoTrack.stop();
         }
         
-        // Only disconnect if room is still connected - FIX 5: Don't destroy mid-flow
+        // Only disconnect if room is still connected
         if (client.state === 'connected') {
           if (import.meta.env.DEV) console.log('[BattleView] Cleanup: disconnecting room');
           client.disconnect();
         }
         
-        // Clear the ref
         battleRoomRef.current = null;
       }
       // Do NOT call PreflightStore.clear() - tracks belong to the main broadcast
-      // clearTracks();
     };
   }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster]);
 
@@ -3299,13 +3916,19 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   // The mapping converts database user IDs to LiveKit identities
   const challengerLiveKitIdentity = userIdToLiveKitIdentity?.[challengerStream.user_id] || challengerStream.user_id;
   const opponentLiveKitIdentity = userIdToLiveKitIdentity?.[opponentStream.user_id] || opponentStream.user_id;
-  
-  if (import.meta.env.DEV) {
+
+  // DEBUG: User lookup logging (throttled, in useEffect to avoid render body side effects)
+  const lastUserLookupLogRef = useRef(0);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const now = Date.now();
+    if (now - lastUserLookupLogRef.current < 2000) return;
+    lastUserLookupLogRef.current = now;
     console.log('[BattleView] User lookup - challenger stream:', challengerStream.user_id?.substring(0, 8), '-> livekit identity:', challengerLiveKitIdentity);
     console.log('[BattleView] User lookup - opponent stream:', opponentStream.user_id?.substring(0, 8), '-> livekit identity:', opponentLiveKitIdentity);
     console.log('[BattleView] Battle remoteUsers count:', remoteUsers?.length || 0);
     console.log('[BattleView] Local videoTrack:', !!battleLocalVideoTrack);
-  }
+  }, [challengerLiveKitIdentity, opponentLiveKitIdentity, remoteUsers.length, battleLocalVideoTrack]);
 
   const findRemoteByIdentity = (targetIdentity: string) => {
     const normalizedTarget = String(targetIdentity || '').replace(/-/g, '').toLowerCase();
@@ -3321,16 +3944,16 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     });
   };
 
-  // Handle challenger video - use mapping to find remote user
+  // Handle challenger video - use mapping to find remote user, or use local tracks for broadcaster
   const challengerUser = findRemoteByIdentity(challengerLiveKitIdentity) ||
     (effectiveUserId === challengerStream.user_id
-      ? { videoTrack: battleLocalVideoTrack }
+      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
       : null);
 
-  // Handle opponent video - use mapping to find remote user
+  // Handle opponent video - use mapping to find remote user, or use local tracks for broadcaster
   const opponentUser = findRemoteByIdentity(opponentLiveKitIdentity) ||
     (effectiveUserId === opponentStream.user_id
-      ? { videoTrack: battleLocalVideoTrack }
+      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
       : null);
 
   const resolveBattlePlaybackUrl = (streamRow: Stream | null): string | null => {
@@ -3456,6 +4079,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                     },
                   }));
                 }}
+                currentUserId={effectiveUserId}
+                isBroadcaster={isBroadcaster}
               />
 
               {/* Global Battle Score Overlay */}

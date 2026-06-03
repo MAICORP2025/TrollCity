@@ -43,7 +43,6 @@ export default function InstallButton({
   const handleClick = async () => {
     switch (installStatus) {
       case 'installed': {
-        // Already installed, do nothing or show a message
         toast.info('App is already installed!');
         break;
       }
@@ -60,14 +59,22 @@ export default function InstallButton({
       }
 
       case 'ios-manual': {
-        // iOS Safari: Show manual instructions
+        // iOS Safari: Show manual "Add to Home Screen" instructions
         setShowIosModal(true);
         break;
       }
 
       case 'unsupported': {
-        // Desktop or unsupported browser
-        toast.info('Install available in Chrome, Edge, or Safari mobile');
+        // Desktop or unsupported — try prompt anyway in case the event fired
+        // after our initial check, then fall back to browser menu instructions
+        if (canPromptInstall) {
+          const outcome = await promptInstall();
+          if (outcome === 'accepted') {
+            toast.success('Thanks for installing Troll City!');
+          }
+        } else {
+          toast.info('Look for the install icon ⊡ in Chrome/Edge menu (three dots)');
+        }
         break;
       }
     }
@@ -100,13 +107,25 @@ export default function InstallButton({
   const getButtonStyle = () => {
     switch (installStatus) {
       case 'prompt-available':
+        return 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-lg shadow-purple-500/30 hover:shadow-cyan-500/30';
       case 'ios-manual':
+        return 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-lg shadow-purple-500/30 hover:shadow-cyan-500/30';
+      case 'mobile-installable':
         return 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-lg shadow-purple-500/30 hover:shadow-cyan-500/30';
       case 'unsupported':
         return 'bg-slate-700/50 border border-slate-600/50 text-slate-400 hover:bg-slate-700';
       default:
         return 'bg-slate-700/50 border border-slate-600/50 text-slate-400';
     }
+  };
+
+  // Button title/tooltip
+  const getButtonTitle = () => {
+    if (installStatus === 'installed') return 'App is installed';
+    if (installStatus === 'prompt-available') return 'Install Troll City';
+    if (installStatus === 'ios-manual') return 'See installation instructions';
+    if (installStatus === 'mobile-installable') return 'Install Troll City';
+    return 'Install not available';
   };
 
   return (
@@ -122,12 +141,7 @@ export default function InstallButton({
           ${getButtonStyle()}
           ${className}
         `}
-        title={
-          installStatus === 'installed' ? 'App is installed' :
-          installStatus === 'prompt-available' ? 'Install Troll City' :
-          installStatus === 'ios-manual' ? 'See installation instructions' :
-          'Install not available'
-        }
+        title={getButtonTitle()}
       >
         {isInstalling ? (
           <>

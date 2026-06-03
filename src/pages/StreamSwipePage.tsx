@@ -97,7 +97,7 @@ export default function StreamSwipePage({ initialCategory = 'top' }: StreamSwipe
         .from('streams')
         .select(`
           *,
-          broadcaster:user_profiles!streams_user_id_fkey(
+          broadcaster:user_profiles!streams_broadcaster_id_fkey(
             username,
             avatar_url,
             level,
@@ -116,7 +116,7 @@ export default function StreamSwipePage({ initialCategory = 'top' }: StreamSwipe
           .from('streams')
           .select(`
             *,
-            broadcaster:user_profiles!streams_user_id_fkey(
+            broadcaster:user_profiles!streams_broadcaster_id_fkey(
               username,
               avatar_url,
               level,

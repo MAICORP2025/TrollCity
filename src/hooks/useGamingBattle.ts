@@ -75,7 +75,7 @@ export function useGamingBattle({ streamId, userId }: UseGamingBattleOptions) {
     try {
       const { data, error } = await supabase
         .from('streams')
-        .select('id, user_id, profiles!streams_user_id_fkey(username, avatar_url)')
+        .select('id, user_id, broadcaster:user_profiles!streams_broadcaster_id_fkey(username, avatar_url)')
         .eq('category', 'gaming')
         .eq('is_live', true)
         .neq('user_id', userId)
@@ -85,7 +85,7 @@ export function useGamingBattle({ streamId, userId }: UseGamingBattleOptions) {
 
       if (data && data.length > 0) {
         const opponent = data[Math.floor(Math.random() * data.length)]
-        const opponentProfile = opponent.profiles as any
+        const opponentProfile = opponent.broadcaster as any
 
         setState((prev) => ({
           ...prev,

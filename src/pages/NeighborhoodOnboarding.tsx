@@ -171,11 +171,22 @@ export default function NeighborhoodOnboarding() {
   const insuranceStatusDisplay = useMemo(() => {
     const profileAny = profile as any
 
-    if (
+    const hasCarInsurance =
       profileAny?.car_insurance_expiry &&
       new Date(profileAny.car_insurance_expiry) > new Date()
-    ) {
-      return 'Active'
+
+    const hasHomeInsurance =
+      profileAny?.homeowners_insurance_expiry &&
+      new Date(profileAny.homeowners_insurance_expiry) > new Date()
+
+    if (hasCarInsurance && hasHomeInsurance) {
+      return 'Fully Insured'
+    }
+    if (hasCarInsurance) {
+      return 'Car Insured'
+    }
+    if (hasHomeInsurance) {
+      return 'Home Insured'
     }
 
     return 'Pending'

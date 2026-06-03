@@ -2,17 +2,8 @@
 ALTER TABLE public.streams 
 ADD COLUMN IF NOT EXISTS layout_mode text DEFAULT 'grid';
 
--- Ensure FK relationship for PostgREST to detect 'user' embedding
-DO $$ 
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'streams_user_id_fkey_profiles') THEN
-    ALTER TABLE public.streams 
-    ADD CONSTRAINT streams_user_id_fkey_profiles 
-    FOREIGN KEY (user_id) REFERENCES public.user_profiles(id);
-  END IF;
-EXCEPTION
-  WHEN OTHERS THEN NULL;
-END $$;
+-- Note: streams.user_id correctly references auth.users
+-- The streams_broadcaster_id_fkey already provides the relationship to user_profiles
 
 -- Add Battle Pot columns
 ALTER TABLE public.battles

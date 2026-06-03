@@ -8,6 +8,8 @@
  * Includes iPadOS detection (Safari reports as MacIntel with touch support)
  */
 export function isIos(): boolean {
+  if (typeof window === 'undefined') return false;
+  
   const userAgent = window.navigator.userAgent.toLowerCase();
   const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
   
@@ -24,6 +26,8 @@ export function isIos(): boolean {
  * iOS Chrome/Firefox are just Safari wrappers but we try to detect them
  */
 export function isSafari(): boolean {
+  if (typeof window === 'undefined') return false;
+  
   const userAgent = window.navigator.userAgent.toLowerCase();
   const vendor = window.navigator.vendor?.toLowerCase() || '';
   
@@ -42,6 +46,8 @@ export function isSafari(): boolean {
  * Works for both iOS and Android
  */
 export function isStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  
   // iOS standalone check
   const iosStandalone = (window.navigator as any).standalone === true;
   
@@ -59,6 +65,7 @@ export function isStandalone(): boolean {
  * Note: This just checks if the event fired, actual availability tracked by hook
  */
 export function supportsInstallPrompt(): boolean {
+  if (typeof window === 'undefined') return false;
   return 'onbeforeinstallprompt' in window;
 }
 
@@ -68,25 +75,30 @@ export function supportsInstallPrompt(): boolean {
  */
 export type InstallStatus = 
   | 'installed'          // Already installed (standalone mode)
-  | 'prompt-available'   // Android/Chrome with beforeinstallprompt
-  | 'ios-manual'         // iOS Safari, needs manual instructions
+  | 'prompt-available'   // Android/Chrome with beforeinstallprompt captured
+  | 'ios-manual'         // iOS Safari, needs manual A2HS instructions
   | 'unsupported';       // Desktop or browser without install support
 
 export function getInstallStatus(hasPrompt: boolean): InstallStatus {
+  // First check if already installed
   if (isStandalone()) {
     return 'installed';
   }
   
+  // Check if we have the beforeinstallprompt event ready
   if (hasPrompt) {
     return 'prompt-available';
   }
   
-  // On iOS, ALL browsers are Safari wrappers (Chrome, Firefox, etc.)
-  // None support beforeinstallprompt — they all need manual A2HS instructions
-  if (isIos()) {
+  // On iOS — all browsers are Safari wrappers, none support beforeinstallprompt.
+  // Show manual "Add to Home Screen" instructions.
+  if (typeof window !== 'undefined' && isIos()) {
     return 'ios-manual';
   }
   
+  // On Android/Chrome — the beforeinstallprompt event should have fired.
+  // If it hasn't, the browser may still show the mini-infobar or the user
+  // can install from the browser menu. Show as unsupported for now.
   return 'unsupported';
 }
 
@@ -95,7 +107,7 @@ export function getInstallStatus(hasPrompt: boolean): InstallStatus {
  * (iOS Safari, not installed, not dismissed recently)
  */
 export function shouldShowIosInstructions(): boolean {
-  if (!isIos() || isStandalone()) {
+  if (isIos() === false || isStandalone()) {
     return false;
   }
   

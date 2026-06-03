@@ -43,7 +43,7 @@ export default function HomeLiveGrid() {
           user_id,
           agora_channel,
           category,
-          user_profiles:user_profiles!streams_user_id_fkey (
+          user_profiles:user_profiles!streams_broadcaster_id_fkey (
             username,
             avatar_url,
             ghost_mode_until,
