@@ -250,11 +250,24 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/api/') ||
     url.pathname.includes('/rest/v1/')
   ) {
-    // API calls: Network First with longer cache for stability
-    // Skip auth requests
+    // Skip auth requests - never cache auth
     if (url.pathname.includes('/auth/v1/')) {
       return;
     }
+
+    // Feed/list queries: Network Only to prevent stale cached responses
+    // from showing fewer/outdated items in PWA mode. Range-based pagination
+    // is especially vulnerable since stale cache returns wrong page slices.
+    const isFeedQuery =
+      url.pathname.includes('/rest/v1/troll_wall_') ||
+      url.pathname.includes('/rest/v1/streams') ||
+      url.pathname.includes('/rest/v1/chat_messages') ||
+      url.pathname.includes('/rest/v1/notifications');
+    if (isFeedQuery) {
+      return; // bypass SW cache entirely
+    }
+
+    // Other API calls: Network First with timeout for stability
     event.respondWith(networkFirstWithTimeout(request, API_CACHE, 30000));
   }
 });

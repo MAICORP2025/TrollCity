@@ -51,8 +51,8 @@ export function InstallPrompt({ className = '', variant = 'banner' }: InstallPro
         return;
       }
       
-      // Show iOS instructions
-      if (isIOS && isSafari && showIOSInstallInstructions) {
+      // Show iOS instructions (all iOS browsers are Safari wrappers)
+      if (isIOS && showIOSInstallInstructions) {
         setShowIOSModal(true);
       }
     }, 5000); // Show after 5 seconds

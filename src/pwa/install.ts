@@ -81,7 +81,9 @@ export function getInstallStatus(hasPrompt: boolean): InstallStatus {
     return 'prompt-available';
   }
   
-  if (isIos() && isSafari()) {
+  // On iOS, ALL browsers are Safari wrappers (Chrome, Firefox, etc.)
+  // None support beforeinstallprompt — they all need manual A2HS instructions
+  if (isIos()) {
     return 'ios-manual';
   }
   
@@ -93,7 +95,7 @@ export function getInstallStatus(hasPrompt: boolean): InstallStatus {
  * (iOS Safari, not installed, not dismissed recently)
  */
 export function shouldShowIosInstructions(): boolean {
-  if (!isIos() || !isSafari() || isStandalone()) {
+  if (!isIos() || isStandalone()) {
     return false;
   }
   

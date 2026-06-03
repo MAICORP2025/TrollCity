@@ -1,6 +1,12 @@
 /**
  * React Hook: useInstallPrompt
- * Captures and manages the beforeinstallprompt event for Android/Chrome
+ * Captures and manages the beforeinstallprompt event for Android/Chrome/Edge.
+ *
+ * The event is captured at module level (before React mounts) so we never miss it.
+ * We do NOT call e.preventDefault() at capture time — that blocks Chrome's default
+ * mini-infobar and can prevent the event from firing on subsequent visits.
+ * preventDefault is only called inside promptInstall() right before we show our
+ * own prompt.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -10,36 +16,42 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
+// Module-level capture — runs before React mounts
+let gDeferredPrompt: BeforeInstallPromptEvent | null = null;
+let gInstallOutcome: 'accepted' | 'dismissed' | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Store the event but do NOT call preventDefault here.
+    // Let the browser show its default mini-infobar so the user sees install is available.
+    gDeferredPrompt = e as BeforeInstallPromptEvent;
+    gInstallOutcome = null;
+    console.log('[PWA] beforeinstallprompt captured');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    console.log('[PWA] App installed successfully');
+    gDeferredPrompt = null;
+    gInstallOutcome = 'accepted';
+  });
+}
+
 export function useInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
+    gDeferredPrompt
+  );
   const [isInstalling, setIsInstalling] = useState(false);
 
   useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      // Prevent the default mini-infobar from appearing on mobile.
-      // NOTE: This will trigger a console warning in Chrome: "Banner not shown: beforeinstallpromptevent.preventDefault() called."
-      // This is EXPECTED behavior for custom install flows. We must call prompt() manually later.
-      e.preventDefault();
-      
-      // Save the event so it can be triggered later
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      
-      console.log('[PWA] beforeinstallprompt captured. Default banner suppressed for custom UI.');
-    };
+    // Sync with module-level if captured before mount
+    if (gDeferredPrompt && !deferredPrompt) {
+      setDeferredPrompt(gDeferredPrompt);
+    }
+  }, [deferredPrompt]);
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  /**
-   * Triggers the native install prompt (Android/Chrome)
-   * Returns the user's choice
-   */
   const promptInstall = useCallback(async (): Promise<'accepted' | 'dismissed' | null> => {
-    if (!deferredPrompt) {
+    const prompt = deferredPrompt || gDeferredPrompt;
+    if (!prompt) {
       console.warn('[PWA] No install prompt available');
       return null;
     }
@@ -47,17 +59,13 @@ export function useInstallPrompt() {
     setIsInstalling(true);
 
     try {
-      // Show the install prompt
-      await deferredPrompt.prompt();
-
-      // Wait for the user to respond
-      const choiceResult = await deferredPrompt.userChoice;
-      
+      // NOW we prevent default — right before showing the prompt
+      prompt.preventDefault();
+      await prompt.prompt();
+      const choiceResult = await prompt.userChoice;
       console.log('[PWA] User choice:', choiceResult.outcome);
-
-      // Clear the prompt after use
+      gDeferredPrompt = null;
       setDeferredPrompt(null);
-      
       return choiceResult.outcome;
     } catch (error) {
       console.error('[PWA] Error showing install prompt:', error);
@@ -67,27 +75,16 @@ export function useInstallPrompt() {
     }
   }, [deferredPrompt]);
 
-  /**
-   * Manually clear the deferred prompt (e.g., user dismissed the button)
-   */
   const clearPrompt = useCallback(() => {
+    gDeferredPrompt = null;
     setDeferredPrompt(null);
   }, []);
 
   return {
-    /** The captured beforeinstallprompt event (null if not available) */
-    deferredPrompt,
-    
-    /** Whether an install prompt is available */
-    canPromptInstall: deferredPrompt !== null,
-    
-    /** Whether an install is in progress */
+    deferredPrompt: deferredPrompt || gDeferredPrompt,
+    canPromptInstall: (deferredPrompt || gDeferredPrompt) !== null,
     isInstalling,
-    
-    /** Trigger the install prompt */
     promptInstall,
-    
-    /** Clear the deferred prompt */
     clearPrompt,
   };
 }

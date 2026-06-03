@@ -168,8 +168,8 @@ export function PWAProvider({ children }: PWAProviderProps) {
     const isIOSSystem = isIos();
     const isSafariBrowser = isSafari();
     
-    // Show iOS instructions if appropriate
-    if (isIOSSystem && isSafariBrowser && !isStandalone()) {
+    // Show iOS instructions if appropriate (all iOS browsers need manual A2HS)
+    if (isIOSSystem && !isStandalone()) {
       const dismissedUntil = localStorage.getItem('ios_install_dismissed_until');
       if (!dismissedUntil || Date.now() > parseInt(dismissedUntil, 10)) {
         setShowIOSInstallInstructions(true);
