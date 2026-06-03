@@ -717,6 +717,28 @@ export default function NeighborhoodOnboarding() {
 
       profileUpdate.car_insurance_expiry = expiry
 
+      if (houseId) {
+        const { error: homeInsuranceError } = await supabase
+          .from('homeowners_insurances')
+          .insert({
+            user_id: user.id,
+            house_id: houseId,
+            expires_at: expiry,
+            deductible_paid: 0,
+            status: 'active',
+            is_active: true,
+            plan_id: 'basic_week',
+            coverage_type: 'basic',
+            cost_paid: 0,
+            deductible: 25,
+            duration_hours: 720,
+            purchased_at: now,
+            claims_made: 0,
+          })
+
+        if (homeInsuranceError) throw homeInsuranceError
+      }
+
       const { error: profileError } = await supabase
         .from('user_profiles')
         .update(profileUpdate)
@@ -735,7 +757,7 @@ export default function NeighborhoodOnboarding() {
         setDriversLicenseExpiry(expiry)
       }
 
-      await refreshProfile(true      )
+      await refreshProfile(true)
 
       toast.success(
         firstInsurance
