@@ -193,7 +193,10 @@ export const useXPStore = create<XPState>((set) => {
 
             syncAuthProfile(levelValue, totalXp, nextLevelAbsolute);
             if (levelValue > lastLevelPerksSynced) {
-              await grantLevelPerksForUser(userId, levelValue)
+              const { data: sessionData } = await supabase.auth.getSession()
+              if (sessionData?.session?.access_token) {
+                await grantLevelPerksForUser(userId, levelValue)
+              }
               lastLevelPerksSynced = levelValue
             }
             lastXPFetchTime = Date.now();
@@ -218,7 +221,10 @@ export const useXPStore = create<XPState>((set) => {
               });
               syncAuthProfile(1, 0, 100);
               lastLevelPerksSynced = 1;
-              await grantLevelPerksForUser(userId, 1)
+              const { data: sessionData } = await supabase.auth.getSession()
+              if (sessionData?.session?.access_token) {
+                await grantLevelPerksForUser(userId, 1)
+              }
               lastXPFetchTime = Date.now();
             } else {
               set({ isLoading: false });
@@ -320,7 +326,10 @@ export const useXPStore = create<XPState>((set) => {
               });
               syncAuthProfile(levelValue, totalXp, nextLevelAbsolute);
               if (levelValue > lastLevelPerksSynced) {
-                await grantLevelPerksForUser(userId, levelValue)
+                const { data: sessionData } = await supabase.auth.getSession()
+                if (sessionData?.session?.access_token) {
+                  await grantLevelPerksForUser(userId, levelValue)
+                }
                 lastLevelPerksSynced = levelValue
               }
             }

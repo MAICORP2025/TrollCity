@@ -14,6 +14,12 @@ export async function grantLevelPerksForUser(userId: string, level: number) {
     return { granted: [] }
   }
 
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData?.session?.access_token) {
+    console.error('No active session - cannot grant level perks')
+    return { granted: [] }
+  }
+
   const unlockedPerks = getUnlockedPerks(level)
   if (unlockedPerks.length === 0) {
     return { granted: [] }

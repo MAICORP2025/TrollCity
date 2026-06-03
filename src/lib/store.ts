@@ -484,7 +484,16 @@ async function fetchProfileBundle(userId: string) {
     window.setTimeout(() => reject(new Error('Profile fetch timeout')), PROFILE_FETCH_TIMEOUT_MS)
   })
 
-  const fetchPromise = ensureSupabaseSession(supabase).then(async () => {
+  const fetchPromise = (async (): Promise<any> => {
+    try {
+      await ensureSupabaseSession(supabase)
+    } catch (err: any) {
+      if (err.message === 'Not logged in yet') {
+        return { profile: null, error: null, notLoggedIn: true }
+      }
+      throw err
+    }
+    
     const profileResult = await supabase
       .from('user_profiles')
       .select(USER_PROFILE_SELECT)
@@ -492,9 +501,15 @@ async function fetchProfileBundle(userId: string) {
       .maybeSingle()
 
     return profileResult
-  })
+  })()
 
-  const { data, error } = await Promise.race([fetchPromise, timeoutPromise])
+  const result = await Promise.race([fetchPromise, timeoutPromise])
+
+  if (result.notLoggedIn) {
+    return { profile: null, error: null, notLoggedIn: true }
+  }
+
+  const { data, error } = result
 
   if (error) {
     return { profile: null, error }
@@ -686,6 +701,12 @@ setProfile: (profile, options = {}) => {
               () => fetchProfileBundle(user.id),
               10
             )
+
+            if (bundle.notLoggedIn) {
+              console.log('[authStore] Not logged in, skipping profile refresh')
+              set({ isRefreshing: false })
+              return
+            }
 
             if (bundle.error) {
               const message = (bundle.error as any).message || ''

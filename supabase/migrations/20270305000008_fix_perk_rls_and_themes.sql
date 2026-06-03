@@ -14,14 +14,16 @@ CREATE POLICY "Public view user perks" ON public.user_perks
 FOR SELECT USING (true);
 
 -- Ensure Insert/Update is still protected (User can only manage their own)
--- (These usually exist from previous migrations, but ensuring them here is safe)
+-- Using auth.uid() for session-based check
 DROP POLICY IF EXISTS "Users can insert their own perks" ON public.user_perks;
 CREATE POLICY "Users can insert their own perks" ON public.user_perks
-FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
+FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can update their own perks" ON public.user_perks;
 CREATE POLICY "Users can update their own perks" ON public.user_perks
-FOR UPDATE USING ((select auth.uid()) = user_id);
+FOR UPDATE TO authenticated
+USING (auth.uid() = user_id);
 
 
 -- 2. FIX THEME LOADING (User Inventory & Marketplace)

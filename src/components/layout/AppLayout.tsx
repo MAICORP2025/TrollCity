@@ -11,6 +11,7 @@ import { setupGlobalMessageNotifications, OFFICER_GROUP_CONVERSATION_ID } from '
 import ChatBubble from '../ChatBubble'
 import { useSidebarStore } from '../../stores/useSidebarStore'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { isStandalone } from '../../pwa/install'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -84,7 +85,7 @@ export default function AppLayout({
     };
   }, [isThemeExemptPage]);
 
-   const effectiveShowSidebar = showSidebar && showLegacySidebar && !isAuthPage && !isLivePage && !isMaiClassPage;
+   const effectiveShowSidebar = showSidebar && showLegacySidebar && !isAuthPage && !isLivePage && !isMaiClassPage && !(isStandalone && isMobileWidth);
    const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isMaiClassPage;
    const effectiveShowBottomNav = showBottomNav && !isAuthPage && !isLivePage && !isMaiClassPage;
   const mainOverflowClass = isLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
@@ -94,8 +95,8 @@ export default function AppLayout({
   return (
     <div className={`app-viewport ${appThemeClass} w-screen h-dvh overflow-hidden text-white flex relative`}>
       {!isAuthPage && <PurchaseRequiredModal />}
-  {/* Desktop Sidebar - Hidden on Mobile */}
-  {effectiveShowSidebar && (
+{/* Desktop Sidebar - Hidden on Mobile PWA */}
+   {effectiveShowSidebar && (
     <div className={`h-full shrink-0 z-60 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'}`}>
       <Sidebar />
     </div>
