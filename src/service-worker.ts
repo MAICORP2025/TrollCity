@@ -102,8 +102,10 @@ const PRECACHE_MANIFEST: any[] = (self as unknown as { __WB_MANIFEST: any[] })._
 self.addEventListener('install', (event) => {
   console.log(`[SW] Installing version ${APP_VERSION} (${CACHE_VERSION})`);
   
-  // Skip waiting — activate immediately so push handlers etc. go live without delay
-  self.skipWaiting();
+  // NOTE: We intentionally do NOT call self.skipWaiting() here.
+  // The workbox config has skipWaiting: false, so the new SW will wait
+  // until the user explicitly triggers an update via the "Update Now" button.
+  // This prevents the app from constantly reloading on every deploy.
   
   // Pre-cache critical assets
   event.waitUntil(

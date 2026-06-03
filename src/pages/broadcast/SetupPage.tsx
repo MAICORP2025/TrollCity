@@ -1551,23 +1551,6 @@ export default function SetupPage() {
        return;
      }
  
-     // Check Gaming category requirements
- 
-     // Check Gaming category requirements - 10 followers required (admin/roles bypass)
-     if (category === 'gaming') {
-       const isAdminOrOfficer = profile?.role === 'admin' || profile?.role === 'superadmin' || 
-         profile?.is_admin || profile?.is_superadmin || profile?.is_troll_officer || 
-         profile?.is_lead_troll_officer || profile?.role === 'troll_officer' || 
-         profile?.role === 'lead_troll_officer' || profile?.role === 'secretary';
-       
-      if (!isAdminOrOfficer && followerCount < 10) {
-        toast.error('Gaming category requires 10 followers');
-        return;
-      }
-     }
- 
-
-
     // Check President Elections requirements - only admin, secretary, lead_troll_officer, troll_officer
     if (category === 'election') {
       const allowedRoles = ['admin', 'secretary', 'lead_troll_officer', 'troll_officer'];
@@ -2085,13 +2068,6 @@ export default function SetupPage() {
   // Render category-specific info
   const renderCategoryInfo = () => {
     switch (category) {
-      case 'gaming':
-        return (
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Gaming</span>
-            <p className="text-xs text-white">Screen share with optional draggable camera overlay</p>
-          </div>
-        );
       case 'debate':
         return (
           <div className="flex flex-col gap-1">
@@ -2461,37 +2437,6 @@ export default function SetupPage() {
           </div>
         )}
 
-        {/* Gaming Follower Requirement */}
-        {category === 'gaming' && (
-          <div className={cn(
-            "rounded-xl p-3 border",
-            followerCount >= 100 || (profile?.role === 'admin' || profile?.role === 'superadmin' || profile?.is_admin || profile?.is_superadmin || profile?.is_troll_officer || profile?.is_lead_troll_officer || profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.role === 'secretary')
-              ? 'bg-green-500/10 border-green-500/30'
-              : 'bg-amber-500/10 border-amber-500/30'
-          )}>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-gray-300">Gaming Follower Requirement</span>
-              <span className={cn(
-                "text-xs font-bold",
-                followerCount >= 100 || (profile?.role === 'admin' || profile?.role === 'superadmin' || profile?.is_admin || profile?.is_superadmin || profile?.is_troll_officer || profile?.is_lead_troll_officer || profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.role === 'secretary')
-                  ? 'text-green-400' : 'text-amber-400'
-              )}>
-                {followerCount} / 100
-              </span>
-            </div>
-            <div className="w-full bg-gray-700/50 rounded-full h-1.5">
-              <div
-                className={cn(
-                  "h-1.5 rounded-full transition-all",
-                  followerCount >= 100 || (profile?.role === 'admin' || profile?.role === 'superadmin' || profile?.is_admin || profile?.is_superadmin || profile?.is_troll_officer || profile?.is_lead_troll_officer || profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.role === 'secretary')
-                    ? 'bg-green-500' : 'bg-amber-500'
-                )}
-                style={{ width: `${Math.min((followerCount / 100) * 100, 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
-
         {/* Religion Selector */}
         {renderReligionSelector()}
 
@@ -2538,6 +2483,8 @@ export default function SetupPage() {
                >
                  {Object.values(BROADCAST_CATEGORIES)
                    .filter((cat) => {
+                     // Gaming has its own dedicated setup page
+                     if (cat.id === 'gaming') return false;
                      // Hide TCNN and President Elections from regular users
                      if (cat.id === 'tcnn' || cat.id === 'election') {
                        return isUserAdmin || profile?.role === 'secretary' ||

@@ -10,6 +10,7 @@ import { WallPost, WallPostType } from '../types/trollWall'
 import ClickableUsername from '../components/ClickableUsername'
 import { useAuthStore } from '../lib/store'
 import { parseTextWithLinks } from '../lib/utils'
+import WallShareModal from '../components/trollWall/WallShareModal'
 
 export default function WallPostPage() {
   const { postId } = useParams<{ postId: string }>()
@@ -17,6 +18,7 @@ export default function WallPostPage() {
   const { user } = useAuthStore()
   const [post, setPost] = useState<WallPost | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showShareModal, setShowShareModal] = useState(false)
 
   useEffect(() => {
     const loadPost = async () => {
@@ -88,19 +90,17 @@ export default function WallPostPage() {
   }
 
   const handleShare = () => {
-    if (!post) return
-    const url = `${window.location.origin}/wall/${post.id}`
-    navigator.clipboard.writeText(url)
-    toast.success('Link copied to clipboard!')
+    setShowShareModal(true)
+  }
 
+  const handleShareAction = () => {
+    if (!post) return
     if (user?.id) {
       supabase
         .from('troll_wall_post_shares')
         .insert({ post_id: post.id, user_id: user.id })
         .then(({ error }) => {
-          if (error) {
-            console.warn('Failed to record share:', error)
-          }
+          if (error) console.warn('Failed to record share:', error)
         })
         .catch((err) => console.warn('Failed to record share:', err))
     }
@@ -221,10 +221,20 @@ export default function WallPostPage() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-blue-400 transition-colors"
             >
               <Share2 className="w-5 h-5" />
-              <span>Share Link</span>
+              <span>Share</span>
             </button>
           </div>
         </div>
+
+        {showShareModal && post && (
+          <WallShareModal
+            isOpen={showShareModal}
+            onClose={() => setShowShareModal(false)}
+            post={post}
+            postUrl={`${window.location.origin}/wall/${post.id}`}
+            onShare={handleShareAction}
+          />
+        )}
       </div>
     </div>
   )

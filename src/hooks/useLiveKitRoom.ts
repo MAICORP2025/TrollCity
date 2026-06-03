@@ -1,20 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { 
-  Room, 
-  RoomEvent, 
-  LocalVideoTrack, 
-  LocalAudioTrack, 
-  RemoteParticipant,
-  RemoteVideoTrack,
-  RemoteAudioTrack,
-  VideoCaptureOptions,
-  AudioCaptureOptions,
-  VideoPresets,
-  AudioPresets,
-  createLocalAudioTrack,
-  createLocalVideoTrack
-} from 'livekit-client';
+import { Room, RoomEvent, VideoPresets, createLocalAudioTrack, createLocalVideoTrack } from 'livekit-client';
+import type { LocalVideoTrack, LocalAudioTrack, RemoteParticipant, RemoteVideoTrack, RemoteAudioTrack } from 'livekit-client';
 import { supabase } from '../lib/supabase';
+import { getLiveKitRoomName } from '../lib/liveUtils';
 import { toast } from 'sonner';
 
 /**
@@ -53,6 +41,17 @@ export function useLiveKitRoom({
   const [localAudioTrack, setLocalAudioTrack] = useState<LocalAudioTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
+  const [lastJoinDebug, setLastJoinDebug] = useState<any>(null);
+
+  // Helper to safely stringify values for logging without passing raw objects
+  const safeStringify = (v: any) => {
+    try {
+      if (typeof v === 'string') return v
+      return JSON.stringify(v)
+    } catch {
+      try { return String(v) } catch { return '[Unserializable]' }
+    }
+  }
 
    // Refs
     const roomRef = useRef<Room | null>(null);
@@ -64,6 +63,12 @@ export function useLiveKitRoom({
     const prewarmedAudioTrackRef = useRef<LocalAudioTrack | null>(null);
     const prewarmedVideoTrackRef = useRef<LocalVideoTrack | null>(null);
     const prewarmCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Track last failed join to prevent infinite retry loops
+    const lastFailedJoinRef = useRef<{ roomId: string; userId: string; error: string; timestamp: number } | null>(null);
+
+// Module-level: tracks failed joins across component remounts (e.g. ErrorBoundary recovery).
+// Key = `${roomId}:${userId}`, Value = { error, timestamp }
+const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
 
   // Get LiveKit credentials from environment
   const getLiveKitUrl = () => import.meta.env.VITE_LIVEKIT_URL;
@@ -73,15 +78,22 @@ export function useLiveKitRoom({
   const isLiveKitConfigured = !!getLiveKitUrl() && !!getLiveKitApiKey();
 
   // Fetch LiveKit token via edge function
-  const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string, isPublisherOverride?: boolean, metadataOverride?: string) => {
-    const isPublisher = true;
+  // mode: 'broadcaster' | 'audience' | 'seat-publisher' | 'battle-watch'
+  const fetchToken = useCallback(async (roomName: string, userId: string, userName?: string, isPublisherOverride?: boolean, metadataOverride?: string, mode?: string) => {
+    // Determine publish permission from explicit mode or override parameter.
+    // Broadcaster and seat-publisher get canPublish: true.
+    // Audience, battle-watch, and default get canPublish: false.
+    const canPublish = mode === 'broadcaster' || mode === 'seat-publisher' || (mode === undefined && (isPublisherOverride === true || publish === true));
     const requestBody: Record<string, any> = {
       room: roomName,
       roomName,
       identity: identity || userId,
       name: userName || 'User',
-      role: isPublisher ? 'publisher' : 'audience',
-      isHost: isPublisher && roomType === 'pod' ? true : undefined,
+      role: canPublish ? 'publisher' : 'audience',
+      isHost: canPublish && roomType === 'pod' ? true: undefined,
+      canPublish,
+      canSubscribe: true,
+      mode: mode || (canPublish ? 'publisher' : 'audience'),
     };
     if (metadataOverride) {
       requestBody.metadata = metadataOverride;
@@ -90,8 +102,11 @@ export function useLiveKitRoom({
     const requestDetails = {
       roomName,
       userId,
-      role: isPublisher ? 'publisher' : 'audience',
-      isHost: isPublisher && roomType === 'pod',
+      role: canPublish ? 'publisher' : 'audience',
+      canPublish,
+      canSubscribe: true,
+      mode: mode || (canPublish ? 'publisher' : 'audience'),
+      isHost: canPublish && roomType === 'pod',
     };
 
     try {
@@ -100,13 +115,14 @@ export function useLiveKitRoom({
       });
 
       if (tokenError) {
-        const errorMessage = tokenError?.message || JSON.stringify(tokenError);
-        console.error('[useLiveKitRoom] Error fetching token via Supabase functions.invoke:', errorMessage, requestDetails, tokenError);
-        throw new Error(`LiveKit token fetch failed: ${errorMessage}`);
+        const statusCode = tokenError?.status || tokenError?.statusCode || tokenError?.status_code || null;
+        const bodyText = tokenError?.body || tokenError?.message || JSON.stringify(tokenError);
+        console.error(`[useLiveKitRoom] Error fetching token via Supabase functions.invoke: ${statusCode} ${safeStringify(bodyText)} ${safeStringify(requestDetails)}`);
+        throw new Error(`LiveKit audience token failed: ${statusCode ? statusCode + ' ' : ''}${String(bodyText)}`);
       }
 
       if (!data?.token) {
-        console.error('[useLiveKitRoom] No token in response from edge function:', data, requestDetails);
+        console.error(`[useLiveKitRoom] No token in response from edge function: ${safeStringify(data)} ${safeStringify(requestDetails)}`);
         throw new Error(`LiveKit token response missing token: ${JSON.stringify(data)}`);
       }
 
@@ -138,24 +154,24 @@ export function useLiveKitRoom({
       try {
         parsed = JSON.parse(responseText);
       } catch (parseErr) {
-        console.error('[useLiveKitRoom] Failed parsing fallback token response:', parseErr, responseText);
+        console.error(`[useLiveKitRoom] Failed parsing fallback token response: ${safeStringify(parseErr)} ${safeStringify(responseText)}`);
         throw new Error(`LiveKit token fallback response parse failed: ${parseErr?.message || String(parseErr)}`);
       }
 
       if (!response.ok) {
-        console.error('[useLiveKitRoom] Fallback token request failed:', response.status, parsed);
+        console.error(`[useLiveKitRoom] Fallback token request failed: ${response.status} ${safeStringify(parsed)}`);
         throw new Error(`LiveKit token fallback request failed (${response.status}): ${parsed?.error || JSON.stringify(parsed)}`);
       }
 
       if (!parsed?.token) {
-        console.error('[useLiveKitRoom] Fallback token response missing token:', parsed);
+        console.error(`[useLiveKitRoom] Fallback token response missing token: ${safeStringify(parsed)}`);
         throw new Error(`LiveKit token fallback response missing token: ${JSON.stringify(parsed)}`);
       }
 
       console.log('[useLiveKitRoom] Got token via fallback fetch, room:', roomName);
       return parsed.token;
     }
-  }, [publish, roomType]);
+  }, [publish, roomType, identity]);
 
   // Resolve video preset based on admin status
   const videoPreset = isAdmin ? VideoPresets.h1080 : VideoPresets.h720;
@@ -187,7 +203,7 @@ export function useLiveKitRoom({
 
       return { audioTrack, videoTrack };
     } catch (err) {
-      console.error('[useLiveKitRoom] Error creating local tracks:', err);
+      console.error(`[useLiveKitRoom] Error creating local tracks: ${safeStringify(err)}`);
       throw err;
     }
   }, [audioOnly, roomType, videoPreset]);
@@ -215,121 +231,306 @@ export function useLiveKitRoom({
     );
   };
 
+  const participantMatches = (item: any, participant: any) => {
+    if (!item || !participant) return false;
+    const sid = participant?.sid;
+    const identity = participant?.identity;
+    if (sid && item?.sid === sid) return true;
+    if (identity && item?.identity === identity) return true;
+    return false;
+  };
+
+  const replaceOrAppendParticipant = (prev: RemoteParticipant[], participant: RemoteParticipant) => {
+    const sid = participant?.sid || null;
+    const identity = participant?.identity || null;
+    const exists = prev.some((item: any) => participantMatches(item, participant));
+    if (!exists) {
+      return [...prev, participant];
+    }
+    return prev.map((item: any) => participantMatches(item, participant) ? participant : item);
+  };
+
+  // Normalize various error shapes into a predictable object for logging
+  const normalizeLiveKitError = (err: unknown) => {
+    try {
+      if (err instanceof Error) {
+        return {
+          name: err.name,
+          message: err.message,
+          stack: err.stack,
+          cause: (err as any).cause,
+        };
+      }
+
+      if (typeof err === 'object' && err !== null) {
+        const e: any = err as any;
+        // Avoid attaching the full raw object (may contain circular LiveKit refs).
+        // Provide a shallow summary instead to aid debugging without causing serialization recursion.
+        let rawSummary: any = null;
+        try {
+          rawSummary = {
+            keys: Object.keys(e).slice(0, 20),
+            message: e.message || e.error || undefined,
+            status: e.status || undefined,
+            code: e.code || undefined,
+          };
+        } catch {
+          rawSummary = String(e);
+        }
+
+        return {
+          message: e.message || e.error_description || e.error || 'Unknown object error',
+          status: e.status,
+          code: e.code,
+          details: e.details,
+          hint: e.hint,
+          rawSummary,
+        };
+      }
+
+      return { message: String(err) };
+    } catch (e) {
+      return { message: String(err) };
+    }
+  };
+
+  // Safe serializer to ensure errors are logged as plain objects
+  const serializeError = (err: unknown) => {
+    // Depth-limited, circular-safe serializer to avoid RangeError: Maximum call stack size exceeded
+    if (err instanceof Error) {
+      return {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+        cause: (err as any).cause,
+      };
+    }
+
+    const maxDepth = 4;
+    const seen = new WeakSet();
+    const cloneSafe = (value: any, depth = 0): any => {
+      if (value === null) return null;
+      if (typeof value !== 'object') return value;
+      if (seen.has(value)) return '[Circular]';
+      if (depth >= maxDepth) return '[Truncated]';
+      seen.add(value);
+      if (Array.isArray(value)) return value.map(v => cloneSafe(v, depth + 1));
+      const out: any = {};
+      for (const k of Object.keys(value)) {
+        try {
+          out[k] = cloneSafe(value[k], depth + 1);
+        } catch {
+          out[k] = '[Unserializable]';
+        }
+      }
+      return out;
+    };
+
+    if (typeof err === 'object' && err !== null) {
+      try {
+        return cloneSafe(err, 0);
+      } catch {
+        return { message: String(err) };
+      }
+    }
+
+    return { message: String(err) };
+  };
+
   // Handle participant joined
   const handleParticipantJoined = useCallback((participant: RemoteParticipant) => {
     const identity = getParticipantIdentity(participant);
 
     console.log('[useLiveKitRoom] Participant connected:', {
       identity,
+      sid: participant?.sid,
       publicationCount: getPublicationCount(participant),
     });
 
-    setRemoteUsers(prev => {
-      const alreadyExists = prev.some(
-        (item: any) => getParticipantIdentity(item) === identity
-      );
-
-      if (alreadyExists) {
-        return prev.map((item: any) =>
-          getParticipantIdentity(item) === identity ? participant : item
-        );
-      }
-
-      return [...prev, participant];
-    });
+    setRemoteUsers(prev => replaceOrAppendParticipant(prev, participant));
 
     onUserJoined?.(participant);
   }, [onUserJoined]);
 
   // Handle participant left
   const handleParticipantLeft = useCallback((participant: RemoteParticipant) => {
-    const identity = getParticipantIdentity(participant);
+    const identity = participant?.identity || null;
+    const sid = participant?.sid || null;
 
     console.log('[useLiveKitRoom] Participant disconnected:', {
       identity,
+      sid,
       publicationCount: getPublicationCount(participant),
     });
 
     setRemoteUsers(prev =>
-      prev.filter((item: any) => getParticipantIdentity(item) !== identity)
+      prev.filter((item: any) => {
+        const matchBySid = sid && item?.sid === sid;
+        const matchByIdentity = identity && item?.identity === identity;
+        return !(matchBySid || matchByIdentity);
+      })
     );
 
     onUserLeft?.(participant);
   }, [onUserLeft]);
 
-  // Handle track subscribed
+  // Handle track subscribed — with race-condition guard.
+  // LiveKit can fire trackSubscribed after participantDisconnected, reconnect,
+  // remount, or stale PWA state. We verify the participant exists in both our
+  // local state AND the actual LiveKit room before attaching the track.
   const handleTrackSubscribed = useCallback(
     (track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
-      const identity = getParticipantIdentity(participant);
+      const participantSid = participant?.sid || null;
+      const participantIdentity = participant?.identity || null;
+      const trackSid = track?.sid || publication?.trackSid || publication?.sid || null;
+      const kind = track?.kind || publication?.kind || null;
 
-      if (!identity || identity === 'unknown-participant') {
-        console.warn('[useLiveKitRoom] Track subscribed without participant identity', {
-          kind: track?.kind,
-          publicationSid: publication?.trackSid,
+      if (!participantSid && !participantIdentity) {
+        console.warn('[useLiveKitRoom] Ignoring late track for missing participant', {
+          participantSid,
+          participantIdentity,
+          trackSid,
+          kind,
         });
         return;
       }
 
-      console.log('[useLiveKitRoom] Track subscribed:', {
-        participantIdentity: identity,
-        trackSid: track?.sid || publication?.trackSid || publication?.sid || null,
-        kind: track?.kind || publication?.kind || null,
+      const trackInfo = {
+        participantIdentity,
+        participantSid,
+        trackSid,
+        kind,
         source: publication?.source || null,
-      });
+      };
 
+      // Check local state first
       setRemoteUsers(prev => {
-        const exists = prev.some(
-          (item: any) => getParticipantIdentity(item) === identity
-        );
+        const exists = prev.some((item: any) => participantMatches(item, participant));
+        if (!exists) {
+          // Participant not in local state — check the actual LiveKit room.
+          // This handles the race where trackSubscribed fires before
+          // participantConnected or after a reconnect.
+          const room = roomRef.current;
+          if (room?.remoteParticipants) {
+            const roomParticipant = participantIdentity
+              ? room.remoteParticipants.get(participantIdentity)
+              : null;
+            const roomBySid = !roomParticipant && participantSid
+              ? Array.from(room.remoteParticipants.values()).find(
+                  (p: any) => p?.sid === participantSid,
+                )
+              : null;
+            const resolvedParticipant = roomParticipant || roomBySid;
+            if (resolvedParticipant) {
+              // Participant exists in room but not yet in local state — add it.
+              // Use the room's participant object for consistency.
+              if (import.meta.env.DEV) {
+                console.warn('[useLiveKitRoom] Recovered missing participant from room', trackInfo);
+              }
+              return [...prev, resolvedParticipant as RemoteParticipant];
+            }
+          }
 
-        if (!exists) return [...prev, participant];
+          // Genuinely missing — log and skip (no throw, no error).
+          console.warn('[useLiveKitRoom] Ignoring late track for missing participant', trackInfo);
+          return prev;
+        }
 
-        return prev.map((item: any) =>
-          getParticipantIdentity(item) === identity ? participant : item
-        );
+        return prev.map((item: any) => participantMatches(item, participant) ? participant : item);
       });
 
-      // Double-update on next animation frame to ensure React re-renders
-      // even when LiveKit mutates the same participant object reference.
-      // Critical for mobile PWA where track subscribe doesn't change the
-      // participant reference but adds tracks to it.
+      // Double-update to ensure React re-renders when LiveKit mutates the
+      // same participant object reference (important for mobile/PWA).
       window.requestAnimationFrame(() => {
         setRemoteUsers(prev => {
-          const exists = prev.some(
-            (item: any) => getParticipantIdentity(item) === identity
-          );
-
-          if (!exists) return [...prev, participant];
-
-          return prev.map((item: any) =>
-            getParticipantIdentity(item) === identity ? participant : item
-          );
+          const exists = prev.some((item: any) => participantMatches(item, participant));
+          if (!exists) {
+            return prev;
+          }
+          return prev.map((item: any) => participantMatches(item, participant) ? participant : item);
         });
       });
     },
     []
   );
 
-  // Handle track unsubscribed
+  // Handle track unsubscribed — idempotent, safe for missing participants.
+  // Mirrors handleTrackSubscribed guards: verifies participant exists in local
+  // state AND the actual LiveKit room before updating. Handles late/missed
+  // unsub events from reconnects, stale PWA state, and race conditions.
   const handleTrackUnsubscribed = useCallback(
     (_track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
-      const identity = getParticipantIdentity(participant);
+      const identity = participant?.identity || null;
+      const sid = participant?.sid || null;
+      const trackSid = publication?.trackSid || publication?.sid || null;
+      const kind = publication?.kind || null;
 
-      console.log('[useLiveKitRoom] Track unsubscribed:', {
-        participantIdentity: identity,
-        trackSid: publication?.trackSid || publication?.sid || null,
-        kind: publication?.kind || null,
-      });
-
-      if (!participant?.identity) {
+      if (!identity && !sid) {
+        // Nothing to match on — skip silently
         return;
       }
 
-      setRemoteUsers(prev =>
-        prev.map((item: any) =>
-          getParticipantIdentity(item) === identity ? participant : item
-        )
-      );
+      const logInfo = {
+        participantIdentity: identity,
+        participantSid: sid,
+        trackSid,
+        kind,
+        source: publication?.source || null,
+      };
+
+      // Check local state first — if participant exists, update in place.
+      setRemoteUsers(prev => {
+        const exists = prev.some((item: any) => participantMatches(item, participant));
+        if (exists) {
+          console.log('[useLiveKitRoom] Track unsubscribed:', logInfo);
+          return prev.map((item: any) => participantMatches(item, participant) ? participant : item);
+        }
+
+        // Participant not in local state — check the actual LiveKit room.
+        // This handles the race where trackUnsubscribed fires after a reconnect
+        // or when the participant was already removed from local state.
+        const room = roomRef.current;
+        if (room?.remoteParticipants) {
+          const roomParticipant = identity
+            ? room.remoteParticipants.get(identity)
+            : null;
+          const roomBySid = !roomParticipant && sid
+            ? Array.from(room.remoteParticipants.values()).find(
+                (p: any) => p?.sid === sid,
+              )
+            : null;
+          const resolvedParticipant = roomParticipant || roomBySid;
+          if (resolvedParticipant) {
+            // Participant exists in room — update with the latest reference
+            // so track detachment is reflected in the UI.
+            if (import.meta.env.DEV) {
+              console.log('[useLiveKitRoom] Track unsubscribed: recovered participant from room', logInfo);
+            }
+            return prev.map((item: any) =>
+              participantMatches(item, resolvedParticipant) ? resolvedParticipant : item
+            );
+          }
+        }
+
+        // Genuinely missing from both local state and room — the unsub event
+        // arrived after the participant was already removed. Safe to ignore.
+        if (import.meta.env.DEV) {
+          console.log('[useLiveKitRoom] Track unsubscribed: participant already removed, skipping', logInfo);
+        }
+        return prev;
+      });
+
+      // Double-update via rAF to ensure React re-renders when LiveKit mutates
+      // the same participant object reference (important for mobile/PWA).
+      window.requestAnimationFrame(() => {
+        setRemoteUsers(prev => {
+          const exists = prev.some((item: any) => participantMatches(item, participant));
+          if (!exists) {
+            return prev;
+          }
+          return prev.map((item: any) => participantMatches(item, participant) ? participant : item);
+        });
+      });
     },
     []
   );
@@ -360,6 +561,7 @@ export function useLiveKitRoom({
     joiningRef.current = true;
     setIsJoining(true);
     setError(null);
+    setRemoteUsers([]);
     localUserIdRef.current = userId;
 
     let room: Room | null = null;
@@ -393,6 +595,7 @@ export function useLiveKitRoom({
         joiningRef.current = false;
         setIsConnected(false);
         setIsPublishing(false);
+        setRemoteUsers([]);
       });
       room.on(RoomEvent.Reconnecting, () => {
         console.log('[useLiveKitRoom] Room reconnecting...');
@@ -410,15 +613,13 @@ export function useLiveKitRoom({
         }
       });
 
-      const token = tokenOverride || await fetchToken(roomId, userId, userName, true);
+      const roomName = getLiveKitRoomName(roomId);
+      const token = tokenOverride || await fetchToken(roomName, userId, userName, true, undefined, 'broadcaster');
       const url = getLiveKitUrl();
       const apiKey = getLiveKitApiKey();
 
       if (!url || !apiKey) {
-        console.error('[useLiveKitRoom] Missing LiveKit config:', {
-          hasUrl: !!url,
-          hasApiKey: !!apiKey
-        });
+        console.error(`[useLiveKitRoom] Missing LiveKit config: hasUrl=${!!url} hasApiKey=${!!apiKey}`);
         throw new Error(`Missing LiveKit env vars: VITE_LIVEKIT_URL=${url ? 'set' : 'MISSING'}, VITE_LIVEKIT_API_KEY=${apiKey ? 'set' : 'MISSING'}`);
       }
 
@@ -478,7 +679,7 @@ export function useLiveKitRoom({
 
       return room;
     } catch (err: any) {
-      console.error('[useLiveKitRoom] Error joining as publisher:', err);
+      console.error(`[useLiveKitRoom] Error joining as publisher: ${safeStringify(err)}`);
 
       if (audioTrack) {
         try {
@@ -522,15 +723,26 @@ export function useLiveKitRoom({
   }, [roomId, videoPreset, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError, userName, identity, audioOnly, initialAudioEnabled]);
 
   // Join as viewer (LiveKit)
-  const joinAsAudience = useCallback(async (userId: string) => {
+  const joinAsAudience = useCallback(async (userIdOrParam: string | { userId?: string; streamId?: string; roomName?: string; viewerIdentity?: string }) => {
+    // Support legacy string signature and object signature
+    let userId: string
+    let providedStreamId: string | undefined
+    let providedRoomName: string | undefined
+    if (typeof userIdOrParam === 'string') {
+      userId = userIdOrParam
+    } else {
+      userId = userIdOrParam.userId || userIdOrParam.viewerIdentity || ''
+      providedStreamId = userIdOrParam.streamId
+      providedRoomName = userIdOrParam.roomName
+    }
     // Guard: prevent multiple simultaneous connection attempts
     if (joinedRef.current) {
-      console.warn('[useLiveKitRoom] Join prevented: already joined');
+      if (import.meta.env.DEV) console.log('[useLiveKitRoom] Join prevented: already joined', { roomId, userId });
       return roomRef.current;
     }
-    
+
     if (joiningRef.current) {
-      console.warn('[useLiveKitRoom] Join prevented: already joining');
+      if (import.meta.env.DEV) console.log('[useLiveKitRoom] Join prevented: already joining', { roomId, userId });
       // Wait for existing join to complete
       let attempts = 0;
       while (joiningRef.current && attempts < 50) {
@@ -539,15 +751,40 @@ export function useLiveKitRoom({
       }
       return roomRef.current;
     }
-    
+
+    // Guard: if the same room+user failed recently (within 60s), don't retry.
+    // Checks both the instance ref and the module-level cache (survives remounts).
+    // This prevents infinite retry loops when the token or network is the issue.
+    const effectiveStreamKey = providedStreamId || roomId || '';
+    const joinCacheKey = `${effectiveStreamKey}:${userId}`;
+    const cachedFailure = failedJoinCache.get(joinCacheKey);
+    const instanceFailure = lastFailedJoinRef.current;
+    const now = Date.now();
+    if (cachedFailure && (now - cachedFailure.timestamp < 60000)) {
+      if (import.meta.env.DEV) console.log('[useLiveKitRoom] Join prevented: recent cached failure', {
+        roomId: effectiveStreamKey, userId, lastError: cachedFailure.error,
+      });
+      return roomRef.current;
+    }
+    if (instanceFailure
+        && instanceFailure.roomId === (effectiveStreamKey || roomId)
+        && instanceFailure.userId === userId
+        && (now - instanceFailure.timestamp < 60000)) {
+      if (import.meta.env.DEV) console.log('[useLiveKitRoom] Join prevented: recent instance failure', {
+        roomId: effectiveStreamKey, userId, lastError: instanceFailure.error,
+      });
+      return roomRef.current;
+    }
+
     if (!roomId || !userId) {
-      console.warn('[useLiveKitRoom] Join prevented: missing params');
+      if (import.meta.env.DEV) console.warn('[useLiveKitRoom] Join prevented: missing params', { roomId, userId });
       return;
     }
 
     joiningRef.current = true;
     setIsJoining(true);
     setError(null);
+    setRemoteUsers([]);
     localUserIdRef.current = userId;
 
     try {
@@ -571,6 +808,7 @@ export function useLiveKitRoom({
         joiningRef.current = false;
         setIsConnected(false);
         setIsPublishing(false);
+        setRemoteUsers([]);
       });
 
       // Handle reconnection events
@@ -593,16 +831,40 @@ export function useLiveKitRoom({
         }
       });
 
-      // Get token
-      const token = await fetchToken(roomId, userId, userName, false);
+      // Get token — audience mode: canPublish false, canSubscribe true
+      // Ensure we consistently compute the LiveKit room name
+      const roomName = providedRoomName || roomId || getLiveKitRoomName(undefined, providedStreamId || roomId);
+
+      if (import.meta.env.DEV) {
+        const pre = {
+            streamId: providedStreamId || roomId,
+            roomName,
+            userId,
+            identity,
+            mode: 'audience',
+          };
+        console.log('[useLiveKitRoom] joinAsAudience request params (pre-token):', pre);
+        setLastJoinDebug((prev: any) => ({ ...(prev || {}), pre }));
+      }
+
+      const token = await fetchToken(roomName, userId, userName, false, providedStreamId ? JSON.stringify({ streamId: providedStreamId }) : undefined, 'audience');
       const url = getLiveKitUrl();
       const apiKey = getLiveKitApiKey();
 
+      if (import.meta.env.DEV) {
+        const post = {
+            streamId: providedStreamId || roomId,
+            roomName,
+            identity,
+            hasToken: Boolean(token),
+            livekitUrl: url,
+          };
+        console.log('[useLiveKitRoom] Audience join attempt', post);
+        setLastJoinDebug((prev: any) => ({ ...(prev || {}), post }));
+      }
+
       if (!url || !apiKey) {
-        console.error('[useLiveKitRoom] Missing LiveKit config:', { 
-          hasUrl: !!url, 
-          hasApiKey: !!apiKey 
-        });
+        console.error(`[useLiveKitRoom] Missing LiveKit config: hasUrl=${!!url} hasApiKey=${!!apiKey}`);
         throw new Error(`Missing LiveKit env vars: VITE_LIVEKIT_URL=${url ? 'set' : 'MISSING'}, VITE_LIVEKIT_API_KEY=${apiKey ? 'set' : 'MISSING'}`);
       }
       
@@ -628,31 +890,70 @@ export function useLiveKitRoom({
       setIsJoining(false);
       joiningRef.current = false;
 
+      if (import.meta.env.DEV) {
+        console.log('[useLiveKitRoom] joinAsAudience connected:', {
+          roomName: room.name,
+          identity,
+          remoteParticipantCount: existingParticipants.length,
+          remoteIdentities: existingParticipants.map((p: any) => p.identity),
+        });
+      }
+
       return room;
     } catch (err: any) {
-      console.error('[useLiveKitRoom] Error joining as audience:', err);
-      
-      // Check if this is a getUserMedia error - these often happen in LiveKit's internal
-      // reconnection logic and don't necessarily mean the connection failed
-      const errorMessage = err?.message || String(err) || '';
-      const isGetUserMediaError = errorMessage.includes('getUserMedia');
-      
-      // Only reset state and call onError if it's NOT a getUserMedia error
-      // or if we haven't successfully connected yet
-      if (!isGetUserMediaError || !roomRef.current) {
-        // Reset state on error
-        joinedRef.current = false;
-        setIsConnected(false);
-        setIsPublishing(false);
-        setError(err.message || 'Failed to join room');
-        setIsJoining(false);
-        joiningRef.current = false;
-        onError?.(err);
-        throw err;
-      } else {
-        // For getUserMedia errors, just log but don't fail
+      const safeError = serializeError(err);
+      const normalized = normalizeLiveKitError(err);
+      const rootMessage = normalized?.message || safeError?.message || 'Unknown LiveKit audience join failure';
+
+      const effectiveStreamId = providedStreamId || roomId;
+      const effectiveRoomName = providedRoomName || roomId || getLiveKitRoomName(undefined, providedStreamId || roomId);
+      const errorPayload = {
+        streamId: effectiveStreamId,
+        roomName: effectiveRoomName,
+        viewerIdentity: identity,
+        livekitUrl: getLiveKitUrl() ? 'present' : 'missing',
+        error: safeError,
+        normalized,
+      };
+      const warnPayload = {
+        message: rootMessage,
+        streamId: effectiveStreamId,
+        viewerIdentity: identity,
+        livekitUrl: getLiveKitUrl() ? 'present' : 'missing',
+      };
+      console.warn('[useLiveKitRoom] Error joining as audience', warnPayload);
+      setLastJoinDebug((prev: any) => ({ ...(prev || {}), error: errorPayload }));
+
+      const isGetUserMediaError = String(normalized?.message || '').includes('getUserMedia');
+
+      // Record failure cache to prevent tight retry loops
+      lastFailedJoinRef.current = { roomId: effectiveStreamKey || '', userId, error: rootMessage, timestamp: Date.now() };
+      failedJoinCache.set(`${effectiveStreamKey}:${userId}`, { error: rootMessage, timestamp: Date.now() });
+      if (failedJoinCache.size > 100) {
+        const cutoff = Date.now() - 120000;
+        for (const [key, val] of failedJoinCache) {
+          if (val.timestamp < cutoff) failedJoinCache.delete(key);
+        }
+      }
+
+      // Reset state
+      joinedRef.current = false;
+      setIsConnected(false);
+      setIsPublishing(false);
+      setError(rootMessage);
+      setIsJoining(false);
+      joiningRef.current = false;
+
+      // Notify component with a simple string message only
+      try {
+        onError?.(rootMessage);
+      } catch (e) {
+        console.warn('[useLiveKitRoom] onError handler threw:', safeStringify(e));
+      }
+
+      // For getUserMedia errors we may want to tolerate them if room connected
+      if (isGetUserMediaError) {
         console.warn('[useLiveKitRoom] Ignoring getUserMedia error - connection may still work');
-        // If we got here, the connection might have succeeded despite the error
         if (roomRef.current && !joinedRef.current) {
           joinedRef.current = true;
           setIsConnected(true);
@@ -661,6 +962,8 @@ export function useLiveKitRoom({
           return roomRef.current;
         }
       }
+      // Do not re-throw; return the root message to allow callers to display the failure reason.
+      return rootMessage;
     }
   }, [roomId, identity, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError, userName]);
 
@@ -719,7 +1022,7 @@ export function useLiveKitRoom({
       setIsPublishing(true)
       console.log('[useLiveKitRoom] publishLocalTracks: tracks published')
     } catch (err) {
-      console.error('[useLiveKitRoom] publishLocalTracks error:', err)
+      console.error(`[useLiveKitRoom] publishLocalTracks error: ${safeStringify(err)}`)
       onError?.(err)
     }
   }, [audioOnly, videoPreset, onError])
@@ -751,7 +1054,7 @@ export function useLiveKitRoom({
       setIsPublishing(false)
       console.log('[useLiveKitRoom] unpublishLocalTracks: tracks unpublished')
     } catch (err) {
-      console.error('[useLiveKitRoom] unpublishLocalTracks error:', err)
+      console.error(`[useLiveKitRoom] unpublishLocalTracks error: ${safeStringify(err)}`)
     }
   }, [])
 
@@ -827,7 +1130,7 @@ export function useLiveKitRoom({
       setIsPublishing(false)
       setRemoteUsers([])
     } catch (err) {
-      console.error('[useLiveKitRoom] Error leaving room:', err)
+      console.error(`[useLiveKitRoom] Error leaving room: ${safeStringify(err)}`)
       joinedRef.current = false
       joiningRef.current = false
       roomRef.current = null
@@ -861,7 +1164,7 @@ export function useLiveKitRoom({
         await roomRef.current.localParticipant.publishTrack(newTrack);
       }
     } catch (err) {
-      console.error('[useLiveKitRoom] Error toggling camera:', err);
+      console.error(`[useLiveKitRoom] Error toggling camera: ${safeStringify(err)}`);
     }
   }, [localVideoTrack, videoPreset]);
 
@@ -931,7 +1234,7 @@ export function useLiveKitRoom({
       setLocalAudioTrack(track);
       return true;
     } catch (err) {
-      console.error('[useLiveKitRoom] Error setting mic enabled:', err);
+      console.error(`[useLiveKitRoom] Error setting mic enabled: ${safeStringify(err)}`);
       return false;
     }
   }, []);
@@ -997,6 +1300,9 @@ export function useLiveKitRoom({
     
     // Room ref for external access
     room: roomRef.current
+    ,
+    // Debug
+    lastJoinDebug
   };
 }
 

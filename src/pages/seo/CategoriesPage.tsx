@@ -107,7 +107,7 @@ function TrendingStreamsSection() {
       try {
         const { data } = await supabase
           .from('streams')
-          .select('id, title, category, current_viewers')
+          .select('id, title, category, current_viewers, agora_channel')
           .eq('is_live', true)
           .order('current_viewers', { ascending: false })
           .limit(5)
@@ -118,6 +118,7 @@ function TrendingStreamsSection() {
             title: s.title || 'Live Stream',
             category: s.category || 'Just Chatting',
             viewers: s.current_viewers || 0,
+            isGaming: !!(s.agora_channel || s.category === 'gaming'),
           })))
           setLoading(false)
         }
@@ -153,7 +154,7 @@ function TrendingStreamsSection() {
       ) : streams.map((stream) => (
         <Link
           key={stream.id}
-          to={`/watch/${stream.id}`}
+          to={stream.isGaming ? `/gaming/watch/${stream.id}` : `/watch/${stream.id}`}
           className="p-4 bg-slate-900/50 border border-slate-800 hover:border-purple-500/30 rounded-xl transition-all group"
         >
           <div className="flex items-center gap-2 mb-2">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 interface SafeArea {
   top: number
@@ -15,116 +15,190 @@ interface SafeAreaHeightReturn {
   headerHeight: number
   dockHeight: number
   safeArea: SafeArea
+  visualViewportHeight: number
 }
 
 const MOBILE_BREAKPOINT = 768
 const DEFAULT_HEADER_HEIGHT = 56
 const DEFAULT_DOCK_HEIGHT = 64
 
+function canUseDOM() {
+  return typeof window !== 'undefined' && typeof document !== 'undefined'
+}
+
+function parsePixelValue(value: string | null | undefined): number {
+  if (!value) return 0
+
+  const parsed = Number.parseFloat(String(value).replace('px', '').trim())
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function getOrCreateSafeAreaProbe(): HTMLDivElement | null {
+  if (!canUseDOM()) return null
+
+  const existing = document.getElementById('tc-safe-area-probe') as HTMLDivElement | null
+  if (existing) return existing
+
+  const probe = document.createElement('div')
+  probe.id = 'tc-safe-area-probe'
+  probe.setAttribute('aria-hidden', 'true')
+
+  probe.style.position = 'fixed'
+  probe.style.left = '0'
+  probe.style.top = '0'
+  probe.style.width = '0'
+  probe.style.height = '0'
+  probe.style.visibility = 'hidden'
+  probe.style.pointerEvents = 'none'
+  probe.style.zIndex = '-1'
+
+  probe.style.paddingTop = 'env(safe-area-inset-top)'
+  probe.style.paddingBottom = 'env(safe-area-inset-bottom)'
+  probe.style.paddingLeft = 'env(safe-area-inset-left)'
+  probe.style.paddingRight = 'env(safe-area-inset-right)'
+
+  document.body.appendChild(probe)
+  return probe
+}
+
+function readSafeAreaFromProbe(): SafeArea {
+  if (!canUseDOM()) {
+    return { top: 0, bottom: 0, left: 0, right: 0 }
+  }
+
+  const probe = getOrCreateSafeAreaProbe()
+  if (!probe) {
+    return { top: 0, bottom: 0, left: 0, right: 0 }
+  }
+
+  const styles = window.getComputedStyle(probe)
+
+  return {
+    top: parsePixelValue(styles.paddingTop),
+    bottom: parsePixelValue(styles.paddingBottom),
+    left: parsePixelValue(styles.paddingLeft),
+    right: parsePixelValue(styles.paddingRight),
+  }
+}
+
 /**
- * Detects if device is mobile based on viewport width
+ * Detects mobile based on viewport width.
  */
 export function useMobileLayout(): MobileLayoutReturn {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined') return true
+  const getIsMobile = useCallback(() => {
+    if (!canUseDOM()) return true
     return window.innerWidth < MOBILE_BREAKPOINT
-  })
+  }, [])
+
+  const [isMobile, setIsMobile] = useState<boolean>(() => getIsMobile())
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    if (!canUseDOM()) return
+
+    let frame = 0
+
+    const update = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        setIsMobile(getIsMobile())
+      })
     }
 
-    window.addEventListener('resize', handleResize, { passive: true })
-    window.addEventListener('orientationchange', handleResize, { passive: true })
+    update()
+
+    window.addEventListener('resize', update, { passive: true })
+    window.addEventListener('orientationchange', update, { passive: true })
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', update, { passive: true })
+      window.visualViewport.addEventListener('scroll', update, { passive: true })
+    }
 
     return () => {
-      window.removeEventListener('resize', handleResize)
-      window.removeEventListener('orientationchange', handleResize)
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', update)
+        window.visualViewport.removeEventListener('scroll', update)
+      }
     }
-  }, [])
+  }, [getIsMobile])
 
   return { isMobile }
 }
 
 /**
- * Gets safe area insets for notched devices and calculates header/dock heights
- * Uses CSS environment variables if available (iOS Safari, Android Chrome)
+ * Reads real device safe-area values and calculates usable header/dock heights.
+ *
+ * Important:
+ * - CSS env() values cannot be read directly from JS.
+ * - This hook measures them through a hidden DOM probe.
+ * - visualViewportHeight helps prevent PWA/mobile keyboard and footer layout jumps.
  */
 export function useSafeAreaHeight(): SafeAreaHeightReturn {
-  const [metrics, setMetrics] = useState<SafeAreaHeightReturn>(() => ({
-    headerHeight: DEFAULT_HEADER_HEIGHT,
-    dockHeight: DEFAULT_DOCK_HEIGHT,
-    safeArea: { top: 0, bottom: 0, left: 0, right: 0 },
-  }))
-
-  const updateMetrics = useCallback(() => {
-    const newMetrics: SafeAreaHeightReturn = {
-      headerHeight: DEFAULT_HEADER_HEIGHT,
-      dockHeight: DEFAULT_DOCK_HEIGHT,
-      safeArea: { top: 0, bottom: 0, left: 0, right: 0 },
-    }
-
-    if (typeof window === 'undefined') {
-      setMetrics(newMetrics)
-      return
-    }
-
-    // Get CSS environment variables (safe area insets from notched devices)
-    const getCSSEnvValue = (varName: string): number => {
-      if (typeof getComputedStyle === 'undefined') return 0
-      const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
-      if (!value) return 0
-      const num = parseInt(value, 10)
-      return isNaN(num) ? 0 : num
-    }
-
-    // Try to get safe area insets from CSS env variables (iOS 11.2+, Android Q+)
-    newMetrics.safeArea.top = getCSSEnvValue('--safe-area-inset-top')
-    newMetrics.safeArea.bottom = getCSSEnvValue('--safe-area-inset-bottom')
-    newMetrics.safeArea.left = getCSSEnvValue('--safe-area-inset-left')
-    newMetrics.safeArea.right = getCSSEnvValue('--safe-area-inset-right')
-
-    // Fallback: detect notch from viewport and screen dimensions
-    if (newMetrics.safeArea.top === 0 && window.devicePixelRatio > 2) {
-      const screenTop = window.screen.availTop || 0
-      const screenHeight = window.screen.availHeight || window.innerHeight
-      const topInset = window.outerHeight - screenHeight - screenTop
-
-      if (topInset > 20) {
-        newMetrics.safeArea.top = topInset
+  const getMetrics = useCallback((): SafeAreaHeightReturn => {
+    if (!canUseDOM()) {
+      return {
+        headerHeight: DEFAULT_HEADER_HEIGHT,
+        dockHeight: DEFAULT_DOCK_HEIGHT,
+        safeArea: { top: 0, bottom: 0, left: 0, right: 0 },
+        visualViewportHeight: 0,
       }
     }
 
-    // Add extra padding for notch safety (add notch size to header)
-    const hasNotch = newMetrics.safeArea.top > 20
-    if (hasNotch) {
-      newMetrics.headerHeight = DEFAULT_HEADER_HEIGHT + newMetrics.safeArea.top
-    }
+    const safeArea = readSafeAreaFromProbe()
 
-    setMetrics(newMetrics)
+    const visualViewportHeight =
+      Math.round(window.visualViewport?.height || window.innerHeight || 0)
+
+    const headerHeight = DEFAULT_HEADER_HEIGHT + safeArea.top
+    const dockHeight = DEFAULT_DOCK_HEIGHT + safeArea.bottom
+
+    return {
+      headerHeight,
+      dockHeight,
+      safeArea,
+      visualViewportHeight,
+    }
   }, [])
 
+  const [metrics, setMetrics] = useState<SafeAreaHeightReturn>(() => getMetrics())
+
   useEffect(() => {
+    if (!canUseDOM()) return
+
+    let frame = 0
+
+    const updateMetrics = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        setMetrics(getMetrics())
+      })
+    }
+
     updateMetrics()
 
-    // Re-check on resize and orientation change
     window.addEventListener('resize', updateMetrics, { passive: true })
     window.addEventListener('orientationchange', updateMetrics, { passive: true })
 
-    // Also listen to visual viewport changes (handles keyboard appearing)
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', updateMetrics, { passive: true })
+      window.visualViewport.addEventListener('scroll', updateMetrics, { passive: true })
     }
 
     return () => {
+      window.cancelAnimationFrame(frame)
       window.removeEventListener('resize', updateMetrics)
       window.removeEventListener('orientationchange', updateMetrics)
+
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', updateMetrics)
+        window.visualViewport.removeEventListener('scroll', updateMetrics)
       }
     }
-  }, [updateMetrics])
+  }, [getMetrics])
 
   return metrics
 }

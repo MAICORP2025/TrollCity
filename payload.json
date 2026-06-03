@@ -1,0 +1,8 @@
+﻿{
+  "userId": "8dff9f37-21b5-4b8e-adc2-b9286874be1a",
+  "notification": {
+    "title": "Test Push",
+    "body": "Testing after VAPID setup",
+    "url": "/"
+  }
+}

@@ -468,19 +468,20 @@ if (typeof window !== 'undefined') {
              ? new Date((subscription as any).expirationTime).toISOString()
              : null
 
-         await supabase
-           .from('web_push_subscriptions')
-           .upsert(
-             {
-               user_id: userId,
-               endpoint: subJson.endpoint,
-               p256dh_key: subJson.keys?.p256dh,
-               auth_key: subJson.keys?.auth,
-               expiration_time: expiration,
-               user_agent: navigator.userAgent,
-             },
-             { onConflict: 'endpoint' }
-           )
+        await supabase
+          .from('web_push_subscriptions')
+          .upsert(
+            {
+              user_id: userId,
+              endpoint: subJson.endpoint,
+              p256dh_key: subJson.keys?.p256dh,
+              auth_key: subJson.keys?.auth,
+              expiration_time: expiration,
+              user_agent: navigator.userAgent,
+              is_active: true,
+            },
+            { onConflict: 'endpoint' }
+          )
        } catch (err) {
          console.warn('Push notification setup failed', err)
        }

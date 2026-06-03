@@ -38,7 +38,7 @@ export function useUserPresence() {
     try {
       // Use the session ID from localStorage (set during login)
       const sessionId = localStorage.getItem('current_device_session_id')
-      
+
       if (sessionId) {
         // Update the active_sessions table
         await supabase
@@ -51,16 +51,26 @@ export function useUserPresence() {
           .eq('session_id', sessionId)
       }
 
-      // Also update the user_profiles table for is_online status
-      await supabase
+      // Check if user profile exists before updating presence (FK constraint).
+      // The profile may not exist for newly created users until the trigger fires.
+      const { data: profile } = await supabase
         .from('user_profiles')
-        .update({
-          is_online: isActive,
-          last_active: new Date().toISOString()
-        })
+        .select('id')
         .eq('id', user.id)
+        .maybeSingle()
+
+      if (profile) {
+        // Update the user_profiles table for is_online status
+        await supabase
+          .from('user_profiles')
+          .update({
+            is_online: isActive,
+            last_active: new Date().toISOString()
+          })
+          .eq('id', user.id)
+      }
     } catch (error) {
-      console.error('[useUserPresence] Failed to update presence:', error)
+      // Silently fail — presence tracking is non-critical
     }
   }, [user?.id, session?.access_token])
 

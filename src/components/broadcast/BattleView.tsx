@@ -1868,6 +1868,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
 
   const isBroadcaster = resolvedBattleRole === 'host' || resolvedBattleRole === 'stage';
   const shouldUseMuxPlayback = !isBroadcaster;
+  const isRandomBattle = challengerStream?.battle_mode === 'random_queue' || opponentStream?.battle_mode === 'random_queue';
 
   // Prefer tracks passed from BroadcastPage; fallback to PreflightStore when page refresh/race drops props.
   const localTracksFromPreflight = passedLocalTracks || PreflightStore.getTracks() || null;
@@ -2934,23 +2935,23 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       if (leaveError || leaveResult?.success === false) {
         toast.error(leaveResult?.message || leaveError?.message || 'Failed to leave battle');
       } else {
-        // CRITICAL: Update streams to clear battle state - this prevents redirect loop
+        // CRITICAL: Only clear battle state from the forfeiting user's stream
+        // The other broadcaster should remain in their broadcast
+        // Use server-returned forfeiting_stream_id, or fallback to participant info
+        let forfeitingStreamId = leaveResult?.forfeiting_stream_id;
+        if (!forfeitingStreamId) {
+          // Determine forfeiting stream from participant info
+          const isChallengerTeam = participantInfo?.team === 'challenger';
+          forfeitingStreamId = isChallengerTeam ? challengerStream?.id : opponentStream?.id;
+        }
         try {
-          // Clear challenger stream's battle state
-          if (challengerStream?.id) {
+          if (forfeitingStreamId) {
             await supabase.from('streams').update({
               is_battle: false,
               battle_id: null
-            }).eq('id', challengerStream.id);
+            }).eq('id', forfeitingStreamId);
+            console.log('[BattleView] Cleared battle state from forfeiting stream:', forfeitingStreamId);
           }
-          // Clear opponent stream's battle state
-          if (opponentStream?.id) {
-            await supabase.from('streams').update({
-              is_battle: false,
-              battle_id: null
-            }).eq('id', opponentStream.id);
-          }
-          console.log('[BattleView] Cleared battle state from streams');
         } catch (streamUpdateErr) {
           console.warn('[BattleView] Failed to update stream battle state:', streamUpdateErr);
         }
@@ -3531,8 +3532,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
           </div>
         </div>
 
-        {/* Host Controls */}
-        {participantInfo?.role === 'host' && (battle?.status === 'active' || battle?.status === 'starting') && (
+        {/* Host Controls - only show for non-random battles */}
+        {!isRandomBattle && participantInfo?.role === 'host' && (battle?.status === 'active' || battle?.status === 'starting') && (
           <div className="absolute top-20 md:top-20 left-3 md:left-4 z-40 flex flex-col gap-2">
             <button
               onClick={handleLeaveBattle}

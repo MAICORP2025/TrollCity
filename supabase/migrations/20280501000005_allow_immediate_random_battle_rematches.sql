@@ -253,20 +253,20 @@ BEGIN
       winner_stream_id = v_winner_stream_id
   WHERE id = v_battle.id;
 
-  UPDATE public.streams
-  SET is_battle = false,
-      battle_id = null,
-      battle_mode = 'manual',
-      battle_status = 'waiting',
-      battle_start_time = null,
-      battle_end_time = now(),
-      battle_end_reason = 'forfeit',
-      battle_winner_id = v_winner_id,
-      battle_forfeited_by = p_broadcaster_id,
-      random_battle_queue_enabled = false,
-      random_battle_queued_at = null,
-      random_battle_cooldown_until = null
-  WHERE id IN (v_forfeiter_stream_id, v_winner_stream_id);
+UPDATE public.streams
+SET is_battle = false,
+    battle_id = null,
+    battle_mode = 'manual',
+    battle_status = 'waiting',
+    battle_start_time = null,
+    battle_end_time = now(),
+    battle_end_reason = 'forfeit',
+    battle_winner_id = v_winner_id,
+    battle_forfeited_by = p_broadcaster_id,
+    random_battle_queue_enabled = false,
+    random_battle_queued_at = null,
+    random_battle_cooldown_until = null
+WHERE id = v_forfeiter_stream_id;  -- Only clear from forfeiting stream, winner stays in broadcast
 
   UPDATE public.user_profiles
   SET battle_crowns = COALESCE(battle_crowns, 0) + 2

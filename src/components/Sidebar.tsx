@@ -52,6 +52,7 @@ import UserProfileWidget from './sidebar/UserProfileWidget'
 import { useAuthStore } from '@/lib/store'
 import { supabase, UserRole } from '@/lib/supabase'
 import { canAccessTromail } from '@/lib/tromail'
+import { isPrideMonth } from '@/lib/prideMonth'
 import { useCoins } from '@/lib/hooks/useCoins'
 import { useXPStore } from '@/stores/useXPStore'
 import { useSidebarUpdates } from '@/hooks/useSidebarUpdates'
@@ -89,10 +90,10 @@ function SectionTitle({ title, collapsed }: { title: string; collapsed: boolean 
 
   return (
     <div className="col-span-2 mt-4 first:mt-0 px-1">
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200/70">
-        <span className="h-px flex-1 bg-gradient-to-r from-cyan-400/45 via-purple-400/25 to-transparent" />
+      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/80">
+        <span className="h-px flex-1 bg-gradient-to-r from-red-400/60 via-yellow-300/45 via-green-300/35 via-cyan-300/35 to-transparent" />
         {title}
-        <span className="h-px flex-1 bg-gradient-to-l from-pink-400/45 via-purple-400/25 to-transparent" />
+        <span className="h-px flex-1 bg-gradient-to-l from-pink-400/60 via-purple-400/45 via-blue-300/35 via-green-300/30 to-transparent" />
       </div>
     </div>
   )
@@ -101,12 +102,17 @@ function SectionTitle({ title, collapsed }: { title: string; collapsed: boolean 
 function ShellBackdrop() {
   return (
     <>
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.13),transparent_44%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-300/65 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-[#13071f] to-slate-950" />
+      {isPrideMonth() && (
+        <>
+          <div className="pointer-events-none absolute inset-0 opacity-45 bg-[linear-gradient(135deg,rgba(239,68,68,0.18)_0%,rgba(249,115,22,0.15)_16%,rgba(250,204,21,0.12)_32%,rgba(34,197,94,0.12)_48%,rgba(34,211,238,0.14)_64%,rgba(59,130,246,0.14)_80%,rgba(168,85,247,0.16)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_18%_12%,rgba(236,72,153,0.28),transparent_42%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_78%_0%,rgba(34,211,238,0.22),transparent_46%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(250,204,21,0.13),transparent_44%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(236,72,153,0.12)_0%,rgba(250,204,21,0.08)_26%,rgba(34,197,94,0.07)_44%,rgba(14,165,233,0.09)_66%,rgba(168,85,247,0.12)_100%)]" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-pink-300/70 via-yellow-200/60 via-cyan-300/70 to-transparent" />
+        </>
+      )}
     </>
   )
 }
@@ -441,7 +447,7 @@ export default function Sidebar() {
   return (
     <aside
       className={cx(
-        'fixed left-0 top-0 z-50 flex h-screen max-h-screen flex-col overflow-hidden border-r border-cyan-400/20 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.50),0_0_28px_rgba(45,212,191,0.10),inset_0_0_30px_rgba(147,51,234,0.08)] backdrop-blur-2xl transition-all duration-300',
+        'fixed left-0 top-0 z-50 flex h-screen max-h-screen flex-col overflow-hidden border-r border-pink-300/25 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.55),0_0_30px_rgba(236,72,153,0.14),0_0_34px_rgba(34,211,238,0.10),inset_0_0_34px_rgba(168,85,247,0.10)] backdrop-blur-2xl transition-all duration-300',
         isSidebarCollapsed ? 'w-20' : 'w-72'
       )}
     >
@@ -451,15 +457,15 @@ export default function Sidebar() {
         <div className={cx('flex items-center', isSidebarCollapsed ? 'justify-center' : 'justify-between')}>
           {!isSidebarCollapsed && (
             <SafeLink to="/home" className="group flex min-w-0 items-center gap-3">
-              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-purple-700 via-cyan-500 to-pink-500 shadow-[0_0_28px_rgba(45,212,191,0.25)]">
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-pink-500 via-yellow-400 via-emerald-400 via-cyan-400 to-purple-600 shadow-[0_0_28px_rgba(236,72,153,0.28),0_0_18px_rgba(34,211,238,0.18)]">
                 <span className="text-xl font-black text-white drop-shadow">T</span>
                 <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border border-slate-950 bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.85)]" />
               </div>
                 <div className="min-w-0 text-left">
-                <div className="truncate bg-gradient-to-r from-white via-cyan-100 to-pink-200 bg-clip-text text-lg font-black leading-tight text-transparent">
+                <div className="truncate bg-gradient-to-r from-white via-pink-100 via-yellow-100 via-cyan-100 to-purple-200 bg-clip-text text-lg font-black leading-tight text-transparent">
                   Mai Troll City
                 </div>
-                <div className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/70">
+                <div className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80">
                   City OS
                 </div>
               </div>
@@ -470,7 +476,7 @@ export default function Sidebar() {
             type="button"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className={cx(
-              'shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-all duration-200 hover:border-cyan-300/35 hover:bg-white/[0.08] hover:text-white hover:shadow-[0_0_18px_rgba(45,212,191,0.18)]',
+              'shrink-0 rounded-xl border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition-all duration-200 hover:border-pink-300/40 hover:bg-white/[0.08] hover:text-white hover:shadow-[0_0_18px_rgba(236,72,153,0.18)]',
               isSidebarCollapsed && 'mx-auto'
             )}
             aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -482,7 +488,7 @@ export default function Sidebar() {
 
       {!isSidebarCollapsed && profile && (
         <div className="relative z-10 shrink-0 px-3 pt-3">
-          <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="rounded-2xl border border-pink-300/20 bg-slate-950/60 p-1 shadow-[0_0_18px_rgba(236,72,153,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
             <UserProfileWidget />
           </div>
         </div>
@@ -491,9 +497,9 @@ export default function Sidebar() {
       {!isSidebarCollapsed && profile && (
         <div className="relative z-10 shrink-0 grid grid-cols-3 gap-2 px-3 pt-3">
           {quickStatus.map(item => (
-            <div key={item.label} className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-center">
+            <div key={item.label} className="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.07] via-pink-400/[0.035] to-cyan-400/[0.035] p-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
               <div className="truncate text-[10px] text-slate-400">{item.label}</div>
-              <div className="truncate text-xs font-black text-cyan-100">{item.value}</div>
+              <div className="truncate text-xs font-black text-white">{item.value}</div>
               {item.subValue && (
                 <div className="truncate text-[9px] text-green-400 font-medium">{item.subValue}</div>
               )}
@@ -511,8 +517,8 @@ export default function Sidebar() {
               className={cx(
                 'rounded-2xl border px-3 py-2 text-sm font-semibold transition',
                 sidebarView === 'main'
-                  ? 'border-cyan-300 bg-slate-900 text-white'
-                  : 'border-white/10 bg-slate-950/70 text-slate-400 hover:border-white/20 hover:text-white'
+                  ? 'border-pink-300 bg-gradient-to-r from-pink-600/80 via-purple-600/75 to-cyan-500/75 text-white shadow-[0_0_18px_rgba(236,72,153,0.22)]'
+                  : 'border-white/10 bg-slate-950/70 text-slate-400 hover:border-pink-300/35 hover:text-white'
               )}
             >
               Main
@@ -523,8 +529,8 @@ export default function Sidebar() {
               className={cx(
                 'rounded-2xl border px-3 py-2 text-sm font-semibold transition',
                 sidebarView === 'adminPages'
-                  ? 'border-cyan-300 bg-slate-900 text-white'
-                  : 'border-white/10 bg-slate-950/70 text-slate-400 hover:border-white/20 hover:text-white'
+                  ? 'border-pink-300 bg-gradient-to-r from-pink-600/80 via-purple-600/75 to-cyan-500/75 text-white shadow-[0_0_18px_rgba(236,72,153,0.22)]'
+                  : 'border-white/10 bg-slate-950/70 text-slate-400 hover:border-pink-300/35 hover:text-white'
               )}
             >
               All Pages
@@ -558,7 +564,7 @@ export default function Sidebar() {
                   <SafeLink
                     to="/broadcast/setup"
                     className={cx(
-                      'relative flex w-full items-center justify-center overflow-hidden rounded-2xl border border-cyan-200/35 bg-gradient-to-r from-purple-700 via-cyan-500 to-pink-600 font-black text-white shadow-[0_0_22px_rgba(45,212,191,0.30)] transition-all duration-300 hover:scale-[1.02] hover:from-purple-600 hover:via-cyan-400 hover:to-pink-500',
+                      'relative flex w-full items-center justify-center overflow-hidden rounded-2xl border border-white/25 bg-gradient-to-r from-pink-500 via-purple-600 via-cyan-400 to-emerald-400 font-black text-white shadow-[0_0_24px_rgba(236,72,153,0.26),0_0_18px_rgba(34,211,238,0.20)] transition-all duration-300 hover:scale-[1.02] hover:from-pink-400 hover:via-purple-500 hover:to-cyan-300',
                       isSidebarCollapsed ? 'h-14 p-3' : 'gap-3 p-3.5'
                     )}
                     title="Go Live"
@@ -585,7 +591,7 @@ export default function Sidebar() {
                       <div className="text-left leading-tight">
                         <div className="text-sm uppercase tracking-wide">Go Live</div>
                         <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                          {isBroadcastLockedDown ? 'Locked' : 'License / Insurance Required'}
+                          {isBroadcastLockedDown ? 'Locked' : 'Go TO Neighborhood Page 1st'}
                         </div>
                       </div>
                     )}
@@ -600,6 +606,7 @@ export default function Sidebar() {
               <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} highlight={isUpdated('/troll-court')} onClick={() => markAsViewed('/troll-court')} tone="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighborhood" to="/neighborhood-setup" active={isActive('/neighborhood-setup')} highlight={isUpdated('/neighborhood-setup')} onClick={() => markAsViewed('/neighborhood-setup')} className="text-cyan-400" tone="cyan" />
               <GridItem collapsed={isSidebarCollapsed} icon={MessageSquare} label="TCPS" to="/tcps" active={isActive('/tcps') || isActive('/messages')} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="HytroGaming" to="/hytrogaming" active={isActive('/hytrogaming')} highlight={isUpdated('/hytrogaming')} onClick={() => markAsViewed('/hytrogaming')} className="text-purple-400" tone="purple" glow="pink" underConstruction={true} />
 
               <SectionTitle title="City Services" collapsed={isSidebarCollapsed} />
               <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Advertise" to="/city-registry/advertise" active={isActive('/city-registry/advertise')} highlight={isUpdated('/city-registry/advertise')} onClick={() => markAsViewed('/city-registry/advertise')} tone="pink" />
@@ -818,16 +825,16 @@ export default function Sidebar() {
         )}
       </div>
 
-      <div className="relative z-10 shrink-0 border-t border-white/10 bg-slate-950/50 p-3">
+      <div className="relative z-10 shrink-0 border-t border-pink-300/15 bg-slate-950/55 p-3">
         <SafeLink
           to="/stats"
           className={cx(
-            'group flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-slate-400 transition-all duration-200 hover:border-cyan-400/35 hover:bg-white/[0.075] hover:text-white',
+            'group flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-slate-400 transition-all duration-200 hover:border-pink-300/40 hover:bg-white/[0.075] hover:text-white hover:shadow-[0_0_18px_rgba(236,72,153,0.18)]',
             isSidebarCollapsed ? 'h-12 px-2' : 'gap-3 p-2.5'
           )}
           title="Stats"
         >
-          <LayoutDashboard size={18} className="group-hover:text-cyan-200" />
+          <LayoutDashboard size={18} className="group-hover:text-pink-100" />
           {!isSidebarCollapsed && <span className="text-[13px] font-semibold">Stats</span>}
         </SafeLink>
       </div>
@@ -860,24 +867,24 @@ function GridItem({
   }
 
   const toneMap: Record<GridItemTone, string> = {
-    default: 'from-white/[0.065] via-white/[0.025] to-slate-950/20 border-white/10 hover:border-white/20',
-    green: 'from-emerald-400/15 via-white/[0.025] to-slate-950/20 border-emerald-400/20 hover:border-emerald-300/40',
-    blue: 'from-sky-400/15 via-white/[0.025] to-slate-950/20 border-sky-400/20 hover:border-sky-300/40',
-    cyan: 'from-cyan-400/16 via-white/[0.025] to-slate-950/20 border-cyan-400/22 hover:border-cyan-300/45',
-    pink: 'from-pink-400/15 via-white/[0.025] to-slate-950/20 border-pink-400/20 hover:border-pink-300/40',
-    red: 'from-red-400/14 via-white/[0.025] to-slate-950/20 border-red-400/20 hover:border-red-300/40',
-    orange: 'from-orange-400/12 via-white/[0.025] to-slate-950/20 border-orange-400/18 hover:border-orange-300/35',
-    purple: 'from-purple-400/17 via-white/[0.025] to-slate-950/20 border-purple-400/22 hover:border-purple-300/45',
-    teal: 'from-teal-400/16 via-white/[0.025] to-slate-950/20 border-teal-400/22 hover:border-teal-300/45',
+    default: 'from-white/[0.07] via-white/[0.025] to-slate-950/20 border-white/10 hover:border-pink-300/30',
+    green: 'from-emerald-400/16 via-yellow-300/[0.035] to-slate-950/20 border-emerald-300/22 hover:border-emerald-200/45',
+    blue: 'from-blue-400/16 via-cyan-300/[0.035] to-slate-950/20 border-blue-300/22 hover:border-blue-200/45',
+    cyan: 'from-cyan-400/17 via-blue-300/[0.035] to-slate-950/20 border-cyan-300/24 hover:border-cyan-200/50',
+    pink: 'from-pink-400/17 via-rose-300/[0.035] to-slate-950/20 border-pink-300/24 hover:border-pink-200/50',
+    red: 'from-red-400/16 via-orange-300/[0.035] to-slate-950/20 border-red-300/24 hover:border-red-200/45',
+    orange: 'from-orange-400/16 via-yellow-300/[0.04] to-slate-950/20 border-orange-300/22 hover:border-yellow-200/45',
+    purple: 'from-purple-400/18 via-pink-300/[0.035] to-slate-950/20 border-purple-300/25 hover:border-purple-200/50',
+    teal: 'from-teal-400/17 via-emerald-300/[0.035] to-slate-950/20 border-teal-300/24 hover:border-teal-200/50',
   }
 
   const glowMap: Record<GridGlow, React.CSSProperties> = {
-    green: { boxShadow: '0 0 20px rgba(34,197,94,0.32), inset 0 0 14px rgba(34,197,94,0.08)' },
-    pink: { boxShadow: '0 0 20px rgba(236,72,153,0.32), inset 0 0 14px rgba(236,72,153,0.08)' },
-    cyan: { boxShadow: '0 0 20px rgba(34,211,238,0.34), inset 0 0 14px rgba(34,211,238,0.08)' },
-    red: { boxShadow: '0 0 20px rgba(239,68,68,0.30), inset 0 0 14px rgba(239,68,68,0.08)' },
-    purple: { boxShadow: '0 0 20px rgba(147,51,234,0.34), inset 0 0 14px rgba(147,51,234,0.08)' },
-    teal: { boxShadow: '0 0 20px rgba(45,212,191,0.34), inset 0 0 14px rgba(45,212,191,0.08)' },
+    green: { boxShadow: '0 0 20px rgba(34,197,94,0.32), 0 0 12px rgba(250,204,21,0.14), inset 0 0 14px rgba(34,197,94,0.08)' },
+    pink: { boxShadow: '0 0 20px rgba(236,72,153,0.34), 0 0 12px rgba(168,85,247,0.16), inset 0 0 14px rgba(236,72,153,0.08)' },
+    cyan: { boxShadow: '0 0 20px rgba(34,211,238,0.34), 0 0 12px rgba(59,130,246,0.16), inset 0 0 14px rgba(34,211,238,0.08)' },
+    red: { boxShadow: '0 0 20px rgba(239,68,68,0.30), 0 0 12px rgba(249,115,22,0.15), inset 0 0 14px rgba(239,68,68,0.08)' },
+    purple: { boxShadow: '0 0 20px rgba(168,85,247,0.34), 0 0 12px rgba(236,72,153,0.16), inset 0 0 14px rgba(168,85,247,0.08)' },
+    teal: { boxShadow: '0 0 20px rgba(45,212,191,0.34), 0 0 12px rgba(34,197,94,0.16), inset 0 0 14px rgba(45,212,191,0.08)' },
   }
 
   const isUnderConstruction = underConstruction ?? false
@@ -893,27 +900,27 @@ function GridItem({
         'group relative z-0 flex overflow-hidden rounded-2xl border bg-gradient-to-br transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/[0.07]',
         toneMap[tone],
         collapsed ? 'h-14 items-center justify-center p-2' : 'min-h-[74px] flex-col items-center justify-center gap-1.5 p-3',
-        effectiveActive ? 'border-cyan-300/60 bg-white/[0.09] text-white shadow-[0_0_18px_rgba(45,212,191,0.23),inset_0_1px_0_rgba(255,255,255,0.08)]' : 'text-slate-400 hover:text-white',
+        effectiveActive ? 'border-pink-200/70 bg-white/[0.10] text-white shadow-[0_0_18px_rgba(236,72,153,0.22),0_0_16px_rgba(34,211,238,0.16),inset_0_1px_0_rgba(255,255,255,0.10)]' : 'text-slate-400 hover:text-white',
         isUnderConstruction ? 'opacity-50 cursor-not-allowed' : '',
         className
       )}
       style={glow ? glowMap[glow] : undefined}
     >
-      <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),transparent_48%)] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-      {effectiveActive && <span className="absolute left-0 top-2 h-[calc(100%-1rem)] w-1 rounded-r-full bg-gradient-to-b from-cyan-200 via-purple-400 to-pink-400 shadow-[0_0_12px_rgba(45,212,191,0.55)]" />}
+      <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.16),transparent_48%),linear-gradient(135deg,rgba(239,68,68,0.06),rgba(250,204,21,0.04),rgba(34,197,94,0.04),rgba(34,211,238,0.05),rgba(168,85,247,0.06))] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+      {effectiveActive && <span className="absolute left-0 top-2 h-[calc(100%-1rem)] w-1 rounded-r-full bg-gradient-to-b from-red-300 via-yellow-200 via-emerald-300 via-cyan-300 via-blue-300 to-pink-300 shadow-[0_0_12px_rgba(236,72,153,0.50),0_0_10px_rgba(34,211,238,0.35)]" />}
 
-      <span className="relative z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-slate-950/42 transition-all duration-200 group-hover:border-white/20 group-hover:bg-slate-950/62">
+      <span className="relative z-10 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-slate-950/45 transition-all duration-200 group-hover:border-white/20 group-hover:bg-slate-950/62">
         <Icon size={20} className="shrink-0" />
       </span>
 
       {!collapsed && <span className="relative z-10 text-center text-[10px] font-bold leading-tight tracking-tight">{label}</span>}
 
       {highlight && !isUnderConstruction && (
-        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-gradient-to-r from-pink-400 via-yellow-300 to-cyan-300 shadow-[0_0_8px_rgba(236,72,153,0.70),0_0_8px_rgba(34,211,238,0.55)]" />
       )}
 
       {badge && !collapsed && !isUnderConstruction && (
-        <span className="absolute right-1 top-1 rounded bg-cyan-300 px-1.5 py-0.5 text-[8px] font-black uppercase text-slate-950 shadow-[0_0_6px_rgba(45,212,191,0.45)]">
+        <span className="absolute right-1 top-1 rounded bg-gradient-to-r from-pink-300 via-yellow-200 to-cyan-200 px-1.5 py-0.5 text-[8px] font-black uppercase text-slate-950 shadow-[0_0_6px_rgba(236,72,153,0.35)]">
           {badge}
         </span>
       )}

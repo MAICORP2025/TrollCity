@@ -1,5 +1,9 @@
 export const EDGE_URL = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1'
 
+export const AGORA_REGION = import.meta.env.VITE_AGORA_REGION || 'na'
+
+export const RTLS_PLAYER_URL = import.meta.env.VITE_RTLS_PLAYER_URL || null
+
 export const API_ENDPOINTS = {
   auth: {
     fixAdminRole: `${EDGE_URL}/auth/fix-admin-role`,

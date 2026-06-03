@@ -1,28 +1,24 @@
 import React from 'react';
-import { Loader2, Swords, XCircle, Move } from 'lucide-react';
+import { Loader2, Swords, Move } from 'lucide-react';
 
 interface RandomBattleControlsProps {
   phase: 'regular' | 'queue' | 'starting' | 'active' | 'ended';
   isQueueEnabled: boolean;
-  isRandomBattle: boolean;
   isBusy: boolean;
   delayUntil: number | null;
   battleStartsAt?: number | null;
   onStart: () => void;
   onStop: () => void;
-  onForfeit: () => void;
 }
 
 export default function RandomBattleControls({
   phase,
   isQueueEnabled,
-  isRandomBattle,
   isBusy,
   delayUntil,
   battleStartsAt,
   onStart,
   onStop,
-  onForfeit,
 }: RandomBattleControlsProps) {
   const [now, setNow] = React.useState(Date.now());
 
@@ -64,19 +60,6 @@ export default function RandomBattleControls({
         {isBusy ? <Loader2 size={14} className="animate-spin" /> : <Swords size={14} />}
         {isQueueEnabled ? 'Stop Random Battles' : 'Start Random Battles'}
       </button>
-
-      {isRandomBattle && (phase === 'starting' || phase === 'active') && (
-        <button
-          type="button"
-          onClick={onForfeit}
-          disabled={isBusy}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-red-400/40 bg-red-500/15 px-3 py-2 text-xs font-black uppercase tracking-wide text-red-100 transition hover:bg-red-500/25 disabled:opacity-60"
-        >
-          <XCircle size={14} />
-          Forfeit Battle
-        </button>
-      )}
     </div>
   );
 }

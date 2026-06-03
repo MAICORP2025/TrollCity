@@ -177,6 +177,7 @@ serve(async (req) => {
       if (filteredSubscriptions.length > 0) {
         let successCount = 0;
         let failureCount = 0;
+        const errors: any[] = [];
 
         // Build push payload
         const pushPayload = JSON.stringify({
@@ -222,7 +223,16 @@ serve(async (req) => {
               console.warn('Failed to log push success:', logResult.error);
             }
           } catch (sendErr: any) {
-            console.error(`[Push] ✗ Failed for user ${sub.user_id}:`, sendErr);
+            const errorDetail = {
+              user_id: sub.user_id,
+              endpoint: sub.endpoint.substring(0, 80),
+              statusCode: sendErr?.statusCode,
+              message: sendErr?.message,
+              body: sendErr?.body,
+              fullError: String(sendErr)
+            };
+            errors.push(errorDetail);
+            console.error(`[Push] ✗ Failed for user ${sub.user_id}:`, errorDetail);
             failureCount++;
 
             // Log failure
@@ -251,6 +261,20 @@ serve(async (req) => {
         }
 
         console.log(`Web Push: ${successCount} sent, ${failureCount} failed`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          targeted_users: targetUserIds.length,
+          subscriptions_found: filteredSubscriptions.length,
+          subscriptions_enabled: filteredSubscriptions.length,
+          sent: successCount,
+          failed: failureCount,
+          errors: failureCount > 0 ? errors : undefined,
+          message: 'Push notification processing complete'
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       } else {
         console.log('No active push subscriptions found for target users');
       }
@@ -260,7 +284,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      sent: targetUserIds.length,
+      sent: 0,
       message: 'Push notification processing complete'
     }), {
       status: 200,

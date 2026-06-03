@@ -1663,7 +1663,6 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
       // Use consistent snake_case field names
       window.dispatchEvent(new CustomEvent('broadcast-balance-update', {
         detail: {
-          // Provide both snake_case and camelCase for consumers
           sender_id: giftData.sender_id,
           senderId: giftData.sender_id,
           receiver_id: receiverId,
@@ -1675,7 +1674,9 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
           timestamp: Date.now(),
         }
       }));
-   }, [streamId, resolveGiftAmount, resolveGiftName, supabase]);
+
+      updateStreamActivity()
+    }, [streamId, resolveGiftAmount, resolveGiftName, supabase]);
 
   const stopLocalTracks = useCallback(() => {
     if (localTracks) {
@@ -1725,7 +1726,20 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
     
     setStream(data)
   }, [streamId, supabase])
- 
+
+  const updateStreamActivityRef = useRef<() => Promise<void>>(async () => {})
+  useEffect(() => {
+    updateStreamActivityRef.current = async () => {
+      if (!streamId) return
+      try {
+        await supabase.rpc('update_stream_last_activity', { p_stream_id: streamId })
+      } catch (err) {
+        console.warn('[BroadcastPage] Failed to update stream activity:', err)
+      }
+    }
+  }, [streamId])
+  const updateStreamActivity = updateStreamActivityRef.current
+
   const [isPinProductModalOpen, setIsPinProductModalOpen] = useState(false)
 
 // Auto-end stream if broadcaster has been live for 10 minutes with no viewers and no chat messages
@@ -2523,7 +2537,6 @@ useEffect(() => {
         random_battle_cooldown_until: nextStream.random_battle_cooldown_until,
         battle_end_reason: nextStream.battle_end_reason,
         battle_winner_id: nextStream.battle_winner_id,
-        battle_forfeited_by: nextStream.battle_forfeited_by,
         side_a_score: nextStream.side_a_score,
         side_b_score: nextStream.side_b_score,
       };
@@ -2803,6 +2816,11 @@ useStreamRealtime(streamId, {
         ].slice(0, 50)
       );
 
+      if (!isHost) {
+        setHasReceivedChatMessage(true)
+      }
+      updateStreamActivity()
+
       const timer = window.setTimeout(() => {
         setFloatingMessages(prev => prev.filter(m => m.id !== msgId));
         timers.delete(timer);
@@ -2818,7 +2836,7 @@ useStreamRealtime(streamId, {
      floatingChatChannelRef.current = null;
      supabase.removeChannel(channel);
    };
-}, [streamId, supabase]);
+ }, [streamId, supabase]);
 
   // ★ Gift animations are now driven exclusively by useStreamRealtime.onGift
   // (stream_gifts postgres_changes).  The broadcast gift_sent channel is no
@@ -4146,14 +4164,14 @@ const handleLike = useCallback(async () => {
         if (result.coins_awarded > 0) {
             toast.success(
                 `🎉 You earned ${result.coins_awarded} Troll Coin${result.coins_awarded !== 1 ? 's' : ''}! ` +
-                `(${result.user_like_count.toLocaleString()} likes)`,
+                `(${result.user_like_count.toLocaleString()})`,
                 { duration: 5000 }
             );
         }
 
+        updateStreamActivity()
     } catch (e) {
         console.error('Like error:', e);
-        // Don't show error toast for network issues - could be temporary
     }
   }, [checkClickRate, isClickBlocked, isHost, navigate, stream?.id, user]);
 
@@ -4584,7 +4602,34 @@ const handleLike = useCallback(async () => {
      toast.info(`Mute user ${userId}`);
    }
 
-    function handleGeneralKick() {
+   const sendSeatLeftEvent = useCallback(
+    async ({ seat_index, user_id, session_id }: { seat_index?: number; user_id?: string | null; session_id?: string | null }) => {
+      if (!streamId) return
+
+      try {
+        const channel = supabase.channel(`stream-seat-events:${streamId}`)
+
+        await channel.send({
+          type: 'broadcast',
+          event: 'seat_left',
+          payload: {
+            stream_id: streamId,
+            seat_index,
+            user_id,
+            session_id,
+            sent_at: new Date().toISOString(),
+          },
+        })
+
+        void supabase.removeChannel(channel)
+      } catch (err) {
+        console.warn('[BroadcastPage] sendSeatLeftEvent failed:', err)
+      }
+    },
+    [streamId],
+  )
+
+  function handleGeneralKick() {
       if (!userActionTarget) return
       const targetUserId = userActionTarget.userId
       const seatSessionId = userActionTarget.seatSessionId
@@ -4592,8 +4637,16 @@ const handleLike = useCallback(async () => {
       const doKick = async () => {
         try {
           let kicked = false
+          let removedSeatIndex: number | undefined
+          let removedUserId: string | null = targetUserId || null
+          let removedSessionId: string | null = seatSessionId || null
 
           if (seatSessionId) {
+            const seat = Object.values(seats).find((s: any) => s.id === seatSessionId)
+            if (seat?.seat_index) {
+              removedSeatIndex = seat.seat_index
+            }
+
             const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seatSessionId })
             if (error) {
               console.warn('[BroadcastPage] handleGeneralKick leave_seat_atomic error:', error)
@@ -4606,6 +4659,9 @@ const handleLike = useCallback(async () => {
               (s: any) => s.user_id === targetUserId || s.guest_id === targetUserId,
             )
             if (seat?.id) {
+              removedSeatIndex = seat.seat_index
+              removedUserId = seat.user_id || seat.guest_id || targetUserId || null
+              removedSessionId = seat.id
               const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
               if (error) {
                 console.warn('[BroadcastPage] handleGeneralKick leave_seat_atomic error:', error)
@@ -4624,6 +4680,11 @@ const handleLike = useCallback(async () => {
           toast.success('User removed from seat')
           setUserActionTarget(null)
           refreshSeats()
+          await sendSeatLeftEvent({
+            seat_index: removedSeatIndex,
+            user_id: removedUserId,
+            session_id: removedSessionId,
+          })
         } catch (err) {
           console.error('[BroadcastPage] handleGeneralKick error:', err)
           toast.error('Failed to remove user from seat')
@@ -5015,7 +5076,7 @@ const handleLike = useCallback(async () => {
 
               <aside
                 className={cn(
-                  'flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/25 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.14),transparent_36%),rgba(2,6,23,0.78)] p-4 backdrop-blur-xl shadow-[0_0_30px_rgba(45,212,191,0.16)]'
+                  'flex h-auto min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/20 bg-transparent p-4 backdrop-blur-md shadow-[0_0_30px_rgba(45,212,191,0.10)]'
                 )}
               >
                 <div className="flex shrink-0 items-start justify-between gap-3">
@@ -5024,7 +5085,7 @@ const handleLike = useCallback(async () => {
                     <p className="mt-2 text-sm text-slate-300">
                     </p>
                   </div>
-                  <div className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-sm font-bold text-cyan-100">
+                  <div className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-sm font-bold text-cyan-100">
                     {Math.max(viewerSeatCards.filter((seat) => seat.isOccupied).length, remoteParticipants.size)}/{currentViewerSeatCount} live
                   </div>
                 </div>
@@ -5107,7 +5168,7 @@ const handleLike = useCallback(async () => {
                     <div
                       key={`seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
                       className={cn(
-                        'relative min-h-[155px] overflow-hidden rounded-2xl border bg-black/30 shadow-[0_0_20px_rgba(15,23,42,0.45)] transition-all',
+                        'relative min-h-[155px] overflow-hidden rounded-2xl border bg-transparent shadow-[0_0_20px_rgba(15,23,42,0.25)] transition-all',
                         seat.isOccupied
                           ? 'border-emerald-400/45 shadow-[0_0_24px_rgba(16,185,129,0.16)]'
                           : 'border-cyan-400/45 shadow-[0_0_24px_rgba(34,211,238,0.12)]',
@@ -5119,8 +5180,8 @@ const handleLike = useCallback(async () => {
                         <RemoteSeatSurface
                           participant={matchedParticipant}
                           fallback={
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
-                              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-purple-500/10">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
+                              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-transparent">
                                 <Users className="h-6 w-6 text-purple-200/80" />
                               </div>
                               <div className="mt-3 px-3 text-sm font-black text-white">{participantDisplayName}</div>
@@ -5129,7 +5190,7 @@ const handleLike = useCallback(async () => {
                           }
                         />
                       ) : isCameraUnavailable ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.08),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.10),transparent_48%)]">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-transparent">
                           {seat.avatarUrl ? (
                             <img
                               src={seat.avatarUrl}
@@ -5137,7 +5198,7 @@ const handleLike = useCallback(async () => {
                               className="h-11 w-11 rounded-full border border-red-400/30 object-cover opacity-60"
                             />
                           ) : (
-                            <div className="grid h-11 w-11 place-items-center rounded-full border border-red-400/25 bg-red-500/10">
+                            <div className="grid h-11 w-11 place-items-center rounded-full border border-red-400/25 bg-transparent">
                               <VideoOff className="h-5 w-5 text-red-300/60" />
                             </div>
                           )}
@@ -5161,7 +5222,7 @@ const handleLike = useCallback(async () => {
                           </div>
                         </div>
                       ) : isCameraConnecting ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
                           {seat.avatarUrl ? (
                             <img
                               src={seat.avatarUrl}
@@ -5169,7 +5230,7 @@ const handleLike = useCallback(async () => {
                               className="h-12 w-12 rounded-full border border-emerald-300/50 object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]"
                             />
                           ) : (
-                            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-300/30 bg-emerald-500/10">
+                            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-300/30 bg-transparent">
                               <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
                             </div>
                           )}
@@ -5180,14 +5241,14 @@ const handleLike = useCallback(async () => {
                           </div>
                         </div>
                       ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.10),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.12),transparent_48%)]">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
                           <Users className="h-10 w-10 text-cyan-200/35" />
                         </div>
                       )}
 
-                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/15" />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
 
-                      <div className="absolute left-3 top-3 z-10 rounded-full border border-cyan-300/25 bg-black/45 px-3 py-1 text-xs font-black text-white backdrop-blur-md">
+                      <div className="absolute left-3 top-3 z-10 rounded-full border border-cyan-300/20 bg-black/15 px-3 py-1 text-xs font-black text-white/90 backdrop-blur-sm">
                         Seat {seat.seatIndex}
                       </div>
 
@@ -5198,12 +5259,12 @@ const handleLike = useCallback(async () => {
                         <div className={cn(
                           'mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em]',
                           matchedParticipant
-                            ? 'border-emerald-300/30 bg-emerald-500/15 text-emerald-200'
+                            ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
                             : isCameraUnavailable
-                              ? 'border-red-300/30 bg-red-500/15 text-red-200'
+                              ? 'border-red-300/30 bg-red-500/10 text-red-200'
                               : isCameraConnecting
-                                ? 'border-cyan-300/30 bg-cyan-500/15 text-cyan-200'
-                                : 'border-purple-300/30 bg-purple-500/15 text-purple-200'
+                                ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
+                                : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
                         )}>
                           {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Camera connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
                         </div>
@@ -5329,6 +5390,8 @@ const handleLike = useCallback(async () => {
                                 payload: { username, content: text },
                               }).catch(() => {})
                             }
+
+                            updateStreamActivity()
                           } catch { /* silent */ }
                         }}
                         className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"

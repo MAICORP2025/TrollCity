@@ -18,7 +18,7 @@ export const useBackgroundProfileRefresh = () => {
       .from('user_profiles')
       .select('*')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
     
     if (!error && data) {
       const currentProfile = useAuthStore.getState().profile

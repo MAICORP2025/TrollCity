@@ -5,6 +5,7 @@ import {
   Eye,
   Flame,
   Gift,
+  Heart,
   Medal,
   Plus,
   Radio,
@@ -322,6 +323,106 @@ function LeagueSkeleton() {
           className="h-16 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04]"
         />
       ))}
+    </div>
+  )
+}
+
+function PrideChallengesLeaguesView() {
+  const now = new Date()
+  const currentWeek = Math.min(4, Math.max(1, Math.ceil(now.getDate() / 7)))
+  const dayOfWeek = now.getDay()
+  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
+
+  const allPrideChallenges: Array<{ week: number; title: string; description: string; xp: string; color: string }> = [
+    // Week 1
+    { week: 1, title: 'Show Your Pride', description: 'Update your profile frame to a Pride theme', xp: '500 XP', color: 'pink' },
+    { week: 1, title: 'Rainbow Greeting', description: 'Send 10 positive chat messages today', xp: '750 XP', color: 'red' },
+    { week: 1, title: 'Pride Profile', description: 'Add a Pride badge to your profile', xp: '300 XP', color: 'orange' },
+    { week: 1, title: 'Spread Love', description: 'Like 20 posts on the Troll Wall', xp: '400 XP', color: 'yellow' },
+    { week: 1, title: 'Community Spirit', description: 'Reply to 5 different wall posts', xp: '600 XP', color: 'green' },
+    // Week 2
+    { week: 2, title: 'Ally Actions', description: 'Support 5 different users with gifts', xp: '1,000 XP', color: 'cyan' },
+    { week: 2, title: 'Pride Stream', description: 'Go live with a Pride-themed broadcast', xp: '1,500 XP', color: 'blue' },
+    { week: 2, title: 'Wall Storyteller', description: 'Post 3 Pride-themed messages on the wall', xp: '800 XP', color: 'purple' },
+    { week: 2, title: 'Gift of Pride', description: 'Send a Pride gift to 3 friends', xp: '900 XP', color: 'pink' },
+    { week: 2, title: 'Pride Explorer', description: 'Visit 5 different neighborhoods', xp: '600 XP', color: 'red' },
+    // Week 3
+    { week: 3, title: 'Pride Champion', description: 'Win a battle with a Pride theme equipped', xp: '1,200 XP', color: 'orange' },
+    { week: 3, title: 'Family Pride', description: 'Invite a friend to join your Troll Family', xp: '1,000 XP', color: 'yellow' },
+    { week: 3, title: 'Pride Collector', description: 'Purchase a Pride item from the store', xp: '750 XP', color: 'green' },
+    { week: 3, title: 'Voice of Pride', description: 'Spend 30 minutes in a voice room', xp: '500 XP', color: 'cyan' },
+    { week: 3, title: 'Pride Shoutout', description: 'Give 10 compliments in chat', xp: '800 XP', color: 'blue' },
+    // Week 4
+    { week: 4, title: 'Pride Legend', description: 'Reach top 10 on any leaderboard', xp: '2,000 XP', color: 'purple' },
+    { week: 4, title: 'Pride Marathon', description: 'Be active for 5 days this week', xp: '1,500 XP', color: 'pink' },
+    { week: 4, title: 'Pride Connector', description: 'Add 5 new friends to your list', xp: '900 XP', color: 'red' },
+    { week: 4, title: 'Pride Creator', description: 'Share a Pride moment on your wall', xp: '1,000 XP', color: 'orange' },
+    { week: 4, title: 'Ultimate Pride', description: 'Complete all other Pride challenges', xp: '5,000 XP', color: 'yellow' },
+  ]
+
+  const colorMap: Record<string, string> = {
+    pink: 'border-pink-400/25 bg-pink-500/[0.07]',
+    red: 'border-red-400/25 bg-red-500/[0.07]',
+    orange: 'border-orange-400/25 bg-orange-500/[0.07]',
+    yellow: 'border-yellow-300/25 bg-yellow-300/[0.07]',
+    green: 'border-green-400/25 bg-green-500/[0.07]',
+    cyan: 'border-cyan-400/25 bg-cyan-500/[0.07]',
+    blue: 'border-blue-400/25 bg-blue-500/[0.07]',
+    purple: 'border-purple-400/25 bg-purple-500/[0.07]',
+  }
+
+  const xpColorMap: Record<string, string> = {
+    pink: 'text-pink-300',
+    red: 'text-red-300',
+    orange: 'text-orange-300',
+    yellow: 'text-yellow-300',
+    green: 'text-green-300',
+    cyan: 'text-cyan-300',
+    blue: 'text-blue-300',
+    purple: 'text-purple-300',
+  }
+
+  const visibleChallenges = allPrideChallenges.filter(c => c.week <= currentWeek)
+
+  return (
+    <div className="mt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <p className="text-lg font-black text-white">Week {currentWeek} of 4</p>
+          <p className="text-xs text-slate-400">Updates every Sunday</p>
+        </div>
+        <span className="rounded-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 px-3 py-1.5 text-[11px] font-black text-pink-200">
+          {visibleChallenges.length}/{allPrideChallenges.length}
+        </span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {visibleChallenges.map((ch) => (
+          <div key={ch.title} className={`rounded-2xl border p-4 ${colorMap[ch.color] || 'border-white/10 bg-white/[0.04]'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-black text-white">{ch.title}</p>
+                <p className="mt-2 text-sm text-slate-300">{ch.description}</p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${xpColorMap[ch.color] || 'text-yellow-300'}`}>
+                {ch.xp}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-purple-400/20 bg-purple-500/10 p-4">
+        <div className="flex gap-3">
+          <Heart className="mt-0.5 h-5 w-5 shrink-0 text-purple-200" />
+          <div>
+            <p className="font-black text-white">Next update in {daysUntilSunday} day{daysUntilSunday !== 1 ? 's' : ''}</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Check back Sunday for new challenges and updated rewards! 🏳️‍🌈
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -930,115 +1031,16 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">
-                League Missions
+                🏳️‍🌈 Pride Challenges
               </p>
               <p className="mt-1 text-sm text-slate-300">
-                Complete daily league goals to earn rewards, experience, and league momentum.
+                Complete Pride Month challenges to earn XP and celebrate with the community.
               </p>
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              {['Weekly', 'Monthly', 'All-Time'].map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setSelectedFilter(option as 'Weekly' | 'Monthly' | 'All-Time')}
-                  className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] transition ${
-                    selectedFilter === option
-                      ? 'border-cyan-300 bg-cyan-300/10 text-white'
-                      : 'border-white/10 bg-white/5 text-slate-400'
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {missions && missions.length > 0 ? (
-              missions.map((mission) => {
-                const progress = mission.target_value
-                  ? Math.min(100, Math.round((mission.current_value / mission.target_value) * 100))
-                  : 0
-
-                return (
-                  <div
-                    key={mission.id}
-                    className="rounded-3xl border border-white/10 bg-white/5 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-black text-white">{mission.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-300">
-                          {mission.description}
-                        </p>
-                      </div>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${
-                        mission.status === 'completed'
-                          ? 'bg-emerald-500/10 text-emerald-200'
-                          : mission.status === 'claimed'
-                          ? 'bg-slate-700/60 text-slate-200'
-                          : 'bg-cyan-500/10 text-cyan-200'
-                      }`}>
-                        {mission.status}
-                      </span>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-white/45">
-                        <span>{mission.current_value}/{mission.target_value}</span>
-                        <span>{mission.reward_points} pts</span>
-                      </div>
-                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className="h-full rounded-full bg-cyan-400"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between gap-2 text-[12px] text-slate-300">
-                      <span>{mission.reward_xp} XP</span>
-                      <span>{mission.reward_coins} Trollmonds</span>
-                    </div>
-
-                    {mission.status === 'completed' && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await claimMission(mission.id)
-                          refreshLeague()
-                        }}
-                        disabled={isClaimingMission}
-                        className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-black text-white transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {claimingMissionId === mission.id && isClaimingMission ? 'Claiming...' : 'Claim'}
-                      </button>
-                    )}
-                  </div>
-                )
-              })) : (
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                  No league missions are available yet. Stay active to receive mission assignments for the current event.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {!event && (
-          <div className="rounded-[1.5rem] border border-purple-300/20 bg-purple-400/10 p-4">
-            <div className="flex gap-3">
-              <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-purple-200" />
-              <div>
-                <p className="font-black text-white">No active league event is connected yet.</p>
-                <p className="mt-1 text-sm leading-6 text-slate-300">
-                  This panel is ready for real league data. Once a league event is active, the live leaderboard will appear here automatically.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+          <PrideChallengesLeaguesView />
+        </div>
 
         {isLoading ? (
           <LeagueSkeleton />

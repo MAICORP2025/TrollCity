@@ -9,6 +9,7 @@ export interface FloatingUser {
   avatarUrl: string | null;
   isLive: boolean;
   streamId?: string;
+  isGaming?: boolean;
 }
 
 interface Bubble {
@@ -62,7 +63,7 @@ export const FloatingUserBackground: React.FC<FloatingUserBackgroundProps> = ({
     try {
       const { data: liveUsers, error: liveError } = await supabase
         .from('streams')
-        .select('id, user_id')
+        .select('id, user_id, agora_channel, category')
         .eq('is_live', true)
         .limit(50);
 
@@ -99,7 +100,8 @@ export const FloatingUserBackground: React.FC<FloatingUserBackgroundProps> = ({
             username: profile.username || 'Unknown',
             avatarUrl: profile.avatar_url,
             isLive: true,
-            streamId: stream.id
+            streamId: stream.id,
+            isGaming: !!(stream.agora_channel || stream.category === 'gaming')
           });
         }
       });
@@ -320,7 +322,7 @@ export const FloatingUserBackground: React.FC<FloatingUserBackgroundProps> = ({
 
   const handleUserClick = useCallback((user: FloatingUser) => {
     if (user.isLive && user.streamId) {
-      navigate(`/watch/${user.streamId}`);
+      navigate(user.isGaming ? `/gaming/watch/${user.streamId}` : `/watch/${user.streamId}`);
     } else {
       navigate(`/profile/${user.id}`);
     }

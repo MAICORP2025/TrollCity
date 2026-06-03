@@ -250,7 +250,8 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
   
   // Handle share - open modal
   const handleShare = () => {
-    setIsShareModalOpen(true);
+    const isGaming = stream.agora_channel || stream.category === 'gaming';
+    navigate(isGaming ? `/gaming/watch/${stream.id}?from=swipe` : `/watch/${stream.id}?from=swipe`);
   };
   
   // Handle join as guest (on stage)
@@ -259,12 +260,14 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
       navigate('/auth?mode=signup');
       return;
     }
-    navigate(`/watch/${stream.id}?from=swipe&action=join`);
+    const isGaming = stream.agora_channel || stream.category === 'gaming';
+    navigate(isGaming ? `/gaming/watch/${stream.id}?from=swipe&action=join` : `/watch/${stream.id}?from=swipe&action=join`);
   };
   
   // Handle tap to view full stream
   const handleTap = () => {
-    navigate(`/watch/${stream.id}?from=swipe`);
+    const isGaming = stream.agora_channel || stream.category === 'gaming';
+    navigate(isGaming ? `/gaming/watch/${stream.id}?from=swipe` : `/watch/${stream.id}?from=swipe`);
   };
   
   const broadcaster = stream.broadcaster;
@@ -369,7 +372,7 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
         
         {/* Comment button */}
         <button
-          onClick={(e) => { e.stopPropagation(); navigate(`/watch/${stream.id}?from=swipe`); }}
+          onClick={(e) => { e.stopPropagation(); const g = stream.agora_channel || stream.category === 'gaming'; navigate(g ? `/gaming/watch/${stream.id}?from=swipe` : `/watch/${stream.id}?from=swipe`); }}
           className="flex flex-col items-center gap-1"
         >
           <div className="w-11 h-11 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 hover:bg-white/20 transition-colors sm:w-12 sm:h-12">

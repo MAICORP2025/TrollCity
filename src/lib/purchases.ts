@@ -42,19 +42,21 @@ export async function runStandardPurchaseFlow(
 
   const client = supabaseClient || supabase;
 
-  const deductResult = await deductCoins({
-    userId,
-    amount,
-    type: transactionType,
-    coinType,
-    description,
-    metadata,
-    useCredit,
-    supabaseClient: client,
-  });
+  if (amount > 0) {
+    const deductResult = await deductCoins({
+      userId,
+      amount,
+      type: transactionType,
+      coinType,
+      description,
+      metadata,
+      useCredit,
+      supabaseClient: client,
+    });
 
-  if (!deductResult.success) {
-    return { success: false, error: deductResult.error || 'Failed to deduct coins' };
+    if (!deductResult.success) {
+      return { success: false, error: deductResult.error || 'Failed to deduct coins' };
+    }
   }
 
   const ownershipResult = await ensureOwnership(client);

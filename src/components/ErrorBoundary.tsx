@@ -15,6 +15,8 @@ interface State {
   errorInfo?: ErrorInfo
 }
 
+let isHandlingErrorBoundaryError = false
+
 export default class ErrorBoundary extends Component<Props, State> {
   state: State = {
     hasError: false
@@ -25,32 +27,43 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, info)
-    
-    // Store error info in state for display
-    this.setState({ errorInfo: info })
-    
-    trackEvent({
-      event_type: 'react_render_error',
-      message: error?.message || 'ErrorBoundary caught error',
-      stack: error?.stack,
-      severity: 'error',
-      fingerprint: `render-${error?.message?.slice(0, 50)}`,
-      extra: { info }
-    });
+    // Prevent infinite recursion: if we're already handling an error boundary
+    // error (e.g. reportBug triggers another render error), stop immediately.
+    if (isHandlingErrorBoundaryError) return
+    isHandlingErrorBoundaryError = true
+    try {
+      // Use the original console.error to avoid triggering the override
+      // which calls reportBug and can cause infinite recursion.
+      const originalConsoleError = console.error
+      originalConsoleError('ErrorBoundary caught:', error, info)
 
-    void reportError({
-      message: error?.message || 'ErrorBoundary caught error',
-      stack: error?.stack,
-      component: 'ErrorBoundary',
-      context: { info }
-    })
-    void reportBug(error, {
-      source: 'frontend',
-      severity: 'high',
-      functionName: 'ErrorBoundary',
-      componentStack: info.componentStack,
-    })
+      // Store error info in state for display
+      this.setState({ errorInfo: info })
+
+      trackEvent({
+        event_type: 'react_render_error',
+        message: error?.message || 'ErrorBoundary caught error',
+        stack: error?.stack,
+        severity: 'error',
+        fingerprint: `render-${error?.message?.slice(0, 50)}`,
+        extra: { info }
+      });
+
+      void reportError({
+        message: error?.message || 'ErrorBoundary caught error',
+        stack: error?.stack,
+        component: 'ErrorBoundary',
+        context: { info }
+      })
+      void reportBug(error, {
+        source: 'frontend',
+        severity: 'high',
+        functionName: 'ErrorBoundary',
+        componentStack: info.componentStack,
+      })
+    } finally {
+      isHandlingErrorBoundaryError = false
+    }
     // Enhanced error detection and handling
     const errorMessage = error.message || ''
     

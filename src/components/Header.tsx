@@ -19,6 +19,7 @@ const Header = () => {
 
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [isMaiSwitcherOpen, setIsMaiSwitcherOpen] = useState(false)
+  const [hasDeviceSubscription, setHasDeviceSubscription] = useState(false)
 
   const canDebugPush =
     !!user &&
@@ -219,6 +220,21 @@ const Header = () => {
     }
   }, [user?.id])
 
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready
+        const subscription = await registration.pushManager.getSubscription()
+        if (!cancelled) setHasDeviceSubscription(!!subscription)
+      } catch {
+        if (!cancelled) setHasDeviceSubscription(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user?.id])
+
   const handleLogout = async () => {
     try {
       sessionStorage.setItem('logout_requested', 'true')
@@ -323,19 +339,19 @@ const Header = () => {
 
           {user && <TMButton />}
 
-          {canDebugPush && (
-            <button
-              onClick={() => {
-                void enablePushNotifications()
-              }}
-              className="hidden sm:flex items-center gap-2 px-3 py-2 text-xs font-semibold text-cyan-100 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-300/20 rounded-xl transition-all duration-200"
-              title="Enable Push Notifications"
-              type="button"
-            >
-              <BellRing className="w-4 h-4" />
-              <span className="hidden lg:inline">Enable Push Notifications</span>
-            </button>
-          )}
+           {canDebugPush && !hasDeviceSubscription && (
+             <button
+               onClick={() => {
+                 void enablePushNotifications()
+               }}
+               className="hidden sm:flex items-center gap-2 px-3 py-2 text-xs font-semibold text-cyan-100 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-300/20 rounded-xl transition-all duration-200"
+               title="Enable Push Notifications"
+               type="button"
+             >
+               <BellRing className="w-4 h-4" />
+               <span className="hidden lg:inline">Enable Push Notifications</span>
+             </button>
+           )}
 
           {user && (
             <button

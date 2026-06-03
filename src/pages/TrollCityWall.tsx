@@ -11,11 +11,13 @@ import { WallPost, WallPostType } from '../types/trollWall'
 import CreatePostModal from '../components/trollWall/CreatePostModal'
 import GiftModal from '../components/trollWall/GiftModal'
 import DailyLoginWall from '../components/trollWall/DailyLoginWall'
+import WallShareModal from '../components/trollWall/WallShareModal'
 import UserNameWithAge from '../components/UserNameWithAge'
 import { emitEvent } from '../lib/events'
 import { Virtuoso } from 'react-virtuoso'
 import UserProfilePopup from '../components/UserProfilePopup'
 import { parseTextWithLinks } from '../lib/utils'
+import { useIsPwa } from '../lib/hooks/useIsPwa'
 import MentionTextarea from '../components/MentionTextarea'
 import { useChatBlockStatus } from '../hooks/useChatBlockStatus'
 
@@ -50,6 +52,7 @@ const MAX_POSTS = 100 // Memory cap for the wall feed
 
 export default function TrollCityWall() {
   const { user, isAdmin } = useAuthStore()
+  const isPwa = useIsPwa()
   const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id)
   const navigate = useNavigate()
   const [posts, setPosts] = useState<WallPost[]>([])
@@ -63,6 +66,7 @@ export default function TrollCityWall() {
   const [showReplyModal, setShowReplyModal] = useState<string | null>(null)
   const [replyContent, setReplyContent] = useState('')
   const [giftModalPostId, setGiftModalPostId] = useState<string | null>(null)
+  const [sharingPost, setSharingPost] = useState<WallPost | null>(null)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null)
 
@@ -575,9 +579,22 @@ export default function TrollCityWall() {
 
 
   const handleShare = (post: WallPost) => {
-    const url = `${window.location.origin}/wall/${post.id}`
-    navigator.clipboard.writeText(url)
-    toast.success('Link copied to clipboard!')
+    setSharingPost(post)
+  }
+
+  const handleShareClose = () => {
+    setSharingPost(null)
+  }
+
+  const recordShare = (postId: string) => {
+    if (!user?.id) return
+    supabase
+      .from('troll_wall_post_shares')
+      .insert({ post_id: postId, user_id: user.id })
+      .then(({ error }) => {
+        if (error) console.warn('Failed to record share:', error)
+      })
+      .catch((err) => console.warn('Failed to record share:', err))
   }
 
   const getPostIcon = (type: WallPostType) => {
@@ -903,8 +920,8 @@ export default function TrollCityWall() {
   )
 
   return (
-    <div className="h-screen bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white overflow-hidden flex flex-col pt-24 px-6 pb-6">
-      <div className="max-w-3xl mx-auto w-full h-full flex flex-col space-y-6">
+    <div className={`${isPwa ? 'min-h-screen' : 'h-screen'} bg-gradient-to-br from-[#0A0814] via-[#0D0D1A] to-[#14061A] text-white ${isPwa ? 'overflow-y-auto' : 'overflow-hidden'} flex flex-col pt-24 px-6 pb-6`}>
+      <div className={`max-w-3xl mx-auto w-full ${isPwa ? '' : 'h-full'} flex flex-col space-y-6`}>
         {/* Header */}
         <div className="flex items-center justify-between shrink-0">
           <div>
@@ -934,7 +951,7 @@ export default function TrollCityWall() {
         </div>
 
         {/* Posts Feed */}
-        <div className="flex-1 min-h-0 bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] overflow-hidden">
+        <div className={`${isPwa ? 'min-h-0' : 'flex-1 min-h-0'} bg-[#1A1A1A] rounded-xl border border-[#2C2C2C] overflow-hidden`}>
           {loading ? (
             <div className="text-center py-12 text-gray-400">Loading posts...</div>
           ) : posts.length === 0 ? (
@@ -944,7 +961,8 @@ export default function TrollCityWall() {
             </div>
           ) : (
             <Virtuoso
-              style={{ height: '100%' }}
+              useWindowScroll={isPwa}
+              style={!isPwa ? { height: '100%' } : undefined}
               data={posts}
               itemContent={renderPost}
               increaseViewportBy={300}
@@ -1011,6 +1029,17 @@ export default function TrollCityWall() {
           onGiftSent={(giftType, _cost) => {
             handleGift(giftModalPostId, giftType)
           }}
+        />
+      )}
+
+      {/* Share Modal */}
+      {sharingPost && (
+        <WallShareModal
+          isOpen={!!sharingPost}
+          onClose={handleShareClose}
+          post={sharingPost}
+          postUrl={`${window.location.origin}/wall/${sharingPost.id}`}
+          onShare={(postId) => recordShare(postId)}
         />
       )}
 

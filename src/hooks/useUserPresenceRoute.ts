@@ -25,6 +25,14 @@ export function useUserPresenceRoute() {
       lastUpdateRef.current = now;
 
       try {
+        // Check if user profile exists before writing presence (FK constraint)
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("id")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (!profile) return; // No profile yet — skip presence tracking
+
         await supabase.from("user_presence_routes").upsert(
           {
             user_id: user.id,

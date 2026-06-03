@@ -550,6 +550,7 @@ const isLocalhost =
             auth_key: subJson.keys?.auth,
             expiration_time: expirationTime,
             user_agent: navigator.userAgent,
+            is_active: true,
           },
           { onConflict: 'endpoint' }
         );
@@ -584,8 +585,20 @@ const isLocalhost =
       const subscription = await registration.pushManager.getSubscription();
 
       if (subscription) {
+        const endpoint = subscription.endpoint || (subscription.toJSON() as any).endpoint;
         await subscription.unsubscribe();
         console.log('[PWA] Push subscription cancelled');
+
+        try {
+          // Mark subscription as inactive in DB so server skips it
+          await supabase
+            .from('web_push_subscriptions')
+            .update({ is_active: false })
+            .eq('endpoint', endpoint);
+          console.log('[PWA] Marked subscription inactive in DB');
+        } catch (dbErr) {
+          console.warn('[PWA] Failed to mark subscription inactive:', dbErr);
+        }
       }
     } catch (error) {
       console.error('[PWA] Push unsubscription failed:', error);

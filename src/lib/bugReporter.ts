@@ -260,8 +260,8 @@ export async function reportBug(
 
     // Fire-and-forget to not block user flow
     void sendBugReport(report);
-  } catch (e) {
-    console.error('Bug reporter internal error:', e);
+  } catch {
+    // Silently fail — bug reporting is non-critical
   } finally {
     isReportingBug = false;
   }
@@ -296,8 +296,8 @@ async function sendBugReport(report: BugReport): Promise<void> {
     await supabase.rpc('log_app_bug_report', {
       payload: maskSensitiveData(toDbPayload(report))
     });
-  } catch (err) {
-    console.error('Failed to log bug report:', err);
+  } catch {
+    // Silently fail — bug reporting is non-critical and must not cause recursion
   }
 }
 

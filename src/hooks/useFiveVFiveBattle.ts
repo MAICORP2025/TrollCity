@@ -590,12 +590,8 @@ export function useFiveVFiveBattle({ streamId, isHost, category }: UseFiveVFiveB
       forfeitingTeam,
     });
 
-    // Clear battle mode on ALL streams
+    // Only clear battle mode from the forfeiting user's stream, not both
     if (currentState.battleId) {
-      await supabase
-        .from('streams')
-        .update({ is_battle: false, battle_id: null })
-        .eq('battle_id', currentState.battleId);
       await supabase
         .from('streams')
         .update({ is_battle: false, battle_id: null })

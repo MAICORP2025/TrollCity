@@ -259,17 +259,13 @@ export const handler = async (req: Request): Promise<Response> => {
         const winningHostId = winningSide === 'A' ? battle.host_id : battle.opponent_id;
         await supabase.rpc('award_battle_crowns', { user_id: winningHostId, amount: 2 });
         
-        // Clear battle flags on both streams
-        await Promise.all([
-          supabase.from('streams').update({
-            is_battle: false,
-            battle_id: null
-          }).eq('id', battle.stream_id),
-          supabase.from('streams').update({
-            is_battle: false,
-            battle_id: null
-          }).eq('id', battle.opponent_stream_id),
-        ]);
+        // Clear battle flags only from the forfeiting user's stream, not both
+        // The winner should remain in their broadcast
+        const forfeitingStreamId = forfeitingSide === 'A' ? battle.stream_id : battle.opponent_stream_id;
+        await supabase.from('streams').update({
+          is_battle: false,
+          battle_id: null
+        }).eq('id', forfeitingStreamId);
         
         // Broadcast forfeit event to ALL connected clients
         const battleChannel = supabase.channel(`battle:${battle.id}`);

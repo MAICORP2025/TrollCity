@@ -104,6 +104,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.cancel_battle_challenge(UUID, UUID) TO authenticated;
 
 -- Leave an active battle and forfeit the win to the other broadcaster
+-- Note: This function now only clears battle from the forfeiting user's stream
 CREATE OR REPLACE FUNCTION public.leave_battle(
     p_battle_id UUID,
     p_user_id UUID
@@ -116,6 +117,7 @@ DECLARE
     v_challenger_owner UUID;
     v_opponent_owner UUID;
     v_winner_stream_id UUID;
+    v_forfeiting_stream_id UUID;
 BEGIN
     IF auth.uid() IS NULL OR auth.uid() <> p_user_id THEN
         RETURN jsonb_build_object('success', false, 'message', 'Unauthorized');
@@ -132,39 +134,37 @@ BEGIN
     SELECT user_id INTO v_challenger_owner FROM public.streams WHERE id = v_battle.challenger_stream_id;
     SELECT user_id INTO v_opponent_owner FROM public.streams WHERE id = v_battle.opponent_stream_id;
 
+    -- Determine winner and who is forfeiting
     IF p_user_id = v_challenger_owner THEN
         v_winner_stream_id := v_battle.opponent_stream_id;
+        v_forfeiting_stream_id := v_battle.challenger_stream_id;
     ELSIF p_user_id = v_opponent_owner THEN
         v_winner_stream_id := v_battle.challenger_stream_id;
+        v_forfeiting_stream_id := v_battle.opponent_stream_id;
     ELSE
         RETURN jsonb_build_object('success', false, 'message', 'Not a participant');
     END IF;
 
+    -- Update battle status and winner
     UPDATE public.battles
-    SET status = 'ended', ended_at = NOW()
+    SET 
+        status = 'ended', 
+        ended_at = NOW(),
+        winner_id = v_winner_stream_id,
+        winner_stream_id = v_winner_stream_id
     WHERE id = p_battle_id;
 
-    IF v_winner_stream_id IS NOT NULL THEN
-        IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'battles' AND column_name = 'winner_id'
-        ) THEN
-            EXECUTE 'UPDATE public.battles SET winner_id = $1 WHERE id = $2'
-            USING v_winner_stream_id, p_battle_id;
-        ELSIF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'battles' AND column_name = 'winner_stream_id'
-        ) THEN
-            EXECUTE 'UPDATE public.battles SET winner_stream_id = $1 WHERE id = $2'
-            USING v_winner_stream_id, p_battle_id;
-        END IF;
-    END IF;
-
+    -- Only clear battle_id from the forfeiting user's stream, not both
+    -- This keeps the other broadcaster in their broadcast
     UPDATE public.streams
     SET battle_id = NULL
-    WHERE battle_id = p_battle_id;
+    WHERE id = v_forfeiting_stream_id;
 
-    RETURN jsonb_build_object('success', true, 'winner_stream_id', v_winner_stream_id);
+    RETURN jsonb_build_object(
+        'success', true, 
+        'winner_stream_id', v_winner_stream_id,
+        'forfeiting_stream_id', v_forfeiting_stream_id
+    );
 END;
 $$;
 

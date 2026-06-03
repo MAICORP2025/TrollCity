@@ -41,6 +41,9 @@ const HomeNotificationPrompt: React.FC = () => {
     if (safeSessionStorageGet('homeNotificationPromptShown')) return;
     if (!isNotificationSupported || Notification.permission !== 'default') return;
 
+    let timerId: number | undefined;
+    let cancelled = false;
+
     const handleBeforeInstallPrompt = (e: Event) => {
       const event = e as any;
       if (typeof event.preventDefault === 'function') {
@@ -51,12 +54,26 @@ const HomeNotificationPrompt: React.FC = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    const timer = window.setTimeout(() => {
-      setShow(true);
-    }, 2000);
+    const init = async () => {
+      let subscribed = false;
+      try {
+        if ('serviceWorker' in navigator && 'PushManager' in window) {
+          const registration = await navigator.serviceWorker.ready;
+          const sub = await registration.pushManager.getSubscription();
+          subscribed = !!sub;
+        }
+      } catch { /* ignore */ }
+      if (cancelled) return;
+      if (subscribed) return;
+      timerId = window.setTimeout(() => {
+        if (!cancelled) setShow(true);
+      }, 2000);
+    };
+    void init();
 
     return () => {
-      window.clearTimeout(timer);
+      cancelled = true;
+      if (timerId !== undefined) window.clearTimeout(timerId);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, [user, isNotificationSupported]);

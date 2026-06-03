@@ -7,9 +7,8 @@
  */
 
 import { useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, ensureSupabaseSession } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
-import { toast } from 'sonner'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface FamilyActivityOptions {
@@ -61,6 +60,9 @@ export function useTrollFamilyActivity() {
       }
 
       try {
+        // Ensure Supabase auth session is current before recording activity
+        await ensureSupabaseSession(supabase)
+
         // Generate dedup key if not provided
         const dedupKey = metadata.dedup_key || `${eventType}_${user.id}_${Date.now()}_${uuidv4()}`
 

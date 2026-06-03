@@ -16,7 +16,7 @@ import {
   Video,
 } from 'lucide-react'
 import type { LocalAudioTrack, LocalVideoTrack, RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from 'livekit-client'
-import { Track } from 'livekit-client'
+import { RoomEvent, Track } from 'livekit-client'
 import { motion, AnimatePresence } from 'framer-motion'
 
 import type { Stream } from '../../types/broadcast'
@@ -57,7 +57,6 @@ import { TopSubscribersBar } from '../../components/broadcast/TopSubscribersBar'
 import { useSubscriberUsernames } from '../../hooks/useCreatorSubscription'
 import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
 import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
-import { awardWatchHypeReward } from '../../lib/hypeRewards'
 import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
 import { useBroadcastTextPopup } from '../../hooks/useBroadcastTextPopup'
 import { useBroadcastViewerCap } from '../../hooks/useBroadcastViewerCap'
@@ -160,7 +159,9 @@ function participantMatchesUser(participant: any, userId?: string | null) {
 
   return (
     identity === userId ||
+    identity.includes(userId) ||
     identity.endsWith(`-${userId}`) ||
+    identity.startsWith(`${userId}-`) ||
     metadata.user_id === userId ||
     metadata.userId === userId ||
     participant?.user_id === userId ||
@@ -256,71 +257,108 @@ function RemoteVideoSurface({
   className,
   fallback,
   onTap,
+  room,
 }: {
   participant: any
   mirror?: boolean
   className?: string
   fallback: React.ReactNode
   onTap?: () => void
+  room?: any
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Tick every 2s to re-evaluate video track — critical for mobile PWA where
-  // LiveKit mutates the same RemoteParticipant instance on track subscribe
-  // without triggering a React re-render.
-  const [, setTrackTick] = useState(0)
+  // Track version tick — incremented on room events and by interval fallback.
+  // LiveKit mutates RemoteParticipant objects in place, so the videoTrack
+  // dependency alone won't trigger re-attach when a track is subscribed.
+  const [trackTick, setTrackTick] = useState(0)
+
+  // Interval fallback for mobile PWA where room events may not propagate to React state.
   useEffect(() => {
     const interval = setInterval(() => setTrackTick(t => t + 1), 2000)
     return () => clearInterval(interval)
   }, [])
 
-  // Do NOT memoize these by participant object. LiveKit mutates the same
-  // RemoteParticipant instance when tracks subscribe, so memoization can keep
-  // returning null even after TrackSubscribed fires. (Same fix as BroadcastPage's RemoteSeatSurface.)
+  // Listen to room events to force re-evaluation when tracks change.
+  useEffect(() => {
+    if (!room) return
+    const bump = () => setTrackTick(t => t + 1)
+    room.on(RoomEvent.TrackSubscribed, bump)
+    room.on(RoomEvent.TrackUnsubscribed, bump)
+    room.on(RoomEvent.ParticipantConnected, bump)
+    room.on(RoomEvent.ParticipantDisconnected, bump)
+    return () => {
+      room.off(RoomEvent.TrackSubscribed, bump)
+      room.off(RoomEvent.TrackUnsubscribed, bump)
+      room.off(RoomEvent.ParticipantConnected, bump)
+      room.off(RoomEvent.ParticipantDisconnected, bump)
+    }
+  }, [room])
+
+  // Recompute tracks on every render + tick change.
+  // Do NOT memoize by participant reference — LiveKit mutates in place.
   const videoTrack = getVideoTrackFromParticipant(participant)
   const audioTrack = getAudioTrackFromParticipant(participant)
 
+  // Dev logging for track detection on mobile/PWA
+  if (import.meta.env.DEV && trackTick > 0 && trackTick % 5 === 0) {
+    console.debug('[RemoteVideoSurface] track check:', {
+      participantIdentity: getParticipantIdentity(participant),
+      hasVideo: !!videoTrack,
+      hasAudio: !!audioTrack,
+      trackTick,
+    })
+  }
+
   useEffect(() => {
     const videoEl = videoRef.current
-    if (!videoEl || !videoTrack) return
+    if (!videoEl) return
 
-    try {
-      videoTrack.attach(videoEl)
-      videoEl.style.transform = mirror ? 'scaleX(-1)' : 'none'
-      videoEl.play().catch(() => {})
-    } catch (err) {
-      console.warn('[ViewerPage] Failed to attach remote video track:', err)
+    if (videoTrack) {
+      try {
+        videoTrack.attach(videoEl)
+        videoEl.style.transform = mirror ? 'scaleX(-1)' : 'none'
+        videoEl.play().catch(() => {})
+      } catch (err) {
+        console.warn('[ViewerPage] Failed to attach remote video track:', err)
+      }
     }
 
     return () => {
-      try {
-        videoTrack.detach(videoEl)
-      } catch {
-        // ignore detach errors
+      if (videoTrack) {
+        try {
+          videoTrack.detach(videoEl)
+        } catch {
+          // ignore detach errors
+        }
       }
     }
-  }, [videoTrack])
+  }, [videoTrack, trackTick, mirror])
 
   useEffect(() => {
     const audioEl = audioRef.current
-    if (!audioEl || !audioTrack) return
+    if (!audioEl) return
 
-    try {
-      audioTrack.attach(audioEl)
-      audioEl.play().catch(() => {})
-    } catch (err) {
-      console.warn('[ViewerPage] Failed to attach remote audio track:', err)
+    if (audioTrack) {
+      try {
+        audioTrack.attach(audioEl)
+        audioEl.play().catch(() => {})
+      } catch (err) {
+        console.warn('[ViewerPage] Failed to attach remote audio track:', err)
+      }
     }
 
     return () => {
-      try {
-        audioTrack.detach(audioEl)
-      } catch {
-        // ignore detach errors
+      if (audioTrack) {
+        try {
+          audioTrack.detach(audioEl)
+        } catch {
+          // ignore detach errors
+        }
       }
     }
-  }, [audioTrack])
+  }, [audioTrack, trackTick])
 
   return (
     <div
@@ -427,7 +465,20 @@ function LocalVideoSurface({
 
 function ViewerPage() {
   const params = useParams()
-  const streamId = params.id || params.streamId || ''
+  const streamId = params.streamId || params.id || ''
+
+  // Startup log to confirm route resolution (important for PWA/mobile)
+  useEffect(() => {
+    try {
+      console.log('[ViewerPage] route streamId resolved', {
+        pathname: typeof window !== 'undefined' ? window.location.pathname : null,
+        streamId,
+        params,
+      })
+    } catch (e) {
+      console.warn('[ViewerPage] route streamId log failed', e)
+    }
+  }, [streamId])
 
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
@@ -782,6 +833,8 @@ function ViewerPage() {
 
   const hasJoinedAudienceRef = useRef(false)
   const joiningAudienceRef = useRef(false)
+  const audienceFailedUntilRef = useRef<number>(0)
+  const audienceJoinAttemptedKeyRef = useRef<string | null>(null)
   const joiningPublisherRef = useRef(false)
   const currentRoomKeyRef = useRef<string | null>(null)
   const viewerIdentityRef = useRef<string>(
@@ -936,10 +989,44 @@ const isActive = isStreamActive(stream)
      return String(getLiveKitRoomName(stream as Stream | null, streamId) || '')
    }, [stream?.livekit_room_name, stream?.id, streamId])
 
+    // Stable anonymous viewer identity — never use "undefined" in identity.
+    // Uses sessionStorage so the same guest gets the same identity for the
+    // browser session and stream. Format: guest-viewer:<streamId>:<uuid>
+    const stableAnonId = useMemo(() => {
+      if (typeof window === 'undefined') return '';
+      const storageKey = streamId ? `guest-viewer:${streamId}` : '';
+      if (!storageKey) return '';
+
+      try {
+        let anonId = sessionStorage.getItem(storageKey);
+        if (anonId) return anonId;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cryptoObj = (window as any).crypto;
+        if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+          anonId = `guest-viewer:${streamId}:${cryptoObj.randomUUID()}`;
+        } else {
+          // Fallback UUID v4 for non-secure contexts (HTTP, older browsers)
+          const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
+          anonId = `guest-viewer:${streamId}:${uuid}`;
+        }
+        sessionStorage.setItem(storageKey, anonId);
+        return anonId;
+      } catch {
+        // sessionStorage may be unavailable in some PWA/iframe contexts
+        return `guest-viewer:${streamId}:${Math.random().toString(36).slice(2, 10)}`;
+      }
+    }, [streamId]);
+
     const viewerIdentity = useMemo(() => {
-      if (!streamId || !user?.id) return '';
-      return `viewer-${streamId}-${user.id}`;
-    }, [streamId, user?.id])
+      const effectiveUserId = user?.id || stableAnonId;
+      if (!streamId || !effectiveUserId) return '';
+      return `viewer-${streamId}-${effectiveUserId}`;
+    }, [streamId, user?.id, stableAnonId])
 
     useEffect(() => {
       viewerIdentityRef.current = viewerIdentity
@@ -953,7 +1040,7 @@ const isActive = isStreamActive(stream)
 
   const handleLiveKitError = useCallback((err: any) => {
     const errorDetail = err?.message || err?.statusText || String(err) || 'Unknown LiveKit audience error'
-    console.error('[ViewerPage] LiveKit audience error:', err, { errorDetail })
+    console.warn('[ViewerPage] LiveKit audience join failed; showing fallback viewer state', err)
     setViewerError(errorDetail)
   }, [])
 
@@ -970,6 +1057,8 @@ const isActive = isStreamActive(stream)
       unpublishLocalTracks,
       setMicEnabled,
       getMicEnabled,
+      room: liveKitRoom,
+      lastJoinDebug,
     } = useLiveKitRoom({
       roomId,
       roomType: 'broadcast',
@@ -982,6 +1071,9 @@ const isActive = isStreamActive(stream)
       onUserLeft: noopCallback,
       onError: handleLiveKitError,
     })
+
+  // Expose dev-only join debug overlay for mobile PWA troubleshooting
+  const [showJoinDebug, setShowJoinDebug] = useState(true);
 
   const remoteParticipants = useMemo(() => {
     return Array.isArray(remoteUsers) ? remoteUsers : []
@@ -1003,9 +1095,27 @@ const isActive = isStreamActive(stream)
   
   const hostParticipant = useMemo(() => {
     const exactHost = remoteParticipants.find((participant: any) => participantMatchesUser(participant, hostId))
-    if (exactHost) return exactHost
+    if (exactHost) {
+      if (import.meta.env.DEV) {
+        console.log('[ViewerPage] hostParticipant found by identity match:', {
+          hostId,
+          participantIdentity: getParticipantIdentity(exactHost),
+          hasVideo: !!getVideoTrackFromParticipant(exactHost),
+        });
+      }
+      return exactHost
+    }
 
     const participantWithCamera = remoteParticipants.find((participant: any) => !!getVideoTrackFromParticipant(participant))
+    if (import.meta.env.DEV) {
+      console.log('[ViewerPage] hostParticipant fallback:', {
+        hostId,
+        remoteParticipantCount: remoteParticipants.length,
+        remoteIdentities: remoteParticipants.map((p: any) => getParticipantIdentity(p)),
+        fallbackFound: !!participantWithCamera,
+        fallbackIdentity: participantWithCamera ? getParticipantIdentity(participantWithCamera) : null,
+      });
+    }
     return participantWithCamera || null
   }, [remoteParticipants, hostId])
 
@@ -1016,6 +1126,21 @@ const isActive = isStreamActive(stream)
       (profile as any)?.is_troll_officer ||
       (profile as any)?.is_lead_officer,
   )
+
+  // Debug panel: show last join debug when in dev and user toggles overlay
+  const JoinDebugOverlay = () => {
+    if (!import.meta.env.DEV) return null;
+    if (!lastJoinDebug) return null;
+    return (
+      <div style={{ position: 'fixed', right: 8, bottom: 8, zIndex: 9999, background: 'rgba(0,0,0,0.85)', color: 'white', padding: 8, borderRadius: 8, maxWidth: '90vw', maxHeight: '40vh', overflow: 'auto', fontSize: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <strong>LiveKit Join Debug</strong>
+          <button onClick={() => setShowJoinDebug(s => !s)} style={{ marginLeft: 8 }}>{showJoinDebug ? 'Hide' : 'Show'}</button>
+        </div>
+        {showJoinDebug ? <pre style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>{JSON.stringify(lastJoinDebug, null, 2)}</pre> : null}
+      </div>
+    )
+  }
 
   const isModerator = Boolean(
     isStaffProfile(profile) ||
@@ -1067,7 +1192,7 @@ const isActive = isStreamActive(stream)
     return profiles
   }, [activeSeats, broadcasterProfile, hostId])
 
-  const { hypeCoins, refreshHypeCoins } = useHypeCoins()
+  const { hypeCoins, refreshHypeCoins, earnHypeCoinFromWatch } = useHypeCoins()
 
   const onGift = useCallback((userId?: string | null) => {
     setGiftRecipientId(userId || hostId || null)
@@ -1287,12 +1412,18 @@ const handleLeaveSeat = useCallback(async () => {
       lastHypeRewardAttemptRef.current = now
 
       try {
-        const result = await awardWatchHypeReward(streamId)
+        const result = await earnHypeCoinFromWatch(streamId)
 
-        if (result.success && (result.earned_amount ?? 0) > 0) {
+        if (result?.success && (result.earned_amount ?? 0) > 0) {
           setShowHypeCoinPopup(true)
-          await refreshHypeCoins()
-          
+
+          // Refresh balances after the reward is awarded
+          try {
+            await refreshHypeCoins()
+          } catch (refreshError) {
+            console.warn('[ViewerPage] refreshHypeCoins failed after reward:', refreshError)
+          }
+
           // Record family activity for hype coins earned
           try {
             await recordHypeCoinsEarned(result.earned_amount || 0, streamId)
@@ -1317,7 +1448,7 @@ const handleLeaveSeat = useCallback(async () => {
         hypeRewardIntervalRef.current = null
       }
     }
-  }, [streamId, user?.id, isStreamLive, hostId, refreshHypeCoins])
+  }, [streamId, user?.id, isStreamLive, hostId, refreshHypeCoins, earnHypeCoinFromWatch, recordHypeCoinsEarned])
 
   useEffect(() => {
     if (!streamId || !user?.id || !isStreamLive || hostId === user.id) {
@@ -1667,27 +1798,83 @@ useStreamRealtime(
        return
      }
 
-     if (isActive && !isUserOnStage && !hasJoinedAudienceRef.current && !joiningAudienceRef.current) {
-       joiningAudienceRef.current = true
-       currentRoomKeyRef.current = audienceRoomKey
+    // Audience join flow moved to a focused effect below (primitive deps only)
+   }, [streamId, roomId, isActive, isUserOnStage, isPublishing, joinAsAudience, publishLocalTracks, unpublishLocalTracks, leaveLiveKitRoom, user?.id, navigate, viewerIdentity])
 
-       joinAsAudience(viewerIdentityRef.current)
-         .then(() => {
-           hasJoinedAudienceRef.current = true
-           setViewerError(null)
-           console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId })
-         })
-         .catch((err: any) => {
-           const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
-           console.warn('[ViewerPage] joinAsAudience failed:', err, { errorDetail })
-           setViewerError(errorDetail)
-         })
-         .finally(() => {
-           joiningAudienceRef.current = false
-         })
-       return
-     }
-   }, [streamId, roomId, isActive, isUserOnStage, isPublishing, joinAsAudience, publishLocalTracks, unpublishLocalTracks, leaveLiveKitRoom, user?.id, navigate])
+  // Reset audience join refs when changing streams so we can re-attempt on new stream
+  useEffect(() => {
+    audienceJoinAttemptedKeyRef.current = null
+    audienceFailedUntilRef.current = 0
+    hasJoinedAudienceRef.current = false
+    joiningAudienceRef.current = false
+  }, [streamId])
+
+  // Focused effect for audience join — keep dependencies primitive to avoid
+  // re-running due to object identity changes.
+  useEffect(() => {
+    if (!streamId) return
+    const isActiveLocal = isStreamActive(stream)
+    if (!isActiveLocal) return
+
+    const identityToUse = viewerIdentityRef.current || viewerIdentity
+    if (!identityToUse) return
+
+    if (!streamId) {
+      console.warn('[ViewerPage] Missing streamId from route before joinAsAudience', {
+        pathname: typeof window !== 'undefined' ? window.location.pathname : null,
+        params,
+      })
+      return
+    }
+
+    // Determine attempt key and cooldown
+    const now = Date.now()
+    const attemptKey = `${streamId}:${identityToUse}`
+    if (audienceJoinAttemptedKeyRef.current === attemptKey) return
+    if (audienceFailedUntilRef.current > now) {
+      if (import.meta.env.DEV) console.warn('[ViewerPage] Skipping audience join due to recent failure cooldown', { retryAfterMs: audienceFailedUntilRef.current - now })
+      return
+    }
+
+    // Don't start if we already joined or are joining
+    if (hasJoinedAudienceRef.current || joiningAudienceRef.current) return
+
+    joiningAudienceRef.current = true
+    audienceJoinAttemptedKeyRef.current = attemptKey
+
+    if (import.meta.env.DEV) console.log('[ViewerPage] triggering audience join (focused effect):', { streamId, roomId, identity: identityToUse })
+
+    let cancelled = false
+
+    Promise.resolve()
+      .then(() => joinAsAudience({ userId: identityToUse, streamId, roomName: roomId, viewerIdentity: identityToUse }))
+      .then((res: any) => {
+        if (cancelled) return
+        if (res && typeof res !== 'string') {
+          hasJoinedAudienceRef.current = true
+          setViewerError(null)
+          console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId })
+        } else {
+          const errorDetail = typeof res === 'string'
+            ? res
+            : 'LiveKit audience join failed'
+          console.warn(`[ViewerPage] joinAsAudience failed for stream ${streamId}: ${errorDetail}`)
+          setViewerError(errorDetail)
+          audienceFailedUntilRef.current = Date.now() + 60000
+        }
+      })
+      .catch((err: any) => {
+        const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
+        console.warn(`[ViewerPage] joinAsAudience threw for stream ${streamId}: ${errorDetail}`)
+        setViewerError(errorDetail)
+        audienceFailedUntilRef.current = Date.now() + 60000
+      })
+      .finally(() => {
+        joiningAudienceRef.current = false
+      })
+
+    return () => { cancelled = true }
+  }, [streamId, stream?.id, stream?.status, stream?.is_live, roomId, user?.id, joinAsAudience])
 
   const stageSlots = useMemo(() => {
     const liveSeats = activeSeats.slice(0, Math.max(0, effectiveBoxCount - 1))
@@ -1725,6 +1912,25 @@ useStreamRealtime(
       }
     })
   }, [effectiveBoxCount, seats, stream, user?.id])
+
+  // Mobile layout: broadcaster video stays fixed, seats flow below.
+  // Seats use a fixed tall grid so they're large and readable on PWA.
+  const mobileSeatGridHeight = useMemo(() => {
+    if (!isMobileViewer || seatCards.length === 0) return 0
+    const count = seatCards.length
+    if (count <= 2) return 260  // 1 row of 2-col, tall cards
+    if (count <= 4) return 380  // 2 rows of 2-col, tall cards
+    return 500                  // 3 rows of 2-col (5-6 seats), tall cards
+  }, [isMobileViewer, seatCards.length])
+
+  // Broadcaster video: fixed height that does NOT shrink when seats are added.
+  // Seats scroll below in the remaining space.
+  const mobileHostVideoHeight = useMemo(() => {
+    if (!isMobileViewer) return undefined
+    // Fixed broadcaster area: reserve control bar + chat input + safe area only
+    const reserved = MOBILE_CONTROL_BAR_HEIGHT + MOBILE_CHAT_INPUT_HEIGHT
+    return `calc(100dvh - ${reserved}px - env(safe-area-inset-bottom))`
+  }, [isMobileViewer])
 
   // ── Channel diagnostics (dev only) ──
   useEffect(() => {
@@ -1890,7 +2096,8 @@ useStreamRealtime(
                         : 'minmax(560px, 1fr) 360px',
                   }
                 : {
-                    paddingBottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT}px + env(safe-area-inset-bottom))`,
+                    // Reserve space for fixed chat input + safe area (seats & controls overlay on video)
+                    paddingBottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
                   }
             }
           >
@@ -1900,15 +2107,24 @@ useStreamRealtime(
                 'relative min-h-0 overflow-hidden',
                 theme.hostVideoPanel,
                 isMobileViewer
-                  ? 'h-[calc(100dvh-150px-env(safe-area-inset-bottom))] max-h-[calc(100dvh-150px-env(safe-area-inset-bottom))] flex-none rounded-none border-0'
+                  ? 'flex-none rounded-none border-0'
                   : ''
               )}
+              style={
+                isMobileViewer
+                  ? {
+                      height: mobileHostVideoHeight,
+                      maxHeight: mobileHostVideoHeight,
+                    }
+                  : undefined
+              }
             >
               <RemoteVideoSurface
                 participant={hostParticipant}
                 mirror={true}
                 className="absolute inset-0"
                 onTap={handleLike}
+                room={liveKitRoom}
                 fallback={
                   <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
                     <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
@@ -1932,31 +2148,29 @@ useStreamRealtime(
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/25" />
 
-              <div className="absolute left-5 top-5 z-20 flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.25)] backdrop-blur-xl">
-                <Crown className="h-4 w-4" />
-                Host
-              </div>
+              {/* Desktop-only overlays */}
+              {!isMobileViewer && (
+                <>
+                  <div className="absolute left-5 top-5 z-20 flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.25)] backdrop-blur-xl">
+                    <Crown className="h-4 w-4" />
+                    Host
+                  </div>
 
-              {isMobileViewer && (
-                <div className="absolute top-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5">
-                  <span className="text-xs font-black text-white">{hostName}</span>
-                  {broadcasterProfile?.is_verified && <BadgeCheck className="h-3.5 w-3.5 text-purple-400" />}
-                </div>
+                  <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-black shadow-inner backdrop-blur-xl',
+                        isActive
+                          ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300 shadow-emerald-500/10'
+                          : 'border-yellow-400/30 bg-yellow-500/15 text-yellow-200 shadow-yellow-500/10'
+                      )}
+                    >
+                      <span className="h-2 w-2 rounded-full bg-current shadow-[0_0_10px_currentColor]" />
+                      {isActive ? 'LIVE' : 'STARTING'}
+                    </span>
+                  </div>
+                </>
               )}
-
-              <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
-                <span
-                  className={cn(
-                    'inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-black shadow-inner backdrop-blur-xl',
-                    isActive
-                      ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300 shadow-emerald-500/10'
-                      : 'border-yellow-400/30 bg-yellow-500/15 text-yellow-200 shadow-yellow-500/10'
-                  )}
-                >
-                  <span className="h-2 w-2 rounded-full bg-current shadow-[0_0_10px_currentColor]" />
-                  {isActive ? 'LIVE' : 'STARTING'}
-                </span>
-              </div>
 
               {viewerError && (
                 <div className="absolute inset-x-4 top-16 z-30 rounded-2xl border border-red-400/35 bg-gradient-to-r from-red-950/90 to-red-900/80 px-4 py-3 text-sm font-bold text-red-100 shadow-[0_0_30px_rgba(239,68,68,0.25)] backdrop-blur-2xl">
@@ -2003,24 +2217,31 @@ useStreamRealtime(
                 </div>
               )}
 
-              {/* ── Mobile floating messages: fixed overlay at bottom of watch surface ── */}
+              {/* ── Mobile PWA floating chat: messages float up from chat input to top of video ── */}
               {isMobileViewer && (
                 <div
-                  className="pointer-events-none absolute inset-x-3 z-30 flex flex-col-reverse gap-2 overflow-hidden"
+                  className="pointer-events-none fixed inset-x-0 z-30 overflow-hidden"
                   style={{
-                    bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT + 12}px + env(safe-area-inset-bottom))`,
-                    maxHeight: '34vh',
+                    top: 0,
+                    bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
                   }}
                 >
                   <AnimatePresence initial={false}>
-                    {floatingMessages.slice(0, 4).map((message) => (
+                    {floatingMessages.slice(0, 6).map((message) => (
                       <motion.div
                         key={message.id}
-                        initial={{ opacity: 0, y: 28, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -90, scale: 0.94 }}
-                        transition={{ duration: 0.65, ease: 'easeOut' }}
-                        className="max-w-[84%] rounded-2xl border border-cyan-300/20 bg-black/60 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
+                        initial={{ opacity: 0, y: 0 }}
+                        animate={{
+                          opacity: [0, 1, 1, 0.6, 0],
+                          y: ['70vh', '50vh', '25vh', '5vh', '-15vh'],
+                        }}
+                        transition={{
+                          duration: CHAT_FLOAT_MS / 1000,
+                          ease: 'linear',
+                          times: [0, 0.08, 0.5, 0.8, 1],
+                        }}
+                        className="pointer-events-none absolute max-w-[75%] rounded-2xl border border-cyan-300/20 bg-black/50 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
+                        style={{ right: '3%' }}
                       >
                         <span className="font-black text-cyan-200 inline-flex items-center gap-1">
                           {message.username}
@@ -2037,21 +2258,21 @@ useStreamRealtime(
             </section>
 
             {/* ── CENTER: Seats belong beside the broadcaster, never over it ── */}
-            {!isMobileViewer && seatCards.length > 0 && (
+            {hasMounted && !isMobileViewer && seatCards.length > 0 && (
               <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/25 bg-black/20 p-4 shadow-[0_0_28px_rgba(45,212,191,0.18)] backdrop-blur-xl">
                 <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.25em] text-cyan-200/80">Live Seats</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.25em] text-white/80">Live Seats</p>
                     <p className="mt-1 text-xs font-semibold text-slate-300">
                       Seat coins deduct automatically when a viewer joins.
                     </p>
                   </div>
-                  <div className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-sm font-black text-cyan-100">
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-black text-slate-200">
                     {seatCards.filter((seat) => !seat.isOccupied).length} open
                   </div>
                 </div>
 
-                <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
+                <div className="grid min-h-0 flex-1 grid-cols-2 gap-5">
                   {seatCards.map((seat) => {
                     const seatStatus = String(seat.seat?.status || '').toLowerCase()
                     const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
@@ -2084,14 +2305,14 @@ useStreamRealtime(
                       <div
                         key={seat.seatIndex}
                         className={cn(
-                          'relative min-h-[155px] overflow-hidden rounded-2xl border bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)] shadow-[inset_0_0_18px_rgba(15,23,42,0.78)] transition-all',
+                          'relative min-h-[220px] overflow-hidden rounded-2xl border bg-transparent shadow-[inset_0_0_18px_rgba(15,23,42,0.78)] transition-all',
                           isMine
                             ? 'border-emerald-300/60 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
                             : seat.isOccupied
-                              ? 'border-purple-300/45 shadow-[0_0_24px_rgba(168,85,247,0.16)]'
+                              ? 'border-purple-300/45 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)] shadow-[0_0_24px_rgba(168,85,247,0.16)]'
                               : seat.isLocked
-                                ? 'border-white/10 opacity-70'
-                                : 'border-cyan-300/45 hover:border-cyan-200/70 hover:shadow-[0_0_24px_rgba(34,211,238,0.22)]'
+                                ? 'border-white/10 bg-transparent opacity-70'
+                                : 'border-white/10 bg-transparent hover:border-white/20 hover:shadow-[0_0_24px_rgba(15,23,42,0.18)]'
                         )}
                       >
                         {isMine ? (
@@ -2115,6 +2336,7 @@ useStreamRealtime(
                             participant={seatParticipant}
                             mirror={true}
                             className="absolute inset-0"
+                            room={liveKitRoom}
                             fallback={
                               <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
                                 <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-purple-500/10">
@@ -2132,13 +2354,13 @@ useStreamRealtime(
                             onClick={() => seat.canJoin && handleJoinSeatByIndex(seat.seatIndex)}
                             className="flex h-full w-full flex-col items-center justify-center gap-3 p-4 text-center disabled:cursor-not-allowed"
                           >
-                            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-300/25 bg-cyan-500/10">
-                              <Users className="h-6 w-6 text-cyan-100/75" />
+                            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-slate-500/40 bg-transparent">
+                              <Users className="h-6 w-6 text-slate-200" />
                             </div>
-                            <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-2 text-sm font-black text-white">
+                            <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-black text-white">
                               Seat {seat.seatIndex}
                             </div>
-                            <div className={cn('text-xs font-bold', seat.canJoin ? 'text-cyan-100/80' : 'text-slate-500')}>
+                            <div className={cn('text-xs font-bold', seat.canJoin ? 'text-slate-200' : 'text-slate-500')}>
                               {statusLabel}
                             </div>
                           </button>
@@ -2167,6 +2389,112 @@ useStreamRealtime(
                 </div>
               </aside>
             )}
+
+          {/* ── MOBILE PWA: Seats overlay on broadcaster video ── */}
+          {hasMounted && isMobileViewer && seatCards.length > 0 && (
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col"
+              style={{
+                bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT}px + ${MOBILE_CHAT_INPUT_HEIGHT}px + 16px + env(safe-area-inset-bottom))`,
+                maxHeight: mobileSeatGridHeight,
+              }}
+            >
+              <div className="pointer-events-auto overflow-y-auto px-2 pb-1">
+                <div
+                  className={cn(
+                    'grid gap-2',
+                    seatCards.length <= 2 ? 'grid-cols-2' : 'grid-cols-3'
+                  )}
+                >
+                  {seatCards.map((seat) => {
+                    const seatStatus = String(seat.seat?.status || '').toLowerCase()
+                    const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
+                    const seatIdentity = seat.seat?.livekit_participant_identity || seatUserId
+                    const isMine = Boolean(user?.id && (seat.seat?.user_id === user.id || seat.seat?.guest_id === user.id))
+                    const seatParticipant = !isMine && seatIdentity
+                      ? remoteParticipants.find((participant: any) => {
+                          const participantIdentity = String(participant?.identity || '')
+                          return (
+                            participantMatchesUser(participant, seatIdentity) ||
+                            participantMatchesUser(participant, seatUserId) ||
+                            participantIdentity === String(seatIdentity) ||
+                            participantIdentity.endsWith(`-${seatIdentity}`) ||
+                            String(seatIdentity).endsWith(participantIdentity)
+                          )
+                        })
+                      : null
+
+                    return (
+                      <div
+                        key={seat.seatIndex}
+                        className={cn(
+                          'relative aspect-[4/3] overflow-hidden rounded-xl border',
+                          isMine
+                            ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                            : seat.isOccupied
+                              ? 'border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
+                              : 'border-white/20',
+                          'bg-transparent'
+                        )}
+                      >
+                        {isMine ? (
+                          <LocalVideoSurface
+                            videoTrack={localVideoTrack}
+                            audioTrack={localAudioTrack}
+                            mirror={false}
+                            className="absolute inset-0"
+                            fallback={
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-center">
+                                <Users className="h-5 w-5 text-emerald-300/70" />
+                                <div className="text-[10px] font-black text-white">You</div>
+                                <div className="text-[9px] text-emerald-200/60">Starting</div>
+                              </div>
+                            }
+                          />
+                        ) : seat.isOccupied ? (
+                          <RemoteVideoSurface
+                            participant={seatParticipant}
+                            mirror={true}
+                            className="absolute inset-0"
+                            room={liveKitRoom}
+                            fallback={
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-center">
+                                <Users className="h-5 w-5 text-purple-300/70" />
+                                <div className="max-w-full truncate px-1 text-[10px] font-black text-white">{seat.displayName}</div>
+                                <div className="text-[9px] text-purple-200/60">Starting</div>
+                              </div>
+                            }
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!seat.canJoin}
+                            onClick={() => seat.canJoin && handleJoinSeatByIndex(seat.seatIndex)}
+                            className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-1.5 text-center bg-transparent disabled:cursor-not-allowed"
+                          >
+                            <div className="grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-transparent">
+                              <Plus className="h-5 w-5 text-white/70" />
+                            </div>
+                            <div className="text-[11px] font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">Seat {seat.seatIndex}</div>
+                            <div className="text-[10px] font-bold text-white/60 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+                              {seat.isLocked ? 'Locked' : seat.seatPrice === 0 ? 'Free' : `${seat.seatPrice} ◈`}
+                            </div>
+                          </button>
+                        )}
+
+                        {/* Seat label overlay */}
+                        {seat.isOccupied && (
+                          <div className="absolute inset-x-0 bottom-0 px-1.5 py-0.5">
+                            <p className="truncate text-[9px] font-bold text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">{seat.displayName}</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── RIGHT: Desktop Chat Panel — same flow layout style as BroadcastPage ── */}
           {!isMobileViewer && (
@@ -2212,7 +2540,7 @@ useStreamRealtime(
                           No messages yet – say something!
                         </div>
                       ) : (
-<div className="flex min-h-full flex-col gap-1.5">
+<div className="flex flex-col gap-1.5">
                            <AnimatePresence initial={false}>
                              {floatingMessages.map((msg) => (
                                <motion.div
@@ -2418,7 +2746,10 @@ useStreamRealtime(
 
         {/* ── MOBILE CHAT INPUT AT BOTTOM — fixed overlay, not document flow ── */}
         {isMobileViewer && (
-          <div className="absolute inset-x-3 bottom-3 z-40 pointer-events-auto">
+          <div
+            className="fixed inset-x-3 z-40 pointer-events-auto"
+            style={{ bottom: `env(safe-area-inset-bottom)` }}
+          >
             <form
               onSubmit={async (e) => {
                 e.preventDefault()
@@ -2498,14 +2829,18 @@ useStreamRealtime(
 
         <div
   className={cn(
-    'relative z-20 shrink-0 border-t border-white/10 px-4 py-3',
+    'relative z-20 shrink-0 px-4 py-3',
     theme.bottomBar,
-    isMobileViewer && 'fixed inset-x-0 bottom-0'
+    isMobileViewer
+      ? 'fixed inset-x-0 border-none bg-transparent shadow-none rounded-none'
+      : 'border-t border-white/10'
   )}
   style={
     isMobileViewer
       ? {
-          paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+          // Sit flush with broadcaster box bottom, just above chat input
+          bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
+          paddingBottom: `calc(4px + env(safe-area-inset-bottom))`,
         }
       : undefined
   }
@@ -2540,15 +2875,6 @@ useStreamRealtime(
                 Share
               </button>
               {isUserOnStage && (
-              <button
-                onClick={handleLeaveSeat}
-                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.purpleButton)}
-              >
-                <Users className="h-4 w-4" />
-                Leave Stage
-              </button>
-              )}
-              {isUserOnStage && (
                 <button
                   onClick={handleStartSeatBattle}
                   disabled={isBattleButtonBusy}
@@ -2566,7 +2892,7 @@ useStreamRealtime(
                 className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.danger)}
               >
                 <LogOut className="h-4 w-4" />
-                {isUserOnStage ? 'Leave Stage' : 'Leave'}
+                Leave
               </button>
             </div>
           </div>

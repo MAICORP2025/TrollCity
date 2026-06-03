@@ -92,6 +92,7 @@ export default function NeighborhoodOnboarding() {
 
   const [grantingLicense, setGrantingLicense] = useState(false)
   const [insuranceBuying, setInsuranceBuying] = useState(false)
+  const [homeInsuranceBuying, setHomeInsuranceBuying] = useState(false)
   const [driversLicenseExpiry, setDriversLicenseExpiry] = useState<string | null>(null)
 
   const [plateText, setPlateText] = useState('TROLL123')
@@ -301,6 +302,18 @@ export default function NeighborhoodOnboarding() {
           : false
         const hasPlate = !!profileAny?.license_plate
 
+        const { data: activeHomeInsurance } = await supabase
+          .from('homeowners_insurances')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .limit(1)
+          .maybeSingle()
+
+        const homeInsuranceValid = !!activeHomeInsurance
+
         const hasRestorableLicense =
           profileAny?.license_status === 'suspended' &&
           carInsuranceValid &&
@@ -356,7 +369,7 @@ export default function NeighborhoodOnboarding() {
         let nextScene: OnboardingScene = 'street'
         let nextMessage = ''
 
-        if (hasNeighborhood && hasHouse && hasVehicle && carInsuranceValid && hasPlate && hasLicense) {
+        if (hasNeighborhood && hasHouse && hasVehicle && carInsuranceValid && homeInsuranceValid && hasPlate && hasLicense) {
           nextScene = 'complete'
           nextMessage = 'Your neighborhood is ready. Enter the streets of Troll City!'
         } else if (isFamilyMember) {
@@ -364,7 +377,7 @@ export default function NeighborhoodOnboarding() {
             nextScene = 'car'
           } else if (!hasLicense && !hasRestorableLicense) {
             nextScene = 'driverTest'
-          } else if (!carInsuranceValid) {
+          } else if (!carInsuranceValid || !homeInsuranceValid) {
             nextScene = 'insurance'
           } else if (!hasPlate) {
             nextScene = 'license'
@@ -378,7 +391,7 @@ export default function NeighborhoodOnboarding() {
           nextScene = 'car'
         } else if (!hasLicense && !hasRestorableLicense) {
           nextScene = 'driverTest'
-        } else if (!carInsuranceValid) {
+        } else if (!carInsuranceValid || !homeInsuranceValid) {
           nextScene = 'insurance'
         } else if (!hasPlate) {
           nextScene = 'license'
@@ -659,6 +672,7 @@ export default function NeighborhoodOnboarding() {
 
     try {
       const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      const now = new Date().toISOString()
 
       const { data: existingInsurance } = await supabase
         .from('car_insurances')
@@ -668,25 +682,6 @@ export default function NeighborhoodOnboarding() {
         .maybeSingle()
 
       const firstInsurance = !existingInsurance
-      const insuranceCost = 0
-
-      if (insuranceCost > 0) {
-        const { success, error } = await deductCoins({
-          userId: user.id,
-          amount: insuranceCost,
-          type: 'insurance_purchase',
-          coinType: 'troll_coins',
-          description: 'Car insurance - 30 days',
-          metadata: {
-            vehicle_id: currentVehicleId,
-            duration_days: 30,
-          },
-        })
-
-        if (!success) {
-          throw new Error(error || 'Insufficient coins to purchase insurance')
-        }
-      }
 
       const shouldRestoreLicense =
         profileAny?.license_status === 'suspended' &&
@@ -696,32 +691,17 @@ export default function NeighborhoodOnboarding() {
         profileAny?.license_status !== 'active' &&
         !!profileAny?.driver_test_passed_at
 
-      const updateData: any = {
-        car_insurance_expiry: expiry,
-      }
+      const profileUpdate: any = {}
 
       if (shouldRestoreLicense) {
-        updateData.license_status = 'active'
-        updateData.license_restored_at = new Date().toISOString()
-        updateData.insurance_required = false
-        updateData.drivers_license_expiry = expiry
+        profileUpdate.license_status = 'active'
+        profileUpdate.license_restored_at = now
+        profileUpdate.insurance_required = false
+        profileUpdate.drivers_license_expiry = expiry
       } else if (shouldActivateLicense) {
-        updateData.license_status = 'active'
-        updateData.license_activated_at = new Date().toISOString()
-        updateData.drivers_license_expiry = expiry
-      }
-
-      let houseId = profileAny?.house_id || null
-
-      if (!houseId) {
-        const { data: houseRow } = await supabase
-          .from('houses')
-          .select('id')
-          .eq('owner_user_id', user.id)
-          .limit(1)
-          .maybeSingle()
-
-        houseId = houseRow?.id || null
+        profileUpdate.license_status = 'active'
+        profileUpdate.license_activated_at = now
+        profileUpdate.drivers_license_expiry = expiry
       }
 
       const { error: carInsuranceError } = await supabase.from('car_insurances').insert({
@@ -729,30 +709,17 @@ export default function NeighborhoodOnboarding() {
         vehicle_id: currentVehicleId,
         expires_at: expiry,
         deductible_paid: 0,
+        status: 'active',
+        starts_at: now,
       })
 
       if (carInsuranceError) throw carInsuranceError
 
-      if (houseId) {
-        const { error: homeInsuranceError } = await supabase
-          .from('homeowners_insurances')
-          .insert({
-            user_id: user.id,
-            house_id: houseId,
-            expires_at: expiry,
-            deductible_paid: 0,
-          })
-
-        if (homeInsuranceError) throw homeInsuranceError
-      }
+      profileUpdate.car_insurance_expiry = expiry
 
       const { error: profileError } = await supabase
         .from('user_profiles')
-        .update({
-          ...updateData,
-          homeowners_insurance_expiry: expiry,
-          homeowners_insurance_deductible: 25,
-        })
+        .update(profileUpdate)
         .eq('id', user.id)
 
       if (profileError) throw profileError
@@ -760,9 +727,7 @@ export default function NeighborhoodOnboarding() {
       if (profile) {
         setProfile({
           ...profile,
-          ...updateData,
-          homeowners_insurance_expiry: expiry,
-          homeowners_insurance_deductible: 25,
+          ...profileUpdate,
         } as any)
       }
 
@@ -770,20 +735,116 @@ export default function NeighborhoodOnboarding() {
         setDriversLicenseExpiry(expiry)
       }
 
-      await refreshProfile(true)
+      await refreshProfile(true      )
 
       toast.success(
         firstInsurance
-          ? 'Free car + home insurance activated for 30 days!'
+          ? 'Free car insurance activated for 30 days!'
           : 'Car insurance active for 30 days'
       )
-
-      transitionToScene('license', '🛡️ Insured! Now customize your license plate!')
     } catch (error: any) {
       console.error('Insurance error:', error)
       toast.error(error?.message || 'Unable to purchase insurance')
     } finally {
       setInsuranceBuying(false)
+    }
+  }
+
+  const handlePurchaseHomeInsurance = async () => {
+    if (!user?.id) {
+      toast.error('Not authenticated')
+      return
+    }
+
+    const profileAny = profile as any
+
+    if (profileAny?.troll_coins < 500) {
+      toast.error('You need 500 Troll Coins to purchase home insurance')
+      return
+    }
+
+    let houseId = profileAny?.house_id || null
+
+    if (!houseId) {
+      const { data: houseRow } = await supabase
+        .from('houses')
+        .select('id')
+        .eq('owner_user_id', user.id)
+        .limit(1)
+        .maybeSingle()
+
+      houseId = houseRow?.id || null
+    }
+
+    if (!houseId) {
+      toast.error('No house found to insure')
+      return
+    }
+
+    setHomeInsuranceBuying(true)
+
+    try {
+      const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      const now = new Date().toISOString()
+
+      const { success, error: deductError } = await deductCoins({
+        userId: user.id,
+        amount: 500,
+        type: 'insurance_purchase',
+        coinType: 'troll_coins',
+        description: 'Homeowners insurance - 7 days',
+        metadata: {
+          house_id: houseId,
+          duration_days: 7,
+        },
+      })
+
+      if (!success) {
+        throw new Error(deductError || 'Insufficient coins to purchase home insurance')
+      }
+
+      const { error: homeInsuranceError } = await supabase
+        .from('homeowners_insurances')
+        .insert({
+          user_id: user.id,
+          house_id: houseId,
+          expires_at: expiry,
+          deductible_paid: 0,
+          status: 'active',
+          is_active: true,
+          plan_id: 'basic_week',
+          coverage_type: 'basic',
+          cost_paid: 500,
+          deductible: 25,
+          duration_hours: 168,
+          purchased_at: now,
+          claims_made: 0,
+        })
+
+      if (homeInsuranceError) throw homeInsuranceError
+
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({
+          homeowners_insurance_expiry: expiry,
+          homeowners_insurance_deductible: 25,
+          role: 'broadcaster',
+          is_broadcaster: true,
+        })
+        .eq('id', user.id)
+
+      if (profileError) throw profileError
+
+      await refreshProfile(true)
+
+      toast.success('Home insurance activated for 7 days! You can now broadcast.')
+
+      transitionToScene('license', '🏠 Home insured! Now customize your license plate!')
+    } catch (error: any) {
+      console.error('Home insurance error:', error)
+      toast.error(error?.message || 'Unable to purchase home insurance')
+    } finally {
+      setHomeInsuranceBuying(false)
     }
   }
 
@@ -1168,16 +1229,21 @@ export default function NeighborhoodOnboarding() {
               {currentScene === 'insurance' && (
                 <div className="space-y-6">
                   <div className="space-y-3">
-                    <h2 className="text-2xl font-semibold text-white">Buy Car Insurance</h2>
+                    <h2 className="text-2xl font-semibold text-white">Get Insurance</h2>
                     <p className="text-slate-400">
-                      Activate insurance so your ride can survive vandalism and raids.
+                      Insurance and a valid license are required to broadcast, drive, and access neighborhood features.
                     </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+                    <p className="font-semibold">⚠️ Important</p>
+                    <p className="mt-1">Car insurance must stay active to keep your vehicle protected. Home insurance (7 days) unlocks broadcast access and must be renewed before it expires. Your license must remain valid — if both insurances expire, your license will be suspended.</p>
                   </div>
 
                   <div className="rounded-3xl border border-slate-700 bg-slate-950/90 p-5">
                     <div className="flex items-center justify-between gap-4 text-sm text-slate-300">
                       <div>
-                        <p className="font-semibold text-white">Starter Coverage</p>
+                        <p className="font-semibold text-white">Starter Car Coverage</p>
                         <p>30 days active coverage with deductible protection.</p>
                       </div>
 
@@ -1199,8 +1265,42 @@ export default function NeighborhoodOnboarding() {
                       {insuranceBuying
                         ? 'Activating…'
                         : hasFreeInsurance
-                          ? 'Get Free Insurance'
-                          : 'Get Insurance'}
+                          ? 'Get Free Car Insurance'
+                          : 'Get Car Insurance'}
+                    </Button>
+                  </div>
+
+                  <div className="border-t border-slate-700 pt-6">
+                    <div className="rounded-3xl border border-slate-700 bg-slate-950/90 p-5">
+                      <div className="flex items-center justify-between gap-4 text-sm text-slate-300">
+                        <div>
+                          <p className="font-semibold text-white">Homeowners Coverage</p>
+                          <p>7 days active coverage. Required to unlock broadcast access.</p>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-yellow-400">500 TC</div>
+                          <div className="text-xs text-yellow-400/70">
+                            {profile && (profile as any)?.troll_coins >= 500 ? 'You can afford this' : 'Not enough coins'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 text-sm text-slate-300">
+                      <p>Your balance: <span className="font-bold text-yellow-400">{(profile as any)?.troll_coins ?? 0} Troll Coins</span></p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      onClick={handlePurchaseHomeInsurance}
+                      disabled={homeInsuranceBuying || ((profile as any)?.troll_coins ?? 0) < 500}
+                      className="bg-gradient-to-r from-yellow-500 to-amber-500"
+                    >
+                      {homeInsuranceBuying
+                        ? 'Purchasing…'
+                        : 'Buy Home Insurance (500 TC)'}
                     </Button>
 
                     <Button variant="secondary" onClick={() => setCurrentScene('license')}>

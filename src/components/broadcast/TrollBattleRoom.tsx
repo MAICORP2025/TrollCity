@@ -153,17 +153,6 @@ export default function TrollBattleRoom({
 
         {/* Right: Action Buttons */}
         <div className="flex items-center gap-2">
-          {/* Forfeit */}
-          {phase === 'active' && onForfeit && (
-            <button
-              onClick={onForfeit}
-              className="px-3 py-1.5 rounded text-xs font-bold bg-red-600/20 border border-red-600 text-red-300 hover:bg-red-600/30 transition-all"
-            >
-              <LogOut size={14} className="inline mr-1" />
-              Forfeit
-            </button>
-          )}
-
           {/* Close Button */}
           {phase !== 'active' && (
             <button

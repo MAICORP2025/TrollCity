@@ -97,6 +97,7 @@
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.468.0",
     "node-fetch": "^3.3.2",
+    "obs-websocket-js": "^5.0.8",
     "postcss": "^8.5.3",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",

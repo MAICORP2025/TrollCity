@@ -232,30 +232,5 @@ export default function RandomBattleBanner({
       </AnimatePresence>
     );
   }
-
-  // For viewers in regular phase, show a subtle indicator that random battles are available
-  if (phase === 'regular' && !isBroadcaster) {
-    return (
-      <AnimatePresence>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className={cn(
-            'relative z-30 mx-auto w-full max-w-2xl',
-            mobileSafe ? 'px-3 pt-1' : 'px-4 pt-2',
-          )}
-        >
-          <div className="flex items-center justify-center gap-2 py-1.5">
-            <Swords className="w-3.5 h-3.5 text-purple-400/50" />
-            <p className="text-[10px] font-bold uppercase tracking-widest text-purple-400/40">
-              Random Battles Available — Enable in broadcaster controls
-            </p>
-          </div>
-        </motion.div>
-      </AnimatePresence>
-    );
-  }
-
   return null;
 }

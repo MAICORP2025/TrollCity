@@ -13,10 +13,11 @@ import {
   Pin,
   Reply,
   Trash2,
-  Radio,
   Sparkles,
+  Radio,
   Flame,
   X,
+  Share2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Virtuoso } from 'react-virtuoso'
@@ -28,6 +29,9 @@ import UserNameWithAge from '@/components/UserNameWithAge'
 import NeonGlowUsername from '@/components/NeonGlowUsername'
 import CreatePostComposer from './CreatePostComposer'
 import { parseTextWithLinks, cn } from '@/lib/utils'
+import WallShareModal from '@/components/trollWall/WallShareModal'
+import { useIsPwa } from '@/lib/hooks/useIsPwa'
+import '@/styles/rainbow-scroller.css'
 
 const UserProfilePopup = lazy(() => import('@/components/UserProfilePopup'))
 const MentionTextarea = lazy(() => import('@/components/MentionTextarea'))
@@ -37,10 +41,19 @@ interface TrollWallFeedProps {
   feedClassName?: string
 }
 
+interface LiveGamingStream {
+  id: string
+  user_id: string
+  title: string
+  game_title: string | null
+  broadcaster_name: string
+}
+
 const PAGE_SIZE = 10
 
 export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWallFeedProps) {
   const { user, isAdmin } = useAuthStore()
+  const isPwa = useIsPwa()
   const isMountedRef = useRef(true)
   const latestRequestId = useRef(0)
 
@@ -58,6 +71,46 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   const [lightboxTitle, setLightboxTitle] = useState<string | null>(null)
   const [lightboxVisible, setLightboxVisible] = useState(false)
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set())
+  const [sharingPost, setSharingPost] = useState<WallPost | null>(null)
+  const [liveGamingStreams, setLiveGamingStreams] = useState<LiveGamingStream[]>([])
+
+  const fetchLiveGamingStreams = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('streams')
+        .select(`
+          id,
+          user_id,
+          title,
+          game_title,
+          is_live,
+          user_profiles(username)
+        `)
+        .eq('is_live', true)
+        .eq('category', 'gaming')
+        .limit(10)
+
+      if (error) throw error
+
+      const streams = (data || []).map((stream: any) => ({
+        id: stream.id,
+        user_id: stream.user_id,
+        title: stream.title || 'Live stream',
+        game_title: stream.game_title,
+        broadcaster_name: stream.user_profiles?.username || 'Gamer',
+      }))
+
+      setLiveGamingStreams(streams)
+    } catch (err) {
+      console.warn('[TrollWallFeed] Failed to fetch live gaming streams:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchLiveGamingStreams()
+    const interval = setInterval(fetchLiveGamingStreams, 30000)
+    return () => clearInterval(interval)
+  }, [fetchLiveGamingStreams])
 
   // Load blocked user IDs on mount and when user changes
   useEffect(() => {
@@ -550,21 +603,31 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                       {post.is_pinned ? 'Unpin' : 'Pin'}
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(post.id)}
-                      className="flex items-center gap-1.5 rounded-full border border-red-300/10 bg-red-500/5 px-3 py-1.5 text-red-300 transition-all duration-200 hover:border-red-300/30 hover:bg-red-500/15 hover:text-red-100"
-                      title={
-                        isAdmin && post.user_id !== user.id
-                          ? 'Admin delete post'
-                          : 'Delete post'
-                      }
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </>
-                )}
+                     <button
+                       type="button"
+                       onClick={() => handleDelete(post.id)}
+                       className="flex items-center gap-1.5 rounded-full border border-red-300/10 bg-red-500/5 px-3 py-1.5 text-red-300 transition-all duration-200 hover:border-red-300/30 hover:bg-red-500/15 hover:text-red-100"
+                       title={
+                         isAdmin && post.user_id !== user.id
+                           ? 'Admin delete post'
+                           : 'Delete post'
+                       }
+                     >
+                       <Trash2 className="h-3.5 w-3.5" />
+                       Delete
+                     </button>
+
+                     <button
+                       type="button"
+                       onClick={() => setSharingPost(post)}
+                       className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-white/60 transition-all duration-200 hover:border-blue-300/20 hover:bg-blue-500/10 hover:text-blue-200"
+                       title="Share post"
+                     >
+                       <Share2 className="h-3.5 w-3.5" />
+                       Share
+                     </button>
+                   </>
+                 )}
               </div>
 
               {replyingTo === post.id && (
@@ -717,15 +780,56 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
       handlePinToggle,
       handleDelete,
       openLightbox,
+      setSharingPost,
     ]
   )
 
   return (
     <div className="flex flex-col min-h-full w-full">
-      <div className="mb-3 rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-4 shadow-[0_0_30px_rgba(34,211,238,0.08)]">
+      {/* Rainbow ticker marquee */}
+      <div className="rainbow-ticker mb-3 rounded-2xl border border-white/10 bg-[#050816]/80 py-2">
+        <div className="rainbow-ticker__track">
+          {Array.from({ length: 2 }).map((_, setIdx) => (
+            <React.Fragment key={setIdx}>
+              <span className="rainbow-ticker__item" style={{ color: '#ff2a6d' }}>
+                <Sparkles className="h-3 w-3" /> Pride Month
+              </span>
+              <span className="rainbow-ticker__item" style={{ color: '#ffb703' }}>
+                🏳️‍🌈 Celebrate Love
+              </span>
+              <span className="rainbow-ticker__item" style={{ color: '#38ff7d' }}>
+                <Heart className="h-3 w-3" /> Spread Kindness
+              </span>
+              <span className="rainbow-ticker__item" style={{ color: '#00d4ff' }}>
+                ✨ Live With Pride
+              </span>
+              <span className="rainbow-ticker__item" style={{ color: '#a855f7' }}>
+                <Sparkles className="h-3 w-3" /> Troll With Love
+              </span>
+              <span className="rainbow-ticker__item" style={{ color: '#ff2a6d' }}>
+                🏳️‍⚧️ All Are Welcome
+              </span>
+              <span className="rainbow-ticker__item" style={{ color: '#ffb703' }}>
+                💜 Support Creators
+              </span>
+              <span className="rainbow-ticker__item" style={{ color: '#38ff7d' }}>
+                <Heart className="h-3 w-3" /> Pride Challenges Live
+              </span>
+              {/* Live gaming streams ticker items */}
+              {liveGamingStreams.map((stream) => (
+                <span key={`live-${stream.id}`} className="rainbow-ticker__item" style={{ color: '#06b6d4' }}>
+                  <Radio className="h-3 w-3" /> {stream.broadcaster_name} is live playing {stream.game_title || 'a game'}
+                </span>
+              ))}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      <div className="rainbow-glow-border rainbow-top-glow mb-3 rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-4 shadow-[0_0_30px_rgba(34,211,238,0.08)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-black tracking-tight text-white">
+            <h2 className="rainbow-text-shimmer text-xl font-black tracking-tight">
               Troll Wall
             </h2>
             <p className="mt-1 text-xs text-cyan-100/70">
@@ -733,21 +837,21 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             </p>
           </div>
 
-          <div className="hidden rounded-2xl border border-cyan-300/15 bg-cyan-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200 sm:flex sm:items-center sm:gap-1.5">
-            <Radio className="h-3 w-3" />
-            Live Feed
+          <div className="hidden rounded-2xl border border-pink-300/20 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-cyan-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200 sm:flex sm:items-center sm:gap-1.5">
+            <Radio className="h-3 w-3 text-pink-300" />
+            <span className="rainbow-text-shimmer">Live Feed</span>
           </div>
         </div>
         </div>
 
-        <div className={cn("rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-2 shadow-[0_0_30px_rgba(34,211,238,0.08)]", feedClassName)}>
+        <div className={cn("rounded-3xl border border-cyan-400/10 bg-[#050816]/95 p-2 sm:p-4 shadow-[0_0_30px_rgba(34,211,238,0.08)]", feedClassName)}>
           <CreatePostComposer
             onPostCreated={handlePostCreated}
             onRequireAuth={onRequireAuth}
           />
         </div>
 
-        <div className="min-h-0 w-full">
+        <div className={cn("rainbow-scrollbar w-full", !isPwa && "h-[60vh] sm:h-[80vh] overflow-auto")}>
         {loading && posts.length === 0 ? (
           <div className="rounded-3xl border border-cyan-400/10 bg-[#050816]/80 py-10 text-center text-white/50">
             Loading Wall...
@@ -759,7 +863,8 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           </div>
         ) : (
           <Virtuoso
-            useWindowScroll
+            useWindowScroll={true}
+            style={!isPwa ? { height: '100%' } : undefined}
             data={posts}
             itemContent={renderPost}
             endReached={() => {
@@ -772,8 +877,8 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             components={{
               Footer: () =>
                 loadingMore ? (
-                  <div className="py-4 text-center text-xs text-cyan-100/60">
-                    Loading more city posts...
+                  <div className="py-4 text-center text-xs">
+                    <span className="rainbow-text-shimmer font-bold">Loading more city posts...</span>
                   </div>
                 ) : (
                   <div className="h-3" />
@@ -783,8 +888,6 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           />
         )}
       </div>
-
-      
 
       {selectedUserId && selectedUsername && (
         <Suspense fallback={null}>
@@ -836,6 +939,25 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           </div>,
           document.body
         )}
+
+      {sharingPost && (
+        <WallShareModal
+          isOpen={!!sharingPost}
+          onClose={() => setSharingPost(null)}
+          post={sharingPost}
+          postUrl={`${window.location.origin}/wall/${sharingPost.id}`}
+          onShare={(postId) => {
+            if (!user?.id) return
+            supabase
+              .from('troll_wall_post_shares')
+              .insert({ post_id: postId, user_id: user.id })
+              .then(({ error }) => {
+                if (error) console.warn('Failed to record share:', error)
+              })
+              .catch((err) => console.warn('Failed to record share:', err))
+          }}
+        />
+      )}
     </div>
   )
 }

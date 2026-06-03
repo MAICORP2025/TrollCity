@@ -522,6 +522,41 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`📡 Health check: GET http://localhost:${PORT}/api/health`);
 });
 
+// Auto-end inactive streams every 60 seconds
+// Streams with no chat, gifts, or likes for 5+ minutes will be automatically ended
+const INACTIVITY_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
+const INACTIVITY_THRESHOLD_MINUTES = 5;
+
+const autoEndInterval = setInterval(async () => {
+  try {
+    if (!supabase) return;
+
+    const { data, error } = await supabase.rpc('auto_end_inactive_streams', {
+      inactivity_minutes: INACTIVITY_THRESHOLD_MINUTES,
+    });
+
+    if (error) {
+      console.warn('[AutoEnd] Error checking inactive streams:', error.message);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      console.log(`[AutoEnd] Ended ${data.length} inactive stream(s):`, data.map((s: any) => ({
+        streamId: s.ended_stream_id,
+        broadcasterId: s.broadcaster_id,
+        lastActivity: s.last_activity,
+      })));
+    }
+  } catch (err: any) {
+    console.warn('[AutoEnd] Unexpected error:', err.message);
+  }
+}, INACTIVITY_CHECK_INTERVAL_MS);
+
+// Cleanup interval on server shutdown
+server.on('close', () => {
+  clearInterval(autoEndInterval);
+});
+
 server.on('error', (err) => {
   console.error('❌ Failed to start server:', err.message);
   console.error('   Code:', err.code);

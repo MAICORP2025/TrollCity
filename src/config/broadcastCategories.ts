@@ -115,12 +115,12 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     showCoinBalanceInChat: true,
   },
 
-  // 3. Gaming - Screen share streaming
+  // 3. Gaming - OBS + Agora streaming (dedicated setup page at /broadcast/setup/gaming)
   gaming: {
     id: 'gaming',
     name: 'Gaming',
     icon: '🎮',
-    description: 'Stream games via screen share',
+    description: 'Stream games via OBS Studio with Agora — no browser camera required',
     layoutMode: 'grid',
     defaultBoxCount: 1,
     maxBoxCount: 6,
@@ -131,7 +131,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     allowFrontCamera: true,
     allowRearCamera: true,
     forceRearCamera: false,
-    hasOBSIntegration: false,
+    hasOBSIntegration: true,
     hasYouTubePlayer: false,
     maxYouTubePlayerBoxes: 0,
     hasMatchingSystem: false,
@@ -140,6 +140,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     supportsBattles: false,
     battleType: 'none',
     isOneWayBroadcast: false,
+    requiresCamera: false,
     showCoinBalanceInChat: true, // Stream category - show coin balance
   },
 

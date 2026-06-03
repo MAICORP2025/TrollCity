@@ -113,6 +113,9 @@ const CourtViewerPage = lazyWithRetry(() => import("./pages/CourtViewerPage"));
 
 const Call = lazyWithRetry(() => import("./pages/Call"));
 const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
+const HytroGaming = lazyWithRetry(() => import("./pages/gaming/HytroGaming"));
+const HytroViewerPage = lazyWithRetry(() => import("./pages/gaming/HytroViewerPage"));
+const AgoraPlayerPage = lazyWithRetry(() => import("./pages/broadcast/AgoraPlayerPage"));
 const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
 const Trollifieds = lazyWithRetry(() => import("./pages/Trollifieds"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
@@ -338,6 +341,12 @@ import ExploreFeed from "./pages/ExploreFeed.js";
 import StreamSwipePage from "./pages/StreamSwipePage.js";
 import ApplicationPage from "./pages/ApplicationPage.js";
 import SetupPage from "./pages/broadcast/SetupPage.js";
+import GamingSetupPage from "./pages/broadcast/GamingSetupPage.tsx";
+import GamingAnalytics from "./pages/broadcast/gaming/GamingAnalytics.tsx";
+import GamingCommunity from "./pages/broadcast/gaming/GamingCommunity.tsx";
+import GamingMonetization from "./pages/broadcast/gaming/GamingMonetization.tsx";
+import GamingStore from "./pages/broadcast/gaming/GamingStore.tsx";
+import GamingViewerPage from './components/broadcast/GamingViewerPage'
 import BroadcastRouter from "./pages/broadcast/BroadcastRouter.js";
 import StreamSummary from "./pages/broadcast/StreamSummary.js";
 import PresidentPage from "./pages/President.js";
@@ -1045,18 +1054,128 @@ function AppContent() {
         functionName: 'App.unhandledRejection',
       })
     }
+    let isReportingConsoleError = false
     const originalConsoleError = console.error
     console.error = (...args: any[]) => {
+      // If we're already reporting a console.error, just output using the
+      // original console function and return immediately to avoid re-entry.
+      if (isReportingConsoleError) {
+        originalConsoleError(...args)
+        return
+      }
+
+      // Preserve original behaviour first
+      originalConsoleError(...args)
+
       try {
-        const msg = typeof args[0] === 'string' ? args[0] : (args[0]?.message || JSON.stringify(args[0]))
-        void reportBug(new Error(msg || 'console.error'), {
+        isReportingConsoleError = true
+
+        const safeSerialize = (value: any, depth = 0): any => {
+          const maxDepth = 4
+          try {
+            if (value instanceof Error) {
+              return {
+                _type: 'Error',
+                name: value.name,
+                message: value.message,
+                stack: value.stack,
+                cause: safeSerialize((value as any).cause, depth + 1),
+              }
+            }
+
+            if (depth >= maxDepth) {
+              return '[Truncated]'
+            }
+
+            if (typeof value === 'object' && value !== null) {
+              const seen = new WeakSet()
+              const clone = (obj: any, currentDepth: number): any => {
+                if (obj === null) return null
+                if (typeof obj !== 'object') return obj
+                if (currentDepth >= maxDepth) return '[Truncated]'
+                if (seen.has(obj)) return '[Circular]'
+                seen.add(obj)
+                if (Array.isArray(obj)) return obj.map((item) => clone(item, currentDepth + 1))
+                const res: any = {}
+                for (const k of Object.keys(obj)) {
+                  try { res[k] = clone(obj[k], currentDepth + 1) } catch { res[k] = '[Unserializable]' }
+                }
+                return res
+              }
+              return clone(value, depth)
+            }
+
+            return value
+          } catch (e) {
+            return String(value)
+          }
+        }
+
+        let serializedArgs: any[]
+        try {
+          serializedArgs = args.map((arg) => safeSerialize(arg, 0))
+        } catch {
+          serializedArgs = args.map((arg) => {
+            try {
+              return String(arg)
+            } catch {
+              return '[Unserializable argument]'
+            }
+          })
+        }
+
+        const firstString = args.find(a => typeof a === 'string')
+        const firstError = args.find(a => a instanceof Error) as Error | undefined
+        const firstObjMessage = args.find(a => typeof a === 'object' && a && (a.message || a.error || a.error_description))
+
+        const rootMessage = (firstString ? String(firstString) : '') +
+          (firstError ? (firstError.message ? ` ${firstError.message}` : '') : '') +
+          (firstObjMessage && !firstError ? ` ${String((firstObjMessage as any).message || (firstObjMessage as any).error || '')}` : '')
+
+        const fullMessage = rootMessage.trim() || serializedArgs.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')
+
+        let stack = null
+        if (firstError && firstError.stack) stack = firstError.stack
+        if (!stack) stack = new Error(fullMessage).stack
+
+        const pageUrl = typeof window !== 'undefined' ? window.location.href : null
+        const route = typeof window !== 'undefined' ? window.location.pathname : null
+        // Extract streamId from common watch/broadcast routes for better bug grouping
+        let streamIdFromRoute: string | null = null
+        try {
+          if (route) {
+            const m = route.match(/\/(?:watch|broadcast|mobile\/watch|pwa\/watch)\/([0-9a-fA-F-]{36})/)
+            if (m && m[1]) streamIdFromRoute = m[1]
+          }
+        } catch {}
+        const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null
+        const userId = ((supabase.auth as any)?.user?.id) || null
+
+        const isReporterCall = serializedArgs.some((a: any) => typeof a === 'object' && a && (a?.requestPayload || a?.functionName === 'console.error' || a?.table === 'app_bug_reports'))
+        if (isReporterCall) return
+
+        // Report the error to Bug Center. Marking `isReportingConsoleError`
+        // prevents recursive console.error handling while the reporter runs.
+        void reportBug(new Error(fullMessage), {
           source: 'frontend',
           severity: 'medium',
           functionName: 'console.error',
-          requestPayload: { args },
+          requestPayload: {
+            args: serializedArgs,
+            userAgent,
+            route,
+            pageUrl,
+          },
+          streamId: streamIdFromRoute,
+          userId: userId,
+          stack,
         })
-      } catch {}
-      originalConsoleError(...args)
+      } catch (reportErr) {
+        // Use the original console error to avoid re-entering this wrapper.
+        originalConsoleError('[BugCenter] console.error reporter failed', reportErr)
+      } finally {
+        isReportingConsoleError = false
+      }
     }
     window.addEventListener('error', onError)
     window.addEventListener('unhandledrejection', onRejection)
@@ -1213,6 +1332,9 @@ const handleVisibilityChange = async () => {
                 <Route path="/explore" element={<ExploreFeed />} />
                 <Route path="/live-swipe" element={<StreamSwipePage />} />
                 <Route path="/embed/:id" element={<EmbedPage />} />
+                <Route path="/hytrogaming" element={<HytroGaming />} />
+                <Route path="/hytro/:id" element={<HytroViewerPage />} />
+                <Route path="/agora-player" element={<AgoraPlayerPage />} />
                 <Route path="/dev/theme-preview" element={<ThemePreviewPage />} />
                 <Route path="/dev/homepage-preview" element={<HomepageBackgroundShowcase />} />
 
@@ -1262,8 +1384,15 @@ const handleVisibilityChange = async () => {
                     }
                   />
                   <Route path="/broadcast/setup" element={<SetupPage />} />
-                   <Route path="/broadcast/:id" element={<BroadcastRouter />} />
-                   <Route path="/watch/:id" element={<BroadcastRouter />} />
+<Route path="/broadcast/setup/gaming" element={<GamingSetupPage />}>
+  <Route path="analytics" element={<GamingAnalytics />} />
+  <Route path="community" element={<GamingCommunity />} />
+  <Route path="monetization" element={<GamingMonetization />} />
+  <Route path="store" element={<GamingStore />} />
+</Route>
+                    <Route path="/gaming/watch/:streamId" element={<GamingViewerPage />} />
+                    <Route path="/broadcast/:id" element={<BroadcastRouter />} />
+                    <Route path="/watch/:id" element={<BroadcastRouter />} />
                    <Route path="/kick-fee/:streamId" element={<KickFeePage />} />
                    <Route path="/broadcast/summary/:streamId" element={<StreamSummary />} />
                   
