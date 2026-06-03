@@ -303,20 +303,21 @@ export function createParticleSystem(
   }
   
   // Store metadata on mesh for updates
-  (mesh as any).particleData = {
+(mesh as any).particleData = {
     config,
-      velocities: Array(particleCount).fill(0).map(() => ({
-        x: (Math.random() - 0.5) * config.velocity.max,
-        y: (Math.random() - 0.5) * config.velocity.max,
-        z: (Math.random() - 0.5) * config.velocity.max,
-      })),
-      lifetimes: Array(particleCount).fill(0).map(() =>
-        config.lifetime.min + Math.random() * (config.lifetime.max - config.lifetime.min)
-      ),
-      ages: Array(particleCount).fill(0),
+    velocities: Array(particleCount).fill(0).map(() => ({
+      x: (Math.random() - 0.5) * config.velocity.max,
+      y: (Math.random() - 0.5) * config.velocity.max,
+      z: (Math.random() - 0.5) * config.velocity.max,
+    })),
+    lifetimes: Array(particleCount).fill(0).map(() =>
+      config.lifetime.min + Math.random() * (config.lifetime.max - config.lifetime.min)
+    ),
+    ages: Array(particleCount).fill(0),
+  };
   state.scene.add(mesh);
   state.particleSystems.set(systemId, mesh);
-  
+
   return mesh;
 }
 

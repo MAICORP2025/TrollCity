@@ -112,7 +112,7 @@ export function useBroadcastRealtime({
 
     cleanup();
 
-    const channels: any[]];
+    const channels: any[] = [];
 
     // ============================================
     // 1. UNIFIED STREAM CHANNEL: postgres_changes for stream data + broadcast for chat/gifts/likes

@@ -624,7 +624,7 @@ export default function AgoraPlayerPage() {
             {watchable && shouldUseAgora && agoraViewer.remoteVideoTrack ? (
               <AgoraVideoSurface track={agoraViewer.remoteVideoTrack} />
             ) : watchable && shouldUseAgora && agoraViewer.isConnecting ? (
-              <CenterStatus icon={<Loader2 className="h-10 w-10 animate-spin text-cyan-300" />} title="Connecting to stream..."} detail="Joining the Agora channel." />
+              <CenterStatus icon={<Loader2 className="h-10 w-10 animate-spin text-cyan-300" />} title="Connecting to stream..." detail="Joining the Agora channel." />
             ) : watchable && shouldUseAgora && agoraViewer.isConnected ? (
               <CenterStatus icon={<MonitorPlay className="h-12 w-12 text-cyan-300" />} title="Waiting for video" detail="The broadcaster is connected, but video has not been published yet." />
             ) : watchable ? (

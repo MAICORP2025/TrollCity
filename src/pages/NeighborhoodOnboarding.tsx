@@ -691,6 +691,19 @@ export default function NeighborhoodOnboarding() {
         profileAny?.license_status !== 'active' &&
         !!profileAny?.driver_test_passed_at
 
+      let houseId = profileAny?.house_id || null
+
+      if (!houseId) {
+        const { data: houseRow } = await supabase
+          .from('houses')
+          .select('id')
+          .eq('owner_user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+
+        houseId = houseRow?.id || null
+      }
+
       const profileUpdate: any = {}
 
       if (shouldRestoreLicense) {
