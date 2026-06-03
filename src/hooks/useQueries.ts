@@ -92,7 +92,7 @@ export function useStream(streamId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('streams')
-        .select('*, broadcaster:user_profiles!streams_broadcaster_id_fkey(*)')
+        .select('id, title, current_viewers, viewer_count, is_live, broadcaster_id, broadcaster:user_profiles!streams_broadcaster_id_fkey(id, username, avatar_url)')
         .eq('id', streamId)
         .maybeSingle()
 

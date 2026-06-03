@@ -134,9 +134,10 @@ try {
 
    // Catch unhandled JavaScript errors
 const isExpectedDevNoise = (errorLike: unknown) => {
+      const error = errorLike as any
       const message = String(
-        (errorLike as any)?.message ||
-        (errorLike as any)?.reason?.message ||
+        error?.message ||
+        error?.reason?.message ||
         errorLike ||
         ''
       ).toLowerCase()
@@ -146,6 +147,7 @@ const isExpectedDevNoise = (errorLike: unknown) => {
         message.includes('operation was aborted') ||
         message.includes('signal is aborted') ||
         message.includes('lock request is aborted') ||
+        error?.name === 'AbortError' ||
         message.includes('@vite/client') ||
         message.includes('vite') && message.includes('ping') ||
         message.includes('failed to fetch dynamically imported module') ||
@@ -286,7 +288,7 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
 
         if (!isSupabaseFunction && !isExpectedDevNoise(error)) {
           if (!shouldReportBugCenterError(error)) throw error
-          // Add more context to network errors
+          
           const errorContext: any = {
             source: 'frontend',
             severity: 'high',
@@ -298,10 +300,7 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
             is_secure_context: window.isSecureContext,
           };
           
-          // Add URL and error type for better debugging
-          if (error.name === 'AbortError') {
-            errorContext.table = 'fetch_abort';
-          } else if (error.name === 'TypeError') {
+          if (error.name === 'TypeError') {
             // TypeError can indicate CORS, network offline, or insecure context
             const msg = String(error.message || '').toLowerCase();
             if (msg.includes('failed to fetch') || msg.includes('network')) {

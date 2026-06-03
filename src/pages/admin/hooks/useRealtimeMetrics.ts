@@ -26,9 +26,9 @@ export const useRealtimeMetrics = (): Metrics => {
         streamsRes,
         activeStreamsRes,
       ] = await Promise.all([
-        supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('streams').select('*', { count: 'exact', head: true }),
-        supabase.from('streams').select('*', { count: 'exact', head: true }).eq('is_live', true),
+        supabase.from('user_profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('streams').select('id', { count: 'exact', head: true }),
+        supabase.from('streams').select('id', { count: 'exact', head: true }).eq('is_live', true),
       ]);
 
       const totalUsers = usersRes.count || 0;

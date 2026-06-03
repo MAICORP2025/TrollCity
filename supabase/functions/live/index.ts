@@ -233,7 +233,7 @@ Deno.serve(async (req) => {
       if (!stream_id && !user_id) {
         return new Response(JSON.stringify({ error: 'Missing stream_id or user_id' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      let query = supabase.from('streams').select('*');
+      let query = supabase.from('streams').select('id, title, is_live, broadcaster_id, current_viewers, viewer_count, started_at, ended_at');
       if (stream_id) query = query.eq('id', stream_id);
       if (user_id) query = query.eq('broadcaster_id', user_id);
       const { data, error } = await query.limit(1).maybeSingle();
