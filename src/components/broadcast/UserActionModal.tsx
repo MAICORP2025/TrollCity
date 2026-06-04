@@ -377,7 +377,7 @@ export default function UserActionModal({
 
   const handlePromote = async () => {
     if (!confirm("Promote this user to Broadofficer? They will have moderation powers.")) return;
-    const { error } = await supabase.rpc('assign_broadofficer', { p_user_id: userId });
+    const { error } = await supabase.rpc('assign_broadofficer', { p_user_id: userId, p_stream_id: streamId });
     if (error) toast.error("Failed to promote user");
     else {
         const promotedName = displayName || username || 'this viewer';

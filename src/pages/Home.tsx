@@ -667,6 +667,76 @@ export default function Home() {
   const [loadingLive, setLoadingLive] = useState(true)
   const [showLiveGrid, setShowLiveGrid] = useState<boolean | null>(null)
   const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([])
+  const mountedRef = React.useRef(true)
+
+  React.useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  // Fetch live streams list (callable from realtime handlers)
+  const fetchLiveContent = async () => {
+    try {
+      const { data: streamsData, error: streamsError } = await supabase
+        .from('streams')
+        .select(`
+          id,
+          title,
+          current_viewers,
+          viewer_count,
+          is_featured,
+          battle_mode,
+          battle_format,
+          battle_status,
+          broadcaster_id
+        `)
+        .eq('is_live', true)
+        .order('is_featured', { ascending: false })
+        .order('current_viewers', { ascending: false })
+        .limit(100)
+
+      if (streamsError) throw streamsError
+
+      const broadcasterIds = Array.from(new Set((streamsData || []).map((s: any) => s.broadcaster_id).filter(Boolean)))
+      let broadcasterMap = new Map<string, any>()
+
+      if (broadcasterIds.length > 0) {
+        const { data: broadcasters, error: broadcasterError } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url')
+          .in('id', broadcasterIds)
+
+        if (!broadcasterError && broadcasters) {
+          broadcasterMap = new Map(broadcasters.map((b: any) => [b.id, b]))
+        }
+      }
+
+      if (!mountedRef.current) return
+
+      const streams: LiveItem[] = (streamsData || []).map((stream: any) => {
+        const broadcaster = broadcasterMap.get(stream.broadcaster_id)
+        return {
+          id: stream.id,
+          title: stream.title || 'Untitled Stream',
+          type: 'stream',
+          viewerCount: stream.current_viewers || stream.viewer_count || 0,
+          streamerName: broadcaster?.username || 'Unknown',
+          streamerAvatar: broadcaster?.avatar_url || null,
+          isFeatured: stream.is_featured || false,
+          isBattle: stream.battle_mode === 'universal',
+          battleFormat: stream.battle_format,
+          battleStatus: stream.battle_status,
+        }
+      })
+
+      setLiveItems(streams)
+      setTotalViewers(streams.reduce((sum, item) => sum + item.viewerCount, 0))
+    } catch (err) {
+      console.error('Error fetching live content:', err)
+    } finally {
+      if (mountedRef.current) setLoadingLive(false)
+    }
+  }
   const [supportGoalReminder, setSupportGoalReminder] = useState<any>(null)
   const [reminderLoading, setReminderLoading] = useState(false)
 
@@ -715,76 +785,47 @@ export default function Home() {
 
   useEffect(() => {
     let mounted = true
-
-    const fetchLiveContent = async () => {
-      try {
-        const { data: streamsData, error: streamsError } = await supabase
-          .from('streams')
-          .select(`
-            id,
-            title,
-            current_viewers,
-            viewer_count,
-            is_featured,
-            battle_mode,
-            battle_format,
-            battle_status,
-            broadcaster_id
-          `)
-          .eq('is_live', true)
-          .order('is_featured', { ascending: false })
-          .order('current_viewers', { ascending: false })
-          .limit(100)
-
-        if (streamsError) throw streamsError
-
-        const broadcasterIds = Array.from(new Set((streamsData || []).map((s: any) => s.broadcaster_id).filter(Boolean)))
-        let broadcasterMap = new Map<string, any>()
-
-        if (broadcasterIds.length > 0) {
-          const { data: broadcasters, error: broadcasterError } = await supabase
-            .from('user_profiles')
-            .select('id, username, avatar_url')
-            .in('id', broadcasterIds)
-
-          if (!broadcasterError && broadcasters) {
-            broadcasterMap = new Map(broadcasters.map((b: any) => [b.id, b]))
-          }
-        }
-
-        if (mounted) {
-          const streams: LiveItem[] = (streamsData || []).map((stream: any) => {
-            const broadcaster = broadcasterMap.get(stream.broadcaster_id)
-            return {
-              id: stream.id,
-              title: stream.title || 'Untitled Stream',
-              type: 'stream',
-              viewerCount: stream.current_viewers || stream.viewer_count || 0,
-              streamerName: broadcaster?.username || 'Unknown',
-              streamerAvatar: broadcaster?.avatar_url || null,
-              isFeatured: stream.is_featured || false,
-              isBattle: stream.battle_mode === 'universal',
-              battleFormat: stream.battle_format,
-              battleStatus: stream.battle_status,
-            }
-          })
-
-          setLiveItems(streams)
-          setTotalViewers(streams.reduce((sum, item) => sum + item.viewerCount, 0))
-        }
-      } catch (err) {
-        console.error('Error fetching live content:', err)
-      } finally {
-        if (mounted) setLoadingLive(false)
-      }
-    }
-
+    // Move fetchLiveContent to component scope so it can be invoked by realtime handlers.
+    mounted = true
     fetchLiveContent()
-    const interval = setInterval(fetchLiveContent, 60000)
+
+    // Poll as a fallback for visibility edge cases
+    const interval = setInterval(() => {
+      fetchLiveContent()
+    }, 60000)
+
+    // Realtime subscription: refresh live list the second a stream row changes
+    const channel = supabase.channel('home:live-streams')
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
+      try {
+        // Only refresh when live status or viewer counts or featured flags change
+        const oldRow = payload.old || null
+        const newRow = payload.new || null
+        const relevantChange = (() => {
+          if (!oldRow && newRow) return newRow.is_live === true
+          if (oldRow && !newRow) return oldRow.is_live === true
+          if (oldRow && newRow) {
+            if ((oldRow.is_live || newRow.is_live) && oldRow.is_live !== newRow.is_live) return true
+            const keys = ['current_viewers','viewer_count','is_featured','battle_mode','battle_format','battle_status']
+            return keys.some(k => (oldRow as any)[k] !== (newRow as any)[k])
+          }
+          return false
+        })()
+
+        if (relevantChange) {
+          fetchLiveContent()
+        }
+      } catch (e) {
+        console.warn('home:live-streams handler error', e)
+      }
+    })
+
+    channel.subscribe()
 
     return () => {
       mounted = false
       clearInterval(interval)
+      try { supabase.removeChannel(channel) } catch {}
     }
   }, [])
 

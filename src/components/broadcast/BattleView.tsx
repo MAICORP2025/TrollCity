@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Hls from 'hls.js';
 
 import { Room, LocalAudioTrack, LocalVideoTrack, RemoteParticipant, RemoteTrack, RemoteVideoTrack, RemoteAudioTrack, RemoteTrackPublication, RoomEvent, Track } from 'livekit-client';
 
@@ -52,10 +51,6 @@ const logRealtime = (message: string, data?: any) => {
 
 const logParticipants = (message: string, data?: any) => {
   console.log(`[Participants] ${message}`, data || '');
-};
-
-const logMux = (message: string, data?: any) => {
-  console.log(`[Mux] ${message}`, data || '');
 };
 
 const logRTC = (message: string, data?: any) => {
@@ -258,173 +253,6 @@ const LiveKitVideoPlayer = ({
   );
 };
 
-const BattleHlsFallbackPlayer = ({ hlsUrl }: { hlsUrl?: string | null }) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [needsUserInteraction, setNeedsUserInteraction] = useState(false);
-
-  // Memoize Hls config to prevent reinitialization
-  const hlsConfig = useMemo(() => ({
-    enableWorker: true,
-    lowLatencyMode: true,
-    // Mobile-specific optimizations
-    maxBufferLength: 10,
-    maxMaxBufferLength: 20,
-    levelLoadingMaxRetry: 3,
-    levelLoadingMaxRetryTimeout: 2000,
-    // iOS Safari specific
-    startLevel: -1, // Auto quality
-    // Android Chrome specific
-    fragLoadingMaxRetry: 3,
-    fragLoadingMaxRetryTimeout: 2000,
-  }), []);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !hlsUrl) return;
-    logMux('Initializing Mux player', { hlsUrl });
-
-    // Enhanced mobile attributes
-    video.setAttribute('playsinline', 'true');
-    video.setAttribute('webkit-playsinline', 'true');
-    video.setAttribute('x5-video-player-type', 'h5'); // Android WeChat
-    video.setAttribute('x5-video-player-fullscreen', 'true'); // Android WeChat
-    video.setAttribute('x-webkit-airplay', 'allow'); // iOS AirPlay
-    video.setAttribute('airplay', 'allow'); // iOS AirPlay
-    video.muted = true;
-    video.preload = 'metadata';
-
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-
-    const cleanupNative = () => {
-      video.removeAttribute('src');
-      try {
-        video.load();
-      } catch (_e) {}
-    };
-
-    // Detect iOS Safari
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const isIOSSafari = isIOS && isSafari;
-
-    // Detect Android Chrome
-    const isAndroid = /Android/.test(navigator.userAgent);
-    const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
-
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (iOS Safari, modern Safari)
-      video.src = hlsUrl;
-
-      const tryPlay = () => {
-        video.play().then(() => {
-          setIsPlaying(true);
-          setNeedsUserInteraction(false);
-        }).catch(() => {
-          setNeedsUserInteraction(true);
-        });
-      };
-
-      // iOS Safari needs user interaction
-      if (isIOSSafari) {
-        setNeedsUserInteraction(true);
-      } else {
-        tryPlay();
-      }
-
-      return cleanupNative;
-    }
-
-    if (Hls.isSupported()) {
-      const hls = new Hls(hlsConfig);
-      hlsRef.current = hls;
-      hls.loadSource(hlsUrl);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        logMux('Mux manifest parsed, starting playback');
-        video.play().then(() => {
-          setIsPlaying(true);
-          setNeedsUserInteraction(false);
-        }).catch(() => {
-          // Android Chrome may need user interaction
-          if (isAndroid && isChrome) {
-            setNeedsUserInteraction(true);
-          }
-        });
-      });
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        console.warn('[BattleHlsFallbackPlayer] HLS Error:', data);
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              // Try to recover network error
-              console.log('[BattleHlsFallbackPlayer] Network error, attempting recovery');
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[BattleHlsFallbackPlayer] Media error, attempting recovery');
-              hls.recoverMediaError();
-              break;
-            default:
-              // Cannot recover
-              hls.destroy();
-              break;
-          }
-        }
-      });
-
-      return () => {
-        logMux('Destroying Mux player');
-        hls.destroy();
-        hlsRef.current = null;
-      };
-    }
-
-    return cleanupNative;
-  }, [hlsUrl, hlsConfig]);
-
-  const handleUserInteraction = () => {
-    const video = videoRef.current;
-    if (video && needsUserInteraction) {
-      video.play().then(() => {
-        setIsPlaying(true);
-        setNeedsUserInteraction(false);
-      }).catch(console.error);
-    }
-  };
-
-  return (
-    <>
-      <video
-        ref={videoRef}
-        className="w-full h-full object-cover bg-black pointer-events-none"
-        autoPlay
-        muted
-        preload="auto"
-        playsInline
-        controls={false}
-        onClick={handleUserInteraction}
-      />
-      {needsUserInteraction && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <button
-            onClick={handleUserInteraction}
-            className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white px-4 py-2 rounded-full font-bold shadow-lg border border-purple-400/50"
-          >
-            ▶️ Tap to start battle video
-          </button>
-        </div>
-      )}
-    </>
-  );
-};
-
 const BattleAudioTrackPlayer = ({
   audioTrack,
   label,
@@ -468,7 +296,7 @@ const BattleAudioTrackPlayer = ({
       audioElement.autoplay = true;
       audioElement.muted = false;
       audioElement.volume = 1;
-      audioElement.playsInline = true;
+      (audioElement as any).playsInline = true;
       audioElement.setAttribute('playsinline', 'true');
       audioElement.setAttribute('webkit-playsinline', 'true');
       audioElement.style.display = 'none';
@@ -573,7 +401,6 @@ interface BattleParticipant {
   profile?: any;
   trollCoins?: number;
   trollmonds?: number;
-  fallbackHlsUrl?: string | null;
 }
 
 interface CrownInfo {
@@ -648,7 +475,7 @@ const getTrackPublications = (
 // Extended props for BattleParticipantTile.
 // Battle rule:
 // - publishers (host/stage) render LiveKit tracks
-// - viewers render Mux HLS only
+// - viewers also render LiveKit tracks only
 // - the tile itself must stay clickable for gifts/mod actions
 interface BattleParticipantTileProps extends BattleParticipant {
   side: 'challenger' | 'opponent';
@@ -658,128 +485,15 @@ interface BattleParticipantTileProps extends BattleParticipant {
   canTroll?: boolean;
   onTileClick?: () => void;
   isSingleHost?: boolean;
-  fallbackHlsUrl?: string | null;
-  playbackMode: 'livekit' | 'mux';
 }
 
 const BattleVideoRenderer = ({
   videoTrack,
-  fallbackHlsUrl,
-  isHost,
-  playbackMode,
 }: {
   videoTrack?: LocalVideoTrack | RemoteVideoTrack;
-  fallbackHlsUrl?: string | null;
-  isHost: boolean;
-  playbackMode: 'livekit' | 'mux';
 }) => {
-  const shouldUseMux = playbackMode === 'mux' && !isHost;
-  const hasPlayableVideo = shouldUseMux ? !!fallbackHlsUrl : !!videoTrack || !!fallbackHlsUrl;
-
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [needsUserInteraction, setNeedsUserInteraction] = useState(false);
-  const hlsConfig = useMemo(() => ({
-    enableWorker: true,
-    lowLatencyMode: true,
-    maxBufferLength: 10,
-    maxMaxBufferLength: 20,
-    levelLoadingMaxRetry: 3,
-    levelLoadingMaxRetryTimeout: 2000,
-    startLevel: -1,
-    fragLoadingMaxRetry: 3,
-    fragLoadingMaxRetryTimeout: 2000,
-  }), []);
-
-  useEffect(() => {
-    if (!hasPlayableVideo) return;
-
-    const hlsUrl = shouldUseMux ? fallbackHlsUrl : null;
-    if (hlsUrl && videoRef.current) {
-      const video = videoRef.current;
-      logMux('Initializing HLS fallback player', { hlsUrl });
-      video.setAttribute('playsinline', 'true');
-      video.setAttribute('webkit-playsinline', 'true');
-      video.setAttribute('x5-video-player-type', 'h5');
-      video.setAttribute('x5-video-player-fullscreen', 'true');
-      video.setAttribute('x-webkit-airplay', 'allow');
-      video.setAttribute('airplay', 'allow');
-      video.muted = true;
-      video.preload = 'metadata';
-
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      const isIOSSafari = isIOS && isSafari;
-      const isAndroid = /Android/.test(navigator.userAgent);
-      const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
-
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = hlsUrl;
-        const tryPlay = () => {
-          video.play().then(() => {
-            setIsPlaying(true);
-            setNeedsUserInteraction(false);
-          }).catch(() => {
-            setNeedsUserInteraction(true);
-          });
-        };
-        if (isIOSSafari) {
-          setNeedsUserInteraction(true);
-        } else {
-          tryPlay();
-        }
-        return;
-      }
-
-      if (Hls.isSupported()) {
-        const hls = new Hls(hlsConfig);
-        hlsRef.current = hls;
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          logMux('Mux manifest parsed, starting playback');
-          video.play().then(() => {
-            setIsPlaying(true);
-            setNeedsUserInteraction(false);
-          }).catch(() => {
-            if (isAndroid && isChrome) {
-              setNeedsUserInteraction(true);
-            }
-          });
-        });
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          console.warn('[BattleVideoRenderer] HLS Error:', data);
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                console.log('[BattleVideoRenderer] Network error, attempting recovery');
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.log('[BattleVideoRenderer] Media error, attempting recovery');
-                hls.recoverMediaError();
-                break;
-              default:
-                hls.destroy();
-                break;
-            }
-          }
-        });
-        return () => {
-          logMux('Destroying HLS player');
-          hls.destroy();
-          hlsRef.current = null;
-        };
-      }
-    }
-  }, [hasPlayableVideo, shouldUseMux, fallbackHlsUrl, hlsConfig]);
 
   useEffect(() => {
     if (!videoTrack || !containerRef.current) return;
@@ -821,59 +535,21 @@ const BattleVideoRenderer = ({
       if (containerRef.current) {
         containerRef.current.style.transform = isFrontCamera ? 'scaleX(-1)' : '';
       }
-      containerRef.current.appendChild(videoElement);
     } catch (err) {
       console.error('[BattleVideoRenderer] attach() threw error:', err);
     }
   }, [videoTrack]);
 
-  const handleUserInteraction = () => {
-    const video = videoRef.current;
-    if (video && needsUserInteraction) {
-      video.play().then(() => {
-        setIsPlaying(true);
-        setNeedsUserInteraction(false);
-      }).catch(console.error);
-    }
-  };
-
-  if (!hasPlayableVideo) {
+  if (!videoTrack) {
     return null;
   }
 
-  if (videoTrack) {
-    return (
-      <div
-        ref={containerRef}
-        className="relative w-full h-full min-h-0 object-cover overflow-hidden"
-        style={{ minWidth: '100%', minHeight: '100%' }}
-      />
-    );
-  }
-
   return (
-    <div className="relative w-full h-full">
-      <video
-        ref={videoRef}
-        className="w-full h-full object-cover bg-black pointer-events-none"
-        autoPlay
-        muted
-        preload="auto"
-        playsInline
-        controls={false}
-        onClick={handleUserInteraction}
-      />
-      {needsUserInteraction && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <button
-            onClick={handleUserInteraction}
-            className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white px-4 py-2 rounded-full font-bold shadow-lg border border-purple-400/50"
-          >
-            ▶️ Tap to start battle video
-          </button>
-        </div>
-      )}
-    </div>
+    <div
+      ref={containerRef}
+      className="relative w-full h-full min-h-0 object-cover overflow-hidden"
+      style={{ minWidth: '100%', minHeight: '100%' }}
+    />
   );
 };
 
@@ -892,11 +568,8 @@ const BattleParticipantTile = ({
   canTroll,
   onTileClick,
   isSingleHost = false,
-  fallbackHlsUrl,
-  playbackMode,
 }: BattleParticipantTileProps) => {
   const isHost = role === 'host' || metadata?.role === 'host';
-  const shouldUseMux = playbackMode === 'mux' && !isHost;
   const micMuted = !isMicrophoneEnabled;
 
   const handleTileClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -925,13 +598,11 @@ const BattleParticipantTile = ({
       isHost,
       isSingleHost,
       hasLiveKitVideo: !!videoTrack,
-      hasMuxFallback: !!fallbackHlsUrl,
-      playbackMode,
       side,
       isLocal,
       videoTrackSid: videoTrack?.sid,
     });
-  }, [identity, isSingleHost, isHost, name, side, videoTrack, fallbackHlsUrl, playbackMode]);
+  }, [identity, isSingleHost, isHost, name, side, videoTrack]);
 
   const containerClass = isSingleHost
     ? `relative w-full aspect-square md:h-full min-h-0 rounded-2xl overflow-hidden bg-black transition-all duration-300`
@@ -947,13 +618,10 @@ const BattleParticipantTile = ({
     >
       {/* Video or Avatar.
           Critical: the actual video layer is pointer-events-none so mobile taps hit the tile.
-          The explicit tap-to-start overlay inside the HLS player still uses a button. */}
+          Video is rendered through LiveKit track attachment only. */}
       <div className="absolute inset-0 pointer-events-none">
         <BattleVideoRenderer
           videoTrack={videoTrack}
-          fallbackHlsUrl={fallbackHlsUrl}
-          isHost={isHost}
-          playbackMode={playbackMode}
         />
       </div>
 
@@ -1015,14 +683,9 @@ const BattleParticipantTile = ({
               HOST
             </span>
           )}
-          {isHost && shouldUseMux && (
-            <span className="text-[8px] bg-black/50 border border-white/10 text-white/80 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-              MUX
-            </span>
-          )}
         </div>
 
-        {micMuted && !shouldUseMux && (
+        {micMuted && (
           <div className="bg-red-500 p-1.5 rounded-full shadow-lg">
             <MicOff size={12} className="text-white" />
           </div>
@@ -1055,8 +718,6 @@ interface BattleArenaProps {
   opponentHostId: string;
   challengerHostName?: string;
   opponentHostName?: string;
-  challengerHostHlsUrl?: string | null;
-  opponentHostHlsUrl?: string | null;
   challengerBoxCount?: number;
   opponentBoxCount?: number;
   challengerCrownInfo?: CrownInfo;
@@ -1068,7 +729,6 @@ interface BattleArenaProps {
   canTroll?: boolean;
   currentUserTeam?: 'challenger' | 'opponent' | null;
   userIdToLiveKitIdentity?: Record<string, string>;
-  shouldUseMuxPlayback: boolean;
   currentUserProfile?: any;
   onOpenStaffActions?: (participant: BattleParticipant) => void;
   trackRevision: number;
@@ -1091,8 +751,6 @@ const BattleArena = ({
   opponentHostId,
   challengerHostName,
   opponentHostName,
-  challengerHostHlsUrl,
-  opponentHostHlsUrl,
   challengerBoxCount = 1,
   opponentBoxCount = 1,
   challengerCrownInfo,
@@ -1104,7 +762,6 @@ const BattleArena = ({
   canTroll = false,
   currentUserTeam,
   userIdToLiveKitIdentity,
-  shouldUseMuxPlayback,
   currentUserProfile,
   onOpenStaffActions,
   currentUserId,
@@ -1186,7 +843,8 @@ const BattleArena = ({
       // Add database participants even if they're not in LiveKit yet
       if (allParticipants) {
         for (const dbParticipant of allParticipants) {
-          // Skip if we already have this participant
+          // Skip null entries or if we already have this participant
+          if (!dbParticipant) continue;
           if (participantsData.some(p => p.identity === dbParticipant.user_id)) continue;
           
           const metadata = safeParseMetadata(dbParticipant.metadata, `db participant ${dbParticipant.user_id}`);
@@ -1203,7 +861,7 @@ const BattleArena = ({
           
           // Get username from profile if available (joined via profile:user_profiles)
           const getUsername = (participant: any): string => {
-            return participant.profile?.username || participant.username || 'Anonymous';
+            return participant?.profile?.username || participant?.username || 'Anonymous';
           };
           
           participantsData.push({
@@ -1226,14 +884,7 @@ const BattleArena = ({
         }
       }
 
-      // Viewers must not parse/subscribe to LiveKit RTC media tracks.
-      // They render hosts through Mux HLS URLs only. This avoids mobile black screens,
-      // autoplay edge cases, and video elements intercepting gift/mod-action taps.
-      if (shouldUseMuxPlayback) {
-        setBattleParticipants(participantsData);
-        return;
-      }
-
+     
       // Helper to find LiveKit identity for a user ID
       const findLiveKitIdentity = (userId: string): string => {
         if (userIdToLiveKitIdentity?.[userId]) {
@@ -1264,7 +915,7 @@ const BattleArena = ({
         const localMetadata = safeParseMetadata(localSupabaseParticipant?.metadata, `local user ${user.id}`);
         // Get username from profile if available (joined via profile:user_profiles)
         const getUsername = (participant: any): string => {
-          return participant.profile?.username || participant.username || 'You';
+          return participant?.profile?.username || participant?.username || 'You';
         };
         
         // Determine the local user's team and role
@@ -1291,8 +942,8 @@ const BattleArena = ({
           isLocal: true,
           videoTrack: localVideoTrack,
           audioTrack: localAudioTrack,
-          // Use explicitly passed enabled state, fallback to track-based detection
-          isMicrophoneEnabled: localIsMicEnabled ?? (localAudioTrack?.enabled ?? false),
+          // Use explicitly passed enabled state, fallback to track-based detection via mediaStreamTrack
+          isMicrophoneEnabled: localIsMicEnabled ?? (localAudioTrack?.mediaStreamTrack?.enabled ?? false),
           // Be more lenient with camera check - use explicit state if available, otherwise check track
           isCameraEnabled: localIsCameraEnabled ?? !!localVideoTrack,
           metadata: localMetadata,
@@ -1402,13 +1053,11 @@ const BattleArena = ({
         // Log ALL publication details for debugging
         videoPublications.forEach(p => {
           console.log('[BattleArena] Video publication:', {
-            sid: p.sid,
             trackSid: p.trackSid,
             source: p.source,
             isSubscribed: p.isSubscribed,
             trackKind: p.kind,
             hasTrack: !!p.track,
-            trackId: p.track?.id,
             trackSidFromTrack: p.track?.sid,
             // Use Track.Source enum for proper comparison
             isCamera: p.source === Track.Source.Camera,
@@ -1418,13 +1067,11 @@ const BattleArena = ({
 
         audioPublications.forEach(p => {
           console.log('[BattleArena] Audio publication:', {
-            sid: p.sid,
             trackSid: p.trackSid,
             source: p.source,
             isSubscribed: p.isSubscribed,
             trackKind: p.kind,
             hasTrack: !!p.track,
-            trackId: p.track?.id,
             trackSidFromTrack: p.track?.sid,
             isMic: p.source === Track.Source.Microphone,
           });
@@ -1461,30 +1108,28 @@ const BattleArena = ({
         // Additional mobile-specific track detection
         if (!videoPub && isMobileDevice) {
           // Try to find tracks that might be in the process of subscribing
-          const allVideoPubs = remoteUser.trackPublications ?
-            Array.from((remoteUser.trackPublications as any).values()) : [];
-          videoPub = allVideoPubs.find((p: any) => p.track && p.kind === 'video' && p.source === Track.Source.Camera) ||
-                    allVideoPubs.find((p: any) => p.track && p.kind === 'video');
+          const allVideoPubs: RemoteTrackPublication[] = remoteUser.trackPublications ?
+            Array.from((remoteUser.trackPublications as Map<string, RemoteTrackPublication>).values()) : [];
+          videoPub = allVideoPubs.find(p => p.track && p.kind === Track.Kind.Video && p.source === Track.Source.Camera) ||
+                    allVideoPubs.find(p => p.track && p.kind === Track.Kind.Video);
         }
 
         if (!audioPub && isMobileDevice) {
-          const allAudioPubs = remoteUser.trackPublications ?
-            Array.from((remoteUser.trackPublications as any).values()) : [];
-          audioPub = allAudioPubs.find((p: any) => p.track && p.kind === 'audio' && p.source === Track.Source.Microphone) ||
-                    allAudioPubs.find((p: any) => p.track && p.kind === 'audio');
+          const allAudioPubs: RemoteTrackPublication[] = remoteUser.trackPublications ?
+            Array.from((remoteUser.trackPublications as Map<string, RemoteTrackPublication>).values()) : [];
+          audioPub = allAudioPubs.find(p => p.track && p.kind === Track.Kind.Audio && p.source === Track.Source.Microphone) ||
+                    allAudioPubs.find(p => p.track && p.kind === Track.Kind.Audio);
         }
         
         // Log what we found
         console.log('[BattleArena] Selected video publication:', {
           found: !!videoPub,
-          sid: videoPub?.sid,
           trackSid: videoPub?.trackSid,
           hasTrack: !!videoPub?.track,
           trackSidFromTrack: videoPub?.track?.sid,
         });
         console.log('[BattleArena] Selected audio publication:', {
           found: !!audioPub,
-          sid: audioPub?.sid,
           trackSid: audioPub?.trackSid,
           hasTrack: !!audioPub?.track,
           trackSidFromTrack: audioPub?.track?.sid,
@@ -1722,7 +1367,7 @@ const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribe
     };
 
     fetchParticipantData();
-  }, [remoteUsers, battleId, trackRevision, userIdToLiveKitIdentity, challengerHostId, opponentHostId, shouldUseMuxPlayback]);
+  }, [remoteUsers, battleId, trackRevision, userIdToLiveKitIdentity, challengerHostId, opponentHostId]);
 
   const categorized = useMemo(() => {
     const teams = {
@@ -1958,11 +1603,9 @@ return (
                           onTroll={() => handleTrollClick('challenger')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
                           isSingleHost={challengerIsSingleHost}
-                          fallbackHlsUrl={challengerHostHlsUrl}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
-                        challengerHostHlsUrl ? (
+                        false ? (
                           <BattleParticipantTile
                             identity={challengerHostId}
                             name={challengerHostName || 'Challenger'}
@@ -1979,8 +1622,6 @@ return (
                             canTroll={canTroll && currentUserTeam === 'opponent'}
                             onTroll={() => handleTrollClick('challenger')}
                             isSingleHost={challengerIsSingleHost}
-                            fallbackHlsUrl={challengerHostHlsUrl}
-                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                             onTileClick={() => handleParticipantBoxClick({
                               identity: challengerHostId,
                               name: challengerHostName || 'Challenger',
@@ -2013,7 +1654,6 @@ return (
                           {...slot.participant}
                           side="challenger"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2063,11 +1703,9 @@ return (
                           onTroll={() => handleTrollClick('opponent')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
                           isSingleHost={opponentIsSingleHost}
-                          fallbackHlsUrl={opponentHostHlsUrl}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
-                        opponentHostHlsUrl ? (
+                        false ? (
                           <BattleParticipantTile
                             identity={opponentHostId}
                             name={opponentHostName || 'Opponent'}
@@ -2084,8 +1722,6 @@ return (
                             canTroll={canTroll && currentUserTeam === 'challenger'}
                             onTroll={() => handleTrollClick('opponent')}
                             isSingleHost={opponentIsSingleHost}
-                            fallbackHlsUrl={opponentHostHlsUrl}
-                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                             onTileClick={() => handleParticipantBoxClick({
                               identity: opponentHostId,
                               name: opponentHostName || 'Opponent',
@@ -2118,7 +1754,6 @@ return (
                           {...slot.participant}
                           side="opponent"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2159,11 +1794,9 @@ return (
                           onTroll={() => handleTrollClick('challenger')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
                           isSingleHost={challengerIsSingleHost}
-                          fallbackHlsUrl={challengerHostHlsUrl}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
-                        challengerHostHlsUrl ? (
+                        false ? (
                           <BattleParticipantTile
                             identity={challengerHostId}
                             name={challengerHostName || 'Challenger'}
@@ -2180,8 +1813,6 @@ return (
                             canTroll={canTroll && currentUserTeam === 'opponent'}
                             onTroll={() => handleTrollClick('challenger')}
                             isSingleHost={challengerIsSingleHost}
-                            fallbackHlsUrl={challengerHostHlsUrl}
-                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                             onTileClick={() => handleParticipantBoxClick({
                               identity: challengerHostId,
                               name: challengerHostName || 'Challenger',
@@ -2212,7 +1843,6 @@ return (
                           {...slot.participant}
                           side="challenger"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2258,11 +1888,9 @@ return (
                           onTroll={() => handleTrollClick('opponent')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
                           isSingleHost={opponentIsSingleHost}
-                          fallbackHlsUrl={opponentHostHlsUrl}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
-                        opponentHostHlsUrl ? (
+                        false ? (
                           <BattleParticipantTile
                             identity={opponentHostId}
                             name={opponentHostName || 'Opponent'}
@@ -2279,8 +1907,6 @@ return (
                             canTroll={canTroll && currentUserTeam === 'challenger'}
                             onTroll={() => handleTrollClick('opponent')}
                             isSingleHost={opponentIsSingleHost}
-                            fallbackHlsUrl={opponentHostHlsUrl}
-                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                             onTileClick={() => handleParticipantBoxClick({
                               identity: opponentHostId,
                               name: opponentHostName || 'Opponent',
@@ -2311,7 +1937,6 @@ return (
                           {...slot.participant}
                           side="opponent"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2362,11 +1987,9 @@ return (
                           onTroll={() => handleTrollClick('challenger')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
                           isSingleHost={challengerIsSingleHost}
-                          fallbackHlsUrl={challengerHostHlsUrl}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
-                        challengerHostHlsUrl ? (
+                        false ? (
                           <BattleParticipantTile
                             identity={challengerHostId}
                             name={challengerHostName || 'Challenger'}
@@ -2383,8 +2006,6 @@ return (
                             canTroll={canTroll && currentUserTeam === 'opponent'}
                             onTroll={() => handleTrollClick('challenger')}
                             isSingleHost={challengerIsSingleHost}
-                            fallbackHlsUrl={challengerHostHlsUrl}
-                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                             onTileClick={() => handleParticipantBoxClick({
                               identity: challengerHostId,
                               name: challengerHostName || 'Challenger',
@@ -2417,7 +2038,6 @@ return (
                           {...slot.participant}
                           side="challenger"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2465,11 +2085,9 @@ return (
                           onTroll={() => handleTrollClick('opponent')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
                           isSingleHost={opponentIsSingleHost}
-                          fallbackHlsUrl={opponentHostHlsUrl}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
-                        opponentHostHlsUrl ? (
+                        false ? (
                           <BattleParticipantTile
                             identity={opponentHostId}
                             name={opponentHostName || 'Opponent'}
@@ -2486,8 +2104,6 @@ return (
                             canTroll={canTroll && currentUserTeam === 'challenger'}
                             onTroll={() => handleTrollClick('opponent')}
                             isSingleHost={opponentIsSingleHost}
-                            fallbackHlsUrl={opponentHostHlsUrl}
-                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                             onTileClick={() => handleParticipantBoxClick({
                               identity: opponentHostId,
                               name: opponentHostName || 'Opponent',
@@ -2520,7 +2136,6 @@ return (
                           {...slot.participant}
                           side="opponent"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2540,7 +2155,7 @@ return (
         return null;
       })()}
 
-      {!shouldUseMuxPlayback && <BattleAudioRenderer entries={remoteAudioEntries} />}
+      {<BattleAudioRenderer entries={remoteAudioEntries} />}
     </div>
   );
 };
@@ -2557,8 +2172,6 @@ interface BattleViewProps {
   remoteUsers?: RemoteParticipant[];
   userIdToLiveKitIdentity?: Record<string, string>;
   onReturnToStream?: () => void;
-  challengerHlsUrl?: string | null;
-  opponentHlsUrl?: string | null;
 }
 
 export default function BattleView({ battleId, currentStreamId, viewerId, localTracks: passedLocalTracks, remoteUsers: _passedRemoteUsers, userIdToLiveKitIdentity, onReturnToStream }: BattleViewProps) {
@@ -2580,7 +2193,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   const [showResults, setShowResults] = useState(false);
   
   // Get coin/crown balances for display
-  const { troll_coins: userCoins, crowns: userCrowns, trollmonds: userTrollmonds } = useCoins();
+  const { troll_coins: userCoins, crowns: userCrowns, trollmonds: userTrollmonds } = useCoins() as any;
   
   // Family activity recording
   const { recordBattleWon, recordBattleLost, recordBattleJoined } = useTrollFamilyActivity();
@@ -2622,6 +2235,9 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   const navigate = useNavigate();
   const effectiveUserId = viewerId || user?.id;
 
+  // Consolidated battle realtime hook (replaces 6 separate channel subscriptions)
+  const { state: battleRealtime } = useBattleRealtime(battleId || null);
+
   const resolvedBattleRole = useMemo<'host' | 'stage' | 'viewer' | null>(() => {
     if (!effectiveUserId || !challengerStream?.user_id || !opponentStream?.user_id) return null;
     if (effectiveUserId === challengerStream.user_id || effectiveUserId === opponentStream.user_id) return 'host';
@@ -2632,9 +2248,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   }, [effectiveUserId, challengerStream?.user_id, opponentStream?.user_id, participantInfo?.role]);
 
   const isBroadcaster = resolvedBattleRole === 'host' || resolvedBattleRole === 'stage';
-  // Broadcasters always use LiveKit. Mobile viewers also use LiveKit for PWA.
-  // Desktop viewers can use Mux for better quality.
-  const shouldUseMuxPlayback = !isBroadcaster && !isMobileViewport;
+  // Broadcasters use LiveKit. All viewers use LiveKit only.
   const isRandomBattle = challengerStream?.battle_mode === 'random_queue' || opponentStream?.battle_mode === 'random_queue';
 
   // ── Channel diagnostics (dev only) ──
@@ -2651,9 +2265,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       effectiveUserId,
       resolvedBattleRole,
       isBroadcaster,
-      shouldUseMuxPlayback,
     });
-  }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster, shouldUseMuxPlayback]);
+  }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster]);
 
   // PHASE 5: Dev-only mount/unmount log to identify StrictMode double-mount vs real spam
   useEffect(() => {
@@ -2806,7 +2419,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     if (import.meta.env.DEV) console.log('[BattleView] Creating new battle room connection (battle-' + battle.id + ')');
     isConnectingRef.current = true;
     isReusingRoomRef.current = false;
-    const client = new Room({ mode: 'rtc', codec: 'vp8' });
+    const client = new Room();
     battleRoomRef.current = client;
     setLivekitRoom(client);
     
@@ -2898,8 +2511,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
               try {
                 await client.connect(
                   import.meta.env.VITE_LIVEKIT_URL,
-                  data.token,
-                  { name: roomName }
+                  data.token
                 );
                 const existingRemote = safeValues(client.remoteParticipants);
                 if (existingRemote.length > 0) {
@@ -3029,8 +2641,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
             try {
               await client.connect(
                 import.meta.env.VITE_LIVEKIT_URL,
-                data.token,
-                { name: roomName }
+                data.token
               );
               const existingRemote = safeValues(client.remoteParticipants);
               if (existingRemote.length > 0) {
@@ -3137,7 +2748,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       }
       console.log('[BattleView] Track published:', {
         trackKind: publication.kind,
-        trackSid: publication.sid || publication.trackSid,
+        trackSid: publication.trackSid,
         trackSource: publication.source,
         participantIdentity: participant.identity,
       });
@@ -3153,7 +2764,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       }
       console.log('[BattleView] Track unpublished:', {
         trackKind: publication.kind,
-        trackSid: publication.sid || publication.trackSid,
+        trackSid: publication.trackSid,
         trackSource: publication.source,
         participantIdentity: participant.identity,
       });
@@ -3351,14 +2962,59 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
           if (import.meta.env.DEV) console.log('[BattleView] Set isInBattle = true');
         }
         
-        const { data: battleData, error: battleError } = await supabase.from('battles').select('*').eq('id', battleId).maybeSingle();
-        if (battleError || !battleData) {
-          setError('Battle not found');
-          return;
-        }
-        setBattle(battleData);
+        // DEBUG: Log battleId and auth state before query
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        console.log('[BattleView] DEBUG initBattle', { battleId, authUserId: authUser?.id, authUserExists: !!authUser });
 
-        if (battleData.status === 'ended') {
+        const { data: battleData, error: battleError } = await supabase.from('battles').select('*').eq('id', battleId).maybeSingle();
+
+        // Use a resolvedBattle local variable so later code doesn't accidentally
+        // dereference `battleData` when it was null and we used a realtime fallback.
+        let resolvedBattle: any = null;
+        if (battleError || !battleData) {
+          console.warn('[BattleView] battle query returned empty or error', { battleId, battleData, battleError });
+          // Fallback: prefer realtime state (handles viewers with RLS blocking DB reads)
+          const realtimeCandidate = (battleRealtime as any)?.battle;
+          if (realtimeCandidate) {
+            console.log('[BattleView] Using immediate battleRealtime fallback for battle', battleId);
+            setBattle(realtimeCandidate);
+            resolvedBattle = realtimeCandidate;
+          } else {
+            // wait up to 1500ms for realtime to populate
+            let found = false;
+            const start = Date.now();
+            while (!found && Date.now() - start < 1500) {
+              // eslint-disable-next-line no-await-in-loop
+              await new Promise((r) => setTimeout(r, 100));
+              const candidate = (battleRealtime as any)?.battle;
+              if (candidate) {
+                console.log('[BattleView] Using delayed battleRealtime fallback for battle', battleId);
+                setBattle(candidate);
+                resolvedBattle = candidate;
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              // last-resort: try window fallback populated for debugging
+              const realtimeFallback = (typeof window !== 'undefined' && (window as any).__battleRealtimeFallback && (window as any).__battleRealtimeFallback[battleId]) || null;
+              if (realtimeFallback) {
+                console.log('[BattleView] Using window realtime fallback for battle', battleId);
+                setBattle(realtimeFallback);
+                resolvedBattle = realtimeFallback;
+              } else {
+                setError('Battle not found');
+                return;
+              }
+            }
+          }
+        } else {
+          setBattle(battleData);
+          resolvedBattle = battleData;
+        }
+
+        // From here on, use `resolvedBattle` (it will never be null)
+        if (resolvedBattle?.status === 'ended') {
           setShowResults(true);
           setShowRematchOption(true);
         }
@@ -3366,15 +3022,15 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         const { data: streams, error: streamsError } = await supabase
           .from('streams')
           .select('*')
-          .in('id', [battleData.challenger_stream_id, battleData.opponent_stream_id]);
+          .in('id', [resolvedBattle.challenger_stream_id, resolvedBattle.opponent_stream_id]);
             
         if (streamsError || !streams) {
           setError('Failed to load battle streams: ' + (streamsError?.message || 'Unknown error'));
           return;
         }
 
-        const cStream = streams.find(s => s.id === battleData.challenger_stream_id);
-        const oStream = streams.find(s => s.id === battleData.opponent_stream_id);
+        const cStream = streams.find(s => s.id === resolvedBattle.challenger_stream_id);
+        const oStream = streams.find(s => s.id === resolvedBattle.opponent_stream_id);
             
         if (!cStream) {
           setError('Challenger stream not found or not live.');
@@ -3435,8 +3091,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     };
   }, [battleId]);
 
-  // Consolidated battle realtime hook (replaces 6 separate channel subscriptions)
-  const { state: battleRealtime } = useBattleRealtime(battleId || null);
+  // Expose realtime battle state on window for debugging/fallback when DB reads fail
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    (window as any).__battleRealtimeFallback = (window as any).__battleRealtimeFallback || {};
+    if (battleRealtime?.battle && battleId) {
+      (window as any).__battleRealtimeFallback[battleId] = battleRealtime.battle;
+    }
+  }, [battleRealtime?.battle, battleId]);
 
   // Sync consolidated realtime state into BattleView state
   useEffect(() => {
@@ -3452,6 +3114,15 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       setShowResults(true);
     }
   }, [battleRealtime.battle]);
+
+  // If we previously set an immediate 'Battle not found' error, clear it when realtime data appears
+  useEffect(() => {
+    if (error === 'Battle not found' && (battleRealtime as any)?.battle) {
+      console.log('[BattleView] Clearing "Battle not found" error due to realtime data', battleId);
+      setError(null);
+      setBattle((battleRealtime as any).battle);
+    }
+  }, [error, battleRealtime?.battle, battleId]);
 
   useEffect(() => {
     if (battleRealtime.participants.length > 0) {
@@ -4109,31 +3780,53 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     }
   }, [showResults, battle?.status, navigate, currentStreamId, onReturnToStream, participantInfo?.role]);
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-0 bg-black text-red-500 gap-4">
-        <div className="text-6xl mb-4">⚠️</div>
-        <h2 className="text-xl font-bold text-white">Battle Error</h2>
-        <span className="font-medium">{error}</span>
-        <button 
-          onClick={() => navigate('/')}
-          className="mt-4 px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-lg transition"
-        >
-          Return Home
-        </button>
-      </div>
-    );
-  }
+  // Use the userIdToLiveKitIdentity mapping from BroadcastPage to find video tracks
+  // The mapping converts database user IDs to LiveKit identities
+  const challengerLiveKitIdentity = challengerStream
+    ? userIdToLiveKitIdentity?.[challengerStream.user_id] || challengerStream.user_id
+    : undefined;
+  const opponentLiveKitIdentity = opponentStream
+    ? userIdToLiveKitIdentity?.[opponentStream.user_id] || opponentStream.user_id
+    : undefined;
 
-  if (loading || !battle || !challengerStream || !opponentStream) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-amber-500 gap-4" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <Loader2 className="animate-spin" size={48} />
-        <span className="font-black text-lg animate-pulse">Entering Battle Arena...</span>
-        <span className="text-sm text-amber-400/60">Connecting to battle room</span>
-      </div>
-    );
-  }
+  // DEBUG: User lookup logging (throttled, in useEffect to avoid render body side effects)
+  const lastUserLookupLogRef = useRef(0);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const now = Date.now();
+    if (now - lastUserLookupLogRef.current < 2000) return;
+    lastUserLookupLogRef.current = now;
+    console.log('[BattleView] User lookup - challenger stream:', challengerStream?.user_id?.substring(0, 8), '-> livekit identity:', challengerLiveKitIdentity);
+    console.log('[BattleView] User lookup - opponent stream:', opponentStream?.user_id?.substring(0, 8), '-> livekit identity:', opponentLiveKitIdentity);
+    console.log('[BattleView] Battle remoteUsers count:', remoteUsers?.length || 0);
+    console.log('[BattleView] Local videoTrack:', !!battleLocalVideoTrack);
+  }, [challengerLiveKitIdentity, opponentLiveKitIdentity, remoteUsers.length, battleLocalVideoTrack]);
+
+  const findRemoteByIdentity = (targetIdentity: string) => {
+    const normalizedTarget = String(targetIdentity || '').replace(/-/g, '').toLowerCase();
+    return remoteUsers?.find((u) => {
+      const id = String(u.identity || '');
+      const normalized = id.replace(/-/g, '').toLowerCase();
+      return (
+        id === targetIdentity ||
+        normalized === normalizedTarget ||
+        normalized.startsWith(normalizedTarget.substring(0, 8)) ||
+        normalizedTarget.startsWith(normalized.substring(0, 8))
+      );
+    });
+  };
+
+  // Handle challenger video - use mapping to find remote user, or use local tracks for broadcaster
+  const challengerUser = findRemoteByIdentity(challengerLiveKitIdentity) ||
+    (challengerStream && effectiveUserId === challengerStream.user_id
+      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
+      : null);
+
+  // Handle opponent video - use mapping to find remote user, or use local tracks for broadcaster
+  const opponentUser = findRemoteByIdentity(opponentLiveKitIdentity) ||
+    (opponentStream && effectiveUserId === opponentStream.user_id
+      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
+      : null);
 
   // Show connection status indicator
   const renderConnectionStatus = () => {
@@ -4162,74 +3855,37 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     return null;
   };
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-0 bg-black text-red-500 gap-4">
+        <div className="text-6xl mb-4">⚠️</div>
+        <h2 className="text-xl font-bold text-white">Battle Error</h2>
+        <span className="font-medium">{error}</span>
+        <button 
+          onClick={() => navigate('/')}
+          className="mt-4 px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-lg transition"
+        >
+          Return Home
+        </button>
+      </div>
+    );
+  }
+
+  if (loading || !battle || !challengerStream || !opponentStream) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-amber-500 gap-4" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <Loader2 className="animate-spin" size={48} />
+        <span className="font-black text-lg animate-pulse">Entering Battle Arena...</span>
+        <span className="text-sm text-amber-400/60">Connecting to battle room</span>
+      </div>
+    );
+  }
+
   const totalScore = (battle?.score_challenger || 0) + (battle?.score_opponent || 0);
   const challengerPercent = totalScore === 0 ? 50 : Math.round((battle?.score_challenger / totalScore) * 100);
   const opponentPercent = 100 - challengerPercent;
   const challengerSlotCount = Math.max(1, Math.min(challengerStream.box_count || 1, 6));
   const opponentSlotCount = Math.max(1, Math.min(opponentStream.box_count || 1, 6));
-
-  // Use the userIdToLiveKitIdentity mapping from BroadcastPage to find video tracks
-  // The mapping converts database user IDs to LiveKit identities
-  const challengerLiveKitIdentity = userIdToLiveKitIdentity?.[challengerStream.user_id] || challengerStream.user_id;
-  const opponentLiveKitIdentity = userIdToLiveKitIdentity?.[opponentStream.user_id] || opponentStream.user_id;
-
-  // DEBUG: User lookup logging (throttled, in useEffect to avoid render body side effects)
-  const lastUserLookupLogRef = useRef(0);
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const now = Date.now();
-    if (now - lastUserLookupLogRef.current < 2000) return;
-    lastUserLookupLogRef.current = now;
-    console.log('[BattleView] User lookup - challenger stream:', challengerStream.user_id?.substring(0, 8), '-> livekit identity:', challengerLiveKitIdentity);
-    console.log('[BattleView] User lookup - opponent stream:', opponentStream.user_id?.substring(0, 8), '-> livekit identity:', opponentLiveKitIdentity);
-    console.log('[BattleView] Battle remoteUsers count:', remoteUsers?.length || 0);
-    console.log('[BattleView] Local videoTrack:', !!battleLocalVideoTrack);
-  }, [challengerLiveKitIdentity, opponentLiveKitIdentity, remoteUsers.length, battleLocalVideoTrack]);
-
-  const findRemoteByIdentity = (targetIdentity: string) => {
-    const normalizedTarget = String(targetIdentity || '').replace(/-/g, '').toLowerCase();
-    return remoteUsers?.find((u) => {
-      const id = String(u.identity || '');
-      const normalized = id.replace(/-/g, '').toLowerCase();
-      return (
-        id === targetIdentity ||
-        normalized === normalizedTarget ||
-        normalized.startsWith(normalizedTarget.substring(0, 8)) ||
-        normalizedTarget.startsWith(normalized.substring(0, 8))
-      );
-    });
-  };
-
-  // Handle challenger video - use mapping to find remote user, or use local tracks for broadcaster
-  const challengerUser = findRemoteByIdentity(challengerLiveKitIdentity) ||
-    (effectiveUserId === challengerStream.user_id
-      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
-      : null);
-
-  // Handle opponent video - use mapping to find remote user, or use local tracks for broadcaster
-  const opponentUser = findRemoteByIdentity(opponentLiveKitIdentity) ||
-    (effectiveUserId === opponentStream.user_id
-      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
-      : null);
-
-  const resolveBattlePlaybackUrl = (streamRow: Stream | null): string | null => {
-    if (!streamRow) return null;
-    const hlsUrl = String((streamRow as any).hls_url || '').trim();
-    if (hlsUrl) return hlsUrl;
-
-    const muxPlaybackId = String(
-      (streamRow as any).mux_playback_id ||
-      (streamRow as any).muxPlaybackId ||
-      (streamRow as any).playback_id ||
-      ''
-    ).trim();
-    if (muxPlaybackId) return `https://stream.mux.com/${muxPlaybackId}.m3u8`;
-
-    return null;
-  };
-
-  const challengerPlaybackUrl = resolveBattlePlaybackUrl(challengerStream);
-  const opponentPlaybackUrl = resolveBattlePlaybackUrl(opponentStream);
 
   return (
     <div className="fixed inset-0 overflow-hidden z-50 relative bg-black">
@@ -4307,8 +3963,6 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                 opponentHostId={opponentStream.user_id}
                 challengerHostName={challengerStream.title}
                 opponentHostName={opponentStream.title}
-                challengerHostHlsUrl={challengerPlaybackUrl}
-                opponentHostHlsUrl={opponentPlaybackUrl}
                 challengerBoxCount={challengerStream.box_count || 1}
                 opponentBoxCount={opponentStream.box_count || 1}
                 challengerScore={battle?.score_challenger || 0}
@@ -4320,7 +3974,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                 canTroll={isSuddenDeath && participantInfo?.role === 'host'}
                 currentUserTeam={participantInfo?.team}
                 userIdToLiveKitIdentity={userIdToLiveKitIdentity}
-                shouldUseMuxPlayback={shouldUseMuxPlayback}
+                
                 currentUserProfile={profile}
                 onOpenStaffActions={(participant) => {
                   const streamId = participant.sourceStreamId ||
@@ -4558,6 +4212,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
             }}
             recipientId={giftRecipientId}
             streamId={giftStreamId || currentStreamId}
+            battleId={battleId}
           />
         )}
 
@@ -4677,6 +4332,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                       }}
                       recipientId={giftRecipientId}
                       streamId={giftStreamId || currentStreamId}
+                      battleId={battleId}
                     />
                   </div>
                 )}

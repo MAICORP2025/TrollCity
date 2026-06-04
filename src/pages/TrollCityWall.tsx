@@ -216,13 +216,25 @@ export default function TrollCityWall() {
         })
         
         // Attach replies to parent posts
+        const parentIds = new Set(parentPosts.map((post: any) => post.id))
+        const orphanReplies = replies.filter((reply: any) => !parentIds.has(reply.reply_to_post_id))
+
         const postsWithReplies = parentPosts.map((post: any) => ({
           ...post,
           replies: repliesMap[post.id] || []
         })) as WallPost[]
 
-        console.log('✨ [TrollWall] Setting', postsWithReplies.length, 'posts to state')
-        setPosts(postsWithReplies)
+        const postsToSet = [
+          ...postsWithReplies,
+          ...orphanReplies.map((reply: any) => ({ ...reply, replies: [] }))
+        ]
+
+        console.log(
+          '✨ [TrollWall] Setting',
+          postsToSet.length,
+          'posts to state (including', orphanReplies.length, 'orphan replies)'
+        )
+        setPosts(postsToSet)
       } else {
         console.log('⚠️ [TrollWall] No data returned from query')
         setPosts([])
@@ -251,8 +263,9 @@ export default function TrollCityWall() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'troll_wall_posts' },
         (payload) => {
-          // Add to buffer for 150ms batching
-          postBufferRef.current.push(payload.new as any)
+          const incoming = payload.event === 'DELETE' ? payload.old : payload.new
+          if (!incoming || !incoming.id) return
+          postBufferRef.current.push({ ...incoming, _event: payload.event } as any)
         }
       )
       .subscribe()
@@ -267,38 +280,43 @@ export default function TrollCityWall() {
       setPosts(prev => {
         let next = [...prev]
         updates.forEach(newPost => {
+          if (!newPost || !newPost.id) return
+
+          if (newPost._event === 'DELETE') {
+            next = next.filter((post) => post.id !== newPost.id)
+            return
+          }
+
           // Check if this is a reply to an existing post
           if (newPost.reply_to_post_id) {
-            // Find the parent post and add reply to it
             const parentIdx = next.findIndex(p => p.id === newPost.reply_to_post_id)
             if (parentIdx !== -1) {
               const parent = next[parentIdx]
               const existingReplies = parent.replies || []
-              // Check if reply already exists
               const replyIdx = existingReplies.findIndex(r => r.id === newPost.id)
               if (replyIdx !== -1) {
-                // Update existing reply
                 const updatedReplies = [...existingReplies]
                 updatedReplies[replyIdx] = { ...updatedReplies[replyIdx], ...newPost }
                 next[parentIdx] = { ...parent, replies: updatedReplies }
               } else {
-                // Add new reply
-                next[parentIdx] = { 
-                  ...parent, 
+                next[parentIdx] = {
+                  ...parent,
                   replies: [...existingReplies, newPost as WallPost]
                 }
               }
+            } else {
+              // If parent is missing, add orphan reply as a standalone item
+              const existingIdx = next.findIndex(p => p.id === newPost.id)
+              if (existingIdx === -1) {
+                next = [{ ...newPost, replies: [] }, ...next]
+              }
             }
-            // If parent not found, the reply will be handled on next loadPosts()
           } else {
-            // It's a parent post
             const idx = next.findIndex(p => p.id === newPost.id)
             if (idx !== -1) {
-              // Update existing post, preserving replies
               const existingReplies = next[idx].replies || []
               next[idx] = { ...next[idx], ...newPost, replies: existingReplies }
             } else {
-              // New parent post - prepend
               next = [{ ...newPost, replies: [] }, ...next]
             }
           }

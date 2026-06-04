@@ -55,9 +55,13 @@ export function useCustomerServiceUsers() {
       if (profilesError) throw profilesError;
 
       // Fetch presence data (CEO can read all)
-      const { data: presenceData } = await supabase
+      const { data: presenceData, error: presenceError } = await supabase
         .from("user_presence_routes")
         .select("user_id, current_path, current_title, last_seen_at");
+
+      if (presenceError && presenceError.code !== '42501') {
+        console.warn("[useCustomerServiceUsers] Presence fetch error:", presenceError.message);
+      }
 
       const presenceMap = new Map(
         (presenceData || []).map((p) => [p.user_id, p])

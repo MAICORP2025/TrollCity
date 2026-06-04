@@ -170,6 +170,9 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   const [liveStreamId, setLiveStreamId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'social');
   const [showColorPickerModal, setShowColorPickerModal] = useState(false);
+  const [prideThemes, setPrideThemes] = useState<any[]>([]);
+  const [prideLoading, setPrideLoading] = useState(false);
+  const [equippingTheme, setEquippingTheme] = useState<string | null>(null);
   const [showInsuranceCard, setShowInsuranceCard] = useState<any | null>(null);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -527,6 +530,29 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   useEffect(() => {
     if (isOwnProfile && profile?.announcements_enabled !== undefined) setAnnouncementsEnabled(profile.announcements_enabled);
     if (isOwnProfile && profile?.banner_notifications_enabled !== undefined) setBannerNotificationsEnabled(profile.banner_notifications_enabled);
+    // Load owned Pride themes for quick equip on profile
+    (async () => {
+      if (!isOwnProfile || !currentUser) return;
+      setPrideLoading(true);
+      try {
+        const { data } = await supabase
+          .from('v_broadcast_themes_for_user')
+          .select('*')
+          .eq('owned', true)
+          .order('is_active_for_user', { ascending: false });
+        // Filter client-side for Pride-themed frames (by slug or name)
+        const pride = (data || []).filter((t: any) => {
+          const s = (t.slug || '').toLowerCase();
+          const n = (t.name || '').toLowerCase();
+          return s.includes('pride') || n.includes('pride');
+        });
+        setPrideThemes(pride);
+      } catch (err) {
+        console.error('Failed to load pride themes:', err);
+      } finally {
+        setPrideLoading(false);
+      }
+    })();
   }, [isOwnProfile, profile?.announcements_enabled, profile?.banner_notifications_enabled]);
 
   useEffect(() => {
@@ -1224,6 +1250,69 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
                 </div>
               </div>
             </div>
+
+            {isOwnProfile && (
+              <div className={`${innerPanel} p-5`}>
+                <SectionHeader icon={Palette} title="Profile Frames" subtitle="Equip a Pride frame to earn challenges" />
+                <div className="mt-3">
+                  {prideLoading ? (
+                    <div className="text-sm text-zinc-400">Loading themes...</div>
+                  ) : prideThemes.length === 0 ? (
+                    <div className="text-sm text-zinc-500">You don't own any Pride frames.</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {prideThemes.map((t: any) => (
+                        <div key={t.id} className="rounded-lg border border-white/6 p-2">
+                          <div className="mb-2 h-20 w-full overflow-hidden rounded-md bg-black/20">
+                            {t.preview_url ? <img src={t.preview_url} className="w-full h-full object-cover" /> : <div className="h-full w-full flex items-center justify-center text-xs text-zinc-400">No preview</div>}
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs font-bold text-white truncate">{t.name}</div>
+                            <button
+                              disabled={equippingTheme !== null}
+                              onClick={async () => {
+                                if (!currentUser) return;
+                                try {
+                                  setEquippingTheme(t.id);
+                                  const { error: rpcErr } = await supabase.rpc('set_active_broadcast_theme', { p_user_id: currentUser.id, p_theme_id: t.id });
+                                  if (rpcErr) throw rpcErr;
+                                  toast.success('Profile frame equipped');
+                                  // trigger badge evaluation
+                                  try {
+                                    const { data: session } = await supabase.auth.getSession();
+                                    const token = session.session?.access_token;
+                                    const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || 'https://yjxpwfalenorzrqxwmtr.supabase.co/functions/v1';
+                                    if (token) {
+                                      await fetch(`${edgeFunctionsUrl}/evaluate-badges-for-event`, {
+                                        method: 'POST',
+                                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ event_type: 'pride_frame_equipped', user_id: currentUser.id, metadata: { theme_id: t.id } }),
+                                      });
+                                    }
+                                  } catch (e) {
+                                    console.warn('Badge evaluation failed:', e);
+                                  }
+                                  // refresh local profile state
+                                  await refreshProfile();
+                                } catch (err) {
+                                  console.error('Equip theme failed:', err);
+                                  toast.error('Failed to equip frame');
+                                } finally {
+                                  setEquippingTheme(null);
+                                }
+                              }}
+                              className="rounded-lg bg-white/6 px-3 py-1 text-xs font-bold text-white"
+                            >
+                              {equippingTheme === t.id ? 'Equipping…' : t.is_active_for_user ? 'Active' : 'Equip'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {profile.organization_id && organization && (
               <div className={`${innerPanel} p-5`}>

@@ -90,12 +90,11 @@ export default function GlobalPresenceTracker() {
             .limit(1000);
 
           if (!error) {
-            if (count !== null) {
-              setOnlineCount(count);
-            }
             if (presenceData) {
-              const userIds = presenceData.map(p => p.user_id).filter(Boolean);
-              setOnlineUserIds(userIds);
+              const userIds = (presenceData as Array<{ user_id: string | null }>).map(p => p.user_id).filter(Boolean) as string[];
+              const uniqueUserIds = Array.from(new Set(userIds));
+              setOnlineCount(uniqueUserIds.length);
+              setOnlineUserIds(uniqueUserIds);
             }
           }
         }

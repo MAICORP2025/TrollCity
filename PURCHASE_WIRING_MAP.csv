@@ -1,0 +1,40 @@
+id,item_key,item_type,backend_rpc_or_table,frontend_files,wired_status,notes
+1,broadcast_theme,theme,purchase_broadcast_theme; broadcast_background_themes; user_broadcast_theme_purchases,src/components/broadcast/ThemeSelector.tsx; src/pages/perks/PerksStore.tsx; src/pages/Profile.tsx,Wired,Frontend calls `purchase_broadcast_theme`. Seed migration present but not executed.
+
+2,perk,perk,shop_buy_perk; purchase_perk; perks; user_perks,src/pages/perks/PerksStore.tsx; src/components/broadcast/BroadcastControls.tsx; src/pages/Profile.tsx; src/pages/UserInventory.tsx,Wired,Frontend inserts/updates `user_perks`; uses `deductCoins`/`try_pay_coins_secure`.
+
+3,rgb_broadcast,rgb,purchase_rgb_broadcast,src/components/broadcast/BroadcastControls.tsx; src/lib/hooks/useCoins.ts,Wired,Frontend toggles and uses coin flow; RPC logs to purchase_ledger.
+
+4,vehicle,vehicle,purchase_vehicle; purchase_car_v2; buy_vehicle,src/pages/CarDealership.tsx; src/pages/NeighborhoodOnboarding.tsx,Wired,`deductCoins` added before vehicle RPC in fixes; verify DB purchase_ledger.
+
+5,insurance,insurance,buy_car_insurance; purchase_insurance; buy_property_insurance,src/pages/TrollerInsurance.tsx; src/pages/NeighborhoodOnboarding.tsx,Wired,Frontend calls `deductCoins` then RPC; verify policy rows and expiry behavior.
+
+6,property,property,purchase_house; buy_property_with_loan; buy_property_with_loan,marketplace/property UIs (various),Partially Wired,RPCs exist in migrations; some frontend call sites may be outdated—smoke test recommended.
+
+7,landlord_license,license,purchase_landlord_license,property/marketplace UIs,Partially Wired,RPC exists; confirm frontend integration.
+
+8,listing_premium,listing,purchase_listing_premium,marketplace/listing UIs,Partially Wired,RPC present; ensure frontend invokes it and purchase_ledger entries created.
+
+9,coin_package,coins,purchase_coins; coin_packages,src/pages/CoinStore.jsx; api/stripe.ts; supabase/functions (PayPal/Square),Wired,Server & edge functions present (Stripe/PayPal); validate payment credentials and webhooks.
+
+10,troll_pass,pass,buy_troll_pass; troll_pass_bundle,src/pages/CoinStore.jsx; api/stripe.ts,Wired,Stripe metadata references `troll_pass_bundle`.
+
+11,featured_promotion,promotion,buy_featured_promotion,admin/marketplace UIs (promotion flows),Wired,RPC/migration exists for promoted content purchases.
+
+12,marketplace_item,marketplace,purchase_inventory_item; purchase_inventory_item,marketplace listing pages (UI),Mostly Wired,RPCs present; ensure specific listing UI calls RPC.
+
+13,call_minutes,minutes,purchase_family_call_minutes,family purchase UIs,Partially Wired,RPC exists (add_family_call_minutes.sql); verify frontend flows.
+
+14,call_sound,call_sound,purchase_call_sound,call UI flows (various),Wired,RPC referenced in MIGRATION_OBJECTS_REPORT.md.
+
+15,live_snack,snack,buy_live_snack,live purchase UI (chat/broadcast),Wired,Mentioned in migrations report—verify frontend hook.
+
+16,admin_for_week,admin,purchase_admin_for_week,admin UI / moderator flows,Partially Wired,RPC exists in check_all_missing lists; verify access controls.
+
+17,featured_broadcast,feature,buy_featured_promotion; featured_broadcast,stream/feature UIs,Partially Wired,RPCs/migrations present; confirm front-end calls.
+
+18,purchase_from_ktauto,service,purchase_from_ktauto,internal hooks/scripts,Partially Wired,Used by several integrations; verify intended callers.
+
+19,purchase_listing_premium,listing_premium,purchase_listing_premium,marketplace UIs,Partially Wired,Duplicate of listing_premium entry (kept for schema traceability).
+
+20,purchase_perk_alt,perk,purchase_perk,legacy endpoints / migrations,Partially Wired,Some legacy RPC names/aliases exist—frontend mainly uses `shop_buy_perk`.

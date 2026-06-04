@@ -941,6 +941,20 @@ function ViewerPage() {
     return null
   }, [effectiveBoxCount, seats])
 
+  const userIdToLiveKitIdentity = useMemo(() => {
+    const mapping: Record<string, string> = {};
+    if (!seats) return mapping;
+    Object.entries(seats).forEach(([seatIndex, seat]) => {
+      const seatData = seat as any;
+      const userId = seatData?.user_id || seatData?.guest_id;
+      const identity = seatData?.livekit_participant_identity || seatData?.participant_identity || seatData?.livekit_identity;
+      if (userId && identity) {
+        mapping[userId] = identity;
+      }
+    });
+    return mapping;
+  }, [seats]);
+
   const availableSeatPrice = useMemo(() => {
     if (typeof availableSeatIndex !== 'number') return 0
 
@@ -1277,7 +1291,7 @@ const isActive = isStreamActive(stream)
       return
     }
 
-    setStream(data as Stream)
+    setStream(data as unknown as Stream)
     setViewerCount(Number((data as any).current_viewers || 0))
   }, [streamId, navigate])
 
@@ -1978,8 +1992,9 @@ useStreamRealtime(
             key={activeBattleId}
             battleId={stream.battle_id!}
             currentStreamId={streamId}
-            viewerId={user?.id}
+            viewerId={user?.id || stableAnonId}
             remoteUsers={remoteUsers}
+            userIdToLiveKitIdentity={userIdToLiveKitIdentity}
             onReturnToStream={() => {
               refreshStream();
             }}
@@ -2208,7 +2223,7 @@ useStreamRealtime(
                     className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
                   >
                     <Share2 className="h-4 w-4" />
-                    Share
+                    Subscribe
                   </button>
                 </div>
               )}

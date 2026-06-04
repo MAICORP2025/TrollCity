@@ -675,6 +675,20 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     })
   }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices])
 
+  const userIdToLiveKitIdentity = useMemo(() => {
+    const mapping: Record<string, string> = {};
+    if (!seats) return mapping;
+    Object.entries(seats).forEach(([seatIndex, seat]) => {
+      const seatData = seat as any;
+      const userId = seatData?.user_id || seatData?.guest_id;
+      const identity = seatData?.livekit_participant_identity || seatData?.participant_identity || seatData?.livekit_identity;
+      if (userId && identity) {
+        mapping[userId] = identity;
+      }
+    });
+    return mapping;
+  }, [seats]);
+
   const roomName = useMemo(() => {
     return getLiveKitRoomName(stream as Stream | null, streamId) || ''
   }, [stream?.livekit_room_name, stream?.id, streamId]);
@@ -735,7 +749,6 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   const [cameraEnabled, setCameraEnabled] = useState(true)
   const [micEnabled, setMicEnabled] = useState(true)
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
-  // Track if user is going live (starting stream) vs exiting page
   const isGoingLiveRef = useRef(false)
 
   useEffect(() => {
@@ -4807,6 +4820,7 @@ const handleLike = useCallback(async () => {
             viewerId={memoizedViewerId}
             localTracks={battleLocalTracks}
             remoteUsers={remoteUsers}
+            userIdToLiveKitIdentity={userIdToLiveKitIdentity}
             onReturnToStream={() => {
               setStream((prev) =>
                 prev
@@ -4959,22 +4973,24 @@ const handleLike = useCallback(async () => {
                 })()}
 
                 {/* Host video element — mounted via TrackAttach, covers card when track available */}
-                <TrackAttach track={isHost ? (localTracks?.[1] ?? null) : (() => {
-                  const broadcasterUserId = stream?.user_id;
-                  if (!broadcasterUserId || !remoteParticipants) return null;
-                  let vt: any = null;
-                  remoteParticipants.forEach((rp: RemoteParticipant) => {
-                    if (rp.identity === broadcasterUserId) {
-                      const pubs = (rp as any).videoTrackPublications;
-                      if (pubs) {
-                        pubs.forEach((pub: any) => {
-                          if (pub.track && typeof pub.track?.attach === 'function') vt = pub.track;
-                        });
+                <TrackAttach
+                  track={isHost ? (localTracks?.[1] ?? null) : (() => {
+                    const broadcasterUserId = stream?.user_id;
+                    if (!broadcasterUserId || !remoteParticipants) return null;
+                    let vt: any = null;
+                    remoteParticipants.forEach((rp: RemoteParticipant) => {
+                      if (rp.identity === broadcasterUserId) {
+                        const pubs = (rp as any).videoTrackPublications;
+                        if (pubs) {
+                          pubs.forEach((pub: any) => {
+                            if (pub.track && typeof pub.track?.attach === 'function') vt = pub.track;
+                          });
+                        }
                       }
-                    }
-                  });
-                  return vt;
-                })()} />
+                    });
+                    return vt;
+                  })()}
+                  />
 
                 {/* Gradient overlay — sits above video/fallback */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
@@ -5020,11 +5036,9 @@ const handleLike = useCallback(async () => {
                   )} title={`camera ${cameraEnabled ? 'on' : 'off'}`}>
                     {cameraEnabled ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
                   </span>
-                </div>
+</div>
 
-                 
-
-                 {/* Pinned product overlay */}
+                  {/* Pinned product overlay */}
                  {(() => {
                    const pinned = pinnedProducts.find((p: any) => p.stream_id === stream.id);
                    if (!pinned) return null;

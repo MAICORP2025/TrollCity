@@ -212,7 +212,8 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
 
         try {
             const { error } = await supabase.rpc('assign_broadofficer', {
-                p_user_id: userId
+                p_user_id: userId,
+                p_stream_id: streamId
             });
 
             if (error) throw error;

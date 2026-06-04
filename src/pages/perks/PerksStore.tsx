@@ -34,10 +34,13 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
   const [perks, setPerks] = useState<Perk[]>([])
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState<string | null>(null)
+  const [themes, setThemes] = useState<any[]>([])
+  const [purchasingTheme, setPurchasingTheme] = useState<string | null>(null)
   const levelPerkIds = React.useMemo(() => new Set(LEVEL_PERKS.map((perk) => perk.id)), [])
 
   useEffect(() => {
     loadPerks()
+    loadThemes()
   }, [])
 
 
@@ -57,6 +60,22 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
       toast.error('Failed to load perks')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadThemes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('broadcast_background_themes')
+        .select('*')
+        .gt('price_coins', 0)
+        .eq('is_active', true)
+        .order('price_coins', { ascending: true })
+
+      if (error) throw error
+      setThemes(data || [])
+    } catch (err) {
+      console.error('Failed to load themes', err)
     }
   }
 
@@ -231,6 +250,47 @@ function PerksStoreContent({ profile, user }: { profile: any, user: any }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Frames Section */}
+          {themes.length > 0 && (
+            <div className="col-span-1 md:col-span-2 lg:col-span-3">
+              <h2 className="text-xl font-bold mb-4">Frames</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {themes.map((t) => {
+                  const canAfford = (profile?.troll_coins || 0) >= (t.price_coins || 0)
+                  return (
+                    <div key={t.id} className="bg-[#111] border border-white/10 rounded-xl p-3 flex flex-col items-center">
+                      <img src={t.preview_url || t.image_url} alt={t.name} className="w-full h-28 object-cover rounded mb-2" />
+                      <div className="text-sm font-bold mb-1">{t.name}</div>
+                      <div className="text-xs text-gray-400 mb-2">{t.price_coins} Coins</div>
+                      <button
+                        onClick={async () => {
+                          if (!user) { toast.error('Sign in to purchase'); return }
+                          setPurchasingTheme(t.id)
+                          try {
+                            const { data: rpcData, error: rpcError } = await supabase.rpc('purchase_broadcast_theme', { p_theme_id: t.id, p_set_active: true })
+                            if (rpcError) throw rpcError
+                            toast.success('Purchased and activated')
+                            // refresh profile and themes
+                            loadThemes()
+                            window.location.reload()
+                          } catch (err) {
+                            console.error('Theme purchase failed', err)
+                            toast.error('Purchase failed')
+                          } finally {
+                            setPurchasingTheme(null)
+                          }
+                        }}
+                        disabled={!canAfford || purchasingTheme === t.id}
+                        className={`w-full py-2 rounded font-bold ${canAfford ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                      >
+                        {purchasingTheme === t.id ? 'Purchasing...' : (canAfford ? 'Buy Frame' : 'Not Enough Coins')}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           {perks.map((perk) => {
             const isLocked = (profile?.level || 0) < perk.required_level
 const canAfford = (profile?.troll_coins || 0) >= perk.cost

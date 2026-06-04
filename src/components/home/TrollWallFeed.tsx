@@ -65,6 +65,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [oldestCreatedAt, setOldestCreatedAt] = useState<string | null>(null)
   const [likingPosts, setLikingPosts] = useState<Set<string>>(new Set())
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
@@ -171,17 +172,21 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
       }
 
       try {
-        const start = pageIndex * PAGE_SIZE
-        const end = start + PAGE_SIZE - 1
+        const { data, error } = await (() => {
+          let query = supabase
+            .from('troll_wall_posts')
+            .select(
+              '*, user_profiles(username, avatar_url, is_admin, is_troll_officer, is_og_user, created_at, role, is_verified, is_gold, username_style, badge, empire_role, officer_level, troller_level, is_troller, rgb_username_expires_at, glowing_username_color)'
+            )
+            .order('is_pinned', { ascending: false })
+            .order('created_at', { ascending: false })
 
-        const { data, error } = await supabase
-          .from('troll_wall_posts')
-          .select(
-            '*, user_profiles(username, avatar_url, is_admin, is_troll_officer, is_og_user, created_at, role, is_verified, is_gold, username_style, badge, empire_role, officer_level, troller_level, is_troller, rgb_username_expires_at, glowing_username_color)'
-          )
-          .order('is_pinned', { ascending: false })
-          .order('created_at', { ascending: false })
-          .range(start, end)
+          if (append && oldestCreatedAt) {
+            query = query.lt('created_at', oldestCreatedAt)
+          }
+
+          return query.range(0, PAGE_SIZE - 1)
+        })()
 
         if (error) throw error
         if (!isActiveRequest()) return
@@ -248,6 +253,9 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           )
         })
 
+        const parentIds = new Set(parentPosts.map((post) => post.id))
+        const orphanReplies = replies.filter((reply) => !parentIds.has(reply.reply_to_post_id))
+
         const postsWithReplies = parentPosts.map((post: WallPost) => ({
           ...post,
           replies: repliesMap[post.id] || [],
@@ -255,8 +263,27 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
 
         if (!isActiveRequest()) return
 
-        setPosts((prev) => (append ? [...prev, ...postsWithReplies] : postsWithReplies))
-        setHasMore(rows.length === PAGE_SIZE)
+        const mergedPosts = (prev: WallPost[]) => {
+          if (!append) return [...postsWithReplies, ...orphanReplies.map((reply) => ({ ...reply, replies: [] }))]
+
+          const existingIds = new Set(prev.map((post) => post.id))
+          const appendPosts = [
+            ...postsWithReplies,
+            ...orphanReplies.map((reply) => ({ ...reply, replies: [] })),
+          ].filter((post) => !existingIds.has(post.id))
+          return [...prev, ...appendPosts]
+        }
+
+        const newPosts = [
+          ...postsWithReplies,
+          ...orphanReplies.map((reply) => ({ ...reply, replies: [] })),
+        ]
+
+        setPosts((prev) => mergedPosts(prev))
+
+        const oldestPost = newPosts[newPosts.length - 1]
+        setOldestCreatedAt(oldestPost?.created_at || null)
+        setHasMore(((data as any[]) || []).length === PAGE_SIZE)
       } catch (err: any) {
         if (!isActiveRequest()) return
         console.error('[TrollWallFeed] Error loading wall posts:', err)
@@ -268,7 +295,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         setLoadingMore(false)
       }
     },
-    [user]
+    [user, oldestCreatedAt]
   )
 
   useEffect(() => {
@@ -280,7 +307,9 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         'postgres_changes',
         { event: '*', schema: 'public', table: 'troll_wall_posts' },
         (payload) => {
-          postBufferRef.current.push(payload.new as WallPost)
+          const incoming = payload.event === 'DELETE' ? payload.old : payload.new
+          if (!incoming || !incoming.id) return
+          postBufferRef.current.push({ ...incoming, _event: payload.event } as any)
         }
       )
       .subscribe()
@@ -294,6 +323,13 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
       setPosts(prev => {
         let next = [...prev]
         updates.forEach(newPost => {
+          if (!newPost || !newPost.id) return
+
+          if (newPost._event === 'DELETE') {
+            next = next.filter((post) => post.id !== newPost.id)
+            return
+          }
+
           if (newPost.reply_to_post_id) {
             const parentIdx = next.findIndex(p => p.id === newPost.reply_to_post_id)
             if (parentIdx !== -1) {
@@ -309,6 +345,11 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                   ...parent,
                   replies: [...existingReplies, newPost as WallPost]
                 }
+              }
+            } else {
+              const existingIdx = next.findIndex(p => p.id === newPost.id)
+              if (existingIdx === -1) {
+                next = [{ ...newPost, replies: [] }, ...next]
               }
             }
           } else {
@@ -955,7 +996,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             data={posts}
             itemContent={renderPost}
             endReached={() => {
-              if (hasMore && !loadingMore && user?.id) {
+              if (hasMore && !loadingMore) {
                 const nextPage = page + 1
                 setPage(nextPage)
                 loadPosts(nextPage, true)

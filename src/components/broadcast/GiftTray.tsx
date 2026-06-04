@@ -180,7 +180,7 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
       setSendingToAll(true);
       try {
         const promises = allRecipients.map(recipientId => 
-          sendGift(gift, { receiverId: recipientId, quantity: 1 }).catch(e => console.error(`Failed to send to ${recipientId}`, e))
+          sendGift(gift, { receiverId: recipientId, quantity: 1, battleId: battleId ?? null }).catch(e => console.error(`Failed to send to ${recipientId}`, e))
         );
         
         await Promise.all(promises);
@@ -196,7 +196,7 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
       return;
     }
 
-    const success = await sendGift(gift, { receiverId: recipientId, quantity: 1 });
+    const success = await sendGift(gift, { receiverId: recipientId, quantity: 1, battleId: battleId ?? null });
     if (success) {
       setSelectedGift(gift);
       void quietRefreshGiftProfile(user.id);

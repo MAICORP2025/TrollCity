@@ -24,6 +24,7 @@ export default function ThemeSelector({ streamId, currentThemeUrl, onClose }: Th
     const [themes, setThemes] = useState<ThemeItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [activating, setActivating] = useState<string | null>(null);
+    const [purchasing, setPurchasing] = useState<string | null>(null);
 
     const fetchThemes = useCallback(async () => {
         setLoading(true);
@@ -143,6 +144,34 @@ export default function ThemeSelector({ streamId, currentThemeUrl, onClose }: Th
                                 {isActive && (
                                     <div className="absolute top-1 right-1 bg-green-500 rounded-full p-0.5">
                                         <Check size={10} className="text-black" />
+                                    </div>
+                                )}
+
+                                {/* Purchase overlay for premium themes */}
+                                {theme.is_premium && (
+                                    <div className="absolute top-1 left-1 bg-black/60 rounded-md px-2 py-0.5 text-[10px] text-white flex items-center gap-1">
+                                        <span className="text-xs">{theme.cost_coins}</span>
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (!user) { toast.error('Sign in to purchase'); return; }
+                                                setPurchasing(theme.id);
+                                                try {
+                                                    const { data: rpcData, error: rpcError } = await supabase.rpc('purchase_broadcast_theme', { p_theme_id: theme.id, p_set_active: true });
+                                                    if (rpcError) throw rpcError;
+                                                    toast.success('Purchased and activated');
+                                                    fetchThemes();
+                                                } catch (err) {
+                                                    console.error('Purchase failed', err);
+                                                    toast.error('Purchase failed');
+                                                } finally {
+                                                    setPurchasing(null);
+                                                }
+                                            }}
+                                            className="ml-1 text-[10px] bg-purple-600 px-2 py-0.5 rounded text-white"
+                                        >
+                                            {purchasing === theme.id ? 'Buying...' : 'Buy'}
+                                        </button>
                                     </div>
                                 )}
                             </button>
