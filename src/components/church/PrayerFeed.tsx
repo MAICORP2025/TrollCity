@@ -23,7 +23,7 @@ interface PrayerReply {
   id: string;
   content: string;
   created_at: string;
-  pastor_id: string;
+  user_id: string;
   user_profiles: {
     username: string;
     avatar_url: string;
@@ -79,7 +79,7 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
           .from('church_prayer_replies')
           .select(`
             *,
-            user_profiles:pastor_id (username, avatar_url, is_pastor)
+            user_profiles:user_id (username, avatar_url, is_pastor)
           `)
           .in('prayer_id', prayerIds)
           .order('created_at', { ascending: true });
@@ -273,7 +273,7 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
     try {
       const { error } = await supabase.from('church_prayer_replies').insert({
         prayer_id: prayerId,
-        pastor_id: profile?.id,
+        user_id: profile?.id,
         content: text
       });
 

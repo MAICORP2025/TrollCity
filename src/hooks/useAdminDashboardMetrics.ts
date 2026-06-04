@@ -35,6 +35,13 @@ export function useAdminDashboardMetrics() {
     setError(null)
 
     try {
+      // Guard: skip all queries if user is not authenticated
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
       const results = await Promise.allSettled([
         loadCoinPurchaseMetrics(),
         loadUserMetrics(),

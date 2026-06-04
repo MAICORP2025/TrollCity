@@ -935,7 +935,7 @@ const BattleParticipantTile = ({
 
   const containerClass = isSingleHost
     ? `relative w-full aspect-square md:h-full min-h-0 rounded-2xl overflow-hidden bg-black transition-all duration-300`
-    : `relative w-full aspect-square md:aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 ${side === 'challenger' ? 'border-cyan-400/60 shadow-[0_0_22px_rgba(34,211,238,0.24)]' : 'border-fuchsia-400/60 shadow-[0_0_22px_rgba(217,70,239,0.24)]'} bg-black`;
+    : `relative w-full aspect-square md:aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 ${side === 'challenger' ? 'border-emerald-400/70 shadow-[0_0_22px_rgba(16,185,129,0.24)]' : 'border-fuchsia-500/60 shadow-[0_0_22px_rgba(192,38,211,0.24)]'} bg-black`;
 
   return (
     <div
@@ -1061,6 +1061,8 @@ interface BattleArenaProps {
   opponentBoxCount?: number;
   challengerCrownInfo?: CrownInfo;
   opponentCrownInfo?: CrownInfo;
+  challengerScore?: number;
+  opponentScore?: number;
   isSuddenDeath?: boolean;
   onTrollOpponent?: (targetStreamId: string) => void;
   canTroll?: boolean;
@@ -1095,6 +1097,8 @@ const BattleArena = ({
   opponentBoxCount = 1,
   challengerCrownInfo,
   opponentCrownInfo,
+  challengerScore = 0,
+  opponentScore = 0,
   isSuddenDeath = false,
   onTrollOpponent,
   canTroll = false,
@@ -1876,6 +1880,25 @@ const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribe
   // Determine if a side has only the host (no guests) - for single-host styling
   const challengerIsSingleHost = challengerSlots.length === 1 && challengerSlots[0]?.type === 'host';
   const opponentIsSingleHost = opponentSlots.length === 1 && opponentSlots[0]?.type === 'host';
+  const isSingleHostBattle = challengerIsSingleHost && opponentIsSingleHost;
+
+  const battleLeadTeam = challengerScore > opponentScore
+    ? 'challenger'
+    : opponentScore > challengerScore
+      ? 'opponent'
+      : 'tie';
+
+  const challengerGlowClass = battleLeadTeam === 'challenger'
+    ? 'border-2 border-emerald-500/90 shadow-[0_0_30px_rgba(16,185,129,0.45)]'
+    : 'border-2 border-emerald-500/20';
+  const opponentGlowClass = battleLeadTeam === 'opponent'
+    ? 'border-2 border-fuchsia-500/90 shadow-[0_0_30px_rgba(192,38,211,0.45)]'
+    : 'border-2 border-fuchsia-500/20';
+  const vsGlowClass = battleLeadTeam === 'challenger'
+    ? 'text-emerald-300 drop-shadow-[0_0_20px_rgba(16,185,129,0.85)]'
+    : battleLeadTeam === 'opponent'
+      ? 'text-fuchsia-300 drop-shadow-[0_0_20px_rgba(192,38,211,0.85)]'
+      : 'text-white/90 drop-shadow-[0_0_12px_rgba(255,255,255,0.45)]';
 
   // Mobile-optimized grid layout: horizontal layout for mobile, vertical split for desktop
   const getGridClass = (totalSlots: number) => {
@@ -1905,11 +1928,17 @@ const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribe
 return (
     <div className="w-full h-full min-h-0 flex overflow-hidden p-2 md:p-4 gap-2 md:gap-4">
       {/* Mobile Layout: Horizontal split (side-by-side) */}
-      {isMobileViewport ? (
-        <>
+      {(() => {
+        if (isMobileViewport) {
+          if (isSingleHostBattle) {
+            return (
+              <>
           {/* Challenger Side - Left half */}
-          <div className="flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden">
-            <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} w-full`}>
+          <div className={cn(
+            'flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden rounded-3xl p-1',
+            challengerGlowClass
+          )}>
+            <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} w-full h-full`}>
               {challengerSlots.map((slot, idx) => (
                 <div key={`challenger-slot-${idx}`} className="min-h-0 aspect-square">
                   {slot.type === 'host' ? (
@@ -1999,9 +2028,22 @@ return (
             </div>
           </div>
 
+          {/* VS Divider */}
+          <div className="flex items-center justify-center w-16">
+            <div className={cn(
+              'flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-black/40',
+              vsGlowClass
+            )}>
+              <span className="text-2xl font-black uppercase tracking-[0.35em]">VS</span>
+            </div>
+          </div>
+
           {/* Opponent Side - Right half */}
-          <div className="flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden">
-            <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} w-full`}>
+          <div className={cn(
+            'flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden rounded-3xl p-1',
+            opponentGlowClass
+          )}>
+            <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} w-full h-full`}>
               {opponentSlots.map((slot, idx) => (
                 <div key={`opponent-slot-${idx}`} className="min-h-0 aspect-square">
                   {slot.type === 'host' ? (
@@ -2091,7 +2133,203 @@ return (
             </div>
           </div>
         </>
-      ) : (
+            );
+          }
+          return (
+        <div className="relative flex-1 min-h-0 h-full flex flex-col gap-3 overflow-hidden">
+          <div className={cn(
+            'flex-1 min-h-0 rounded-3xl border-2 p-1',
+            challengerGlowClass
+          )}>
+            <div className="grid gap-2 grid-cols-1 h-full">
+              {challengerSlots.map((slot, idx) => (
+                <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
+                  {slot.type === 'host' ? (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="challenger"
+                          crownInfo={challengerCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'opponent'}
+                          onTroll={() => handleTrollClick('challenger')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={challengerIsSingleHost}
+                          fallbackHlsUrl={challengerHostHlsUrl}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        challengerHostHlsUrl ? (
+                          <BattleParticipantTile
+                            identity={challengerHostId}
+                            name={challengerHostName || 'Challenger'}
+                            isLocal={false}
+                            isMicrophoneEnabled={true}
+                            isCameraEnabled={true}
+                            metadata={{ role: 'host' }}
+                            role="host"
+                            team="challenger"
+                            sourceStreamId={challengerStreamId}
+                            side="challenger"
+                            crownInfo={challengerCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'opponent'}
+                            onTroll={() => handleTrollClick('challenger')}
+                            isSingleHost={challengerIsSingleHost}
+                            fallbackHlsUrl={challengerHostHlsUrl}
+                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                            onTileClick={() => handleParticipantBoxClick({
+                              identity: challengerHostId,
+                              name: challengerHostName || 'Challenger',
+                              isLocal: false,
+                              isMicrophoneEnabled: false,
+                              isCameraEnabled: true,
+                              metadata: { role: 'host' },
+                              role: 'host',
+                              team: 'challenger',
+                              sourceStreamId: challengerStreamId,
+                            })}
+                          />
+                        ) : (
+                          <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
+                            <User className="text-purple-500/50" size={48} />
+                            <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="challenger"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-purple-500/30" size={24} />
+                          <span className="text-purple-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center py-1">
+            <div className={cn(
+              'flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-black/40',
+              vsGlowClass
+            )}>
+              <span className="text-2xl font-black uppercase tracking-[0.35em]">VS</span>
+            </div>
+          </div>
+
+          <div className={cn(
+            'flex-1 min-h-0 rounded-3xl border-2 p-1',
+            opponentGlowClass
+          )}>
+            <div className="grid gap-2 grid-cols-1 h-full">
+              {opponentSlots.map((slot, idx) => (
+                <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
+                  {slot.type === 'host' ? (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="opponent"
+                          crownInfo={opponentCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'challenger'}
+                          onTroll={() => handleTrollClick('opponent')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={opponentIsSingleHost}
+                          fallbackHlsUrl={opponentHostHlsUrl}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        opponentHostHlsUrl ? (
+                          <BattleParticipantTile
+                            identity={opponentHostId}
+                            name={opponentHostName || 'Opponent'}
+                            isLocal={false}
+                            isMicrophoneEnabled={true}
+                            isCameraEnabled={true}
+                            metadata={{ role: 'host' }}
+                            role="host"
+                            team="opponent"
+                            sourceStreamId={opponentStreamId}
+                            side="opponent"
+                            crownInfo={opponentCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'challenger'}
+                            onTroll={() => handleTrollClick('opponent')}
+                            isSingleHost={opponentIsSingleHost}
+                            fallbackHlsUrl={opponentHostHlsUrl}
+                            playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                            onTileClick={() => handleParticipantBoxClick({
+                              identity: opponentHostId,
+                              name: opponentHostName || 'Opponent',
+                              isLocal: false,
+                              isMicrophoneEnabled: false,
+                              isCameraEnabled: true,
+                              metadata: { role: 'host' },
+                              role: 'host',
+                              team: 'opponent',
+                              sourceStreamId: opponentStreamId,
+                            })}
+                          />
+                        ) : (
+                          <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
+                            <User className="text-emerald-500/50" size={48} />
+                            <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="opponent"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          playbackMode={shouldUseMuxPlayback ? 'mux' : 'livekit'}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-emerald-500/30" size={24} />
+                          <span className="text-emerald-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+            );
+        }
+        if (isSingleHostBattle) {
+          return (
         /* Desktop Layout: Vertical split */
         <>
           {/* Challenger Side */}
@@ -2297,7 +2535,10 @@ return (
             </div>
           </div>
         </>
-      )}
+          );
+        }
+        return null;
+      })()}
 
       {!shouldUseMuxPlayback && <BattleAudioRenderer entries={remoteAudioEntries} />}
     </div>
@@ -2436,15 +2677,20 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     if (!tracks) return null;
     // Already a tuple
     if (Array.isArray(tracks)) {
-      return [tracks[0] || undefined, tracks[1] || undefined];
+      const audio = tracks[0] || undefined;
+      const video = tracks[1] || undefined;
+      if (!audio && !video) return null;
+      return [audio, video];
     }
-    // Object with audio/video keys
-    if (tracks.audio || tracks.video) {
-      return [tracks.audio, tracks.video];
-    }
-    return null;
+    const audio = tracks.audio ?? tracks.audioTrack;
+    const video = tracks.video ?? tracks.videoTrack;
+    if (!audio && !video) return null;
+    return [audio, video];
   };
-  const localTracksFromPreflight = normalizeTracks(passedLocalTracks) || normalizeTracks(PreflightStore.getTracks()) || null;
+  const localTracksFromPreflight = normalizeTracks(passedLocalTracks)
+    || normalizeTracks(PreflightStore.getLivekitTracks())
+    || normalizeTracks(PreflightStore.getTracks())
+    || null;
 
   // Mobile retry: if no tracks yet, retry PreflightStore after a short delay
   // This handles the race condition where BattleView mounts before PreflightStore is populated
@@ -2452,17 +2698,27 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   useEffect(() => {
     if (localTracksFromPreflight) return;
     if (!isBroadcaster) return;
-    const timer = setTimeout(() => {
-      const tracks = normalizeTracks(PreflightStore.getTracks());
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts += 1;
+      const tracks = normalizeTracks(PreflightStore.getLivekitTracks()) || normalizeTracks(PreflightStore.getTracks());
       if (tracks) {
         if (import.meta.env.DEV) console.log('[BattleView] Mobile retry: found PreflightStore tracks');
         setRetryTracks(tracks);
+        clearInterval(interval);
+        return;
+      }
+      if (attempts >= 6) {
+        clearInterval(interval);
       }
     }, 500);
-    return () => clearTimeout(timer);
+    return () => clearInterval(interval);
   }, [localTracksFromPreflight, isBroadcaster]);
 
   const effectiveLocalTracks = localTracksFromPreflight || retryTracks;
+  const effectiveLocalTracksKey = effectiveLocalTracks
+    ? `${effectiveLocalTracks[0]?.sid ?? 'noaudio'}|${effectiveLocalTracks[1]?.sid ?? 'novideo'}`
+    : 'none';
 
   // REMOVED useBattleRoom hook - using legacy connection only to avoid conflicts
   // The legacy code uses room name: battle-{battleId}
@@ -2486,13 +2742,13 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         .from('user_profiles')
         .select('battle_crowns, battle_crown_streak')
         .eq('id', challengerStream.user_id)
-        .single();
+        .maybeSingle();
 
       const { data: opponentProfile } = await supabase
         .from('user_profiles')
         .select('battle_crowns, battle_crown_streak')
         .eq('id', opponentStream.user_id)
-        .single();
+        .maybeSingle();
 
       if (challengerProfile) {
         setChallengerCrownInfo({
@@ -2536,8 +2792,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       previousBattleIdRef.current = battleId;
     }
 
-    // PHASE 3: If already connected for this battleId, skip
-    if (connectedBattleIdRef.current === battleId && battleRoomRef.current && battleRoomRef.current.state === 'connected') {
+    // PHASE 3: If already connected for this battleId and tracks are already published, skip
+    if (connectedBattleIdRef.current === battleId && battleRoomRef.current && battleRoomRef.current.state === 'connected' && (hasPublishedTracksRef.current || !isBroadcaster)) {
       return;
     }
 
@@ -2998,7 +3254,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       }
       // Do NOT call PreflightStore.clear() - tracks belong to the main broadcast
     };
-  }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster]);
+  }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster, effectiveLocalTracksKey]);
 
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showMobileGiftTray, setShowMobileGiftTray] = useState(false);
@@ -4055,6 +4311,8 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                 opponentHostHlsUrl={opponentPlaybackUrl}
                 challengerBoxCount={challengerStream.box_count || 1}
                 opponentBoxCount={opponentStream.box_count || 1}
+                challengerScore={battle?.score_challenger || 0}
+                opponentScore={battle?.score_opponent || 0}
                 challengerCrownInfo={challengerCrownInfo}
                 opponentCrownInfo={opponentCrownInfo}
                 isSuddenDeath={isSuddenDeath}

@@ -218,7 +218,7 @@ app.get('/api/social/:broadcastId', async (req, res) => {
       // Direct stream lookup by UUID
       const { data: streamData, error: streamError } = await supabase
         .from('streams')
-        .select('*, user_profiles(username, avatar_url, thumbnail_url)')
+        .select('*, user_profiles!streams_broadcaster_id_fkey(username, avatar_url, thumbnail_url)')
         .eq('id', broadcastId)
         .maybeSingle();
       
@@ -242,7 +242,7 @@ app.get('/api/social/:broadcastId', async (req, res) => {
         // Look for active stream
         const { data: streamData, error: streamError } = await supabase
           .from('streams')
-          .select('*, user_profiles(username, avatar_url, thumbnail_url)')
+          .select('*, user_profiles!streams_broadcaster_id_fkey(username, avatar_url, thumbnail_url)')
           .eq('user_id', userData.id)
           .eq('is_live', true)
           .eq('status', 'live')

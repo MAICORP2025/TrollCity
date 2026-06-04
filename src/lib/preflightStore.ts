@@ -129,9 +129,11 @@ export const PreflightStore = {
   },
 
   // Get tracks as object for easier access (alternative to tuple)
-  getTracks(): { audioTrack: LocalAudioTrack | null; videoTrack: LocalVideoTrack | null } | null {
+  getTracks(): { audio: LocalAudioTrack | null; video: LocalVideoTrack | null; audioTrack: LocalAudioTrack | null; videoTrack: LocalVideoTrack | null } | null {
     if (!state.livekitTracks) return null;
     return {
+      audio: state.livekitTracks[0],
+      video: state.livekitTracks[1],
       audioTrack: state.livekitTracks[0],
       videoTrack: state.livekitTracks[1],
     };

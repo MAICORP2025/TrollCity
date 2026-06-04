@@ -236,12 +236,14 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirstWithOfflineFallback(request));
   } else if (
     request.destination === 'script' ||
-    request.destination === 'style' ||
     request.destination === 'font' ||
     request.destination === 'worker'
   ) {
-    // Static assets: Cache First
+    // JS/Font/Worker: Cache First (hashed filenames = immutable)
     event.respondWith(cacheFirst(request, STATIC_CACHE));
+  } else if (request.destination === 'style') {
+    // CSS: Stale While Revalidate to avoid stale CSS after deployments
+    event.respondWith(staleWhileRevalidate(request, STATIC_CACHE));
   } else if (request.destination === 'image') {
     // Images: Stale While Revalidate
     event.respondWith(staleWhileRevalidate(request, IMAGE_CACHE));

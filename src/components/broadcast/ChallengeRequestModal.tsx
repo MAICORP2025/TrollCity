@@ -108,7 +108,7 @@ export default function ChallengeRequestModal({
           expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 minutes
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Challenge error:', error);

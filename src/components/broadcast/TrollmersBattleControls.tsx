@@ -218,14 +218,14 @@ export default function TrollmersBattleControls({ currentStream, onBattleAccepte
             .from('streams')
             .select('id, user_id, title')
             .eq('id', data.opponent_stream_id)
-            .single();
+            .maybeSingle();
             
           if (opponentData) {
             const { data: profile } = await supabase
               .from('user_profiles')
               .select('username, avatar_url')
               .eq('id', opponentData.user_id)
-              .single();
+              .maybeSingle();
               
             setOpponentInfo({
               ...opponentData,
@@ -431,14 +431,14 @@ export default function TrollmersBattleControls({ currentStream, onBattleAccepte
               .from('streams')
               .select('id, user_id, title')
               .eq('id', data.opponent_stream_id)
-              .single();
+              .maybeSingle();
               
             if (opponentData) {
               const { data: profile } = await supabase
                 .from('user_profiles')
                 .select('username, avatar_url')
                 .eq('id', opponentData.user_id)
-                .single();
+                .maybeSingle();
                 
               setOpponentInfo({
                 ...opponentData,

@@ -120,14 +120,7 @@ CREATE POLICY "admin can insert admin password resets"
 DROP POLICY IF EXISTS "users can upsert own route presence" ON public.user_presence_routes;
 CREATE POLICY "users can upsert own route presence"
   ON public.user_presence_routes
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (user_id = auth.uid());
-
-DROP POLICY IF EXISTS "users can update own route presence" ON public.user_presence_routes;
-CREATE POLICY "users can update own route presence"
-  ON public.user_presence_routes
-  FOR UPDATE
+  FOR ALL
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());

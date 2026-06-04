@@ -404,6 +404,45 @@ const isLocalhost =
     return () => window.removeEventListener('supabase-realtime-activity', handleRealtimeActivity);
   }, [connectionHealth]);
   
+  // ===== VISIBILITY CHANGE — AUTO UPDATE AFTER INACTIVITY =====
+  
+  useEffect(() => {
+    let lastHiddenTime = 0;
+    const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        lastHiddenTime = Date.now();
+      } else if (document.visibilityState === 'visible' && lastHiddenTime > 0) {
+        const awayTime = Date.now() - lastHiddenTime;
+        
+        // If the app was backgrounded for more than the threshold, check for updates
+        if (awayTime > INACTIVITY_THRESHOLD_MS) {
+          console.log(`[PWA] App returned after ${Math.round(awayTime / 1000)}s inactivity, checking for updates`);
+          
+          // Check for service worker updates
+          if (swRegistrationRef.current) {
+            swRegistrationRef.current.update().catch(() => {});
+            
+            // If there's already a waiting worker, auto-activate it
+            if (swRegistrationRef.current.waiting) {
+              console.log('[PWA] Update found after inactivity, auto-activating...');
+              swRegistrationRef.current.waiting.postMessage({ type: 'SKIP_WAITING' });
+              // Small delay to let the new SW activate, then reload
+              setTimeout(() => window.location.reload(), 300);
+            }
+          }
+          
+          // Also dispatch a reconnect event for realtime subscriptions
+          window.dispatchEvent(new CustomEvent('pwa-returned-from-inactivity'));
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+  
   // ===== ACTIONS =====
   
   const updateApp = useCallback(() => {

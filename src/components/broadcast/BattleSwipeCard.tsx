@@ -83,7 +83,7 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
           )
         `)
         .eq('id', stream.battle_id)
-        .single();
+        .maybeSingle();
       
       if (data) {
         setBattleData({

@@ -1,13 +1,13 @@
 -- Create user_reports table for broadcast moderation
 CREATE TABLE IF NOT EXISTS user_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reporter_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    reported_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    reporter_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE NOT NULL,
+    reported_user_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE NOT NULL,
     reason VARCHAR(100) NOT NULL,
     description TEXT,
     stream_id UUID REFERENCES streams(id) ON DELETE SET NULL,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'resolved', 'dismissed')),
-    reviewed_by UUID REFERENCES auth.users(id),
+    reviewed_by UUID REFERENCES public.user_profiles(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

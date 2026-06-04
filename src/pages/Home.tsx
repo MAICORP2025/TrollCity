@@ -1,18 +1,15 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazyWithRetry } from '@/utils/lazyImport'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   Bell,
-  ChevronRight,
-  Coins,
   Crown,
   FileText,
   Gamepad2,
   Gavel,
   Gift,
   Heart,
-  Link2,
-  Megaphone,
   MessageCircle,
   Play,
   Radio,
@@ -20,7 +17,6 @@ import {
   Sparkles,
   Star,
   Trophy,
-  Users,
   Vote,
   X,
   Zap,
@@ -38,6 +34,7 @@ import SupportGoalReminderModal from '@/components/SupportGoalReminderModal'
 import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import FloatingPoster from '@/components/home/FloatingPoster'
+import JoinPoster from '@/components/home/JoinPoster'
 
 interface AuctionShow {
   id: string
@@ -71,11 +68,11 @@ interface LiveItem {
 
 type TabType = 'wall' | 'live' | 'universe' | 'laws-fees' | 'leagues' | 'president'
 
-const PWAInstallPrompt = lazy(() => import('../components/PWAInstallPrompt'))
-const TCNNPopupWidget = lazy(() => import('@/components/tcnn/TCNNPopupWidget'))
-const FeaturedBroadcasts = lazy(() => import('@/components/broadcast/FeaturedBroadcasts'))
-const PromoSlot = lazy(() => import('@/components/promo/PromoSlot'))
-const AdRail = lazy(() => import('@/components/promo/AdRail'))
+const PWAInstallPrompt = lazyWithRetry(() => import('../components/PWAInstallPrompt'))
+const TCNNPopupWidget = lazyWithRetry(() => import('@/components/tcnn/TCNNPopupWidget'))
+const FeaturedBroadcasts = lazyWithRetry(() => import('@/components/broadcast/FeaturedBroadcasts'))
+const PromoSlot = lazyWithRetry(() => import('@/components/promo/PromoSlot'))
+const AdRail = lazyWithRetry(() => import('@/components/promo/AdRail'))
 
 const glass =
   'border border-white/10 bg-[#070b19]/70 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]'
@@ -164,7 +161,7 @@ function TopPrideHero({
               </h1>
               <p className="mt-2 max-w-2xl text-sm font-medium text-slate-200 md:text-base">
                 This is your city, your way. Complete Pride challenges, go live, support creators,
-                and keep the homepage glowing for June.
+                and keep the homepage glowing for June. Homepage on July 1st will revert back to original  Layout!
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -975,6 +972,8 @@ export default function Home() {
           </section>
         )}
       </main>
+
+      <JoinPoster />
 
       {supportGoalReminder && !reminderLoading && (
         <SupportGoalReminderModal

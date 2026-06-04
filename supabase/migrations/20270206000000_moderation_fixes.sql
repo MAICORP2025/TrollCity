@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS ip_bans (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     ip_address text NOT NULL,
     reason text,
-    banned_by uuid REFERENCES auth.users(id),
+    banned_by uuid REFERENCES public.user_profiles(id),
     created_at timestamptz DEFAULT now(),
     banned_until timestamptz,
     is_active boolean DEFAULT true

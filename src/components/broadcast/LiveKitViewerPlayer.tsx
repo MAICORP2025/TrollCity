@@ -60,7 +60,7 @@ const LiveKitViewerPlayer: React.FC<LiveKitViewerPlayerProps> = ({ streamId, bro
           .from('streams')
           .select('status')
           .eq('id', streamId)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('[LiveKitViewerPlayer] Error checking stream status:', error);

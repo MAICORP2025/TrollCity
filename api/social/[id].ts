@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     if (isUUID) {
       const { data, error } = await supabaseAdmin
         .from('streams')
-        .select('*, user_profiles(username, avatar_url, thumbnail_url)')
+        .select('*, user_profiles!streams_broadcaster_id_fkey(username, avatar_url, thumbnail_url)')
         .eq('id', broadcastId)
         .maybeSingle();
       
@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       if (!userError && userData) {
         const { data: streamData, error: streamError } = await supabaseAdmin
           .from('streams')
-          .select('*, user_profiles(username, avatar_url, thumbnail_url)')
+          .select('*, user_profiles!streams_broadcaster_id_fkey(username, avatar_url, thumbnail_url)')
           .eq('user_id', userData.id)
           .eq('is_live', true)
           .eq('status', 'live')

@@ -114,7 +114,7 @@ export default function ExecutiveOperationsConsole() {
       try {
         const [intakeRes, alertsRes] = await Promise.all([
           supabase.from('executive_intake').select('id', { count: 'exact', head: true }).in('status', ['new', 'in_progress']),
-          supabase.from('critical_alerts').select('id', { count: 'exact', head: true }).eq('status', 'active')
+          supabase.from('critical_alerts').select('id', { count: 'exact', head: true }).eq('resolved', false)
         ])
         if (intakeRes.count != null) setIntakeCount(intakeRes.count)
         if (alertsRes.count != null) setAlertCount(alertsRes.count)

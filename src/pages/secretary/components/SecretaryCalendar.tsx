@@ -104,7 +104,7 @@ export default function SecretaryCalendar() {
           ends_at: endsAt,
           status: 'scheduled',
         })
-        .select()
+        .select('id, title, description, event_type, starts_at, ends_at, status, created_by_user_id, created_by_role')
         .single();
 
       if (eventError) throw eventError;
