@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -12,6 +12,7 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
+  Skull,
   Users,
   Video,
 } from 'lucide-react'
@@ -63,6 +64,11 @@ import { useBroadcastViewerCap } from '../../hooks/useBroadcastViewerCap'
 import { logActiveChannels } from '../../lib/realtimeChannelDiagnostics'
 import BroadcastTextPopupOverlay from '../../components/broadcast/BroadcastTextPopupOverlay'
 import RandomBattleBanner from '../../components/broadcast/RandomBattleBanner'
+import CityStatusPanel from '../../components/city/CityStatusPanel'
+import CityStatusOrb from '../../components/city/CityStatusOrb'
+import { useCityStatusOrb } from '../../lib/hooks/useCityStatusOrb'
+import SeatCityStatusOrb from '../../components/broadcast/SeatCityStatusOrb'
+import { useGhostMode } from '../../hooks/useGhostMode'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -159,9 +165,9 @@ function participantMatchesUser(participant: any, userId?: string | null) {
 
   return (
     identity === userId ||
-    identity.includes(userId) ||
-    identity.endsWith(`-${userId}`) ||
-    identity.startsWith(`${userId}-`) ||
+    (identity && identity.includes(userId)) ||
+    (identity && identity.endsWith(`-${userId}`)) ||
+    (identity && identity.startsWith(`${userId}-`)) ||
     metadata.user_id === userId ||
     metadata.userId === userId ||
     participant?.user_id === userId ||
@@ -269,7 +275,7 @@ function RemoteVideoSurface({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Track version tick — incremented on room events only.
+  // Track version tick â€” incremented on room events only.
   // LiveKit mutates RemoteParticipant objects in place, so the videoTrack
   // dependency alone won't trigger re-attach when a track is subscribed.
   const [trackTick, setTrackTick] = useState(0)
@@ -291,7 +297,7 @@ function RemoteVideoSurface({
   }, [room])
 
   // Recompute tracks on every render + tick change.
-  // Do NOT memoize by participant reference — LiveKit mutates in place.
+  // Do NOT memoize by participant reference â€” LiveKit mutates in place.
   const videoTrack = getVideoTrackFromParticipant(participant)
   const audioTrack = getAudioTrackFromParticipant(participant)
 
@@ -613,7 +619,10 @@ function ViewerPage() {
     role?: string
     createdAt?: string
   } | null>(null)
+  const [selectedSeatUserId, setSelectedSeatUserId] = useState<string | null>(null)
   const [viewerError, setViewerError] = useState<string | null>(null)
+  // Force re-render trigger for seat updates when broadcaster removes a user
+  const [, setSeatUpdateTick] = useState(0)
   const [showHypeCoinPopup, setShowHypeCoinPopup] = useState(false)
   const { topGifters, isLoading: isTopFansLoading } = useStreamTopGifters({ streamId: streamId || null, limit: 10 })
 
@@ -772,7 +781,7 @@ function ViewerPage() {
     const receiverId = enrichedGiftData.receiver_id || enrichedGiftData.recipient_id || enrichedGiftData.receiverId || enrichedGiftData.recipientId || enrichedGiftData.metadata?.receiver_id || enrichedGiftData.metadata?.recipient_id
 
     if (incomingStreamId && incomingStreamId !== streamId) {
-      if (import.meta.env.DEV) console.log('[ViewerPage] ⚠️ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId })
+      if (import.meta.env.DEV) console.log('[ViewerPage] âš ï¸ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId })
       return
     }
 
@@ -783,7 +792,7 @@ function ViewerPage() {
       id: giftId,
       gift_id: enrichedGiftData.gift_id,
       gift_name: resolvedGiftName,
-      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || '🎁',
+      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || 'ðŸŽ',
       gift_slug: enrichedGiftData.gift_slug || enrichedGiftData.metadata?.gift_slug,
       animation_key: enrichedGiftData.animation_key || enrichedGiftData.metadata?.animation_key,
       animation_type: enrichedGiftData.animation_type || enrichedGiftData.metadata?.animation_type,
@@ -871,8 +880,31 @@ function ViewerPage() {
      joinSeat,
      leaveSeat,
      markSeatLive,
+     refreshSeats,
+     removeSeat,
    } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
    const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
+
+   // Listen for seat_left broadcast events from broadcaster/officer removes
+   // This ensures immediate UI update when a user is kicked from a seat
+   useEffect(() => {
+     if (!streamId) return
+     const channel = supabase.channel(`stream-seat-events:${streamId}-viewer`)
+     channel
+       .on('broadcast', { event: 'seat_left' }, (payload) => {
+         const seatIndex = payload?.payload?.seat_index
+         // Immediately remove the seat from local state for instant UI update
+         if (seatIndex !== undefined && seatIndex !== null) {
+           removeSeat(Number(seatIndex))
+         }
+         // Also trigger a background refetch to sync with server
+         void refreshSeats()
+       })
+       .subscribe()
+     return () => {
+       supabase.removeChannel(channel)
+     }
+   }, [streamId, refreshSeats, removeSeat])
 
    const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
    const isSeatActiveStatus = (status?: string | null) => {
@@ -997,7 +1029,7 @@ const isActive = isStreamActive(stream)
      return String(getLiveKitRoomName(stream as Stream | null, streamId) || '')
    }, [stream?.livekit_room_name, stream?.id, streamId])
 
-    // Stable anonymous viewer identity — never use "undefined" in identity.
+    // Stable anonymous viewer identity â€” never use "undefined" in identity.
     // Uses sessionStorage so the same guest gets the same identity for the
     // browser session and stream. Format: guest-viewer:<streamId>:<uuid>
     const stableAnonId = useMemo(() => {
@@ -1157,6 +1189,40 @@ const isActive = isStreamActive(stream)
       profile?.role === 'admin' ||
       profile?.troll_role === 'admin'
   )
+
+  // Check if current user is CEO
+  const isCEO = Boolean(
+    profile?.role === 'ceo' ||
+    (profile as any)?.is_ceo ||
+    profile?.role === 'admin' ||
+    profile?.is_admin
+  )
+
+  // Ghost Mode hook for CEOs
+  const {
+    ghostSession,
+    isJoiningGhost,
+    isLeavingGhost,
+    isMicEnabled: isGhostMicEnabled,
+    isCameraEnabled: isGhostCameraEnabled,
+    joinGhostMode,
+    leaveGhostMode,
+    toggleMic: toggleGhostMic,
+    toggleCamera: toggleGhostCamera,
+  } = useGhostMode({
+    streamId: streamId || '',
+    userId: user?.id,
+    isCEO,
+    roomRef: liveKitRoom as any,
+  })
+
+   // CityStatusOrb for broadcaster display
+   const broadcasterCityStatus = useCityStatusOrb({
+     userId: hostId,
+     broadcasterId: user?.id,
+     isBroadcaster: false,
+     isBroadOfficer: isOfficer,
+   })
 
    const activeSeats = useMemo(() => {
      return Object.values(seats || {}).filter(
@@ -1583,8 +1649,8 @@ const handleLeaveSeat = useCallback(async () => {
   }, [streamId, refreshStream])
 
   // Canonical gift-animation source: stream_gifts postgres_changes received
-  // via useStreamRealtime. event.new.id is the stream_gifts row UUID — the
-  // same value that useGiftSystem uses as broadcast payload.id — so both
+  // via useStreamRealtime. event.new.id is the stream_gifts row UUID â€” the
+  // same value that useGiftSystem uses as broadcast payload.id â€” so both
   // postgres and broadcast paths resolve to the same animationId and the
   // seenGiftAnimationIdsRef Set catches the second arrival without double-
   // playing the <video>.
@@ -1680,7 +1746,7 @@ useStreamRealtime(
 
   const floatingChatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // ── Floating Chat: receive broadcasts ────────────────────────────────────
+  // â”€â”€ Floating Chat: receive broadcasts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!streamId) return
 
@@ -1817,7 +1883,7 @@ useStreamRealtime(
     joiningAudienceRef.current = false
   }, [streamId])
 
-  // Focused effect for audience join — keep dependencies primitive to avoid
+  // Focused effect for audience join â€” keep dependencies primitive to avoid
   // re-running due to object identity changes.
   useEffect(() => {
     if (!streamId) return
@@ -1940,7 +2006,7 @@ useStreamRealtime(
     return `calc(100dvh - ${reserved}px - env(safe-area-inset-bottom))`
   }, [isMobileViewer])
 
-  // ── Channel diagnostics (dev only) ──
+  // â”€â”€ Channel diagnostics (dev only) â”€â”€
   useEffect(() => {
     logActiveChannels(`ViewerPage:mount:${streamId}`);
     return () => logActiveChannels(`ViewerPage:unmount:${streamId}`);
@@ -1968,7 +2034,7 @@ useStreamRealtime(
     return (
       <div className={cn('flex h-dvh items-center justify-center text-white', theme.pageBg)}>
         <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.035] px-8 py-6 text-center shadow-[0_0_35px_rgba(45,212,191,0.2)] backdrop-blur-2xl">
-          <div className="text-lg font-black">Loading broadcast…</div>
+          <div className="text-lg font-black">Loading broadcastâ€¦</div>
           <div className="mt-2 text-sm text-cyan-100/60">Connecting to Troll City LiveKit.</div>
         </div>
       </div>
@@ -1981,7 +2047,7 @@ useStreamRealtime(
     stream?.is_battle === true &&
     (stream?.battle_status === 'ready' || stream?.battle_status === 'starting' || stream?.battle_status === 'active');
 
-  // PHASE 2: Derive stable battleId for BattleView key — prevents remount on stream state updates
+  // PHASE 2: Derive stable battleId for BattleView key â€” prevents remount on stream state updates
   const activeBattleId = shouldShowRandomBattleArena ? stream?.battle_id ?? null : null;
 
   if (shouldShowRandomBattleArena) {
@@ -2009,7 +2075,7 @@ useStreamRealtime(
       <ErrorBoundary>
         <div className={cn('relative flex h-dvh w-full flex-col overflow-hidden', theme.pageShell)}>
 
-          {/* Background layers — identical to Sidebar ShellBackdrop */}
+          {/* Background layers â€” identical to Sidebar ShellBackdrop */}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
@@ -2019,29 +2085,70 @@ useStreamRealtime(
 
           <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
 
-           {!isMobileViewer && (
-             <>
-               <BroadcastNeonHeader
-                 stream={stream}
-                 broadcasterProfile={broadcasterProfile
-                   ? {
-                     username: broadcasterProfile.username,
-                     avatar_url: broadcasterProfile.avatar_url,
-                     display_name: broadcasterProfile.display_name,
-                   }
-                   : null}
-                 isHost={false}
-                 liveViewerCount={viewerCount}
-                 handleLike={handleLike}
-                 onGift={() => onGift(hostId)}
-                 onShare={handleShare}
-                 onEndStream={handleLeave}
-                 coinBalance={(profile as any)?.troll_coins ?? 0}
-                 onOpenCoinStore={user?.id ? () => toast.info('Coin Store opens from the viewer action bar.') : undefined}
-                 isLive={isActive}
-                 streamStartedAt={(stream as any).started_at} />
-{/* Audience Bubble Ticker and Top Subscribers Bar */}
-                <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
+{!isMobileViewer && (
+                <>
+                  <BroadcastNeonHeader
+                    stream={stream}
+                    broadcasterProfile={broadcasterProfile
+                      ? {
+                          username: broadcasterProfile.username,
+                          avatar_url: broadcasterProfile.avatar_url,
+                          display_name: broadcasterProfile.display_name,
+                        }
+                        : null}
+                    isHost={false}
+                    liveViewerCount={viewerCount}
+                    handleLike={handleLike}
+                    onGift={() => onGift(hostId)}
+                    onShare={handleShare}
+                    onEndStream={handleLeave}
+                    coinBalance={(profile as any)?.troll_coins ?? 0}
+                    onOpenCoinStore={user?.id ? () => toast.info('Coin Store opens from the viewer action bar.') : undefined}
+                    isLive={isActive}
+                    streamStartedAt={(stream as any).started_at} />
+
+                  {isCEO && isActive && (
+                    <div className="px-4 pb-3">
+                      <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-3xl border border-purple-500/20 bg-slate-950/90 p-4 text-sm text-slate-200 shadow-[0_0_30px_rgba(147,51,234,0.25)] sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/15 text-2xl">
+                            <Skull className="h-6 w-6 text-purple-200" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-white">Ghost Mode</p>
+                            <p className="text-xs text-slate-400">
+                              {ghostSession ? 'Active - Silent mode enabled' : 'Join silently to monitor chat'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white/5 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-cyan-200">
+                          {ghostSession ? (
+                            <button
+                              onClick={() => {
+                                leaveGhostMode()
+                              }}
+                              className="hover:text-red-300 transition-colors"
+                            >
+                              Leave Ghost
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                joinGhostMode()
+                              }}
+                              disabled={isJoiningGhost || isLeavingGhost}
+                              className="disabled:opacity-50"
+                            >
+                              {isJoiningGhost ? 'Joining...' : 'Join Ghost'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Audience Bubble Ticker and Top Subscribers Bar */}
+                  <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
                   <div className="w-full max-w-7xl mx-auto flex items-center gap-3 px-4 sm:px-0">
                     <AudienceBubbleTicker
                       streamId={streamId}
@@ -2063,12 +2170,12 @@ useStreamRealtime(
                     <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-3xl border border-cyan-500/10 bg-slate-950/90 p-4 text-sm text-slate-200 shadow-[0_0_30px_rgba(45,212,191,0.08)] sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
-                          {myLeagues[0].icon_emoji || '🏆'}
+                          {myLeagues[0].icon_emoji || 'ðŸ†'}
                         </div>
                         <div>
                           <p className="text-sm font-black text-white">League: {myLeagues[0].name}</p>
                           <p className="text-xs text-slate-400">
-                            {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} • {myLeagues[0].member_count}/{myLeagues[0].max_members} members
+                            {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} â€¢ {myLeagues[0].member_count}/{myLeagues[0].max_members} members
                           </p>
                         </div>
                       </div>
@@ -2081,7 +2188,7 @@ useStreamRealtime(
              </>
            )}
 
-           {/* Random Battle Banner — prominent notice for queue/active battle */}
+           {/* Random Battle Banner â€” prominent notice for queue/active battle */}
            {stream && (
              <RandomBattleBanner
                phase={randomBattlePhase}
@@ -2112,7 +2219,7 @@ useStreamRealtime(
                   }
             }
           >
-            {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
+            {/* â”€â”€ LEFT: Host Video Card / Mobile Watch Surface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
             <section
               className={cn(
                 'relative min-h-0 overflow-hidden',
@@ -2150,7 +2257,7 @@ useStreamRealtime(
                       )}
                       <div className="mt-4 text-lg font-black">{hostName}</div>
                       <div className="mt-2 text-sm text-slate-300">
-                        {isActive ? 'Camera Off' : 'Waiting for broadcast…'}
+                        {isActive ? 'Camera Off' : 'Waiting for broadcastâ€¦'}
                       </div>
                     </div>
                   </div>
@@ -2162,9 +2269,22 @@ useStreamRealtime(
               {/* Desktop-only overlays */}
               {!isMobileViewer && (
                 <>
-                  <div className="absolute left-5 top-5 z-20 flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.25)] backdrop-blur-xl">
-                    <Crown className="h-4 w-4" />
-                    Host
+                  <div className="absolute left-5 top-5 z-20 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.25)] backdrop-blur-xl">
+                      <Crown className="h-4 w-4" />
+                      Host
+                    </div>
+                    {/* City Status Orb â€” compact inline (clickable) */}
+                    {broadcasterCityStatus.data && (
+                      <div className="pointer-events-auto">
+                        <CityStatusOrb
+                          data={broadcasterCityStatus.data}
+                          permissions={{ isSelf: false, canCheckLicense: false, canRaid: false, canRepair: false, canEnforce: false, canRemoveFromSeat: false, canAccessAll: false }}
+                          compact
+                          onHouseClick={() => setSelectedSeatUserId(hostId)}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
@@ -2228,7 +2348,7 @@ useStreamRealtime(
                 </div>
               )}
 
-              {/* ── Mobile PWA floating chat: messages float up from chat input to top of video ── */}
+              {/* â”€â”€ Mobile PWA floating chat: messages float up from chat input to top of video â”€â”€ */}
               {isMobileViewer && (
                 <div
                   className="pointer-events-none fixed inset-x-0 z-30 overflow-hidden"
@@ -2268,7 +2388,7 @@ useStreamRealtime(
               )}
             </section>
 
-            {/* ── CENTER: Seats belong beside the broadcaster, never over it ── */}
+            {/* â”€â”€ CENTER: Seats belong beside the broadcaster, never over it â”€â”€ */}
             {hasMounted && !isMobileViewer && seatCards.length > 0 && (
               <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/25 bg-black/20 p-4 shadow-[0_0_28px_rgba(45,212,191,0.18)] backdrop-blur-xl">
                 <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
@@ -2296,8 +2416,8 @@ useStreamRealtime(
                             participantMatchesUser(participant, seatIdentity) ||
                             participantMatchesUser(participant, seatUserId) ||
                             participantIdentity === String(seatIdentity) ||
-                            participantIdentity.endsWith(`-${seatIdentity}`) ||
-                            String(seatIdentity).endsWith(participantIdentity)
+                            (participantIdentity && seatIdentity && participantIdentity.endsWith(`-${seatIdentity}`)) ||
+                            (seatIdentity && participantIdentity && String(seatIdentity).endsWith(participantIdentity))
                           )
                         })
                       : null
@@ -2312,6 +2432,23 @@ useStreamRealtime(
                             ? 'Free Seat'
                             : `${seat.seatPrice} Coins`
 
+                    // Any occupied seat is clickable to open CityStatusPanel
+                    const canClickSeat = seat.isOccupied && seatUserId;
+
+                    const seatClickProps = canClickSeat
+                      ? {
+                          role: 'button' as const,
+                          tabIndex: 0,
+                          onClick: () => setSelectedSeatUserId(seatUserId),
+                          onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              setSelectedSeatUserId(seatUserId);
+                            }
+                          },
+                        }
+                      : undefined;
+
                     return (
                       <div
                         key={seat.seatIndex}
@@ -2323,8 +2460,10 @@ useStreamRealtime(
                               ? 'border-purple-300/45 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)] shadow-[0_0_24px_rgba(168,85,247,0.16)]'
                               : seat.isLocked
                                 ? 'border-white/10 bg-transparent opacity-70'
-                                : 'border-white/10 bg-transparent hover:border-white/20 hover:shadow-[0_0_24px_rgba(15,23,42,0.18)]'
+                                : 'border-white/10 bg-transparent hover:border-white/20 hover:shadow-[0_0_24px_rgba(15,23,42,0.18)]',
+                          canClickSeat ? 'cursor-pointer hover:-translate-y-0.5' : ''
                         )}
+                        {...seatClickProps}
                       >
                         {isMine ? (
                           <LocalVideoSurface
@@ -2379,19 +2518,32 @@ useStreamRealtime(
 
                         {seat.isOccupied && (
                           <div className="absolute inset-x-3 bottom-3 z-20 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/55 px-3 py-2 backdrop-blur-md">
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-black text-white">Seat {seat.seatIndex}</p>
-                              <p className="truncate text-[11px] font-bold text-cyan-100/70">{statusLabel}</p>
+                            <div className="min-w-0 flex-1">
+                              {seatUserId ? (
+                                <SeatCityStatusOrb
+                                  userId={seatUserId}
+                                  broadcasterId={hostId}
+                                  isBroadOfficer={isOfficer}
+                                  onClick={() => setSelectedSeatUserId(seatUserId)}
+                                />
+                              ) : (
+                                <>
+                                  <p className="truncate text-xs font-black text-white">Seat {seat.seatIndex}</p>
+                                  <p className="truncate text-[11px] font-bold text-cyan-100/70">{statusLabel}</p>
+                                </>
+                              )}
                             </div>
-                            {seat.isMine && (
-                              <button
-                                type="button"
-                                onClick={handleLeaveSeat}
-                                className="rounded-lg border border-red-300/25 bg-red-500/15 px-2 py-1 text-[11px] font-black text-red-100"
-                              >
-                                Leave
-                              </button>
-                            )}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {seat.isMine && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleLeaveSeat(); }}
+                                  className="rounded-lg border border-red-300/25 bg-red-500/15 px-2 py-1 text-[11px] font-black text-red-100"
+                                >
+                                  Leave
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2401,7 +2553,7 @@ useStreamRealtime(
               </aside>
             )}
 
-          {/* ── MOBILE PWA: Seats overlay on broadcaster video ── */}
+          {/* â”€â”€ MOBILE PWA: Seats overlay on broadcaster video â”€â”€ */}
           {hasMounted && isMobileViewer && seatCards.length > 0 && (
             <div
               className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col"
@@ -2429,8 +2581,8 @@ useStreamRealtime(
                             participantMatchesUser(participant, seatIdentity) ||
                             participantMatchesUser(participant, seatUserId) ||
                             participantIdentity === String(seatIdentity) ||
-                            participantIdentity.endsWith(`-${seatIdentity}`) ||
-                            String(seatIdentity).endsWith(participantIdentity)
+                            (participantIdentity && seatIdentity && participantIdentity.endsWith(`-${seatIdentity}`)) ||
+                            (seatIdentity && participantIdentity && String(seatIdentity).endsWith(participantIdentity))
                           )
                         })
                       : null
@@ -2488,7 +2640,7 @@ useStreamRealtime(
                             </div>
                             <div className="text-[11px] font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">Seat {seat.seatIndex}</div>
                             <div className="text-[10px] font-bold text-white/60 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
-                              {seat.isLocked ? 'Locked' : seat.seatPrice === 0 ? 'Free' : `${seat.seatPrice} ◈`}
+                              {seat.isLocked ? 'Locked' : seat.seatPrice === 0 ? 'Free' : `${seat.seatPrice} â—ˆ`}
                             </div>
                           </button>
                         )}
@@ -2507,7 +2659,7 @@ useStreamRealtime(
             </div>
           )}
 
-          {/* ── RIGHT: Desktop Chat Panel — same flow layout style as BroadcastPage ── */}
+          {/* â”€â”€ RIGHT: Desktop Chat Panel â€” same flow layout style as BroadcastPage â”€â”€ */}
           {!isMobileViewer && (
             <aside
               className={cn(
@@ -2548,7 +2700,7 @@ useStreamRealtime(
                     >
                       {floatingMessages.length === 0 ? (
                         <div className="flex h-full items-center justify-center text-sm font-bold text-white/25">
-                          No messages yet – say something!
+                          No messages yet say something!
                         </div>
                       ) : (
 <div className="flex flex-col gap-1.5">
@@ -2589,7 +2741,7 @@ useStreamRealtime(
                         if (!text) return
 
                         if (!user && !reserveAnonymousChatSlot()) {
-                          toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                          toast.error('Youâ€™ve used your 5 anonymous chats. Sign in to keep chatting.')
                           navigate('/auth?mode=login')
                           return
                         }
@@ -2638,7 +2790,7 @@ useStreamRealtime(
                         type="text"
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Say something…"
+                        placeholder="Say something¦"
                         className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                         maxLength={280} />
                     </form>
@@ -2661,7 +2813,7 @@ useStreamRealtime(
                             <div key={league.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                               <div className="flex items-center gap-3">
                                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
-                                  {league.icon_emoji || '🏆'}
+                                  {league.icon_emoji || 'ðŸ†'}
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-sm font-black text-white truncate">{league.name}</p>
@@ -2739,7 +2891,7 @@ useStreamRealtime(
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-bold text-white">{fan.sender_username || 'Troll Citizen'}</div>
                                 <div className="truncate text-xs text-slate-400">
-                                  Last gift: {fan.last_gift_at ? new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
+                                  Last gift: {fan.last_gift_at ? new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'â€”'}
                                 </div>
                               </div>
                               <div className="whitespace-nowrap text-xs font-semibold text-cyan-300">{fan.total_gift_coins.toLocaleString()} coins</div>
@@ -2755,7 +2907,7 @@ useStreamRealtime(
           )}
         </main>
 
-        {/* ── MOBILE CHAT INPUT AT BOTTOM — fixed overlay, not document flow ── */}
+        {/* â”€â”€ MOBILE CHAT INPUT AT BOTTOM â€” fixed overlay, not document flow â”€â”€ */}
         {isMobileViewer && (
           <div
             className="fixed inset-x-3 z-40 pointer-events-auto"
@@ -2768,7 +2920,7 @@ useStreamRealtime(
                 if (!text) return
 
                 if (!user && !reserveAnonymousChatSlot()) {
-                  toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                  toast.error('Youâ€™ve used your 5 anonymous chats. Sign in to keep chatting.')
                   navigate('/auth?mode=login')
                   return
                 }
@@ -2817,7 +2969,7 @@ useStreamRealtime(
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Say something…"
+                placeholder="Say something¦"
                 className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                 maxLength={280} />
               <button
@@ -2836,7 +2988,7 @@ useStreamRealtime(
           </div>
         )}
 
-        {/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
+        {/* â”€â”€ BOTTOM CONTROL BAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
 
         <div
   className={cn(
@@ -2859,7 +3011,23 @@ useStreamRealtime(
           <div className={cn('flex items-center justify-between', isMobileViewer ? 'mx-3' : 'mx-auto max-w-7xl')}>
 
 <div className="flex w-full items-center justify-end gap-2 md:w-auto">
-                <StaffWalkieTalkieButton 
+                  {isCEO && isActive && !isMobileViewer && (
+                    <button
+                      onClick={() => joinGhostMode()}
+                      disabled={isJoiningGhost || isLeavingGhost}
+                      className={cn(
+                        'inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black',
+                        ghostSession
+                          ? 'border border-red-400/30 bg-red-500/15 text-red-300 hover:bg-red-500/20'
+                          : 'border border-purple-400/30 bg-purple-500/15 text-purple-200 hover:bg-purple-500/20'
+                      )}
+                      title={ghostSession ? 'Leave Ghost Mode' : 'Join Ghost Mode'}
+                    >
+                      <Skull className="h-4 w-4" />
+                      {isJoiningGhost || isLeavingGhost ? '...' : ghostSession ? 'Ghost' : 'Ghost'}
+                    </button>
+                  )}
+                  <StaffWalkieTalkieButton
                   showFullControls={false} 
                   onLiveKitMicMute={onLiveKitMicMute}
                   onLiveKitMicUnmute={onLiveKitMicUnmute}
@@ -2885,19 +3053,6 @@ useStreamRealtime(
                 <Share2 className="h-4 w-4" />
                 Share
               </button>
-              {isUserOnStage && (
-                <button
-                  onClick={handleStartSeatBattle}
-                  disabled={isBattleButtonBusy}
-                  className={cn(
-                    'inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black',
-                    theme.purpleButton,
-                  )}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Start Battle
-                </button>
-              )}
               <button
                 onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
                 className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.danger)}
@@ -2935,6 +3090,18 @@ useStreamRealtime(
                 isModerator={isModerator}
                 isOfficer={isOfficer}
                 onGift={() => onGift(userActionTarget.userId)}
+              />
+            )}
+
+            {/* CityStatusPanel for clicking on broadcaster orb or seats */}
+            {selectedSeatUserId && (
+              <CityStatusPanel
+                userId={selectedSeatUserId}
+                onClose={() => setSelectedSeatUserId(null)}
+                isBroadcaster={false}
+                isBroadOfficer={isOfficer}
+                broadcasterId={hostId}
+                isSeatHolder={false}
               />
             )}
           </div>

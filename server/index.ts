@@ -12,6 +12,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import broadcastRoutes from './routes/broadcasts.ts';
+import ghostModeRoutes from './api/ghost-mode.js';
 
 /* ============================================================================
  * 🛡️  CRITICAL STREAMING INFRASTRUCTURE - PROTECTED
@@ -63,6 +64,11 @@ app.post('/api/broadcasts/start-streaming', broadcastRoutes.startBroadcast);
 app.post('/api/broadcasts/stop-streaming', broadcastRoutes.stopBroadcast);
 app.get('/api/broadcasts/:streamId/status', broadcastRoutes.getBroadcastStatus);
 
+// Ghost Mode API routes
+app.post('/api/ghost-mode/create', ghostModeRoutes.createGhostSession);
+app.post('/api/ghost-mode/leave', ghostModeRoutes.leaveGhostSession);
+app.get('/api/ghost-mode/sessions', ghostModeRoutes.getGhostSessions);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
@@ -79,10 +85,10 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(port, () => {
-  console.log(`
-╔═══════════════════════════════════════╗
-║   Troll City Broadcast API Server     ║
-╚═══════════════════════════════════════╝
+console.log(`
+ ╔═══════════════════════════════════════╗
+ ║   Troll City Broadcast API Server     ║
+ ╚═══════════════════════════════════════╝
 
 ✓ Server running on http://localhost:${port}
 ✓ CORS enabled for frontend development
@@ -96,6 +102,10 @@ Broadcast APIs:
   POST /api/broadcasts/start-streaming
   POST /api/broadcasts/stop-streaming
   GET  /api/broadcasts/:streamId/status
+Ghost Mode APIs:
+  POST /api/ghost-mode/create
+  POST /api/ghost-mode/leave
+  GET  /api/ghost-mode/sessions
   `);
 });
 

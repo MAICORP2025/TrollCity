@@ -385,6 +385,11 @@ function getParticipantList(
   return []
 }
 
+function isGhostParticipant(participant: any): boolean {
+  const metadata = getRemoteParticipantMetadata(participant)
+  return metadata?.role === 'ghost' || metadata?.hidden === true
+}
+
 
 function getRemoteSeatVideoTrack(
   participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
@@ -477,6 +482,7 @@ import UserActionModal from '@/components/broadcast/UserActionModal'
 import CityStatusPanel from '@/components/city/CityStatusPanel'
 import CityStatusOrb from '@/components/city/CityStatusOrb'
 import { useCityStatusOrb } from '@/lib/hooks/useCityStatusOrb'
+import SeatCityStatusOrb from '@/components/broadcast/SeatCityStatusOrb'
 
 // Debug counters for broadcast stability verification
 const DEBUG_COUNTERS = {
@@ -616,7 +622,7 @@ export function BroadcastPage() {
      isBroadOfficer: isOfficer,
    })
 
-const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats, removeSeat } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
     const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
 
   const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
@@ -932,8 +938,67 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   const [isScreenSharing, setIsScreenSharing] = useState(initialScreenMode)
   const [cameraOverlayEnabled, setCameraOverlayEnabled] = useState(initialCameraOverlay)
   const [cameraOverlayTrackState, setCameraOverlayTrackState] = useState<LocalVideoTrack | null>(null)
-  const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
-  const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
+const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
+   const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
+   
+   // Ghost participants - separate collection for ghost mode (not merged with remoteParticipants)
+   const [ghostParticipants, setGhostParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
+   const ghostUsers = useMemo(() => Array.from(ghostParticipants.values()), [ghostParticipants])
+   
+   // Debug: Log ghost mode state changes
+   useEffect(() => {
+     if (!import.meta.env.DEV) return;
+     console.log('[BroadcastPage] Ghost mode state update:', {
+       ghostParticipantsCount: ghostParticipants.size,
+       ghostIdentities: Array.from(ghostParticipants.keys()),
+       remoteParticipantsCount: remoteParticipants.size,
+       visibleRemoteUsersCount: remoteUsers.length,
+     })
+   }, [ghostParticipants, remoteParticipants, remoteUsers])
+   
+   // Debug: Log when ghost participants appear in remoteUsers
+useEffect(() => {
+      if (!import.meta.env.DEV) return;
+      const ghostInRemote = remoteUsers.filter(p => {
+        const metadata = getRemoteParticipantMetadata(p)
+        return metadata?.role === 'ghost' || metadata?.hidden === true
+      })
+      if (ghostInRemote.length > 0) {
+        console.log('[BroadcastPage] Ghost participants detected in remoteUsers:', {
+          count: ghostInRemote.length,
+          identities: ghostInRemote.map((p: any) => p.identity),
+          hasAudio: ghostInRemote.map((p: any) => !!getAudioTrackFromRemoteParticipant(p)),
+        })
+      }
+    }, [remoteUsers])
+   
+   // Filter out ghost participants from remote users for display purposes
+   // BUT keep them for audio - ghost participants need to be heard by viewers
+   const visibleRemoteUsers = useMemo(() => {
+     return remoteUsers.filter(p => {
+       const metadata = getRemoteParticipantMetadata(p)
+       return metadata?.role !== 'ghost' && !metadata?.hidden
+     })
+   }, [remoteUsers])
+   
+   // Ghost audio participants - these are ghost participants whose audio we need to render
+   // They are filtered from visibleRemoteUsers but their audio tracks must still be heard
+   const ghostAudioParticipants = useMemo(() => {
+     return remoteUsers.filter(p => {
+       const metadata = getRemoteParticipantMetadata(p)
+       return metadata?.role === 'ghost' || metadata?.hidden === true
+     })
+   }, [remoteUsers])
+   
+   // Debug: Log ghost mode audio state
+useEffect(() => {
+      if (!import.meta.env.DEV) return;
+      console.log('[BroadcastPage] Ghost audio debug:', {
+        ghostAudioParticipantsCount: ghostAudioParticipants.length,
+        ghostAudioIdentities: ghostAudioParticipants.map((p: any) => p.identity),
+        ghostAudioWithTracks: ghostAudioParticipants.filter((p: any) => getAudioTrackFromRemoteParticipant(p)).length,
+      })
+    }, [ghostAudioParticipants])
   // Helper to safely get array from RemoteParticipants Map
   const getRemoteParticipantsArray = () => {
     if (!remoteParticipants || typeof remoteParticipants.values !== 'function') return []
@@ -1270,6 +1335,8 @@ const ranked = senderIds
       isSeatUser: boolean;
       streamId?: string;
     } | null>(null)
+    // CityStatusPanel for clicking on seats / broadcaster orb
+    const [selectedSeatUserId, setSelectedSeatUserId] = useState<string | null>(null)
   const [showPayBroadOfficersModal, setShowPayBroadOfficersModal] = useState(false)
   // Broadcast Abilities
   const {
@@ -4681,12 +4748,21 @@ const handleLike = useCallback(async () => {
 
           toast.success('User removed from seat')
           setUserActionTarget(null)
-          refreshSeats()
+
+          // Immediately remove the seat from local state so the UI updates instantly
+          if (removedSeatIndex !== undefined) {
+            removeSeat(removedSeatIndex)
+          }
+
+          // Broadcast to other viewers so they also update immediately
           await sendSeatLeftEvent({
             seat_index: removedSeatIndex,
             user_id: removedUserId,
             session_id: removedSessionId,
           })
+
+          // Also trigger a background refetch to sync with server
+          void refreshSeats()
         } catch (err) {
           console.error('[BroadcastPage] handleGeneralKick error:', err)
           toast.error('Failed to remove user from seat')
@@ -5157,19 +5233,33 @@ const handleLike = useCallback(async () => {
                         await handleGeneralKick()
                       }
 
-                    const clickProps = seatActionInfo
-                      ? {
-                          role: 'button' as const,
-                          tabIndex: 0,
-                          onClick: () => handleOpenUserAction(seatActionInfo),
-                          onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              handleOpenUserAction(seatActionInfo)
-                            }
-                          },
-                        }
-                      : undefined
+                      // Any occupied seat is clickable to open CityStatusPanel
+                      const canClickSeat = seat.isOccupied && seat.seatUserId;
+
+                      // Host/officer seats also open UserActionModal for moderation
+                      const clickProps = canClickSeat
+                        ? {
+                            role: 'button' as const,
+                            tabIndex: 0,
+                            onClick: () => {
+                              if (seatActionInfo) {
+                                handleOpenUserAction(seatActionInfo);
+                              } else {
+                                setSelectedSeatUserId(seat.seatUserId!);
+                              }
+                            },
+                            onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                if (seatActionInfo) {
+                                  handleOpenUserAction(seatActionInfo);
+                                } else {
+                                  setSelectedSeatUserId(seat.seatUserId!);
+                                }
+                              }
+                            },
+                          }
+                        : undefined
 
                     return (
                     <div
@@ -5179,7 +5269,7 @@ const handleLike = useCallback(async () => {
                         seat.isOccupied
                           ? 'border-emerald-400/45 shadow-[0_0_24px_rgba(16,185,129,0.16)]'
                           : 'border-cyan-400/45 shadow-[0_0_24px_rgba(34,211,238,0.12)]',
-                        seatActionInfo ? 'cursor-pointer hover:-translate-y-0.5' : ''
+                        canClickSeat ? 'cursor-pointer hover:-translate-y-0.5' : ''
                       )}
                       {...clickProps}
                     >
@@ -5260,21 +5350,32 @@ const handleLike = useCallback(async () => {
                       </div>
 
                       <div className="absolute bottom-3 left-3 right-3 z-10">
-                        <div className="truncate text-sm font-black text-white">
-                          {matchedParticipant ? participantDisplayName : seat.isOccupied ? participantDisplayName : 'Open Seat'}
-                        </div>
-                        <div className={cn(
-                          'mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em]',
-                          matchedParticipant
-                            ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
-                            : isCameraUnavailable
-                              ? 'border-red-300/30 bg-red-500/10 text-red-200'
-                              : isCameraConnecting
-                                ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
-                                : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
-                        )}>
-                          {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Camera connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
-                        </div>
+                        {seat.isOccupied && seat.seatUserId ? (
+                          <SeatCityStatusOrb
+                            userId={seat.seatUserId}
+                            broadcasterId={user?.id}
+                            isBroadOfficer={isOfficer}
+                            onClick={() => setSelectedSeatUserId(seat.seatUserId)}
+                          />
+                        ) : (
+                          <>
+                            <div className="truncate text-sm font-black text-white">
+                              {matchedParticipant ? participantDisplayName : seat.isOccupied ? participantDisplayName : 'Open Seat'}
+                            </div>
+                            <div className={cn(
+                              'mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em]',
+                              matchedParticipant
+                                ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
+                                : isCameraUnavailable
+                                  ? 'border-red-300/30 bg-red-500/10 text-red-200'
+                                  : isCameraConnecting
+                                    ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
+                                    : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
+                            )}>
+                              {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Camera connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                     )
@@ -5615,6 +5716,39 @@ const handleLike = useCallback(async () => {
 
             </div>
               <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} nameMap={giftNameMap} />
+              
+              {/* Ghost mode audio tracks - hidden audio elements for ghost participants whose audio must be heard */}
+              {ghostAudioParticipants.map((participant: any) => {
+                const identity = participant.identity
+                const audioTrack = getAudioTrackFromRemoteParticipant(participant)
+                const audioEl = React.useRef<HTMLAudioElement>(null)
+                
+                React.useEffect(() => {
+                  const el = audioEl.current
+                  if (!el || !audioTrack) return
+                  
+                  try {
+                    audioTrack.attach(el)
+                    el.play().catch(() => {})
+                  } catch (err) {
+                    console.warn('[BroadcastPage] Failed to attach ghost audio:', err)
+                  }
+                  
+                  return () => {
+                    try { audioTrack.detach(el) } catch {}
+                  }
+                }, [audioTrack])
+                
+                return (
+                  <audio
+                    key={`ghost-audio-${identity}`}
+                    ref={audioEl}
+                    autoPlay
+                    muted={false}
+                    style={{ position: 'absolute', left: '-9999px' }}
+                  />
+                )
+              })}
                {/* Stage pass requests panel for broadcasters - TEMPORARILY DISABLED */}
                    {/* <StagePassRequestsPanel
                      onApprove={(id) => void approveStagePass(id)}
@@ -5837,7 +5971,7 @@ const handleLike = useCallback(async () => {
                 </div>
               )}
 
-              {/* City Status Panel */}
+              {/* City Status Panel for broadcaster orb / seat clicks via showUserStats */}
               {showUserStats && (
                 <CityStatusPanel
                   userId={showUserStats.userId}
@@ -5846,7 +5980,19 @@ const handleLike = useCallback(async () => {
                   isSeatHolder={showUserStats.isSeatUser}
                   broadcasterId={user?.id}
                 />
-              )}]
+              )}
+
+              {/* City Status Panel for seat clicks via selectedSeatUserId */}
+              {selectedSeatUserId && (
+                <CityStatusPanel
+                  userId={selectedSeatUserId}
+                  onClose={() => setSelectedSeatUserId(null)}
+                  isBroadcaster={isHost}
+                  isBroadOfficer={isOfficer}
+                  isSeatHolder={true}
+                  broadcasterId={user?.id}
+                />
+              )}
 
               {/* Coin Store Modal */}
               {isCoinStoreOpen && (

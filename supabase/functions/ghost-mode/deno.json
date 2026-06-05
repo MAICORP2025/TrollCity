@@ -1,0 +1,8 @@
+{
+  "import_map": {
+    "express": "https://deno.land/std@0.227.0/http/mod.ts"
+  },
+  "deploy": {
+    "name": "ghost-mode"
+  }
+}

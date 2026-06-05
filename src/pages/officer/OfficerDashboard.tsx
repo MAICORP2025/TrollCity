@@ -219,7 +219,7 @@ export default function OfficerDashboard() {
             {togglingGhost 
               ? 'Toggling...' 
               : profile?.is_ghost_mode 
-                ? '👻 Deactivate Ghost Mode' 
+                ? '👻 GHOST ON' 
                 : '🛡 Activate Ghost Mode'
             }
           </button>

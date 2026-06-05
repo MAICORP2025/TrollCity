@@ -48,8 +48,10 @@ async function createLiveKitToken(params: {
   roomName: string;
   participantName: string;
   isPublisher: boolean;
+  isGhost?: boolean;
+  ghostMetadata?: { role: string; hidden: boolean };
 }): Promise<string> {
-  const { apiKey, apiSecret, roomName, participantName, isPublisher } = params;
+  const { apiKey, apiSecret, roomName, participantName, isPublisher, isGhost, ghostMetadata } = params;
 
   const now = Math.floor(Date.now() / 1000);
   const exp = now + 3600; // 1 hour expiry
@@ -61,6 +63,12 @@ async function createLiveKitToken(params: {
   
   // The audience should be the LiveKit server URL for proper token validation
   const liveKitUrl = Deno.env.get('LIVEKIT_URL') || 'wss://troll-city-llc-4ixv208d.livekit.cloud';
+  
+  // Build metadata for ghost participants
+  const metadata = isGhost && ghostMetadata 
+    ? ghostMetadata 
+    : undefined;
+  
   const payload = {
     iss: apiKey,
     sub: participantName,
@@ -71,10 +79,11 @@ async function createLiveKitToken(params: {
     video: {
       room: roomName,
       roomJoin: true,
-      canPublish: isPublisher,
+      canPublish: isPublisher || isGhost,
       canSubscribe: true,
       canPublishData: true,
-    }
+    },
+    metadata: metadata,
   };
 
   // Create JWT-like token
@@ -106,6 +115,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const roomName = String(body.room || body.roomName || body.channel || '');
     const userId = String(body.userId || body.identity || body.participantIdentity || '');
+    
+    // Check if this is a ghost participant request
+    const isGhost = body.role === 'ghost' || body.ghost === true;
+    const ghostMetadata = isGhost ? { role: 'ghost', hidden: true } : undefined;
+    
     // Stage Pass check — approve/live Stage Pass holders get publisher access
     let isPublisher = body.role === 'publisher' || body.role === 'host' || body.isHost === true;
 
@@ -165,20 +179,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }, 500, req);
     }
 
-    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'isPublisher:', isPublisher);
+    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'isPublisher:', isPublisher, 'isGhost:', isGhost);
 
     const token = await createLiveKitToken({
       apiKey,
       apiSecret,
       roomName,
       participantName,
-      isPublisher
+      isPublisher,
+      isGhost,
+      ghostMetadata,
     });
 
-    console.log('[livekit-token] Token generated successfully for', participantName, 'publisher:', isPublisher);
+    console.log('[livekit-token] Token generated successfully for', participantName, 'publisher:', isPublisher, 'isGhost:', isGhost, {
+      roomName,
+      hasToken: !!token,
+      tokenLength: token?.length,
+    });
 
-    // Get LiveKit URL for client to connect to
-    const liveKitUrl = Deno.env.get('LIVEKIT_URL') || 'wss://troll-city-llc-4ixv208d.livekit.cloud';
+    const liveKitUrl = Deno.env.get('LIVEKIT_URL') || Deno.env.get('VITE_LIVEKIT_URL') || 'wss://troll-city-llc-4ixv208d.livekit.cloud';
 
     return withCors({
       success: true,
@@ -188,7 +207,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       participantIdentity: participantName,
       participantName,
       isPublisher,
-      participantType: isPublisher ? 'publisher' : 'audience'
+      isGhost,
+      participantType: isGhost ? 'ghost' : (isPublisher ? 'publisher' : 'audience'),
+      ghostMetadata: isGhost ? ghostMetadata : undefined,
     }, 200, req);
 
   } catch (error) {

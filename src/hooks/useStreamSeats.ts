@@ -522,6 +522,31 @@ export function useStreamSeats(
     await fetchSeats('refreshSeats')
   }, [fetchSeats])
 
+  // Immediately remove a seat from local state (used when broadcaster/officer kicks a user)
+  const removeSeat = useCallback((seatIndex: number) => {
+    const idx = Number(seatIndex)
+    if (!Number.isFinite(idx)) return
+
+    setSeats((prev) => {
+      if (!prev[idx]) return prev
+      const next = { ...prev }
+      delete next[idx]
+      return next
+    })
+
+    setMySeat((prev) => {
+      if (!prev) return prev
+      return prev.seat_index === idx ? null : prev
+    })
+
+    seatsRef.current = { ...seatsRef.current }
+    delete seatsRef.current[idx]
+    if (mySeatRef.current?.seat_index === idx) {
+      mySeatRef.current = null
+    }
+    setSeatVersion((v) => v + 1)
+  }, [])
+
   const handleParticipantDisconnected = useCallback(
     (identity: string) => {
       if (!identity) return
@@ -765,6 +790,7 @@ export function useStreamSeats(
     leaveSeat,
     markSeatLive,
     refreshSeats,
+    removeSeat,
     seatJoinTransition: null,
     handleParticipantDisconnected,
     pendingSeatRequests,
