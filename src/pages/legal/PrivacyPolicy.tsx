@@ -16,8 +16,7 @@ export default function PrivacyPolicy() {
         </p>
 
         <p>
-          Your privacy is important to Troll City. This Privacy Policy explains how we collect, use, and protect your information
-          when you use our platform.
+          <strong>Troll City</strong> (also referred to as "<strong>Mai Troll City</strong>") is a social streaming platform. This Privacy Policy explains how we collect, use, and protect your information when you use our app and services.
         </p>
 
         <h2>1. Information We Collect</h2>
@@ -75,6 +74,11 @@ export default function PrivacyPolicy() {
         <h2>7. Changes to This Policy</h2>
         <p>
           We may update this Privacy Policy from time to time. We will notify you of significant changes by posting the new policy here.
+        </p>
+
+        <h2>8. Contact Information</h2>
+        <p>
+          This app is operated by Mai Troll City. For privacy-related questions, please contact support through the app.
         </p>
       </article>
     </LegalLayout>

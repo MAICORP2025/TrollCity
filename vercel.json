@@ -1,17 +1,9 @@
 {
-  "rewrites": [
-    {
-      "source": "/api/social/:id",
-      "destination": "/api/social/:id"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+  "version": 2,
+  "routes": [
+    { "src": "/api/social/:id", "dest": "/api/social/:id" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/legal/(.*)", "dest": "/api/legal/$1" }
   ],
   "functions": {
     "api/**/*.ts": {
