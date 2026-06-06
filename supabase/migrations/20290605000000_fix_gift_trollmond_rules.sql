@@ -71,6 +71,8 @@ DECLARE
   v_recipient_is_jailed boolean := false;
   v_contract_split_percent integer := NULL;
   v_per_gift_trollmond_cost integer := 0;
+  v_is_friday boolean := false;
+  v_bonus_result jsonb;
 BEGIN
   IF p_quantity IS NULL OR p_quantity < 1 THEN
     p_quantity := 1;
@@ -580,6 +582,15 @@ BEGIN
     END IF;
   END IF;
 
+  -- ── Friday Battle Bonus ──────────────────────────────────────────────────
+  -- Award 5% bonus to gifter if this is a Friday battle
+  IF v_battle_id IS NOT NULL THEN
+    v_is_friday := EXTRACT(DOW FROM (NOW() AT TIME ZONE 'America/Denver')) = 5;
+    IF v_is_friday THEN
+      v_bonus_result := public.award_friday_battle_gifter_bonus(p_sender_id, v_battle_id, v_total_cost::BIGINT);
+    END IF;
+  END IF;
+
   RETURN jsonb_build_object(
     'success', true,
     'transaction_id', v_existing_id,
@@ -593,6 +604,7 @@ BEGIN
     'creator_share_coins', v_recipient_share,
     'leader_bonus_coins', v_leader_bonus,
     'recruiter_bonus_coins', v_recruiter_bonus,
+    'friday_battle_bonus', COALESCE(v_bonus_result->>'success', 'false')::BOOLEAN,
     'message', 'Gift sent successfully'
   );
 END;

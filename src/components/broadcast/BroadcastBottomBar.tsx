@@ -16,6 +16,7 @@ import {
   Gift,
   Sparkles,
   Skull,
+  Bell,
 } from 'lucide-react';
 import { LocalVideoTrack, LocalAudioTrack } from 'livekit-client';
 import { cn } from '../../lib/utils';
@@ -138,6 +139,7 @@ export interface BroadcastBottomBarProps {
   onOpenCoinStore?: () => void;
   onTroll?: () => void;
   isHost?: boolean;
+  onInviteFollowers?: () => void;
 }
 
 export default function BroadcastBottomBar({
@@ -160,6 +162,7 @@ export default function BroadcastBottomBar({
   onOpenCoinStore,
   onTroll,
   isHost = false,
+  onInviteFollowers,
 }: BroadcastBottomBarProps) {
   const theme = trollCityBroadcastTheme
   return (
@@ -209,6 +212,14 @@ export default function BroadcastBottomBar({
               icon={Share2}
               label="Share"
             />
+            {isHost && onInviteFollowers && (
+              <HostActionButton
+                active={false}
+                onClick={onInviteFollowers}
+                icon={Bell}
+                label="Invite"
+              />
+            )}
             <HostActionButton
               active={false}
               onClick={onOpenMoreMenu}

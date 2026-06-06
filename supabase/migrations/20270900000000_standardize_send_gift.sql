@@ -19,6 +19,10 @@ DECLARE
     v_sender_balance NUMERIC;
     v_recipient_share NUMERIC;
     v_gift_tx_id UUID;
+    v_battle_id UUID;
+    v_is_friday BOOLEAN;
+    v_mt_date DATE;
+    v_bonus_result JSONB;
 BEGIN
     v_sender_id := auth.uid();
     
@@ -63,11 +67,6 @@ BEGIN
     -- Deduct from sender
     UPDATE public.user_profiles
     SET troll_coins = troll_coins - v_total_cost
-    WHERE id = v_sender_id;
-
-    -- Award trollmonds to sender: 1 trollmond per 100 coins spent
-    UPDATE public.user_profiles
-    SET trollmonds = COALESCE(trollmonds, 0) + FLOOR(v_total_cost / 100)
     WHERE id = v_sender_id;
 
     -- Credit recipient (95%)
@@ -143,11 +142,29 @@ BEGIN
         );
     END IF;
 
+    -- 7. Friday Battle Bonus: Check if this is an active battle on Friday
+    SELECT id INTO v_battle_id
+    FROM public.battles
+    WHERE (challenger_stream_id = p_stream_id OR opponent_stream_id = p_stream_id)
+      AND status = 'active';
+
+    IF v_battle_id IS NOT NULL THEN
+        -- Check if it's Friday (Mountain Time)
+        v_mt_date := (NOW() AT TIME ZONE 'America/Denver')::DATE;
+        v_is_friday := EXTRACT(DOW FROM v_mt_date) = 5; -- 5 = Friday
+
+        IF v_is_friday THEN
+            -- Award 5% Friday battle bonus to gifter
+            v_bonus_result := public.award_friday_battle_gifter_bonus(v_sender_id, v_battle_id, v_total_cost::BIGINT);
+        END IF;
+    END IF;
+
     RETURN jsonb_build_object(
         'success', true, 
         'new_balance', v_sender_balance - v_total_cost,
         'transaction_id', v_gift_tx_id,
-        'message', 'Sent ' || v_name
+        'message', 'Sent ' || v_name,
+        'friday_battle_bonus', COALESCE(v_bonus_result->>'success', 'false')::BOOLEAN
     );
 END;
 $$;

@@ -16,7 +16,7 @@ export async function safeSelect<T>(
   options: any = {},
   context: SafeQueryOptions = {}
 ): Promise<PostgrestResponse<T>> {
-  const query = supabase.from<T>(tableName).select(options as any);
+  const query = supabase.from(tableName).select(options as any);
 
   const { data, error } = await query;
 
@@ -40,7 +40,7 @@ export async function safeInsert<T>(
   options: any = {},
   context: SafeQueryOptions = {}
 ): Promise<PostgrestResponse<T[] | T>> {
-  const query = supabase.from<T>(tableName).insert(values, options);
+  const query = supabase.from(tableName).insert(values, options);
 
   const { data, error } = await query;
 
@@ -65,7 +65,7 @@ export async function safeUpdate<T>(
   options: any = {},
   context: SafeQueryOptions = {}
 ): Promise<PostgrestResponse<T[] | T>> {
-  const query = supabase.from<T>(tableName).update(values, options);
+  const query = supabase.from(tableName).update(values, options);
 
   const { data, error } = await query;
 

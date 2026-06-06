@@ -33,6 +33,14 @@ BEGIN
     LIMIT 1;
   END IF;
 
+  -- If still not found, check troll_family_members
+  IF v_family_id IS NULL THEN
+    SELECT tfm.family_id, tfm.role INTO v_family_id, v_role
+    FROM public.troll_family_members tfm
+    WHERE tfm.user_id = p_user_id
+    LIMIT 1;
+  END IF;
+
   -- Return null if user is not in any family
   IF v_family_id IS NULL THEN
     RETURN jsonb_build_object(
@@ -88,17 +96,17 @@ BEGIN
     FROM public.family_members fm
     LEFT JOIN public.user_profiles up ON fm.user_id = up.id
     WHERE fm.family_id = v_family_id
-    ORDER BY 
-      CASE fm.role 
-        WHEN 'leader' THEN 1 
-        WHEN 'co_leader' THEN 2 
-        WHEN 'scout' THEN 3 
-        WHEN 'recruiter' THEN 4 
-        WHEN 'mentor' THEN 5 
-        ELSE 6 
-      END,
-      fm.joined_at ASC
-    LIMIT 10
+ORDER BY 
+       CASE fm.role 
+         WHEN 'leader' THEN 1 
+         WHEN 'co_leader' THEN 2 
+         WHEN 'scout' THEN 3 
+         WHEN 'recruiter' THEN 4 
+         WHEN 'mentor' THEN 5 
+         ELSE 6 
+       END,
+       fm.created_at ASC
+     LIMIT 10
   ) m;
 
   -- 4. Get active goals (LIMITED to 10)
@@ -213,11 +221,11 @@ BEGIN
   FROM public.family_members
   WHERE family_id = p_family_id;
 
-  -- Count active members (last_active within 24 hours - needs index)
+  -- Count active members (using created_at as proxy since last_active_at may not exist)
   SELECT COUNT(*) INTO v_active_members
   FROM public.family_members
   WHERE family_id = p_family_id
-    AND last_active_at > NOW() - INTERVAL '24 hours';
+    AND created_at > NOW() - INTERVAL '7 days';
 
   -- Count active goals
   SELECT COUNT(*) INTO v_goals_active
@@ -272,11 +280,6 @@ BEGIN
 END;
 $$;
 
--- Create index on family_members.last_active_at for heartbeat queries (if not exists)
-CREATE INDEX IF NOT EXISTS idx_family_members_last_active 
-ON public.family_members(last_active_at) 
-WHERE last_active_at IS NOT NULL;
-
 -- Create index on family_goals for heartbeat queries
 CREATE INDEX IF NOT EXISTS idx_family_goals_status_expires 
 ON public.family_goals(status, expires_at) 
@@ -289,7 +292,6 @@ WHERE is_read = false;
 
 -- Grant execute permissions
 GRANT EXECUTE ON FUNCTION public.get_family_home_data(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_family_home_json(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_family_heartbeat_json(UUID) TO authenticated;
 
 -- Comment for documentation

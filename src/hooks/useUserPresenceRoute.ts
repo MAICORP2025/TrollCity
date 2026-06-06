@@ -8,34 +8,42 @@ import { useLocation } from "react-router-dom";
  * Should be used once at the app level for authenticated users.
  */
 export function useUserPresenceRoute() {
-  const { user } = useAuthStore();
+  const { user: storeUser } = useAuthStore();
   const location = useLocation();
   const lastUpdateRef = useRef(0);
   const sessionIdRef = useRef(
     `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
   );
 
+  const getAuthUserId = useCallback(async (): Promise<string | null> => {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  }, []);
+
   const updatePresence = useCallback(
     async (path: string, title: string) => {
-      if (!user?.id) return;
+      const storeUserId = storeUser?.id;
+      const authUserId = await getAuthUserId();
 
-      // Throttle updates to once per 5 seconds
+      if (!authUserId) {
+        return;
+      }
+
       const now = Date.now();
       if (now - lastUpdateRef.current < 5000) return;
       lastUpdateRef.current = now;
 
       try {
-        // Check if user profile exists before writing presence (FK constraint)
         const { data: profile } = await supabase
           .from("user_profiles")
           .select("id")
-          .eq("id", user.id)
+          .eq("id", authUserId)
           .maybeSingle();
-        if (!profile) return; // No profile yet — skip presence tracking
+        if (!profile) return;
 
-        await supabase.from("user_presence_routes").upsert(
+        const { error } = await supabase.from("user_presence_routes").upsert(
           {
-            user_id: user.id,
+            user_id: authUserId,
             current_path: path,
             current_title: title || document.title || path,
             session_id: sessionIdRef.current,
@@ -45,34 +53,41 @@ export function useUserPresenceRoute() {
           },
           { onConflict: "user_id" }
         );
-      } catch {
-        // Silently fail — presence tracking is non-critical
+
+        if (error) {
+          console.error("[useUserPresenceRoute] Upsert failed", {
+            error,
+            authUserId,
+            currentPath: path,
+          });
+        }
+      } catch (err: any) {
+        console.error("[useUserPresenceRoute] Unexpected error", {
+          error: err,
+          authUserId,
+          currentPath: path,
+        });
       }
     },
-    [user?.id]
+    [storeUser?.id, getAuthUserId]
   );
 
   // Update on route change
   useEffect(() => {
-    if (!user?.id) return;
     updatePresence(location.pathname, document.title);
-  }, [location.pathname, user?.id, updatePresence]);
+  }, [location.pathname, updatePresence]);
 
   // Periodic heartbeat while active
   useEffect(() => {
-    if (!user?.id) return;
-
     const interval = setInterval(() => {
       updatePresence(location.pathname, document.title);
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [user?.id, location.pathname, updatePresence]);
+  }, [location.pathname, updatePresence]);
 
   // Update on visibility change (tab becomes active)
   useEffect(() => {
-    if (!user?.id) return;
-
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         updatePresence(location.pathname, document.title);
@@ -81,5 +96,5 @@ export function useUserPresenceRoute() {
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [user?.id, location.pathname, updatePresence]);
+  }, [location.pathname, updatePresence]);
 }

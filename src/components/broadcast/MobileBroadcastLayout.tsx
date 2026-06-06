@@ -11,7 +11,8 @@ import ParticipantStrip from './ParticipantStrip';
 import BroadcastControls from './BroadcastControls';
 import MoreControlsDrawer from './MoreControlsDrawer';
 import UserActionModal from './UserActionModal';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Bell } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 interface MobileBroadcastLayoutProps {
   stream: Stream;
@@ -35,6 +36,7 @@ interface MobileBroadcastLayoutProps {
   onStartBattle?: () => void;
   isBattleActive?: boolean;
   isLive?: boolean;
+  onInviteFollowers?: () => void;
 }
 
 export default function MobileBroadcastLayout({
@@ -59,6 +61,7 @@ export default function MobileBroadcastLayout({
   onStartBattle,
   isBattleActive,
   isLive,
+  onInviteFollowers,
 }: MobileBroadcastLayoutProps) {
   const { isMobile } = useMobileLayout();
   const { headerHeight, dockHeight, safeArea } = useSafeAreaHeight();
@@ -129,6 +132,23 @@ export default function MobileBroadcastLayout({
     setSelectedSeatUser(null);
   }, [onGift, selectedSeatUser]);
 
+  const handleInviteFollowers = useCallback(async () => {
+    if (!onInviteFollowers) return;
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      const inviterId = user.user?.id;
+      if (!inviterId) return;
+      
+      const { data, error } = await supabase.rpc('invite_followers_to_broadcast', {
+        p_stream_id: stream.id,
+        p_inviter_id: inviterId
+      });
+      if (error) throw error;
+    } catch (e: any) {
+      console.error('Failed to invite followers:', e);
+    }
+  }, [stream.id, onInviteFollowers]);
+
   // Calculate stage height based on viewport
   const stageHeight = `calc(100dvh - ${headerHeight}px - ${isMinimized ? '60' : dockHeight}px)`;
 
@@ -164,6 +184,7 @@ export default function MobileBroadcastLayout({
           isLive={isLive}
           onStartBattle={onStartBattle}
           isBattleActive={isBattleActive}
+          onInviteFollowers={handleInviteFollowers}
         />
         {isChatOpen && (
           <ChatBottomSheet

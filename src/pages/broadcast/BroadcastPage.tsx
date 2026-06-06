@@ -2096,9 +2096,27 @@ useEffect(() => {
     navigate('/home', { replace: true })
   }, [isHost, localTracks, navigate])
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
-   const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
-   const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
-   const handleClosePinProductModal = useCallback(() => setIsPinProductModalOpen(false), [])
+const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
+    const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
+    const handleClosePinProductModal = useCallback(() => setIsPinProductModalOpen(false), [])
+    const handleInviteFollowers = useCallback(async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const inviterId = userData.user?.id;
+        if (!inviterId || !streamId) return;
+        
+        const { data, error } = await supabase.rpc('invite_followers_to_broadcast', {
+          p_stream_id: streamId,
+          p_inviter_id: inviterId
+        });
+        
+        if (error) throw error;
+        toast.success(`Invited ${data.invited_count || 0} followers and following users`);
+      } catch (e: any) {
+        console.error('Failed to invite followers:', e);
+        toast.error(e.message || 'Failed to send invites');
+      }
+    }, [streamId]);
    const handleOpenSeatsModal = useCallback(() => {
      const fallbackPrice = Math.max(0, Number(stream?.seat_price ?? 0))
      const existingSeatPrices = Array.isArray(stream?.seat_prices)
@@ -5666,6 +5684,7 @@ const handleLike = useCallback(async () => {
                 onEndStream={handleStreamEnd}
                 onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
                 isHost={isHost}
+                onInviteFollowers={handleInviteFollowers}
               />
 
           

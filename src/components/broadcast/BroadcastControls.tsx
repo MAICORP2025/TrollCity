@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Stream } from '../../types/broadcast';
 import { supabase } from '../../lib/supabase';
-import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp, Share2, Package, Swords, Star, GripVertical, X, MoreHorizontal, Sliders, Shield, Gamepad2, PlusCircle } from 'lucide-react';
+import { Plus, Minus, LayoutGrid, Settings2, Coins, Lock, Unlock, Mic, MicOff, Video, VideoOff, MessageSquare, MessageSquareOff, Heart, Eye, Power, Sparkles, Palette, Gift, UserX, ImageIcon, LogOut, ChevronDown, ChevronUp, Share2, Package, Swords, Star, GripVertical, X, MoreHorizontal, Sliders, Shield, Gamepad2, PlusCircle, Users, Bell } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { getCategoryConfig } from '../../config/broadcastCategories';
@@ -33,7 +33,7 @@ interface BroadcastControlsProps {
   handleLike: () => void;
   toggleBattleMode: () => void;
   liveViewerCount?: number;
-  localTracks: [LocalAudioTrack | null, LocalVideoTrack | null] | null;
+  localTracks: [LocalAudioTrack | null, LocalAudioTrack | null] | null;
   toggleCamera: () => void;
   toggleMicrophone: () => void;
   onPinProduct?: () => void;
@@ -65,6 +65,7 @@ interface BroadcastControlsProps {
   selectedBattleTheme?: string;
   onBattleThemeChange?: (themeId: string) => void;
   onOpenStagePass?: () => void;
+  onInviteFollowers?: () => void;
 }
 
 function BroadcastControls({
@@ -104,6 +105,7 @@ function BroadcastControls({
   selectedBattleTheme,
   onBattleThemeChange,
   onOpenStagePass,
+  onInviteFollowers,
 }: BroadcastControlsProps) {
   const navigate = useNavigate();
   const renderCountRef = useRef(0);
@@ -681,6 +683,17 @@ function BroadcastControls({
           />
         )}
 
+        {/* Invite Followers */}
+        {isHost && onInviteFollowers && (
+          <OrbBtn
+            active={false}
+            onClick={onInviteFollowers}
+            icon={Bell}
+            label="Invite"
+            size="sm"
+          />
+        )}
+
         {/* Like (viewers only) */}
         {!isHost && (
           <OrbBtn
@@ -1086,7 +1099,9 @@ function areBroadcastControlsPropsEqual(prev: BroadcastControlsProps, next: Broa
     prev.onStartBattle === next.onStartBattle &&
     prev.onTrollToeController === next.onTrollToeController &&
     prev.onGameSelect === next.onGameSelect &&
-    prev.onBattleThemeChange === next.onBattleThemeChange
+    prev.onBattleThemeChange === next.onBattleThemeChange &&
+    prev.onOpenStagePass === next.onOpenStagePass &&
+    prev.onInviteFollowers === next.onInviteFollowers
   );
 }
 

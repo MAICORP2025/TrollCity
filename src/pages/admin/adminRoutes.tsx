@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image, TrendingUp, PieChart, HeadphonesIcon } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image, TrendingUp, PieChart, HeadphonesIcon, Gift, Calendar } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 
 const CustomerServiceDashboard = lazy(() => import('./CustomerServiceDashboard'))
@@ -26,6 +26,7 @@ const WeeklyReportsView = lazy(() => import('./WeeklyReportsView'))
 const AdminJailManagement = lazy(() => import('./AdminJailManagement'))
 const SeasonalGoals = lazy(() => import('./SeasonalGoals'))
 const PayoutBatches = lazy(() => import('./PayoutBatches'))
+const FridayBattlesDashboard = lazy(() => import('./FridayBattlesDashboard'))
 const LoadLab = lazy(() => import('../../components/admin/LoadLab'))
 const SellerManagement = lazy(() => import('./SellerManagement'))
 
@@ -306,6 +307,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-red-500/10',
     tileBorderColor: 'border-red-500/30',
     category: 'moderation'
+  },
+  {
+    id: 'friday-battles',
+    title: 'Friday Battles',
+    path: '/admin/friday-battles',
+    component: FridayBattlesDashboard,
+    roles: [UserRole.ADMIN],
+    description: 'View and manage Friday battle bonuses',
+    icon: <Gift className="w-5 h-5 text-purple-400" />,
+    tileColor: 'text-purple-400',
+    tileBgColor: 'bg-purple-500/10',
+    tileBorderColor: 'border-purple-500/30',
+    category: 'economy'
   },
 
   {

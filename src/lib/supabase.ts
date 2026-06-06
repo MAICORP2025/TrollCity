@@ -380,7 +380,6 @@ export interface UserProfile {
   message_cost?: number;
   profile_view_cost?: number;
   temp_admin_coins_balance?: number;
-  free_coin_balance?: number;
   bypass_broadcast_restriction?: boolean;
   phone?: string;
   id_verification_status?: string;
@@ -519,7 +518,9 @@ export interface SystemError {
   responded_at?: string | null
 }
 
-export const ADMIN_EMAIL = (import.meta as any).env?.VITE_ADMIN_EMAIL || 'trollcity2025@gmail.com'
+const appEnv = import.meta.env as ImportMetaEnv
+
+export const ADMIN_EMAIL = appEnv.VITE_ADMIN_EMAIL || 'trollcity2025@gmail.com'
 
 // Production-ready admin email validation with additional security checks
 export const isAdminEmail = (email?: string): boolean => {
@@ -533,8 +534,9 @@ export const isAdminEmail = (email?: string): boolean => {
 }
 
 // Staff email validation - check against allowed staff emails list
-export const ALLOWED_STAFF_EMAILS = (import.meta as any).env?.VITE_STAFF_EMAILS
-  ? String(import.meta as any).env.VITE_STAFF_EMAILS.split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean)
+const rawStaffEmails = appEnv.VITE_STAFF_EMAILS
+export const ALLOWED_STAFF_EMAILS = rawStaffEmails
+  ? String(rawStaffEmails).split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean)
   : []
 
 export const isStaffEmail = (email?: string): boolean => {
@@ -544,8 +546,8 @@ export const isStaffEmail = (email?: string): boolean => {
 }
 
 // CEO email validation
-export const ALLOWED_CEO_EMAIL = (import.meta as any).env?.VITE_CEO_EMAIL
-  ? String(import.meta as any).env.VITE_CEO_EMAIL.trim().toLowerCase()
+export const ALLOWED_CEO_EMAIL = appEnv.VITE_CEO_EMAIL
+  ? appEnv.VITE_CEO_EMAIL.trim().toLowerCase()
   : ''
 
 export const isCEOEmail = (email?: string): boolean => {
@@ -576,6 +578,7 @@ export enum UserRole {
   TEMP_ADMIN = 'temp_admin',
   EXECUTIVE_SECRETARY = 'executive_secretary',
   MARKETING_READONLY = 'marketing_readonly',
+  SUPERADMIN = 'superadmin',
   CEO = 'ceo',
 }
 
@@ -767,6 +770,32 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   [UserRole.ADMIN]: [
     // Admin has all permissions
+    Permission.MANAGE_USERS,
+    Permission.MANAGE_CONTENT,
+    Permission.MANAGE_FINANCES,
+    Permission.MANAGE_SYSTEM,
+    Permission.MODERATE_CHAT,
+    Permission.MODERATE_STREAMS,
+    Permission.MANAGE_REPORTS,
+    Permission.ISSUE_WARNINGS,
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE
+  ],
+  [UserRole.SUPERADMIN]: [
+    Permission.MANAGE_USERS,
+    Permission.MANAGE_CONTENT,
+    Permission.MANAGE_FINANCES,
+    Permission.MANAGE_SYSTEM,
+    Permission.MODERATE_CHAT,
+    Permission.MODERATE_STREAMS,
+    Permission.MANAGE_REPORTS,
+    Permission.ISSUE_WARNINGS,
+    Permission.BROADCAST,
+    Permission.CREATE_CONTENT,
+    Permission.MONETIZE
+  ],
+  [UserRole.CEO]: [
     Permission.MANAGE_USERS,
     Permission.MANAGE_CONTENT,
     Permission.MANAGE_FINANCES,
@@ -1576,6 +1605,8 @@ export async function createGroupChat(name: string, memberUserIds: string[]): Pr
 
   if (membersError) throw membersError
 
+  const currentUsername = userData.user?.email || 'Someone'
+
   // Send invite notifications to all invited members
   for (const memberId of memberUserIds) {
     if (memberId !== currentUserId) {
@@ -1584,7 +1615,7 @@ export async function createGroupChat(name: string, memberUserIds: string[]): Pr
           user_id: memberId,
           type: 'group_invite',
           title: 'Group Chat Invite',
-          message: `${profile?.username || 'Someone'} invited you to "${name.trim()}"`,
+          message: `${currentUsername} invited you to "${name.trim()}"`,
           metadata: {
             conversation_id: conversationId,
             group_name: name.trim(),

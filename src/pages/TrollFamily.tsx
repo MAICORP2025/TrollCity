@@ -22,6 +22,7 @@ export default function TrollFamily() {
 
   const [checking, setChecking] = useState(true)
   const [isLeader, setIsLeader] = useState(false)
+  const [userFamilyId, setUserFamilyId] = useState<string | null>(null)
 
   const [families, setFamilies] = useState<TrollFamily[]>([])
   const [loadingFamilies, setLoadingFamilies] = useState(true)
@@ -29,10 +30,10 @@ export default function TrollFamily() {
   const [searchTerm, setSearchTerm] = useState('')
 
   // =========================================
-  // CHECK IF USER IS LEADER
+  // CHECK IF USER IS LEADER OR MEMBER
   // =========================================
   useEffect(() => {
-    const checkLeadership = async () => {
+    const checkFamilyMembership = async () => {
       if (!user) {
         setChecking(false)
         navigate('/family/browse', { replace: true })
@@ -40,22 +41,50 @@ export default function TrollFamily() {
       }
 
       try {
-        const { data } = await supabase
+        const { data: leaderData } = await supabase
           .from('troll_families')
           .select('id')
           .eq('leader_id', user.id)
           .maybeSingle()
 
-        setIsLeader(!!data)
+        if (leaderData?.id) {
+          setIsLeader(true)
+          navigate('/family/home', { replace: true })
+          return
+        }
+
+        const { data: memberData } = await supabase
+          .from('family_members')
+          .select('family_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+
+        if (memberData?.family_id) {
+          navigate('/family/home', { replace: true })
+          return
+        }
+
+        const { data: trollMemberData } = await supabase
+          .from('troll_family_members')
+          .select('family_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+
+        if (trollMemberData?.family_id) {
+          navigate('/family/home', { replace: true })
+          return
+        }
+
+        setChecking(false)
       } catch (err) {
         console.error(err)
-        setIsLeader(false)
-      } finally {
         setChecking(false)
       }
     }
 
-    checkLeadership()
+    checkFamilyMembership()
   }, [user])
 
   // =========================================

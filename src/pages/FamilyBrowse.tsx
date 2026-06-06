@@ -41,6 +41,7 @@ export default function FamilyBrowse() {
   // User membership state
   const [userFamilyId, setUserFamilyId] = useState<string | null>(null)
   const [membershipChecked, setMembershipChecked] = useState(false)
+  const [hasFamily, setHasFamily] = useState(false)
 
   // Build optimized query with selected columns only
   const buildFamilyQuery = useCallback((pageNum: number, sort: SortOption, searchQuery: string) => {
@@ -116,6 +117,7 @@ export default function FamilyBrowse() {
         if (membershipData?.family_id) {
           // User is already in a family - redirect immediately
           setUserFamilyId(membershipData.family_id)
+          setHasFamily(true)
           navigate('/family/home', { replace: true })
           return
         }
@@ -130,6 +132,21 @@ export default function FamilyBrowse() {
 
         if (leaderData?.id) {
           setUserFamilyId(leaderData.id)
+          setHasFamily(true)
+          navigate('/family/home', { replace: true })
+          return
+        }
+
+        const { data: trollMemberData } = await supabase
+          .from('troll_family_members')
+          .select('family_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+
+        if (trollMemberData?.family_id) {
+          setUserFamilyId(trollMemberData.family_id)
+          setHasFamily(true)
           navigate('/family/home', { replace: true })
           return
         }
@@ -280,13 +297,23 @@ export default function FamilyBrowse() {
           
           {/* Action Buttons */}
           <div className="flex gap-4 mb-6">
-            <button
-              onClick={() => navigate('/family/create')}
-              className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-semibold py-3 px-6 rounded-xl transition-all"
-            >
-              <Users className="w-5 h-5" />
-              <span>Create Family</span>
-            </button>
+            {hasFamily ? (
+              <button
+                onClick={() => navigate('/family/home')}
+                className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-400 hover:to-violet-500 text-white font-semibold py-3 px-6 rounded-xl transition-all"
+              >
+                <Crown className="w-5 h-5" />
+                <span>My Family</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/family/create')}
+                className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-semibold py-3 px-6 rounded-xl transition-all"
+              >
+                <Users className="w-5 h-5" />
+                <span>Create Family</span>
+              </button>
+            )}
           </div>
 
          {/* Search & Sort Controls */}
@@ -395,7 +422,7 @@ export default function FamilyBrowse() {
               <p className="text-sm mt-1">
                 {query ? 'Try a different search term' : 'Be the first to create a family!'}
               </p>
-              {!query && (
+              {!query && !hasFamily && (
                 <button
                   onClick={() => navigate('/family/create')}
                   className="mt-4 px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"

@@ -10,6 +10,7 @@ import AdminProfilePanel from './AdminProfilePanel'
 import ModActionsPopup from './broadcast/ModActionsPopup'
 import { toast } from 'sonner'
 import { isStaffProfile } from '../lib/staff'
+import { getUserAffiliation, UserAffiliation } from '../lib/userAffiliations'
 
 interface UserProfilePopupProps {
   userId: string
@@ -21,7 +22,9 @@ interface UserProfilePopupProps {
 export default function UserProfilePopup({ userId, username, onClose, onOpenChat }: UserProfilePopupProps) {
   const { user, profile: userProfile } = useAuthStore()
   const navigate = useNavigate()
+  const isOwnProfile = user?.id === userId
   const [profile, setProfile] = useState<any>(null)
+  const [affiliation, setAffiliation] = useState<UserAffiliation | null>(null)
   const [showReportModal, setShowReportModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isAdminUser, setIsAdminUser] = useState(false)
@@ -73,14 +76,24 @@ export default function UserProfilePopup({ userId, username, onClose, onOpenChat
     setIsBlocked(!!blockData)
   }, [user, userId])
 
+  const loadAffiliation = useCallback(async () => {
+    try {
+      const data = await getUserAffiliation(userId)
+      setAffiliation(data)
+    } catch (err) {
+      console.error('Error loading affiliation:', err)
+    }
+  }, [userId])
+
   useEffect(() => {
     loadProfile()
+    loadAffiliation()
     setIsAdminUser(isAdmin(user, userProfile))
     
     setIsOfficer(isStaffProfile(userProfile))
     
     checkFollowBlockStatus()
-  }, [loadProfile, user, userProfile, checkFollowBlockStatus])
+  }, [loadProfile, loadAffiliation, user, userProfile, checkFollowBlockStatus])
 
   const handleFollow = async () => {
     if (!user) {
@@ -218,6 +231,54 @@ export default function UserProfilePopup({ userId, username, onClose, onOpenChat
                 )}
               </div>
             </div>
+
+            {affiliation && (
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-300">
+                <div className="font-semibold text-white text-sm mb-1">
+                  {affiliation.type === 'agency' ? 'Agency' : 'Family'} affiliation
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{affiliation.name}</span>
+                  {affiliation.role ? <span className="text-xs text-slate-400">{affiliation.role}</span> : null}
+                  {!isOwnProfile && affiliation.type === 'family' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate(`/family/profile/${affiliation.id}`)
+                        onClose()
+                      }}
+                      className="px-3 py-1 text-xs bg-purple-700 hover:bg-purple-600 text-white rounded-lg"
+                    >
+                      View Family
+                    </button>
+                  )}
+                  {!isOwnProfile && affiliation.type === 'agency' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate(`/agency/${affiliation.slug || affiliation.id}`)
+                          onClose()
+                        }}
+                        className="px-3 py-1 text-xs bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg"
+                      >
+                        View Agency
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate(`/agency-apply/${affiliation.slug || affiliation.id}`)
+                          onClose()
+                        }}
+                        className="px-3 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg"
+                      >
+                        Apply to Join
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons Grid */}
             {user && user.id !== userId && (
