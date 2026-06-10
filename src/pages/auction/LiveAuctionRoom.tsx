@@ -1037,7 +1037,7 @@ export default function LiveAuctionRoom() {
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'auction_bids' },
+        { event: 'INSERT', schema: 'public', table: 'auction_bids', filter: `auction_show_id=eq.${showId}` },
         async () => {
           await fetchLiveStateRef.current()
         }

@@ -454,8 +454,12 @@ export default function AuctioneerDashboard() {
       if (currentLiveLot) {
         await supabase.from('auction_lots').update({ status: 'pass' }).eq('id', currentLiveLot.id)
       }
-      const { error } = await supabase.from('auction_lots').update({ status: 'live' }).eq('id', lotId)
+      const { error } = await supabase.from('auction_lots').update({
+        status: 'live',
+        countdown_end_at: new Date(Date.now() + 30 * 1000).toISOString(),
+      }).eq('id', lotId)
       if (error) throw error
+      await supabase.from('auction_shows').update({ current_lot_id: lotId }).eq('id', showId)
       toast.success('Lot is now live!')
       fetchData()
     } catch (error: any) {

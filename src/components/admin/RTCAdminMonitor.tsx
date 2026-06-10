@@ -1882,7 +1882,7 @@ const renderFloatingButton = () => {
                         <button
                           type="button"
                           className="rounded bg-white/5 px-2 py-1 text-[10px] font-bold text-white/50 hover:bg-white/10"
-                          onClick={() => navigate(`/city-registry?tab=notary&doc=${doc.id}`)}
+                          onClick={() => navigate(`/notary?doc=${doc.id}`)}
                         >
                           View
                         </button>

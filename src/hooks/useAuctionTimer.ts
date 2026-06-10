@@ -44,30 +44,33 @@ export function useAuctionTimer(lotId: string | null, isAuctioneer: boolean) {
     }, 1000)
   }, [clearTimerInterval])
 
-  // Fetch initial timer state from DB
-  const fetchTimerState = useCallback(async () => {
-    if (!lotId) return
-    const { data } = await supabase
-      .from('auction_lots')
-      .select('countdown_end_at, status')
-      .eq('id', lotId)
-      .maybeSingle()
-    if (data?.countdown_end_at) {
-      const diff = Math.max(0, Math.ceil((new Date(data.countdown_end_at).getTime() - Date.now()) / 1000))
-      if (diff > 0 && data.status === 'live') {
-        startCountdown(diff)
-      } else if (diff <= 0) {
-        setIsExpired(true)
-        setSecondsLeft(0)
-      }
-    }
-  }, [lotId, startCountdown])
+   // Use refs for callbacks so the realtime effect only depends on lotId
+  const startCountdownRef = useRef(startCountdown)
+  const clearTimerIntervalRef = useRef(clearTimerInterval)
+  useEffect(() => { startCountdownRef.current = startCountdown }, [startCountdown])
+  useEffect(() => { clearTimerIntervalRef.current = clearTimerInterval }, [clearTimerInterval])
 
   // Subscribe to real-time timer updates
   useEffect(() => {
     if (!lotId) return
 
-    fetchTimerState()
+    // Fetch initial timer state from DB
+    supabase
+      .from('auction_lots')
+      .select('countdown_end_at, status')
+      .eq('id', lotId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.countdown_end_at) {
+          const diff = Math.max(0, Math.ceil((new Date(data.countdown_end_at).getTime() - Date.now()) / 1000))
+          if (diff > 0 && data.status === 'live') {
+            startCountdownRef.current(diff)
+          } else if (diff <= 0) {
+            setIsExpired(true)
+            setSecondsLeft(0)
+          }
+        }
+      })
 
     // Subscribe to changes on this specific lot
     const channel = supabase
@@ -85,16 +88,15 @@ export function useAuctionTimer(lotId: string | null, isAuctioneer: boolean) {
           if (newLot.countdown_end_at) {
             const diff = Math.max(0, Math.ceil((new Date(newLot.countdown_end_at).getTime() - Date.now()) / 1000))
             if (diff > 0 && newLot.status === 'live') {
-              startCountdown(diff)
+              startCountdownRef.current(diff)
             } else if (diff <= 0) {
-              clearTimerInterval()
+              clearTimerIntervalRef.current()
               setSecondsLeft(0)
               setIsRunning(false)
               setIsExpired(true)
             }
           } else {
-            // Timer cleared
-            clearTimerInterval()
+            clearTimerIntervalRef.current()
             setSecondsLeft(0)
             setIsRunning(false)
             setIsExpired(false)
@@ -106,10 +108,10 @@ export function useAuctionTimer(lotId: string | null, isAuctioneer: boolean) {
     channelRef.current = channel
 
     return () => {
-      clearTimerInterval()
+      clearTimerIntervalRef.current()
       supabase.removeChannel(channel)
     }
-  }, [lotId, fetchTimerState, startCountdown, clearTimerInterval])
+  }, [lotId])
 
   // Auctioneer: Start timer
   const startTimer = useCallback(async (durationSeconds: number = DEFAULT_TIMER_SECONDS) => {

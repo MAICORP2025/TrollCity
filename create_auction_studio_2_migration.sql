@@ -43,12 +43,13 @@ BEGIN
     SET lot_number = v_lot_number,
         barcode = v_barcode,
         barcode_data = v_lot_number,
-        status_extended = CASE status
+         status_extended = CASE status
           WHEN 'upcoming' THEN 'queued'
           WHEN 'live' THEN 'live'
           WHEN 'sold' THEN 'sold'
           WHEN 'unsold' THEN 'available'
-          ELSE status
+          WHEN 'removed' THEN 'available'
+          ELSE 'draft'
         END
     WHERE id = v_lot.id;
   END LOOP;

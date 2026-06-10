@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/lib/store'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import {
@@ -21,6 +22,7 @@ import { downloadPDF } from '@/services/notaryPDF'
 
 export default function NotaryDashboard() {
   const { profile } = useAuthStore()
+  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<NotaryTab>('my_documents')
   const [documents, setDocuments] = useState<NotaryDocument[]>([])
   const [stats, setStats] = useState<NotaryStats | null>(null)
@@ -58,6 +60,23 @@ export default function NotaryDashboard() {
   const isAdmin = profile?.is_admin || ['admin', 'ceo', 'superadmin', 'founder', 'owner'].includes(userRole)
   const isStaff = profile?.is_admin || ['admin', 'ceo', 'superadmin', 'founder', 'owner', 'moderator', 'lead_troll_officer', 'troll_officer', 'secretary', 'staff', 'prosecutor', 'attorney'].includes(userRole)
   const isTroller = userRole === 'troller' || profile?.is_troller
+
+  // Auto-load document from ?doc= query param (e.g. from RTCAdminMonitor notary tab)
+  useEffect(() => {
+    const docId = searchParams.get('doc')
+    if (!docId) return
+    ;(async () => {
+      try {
+        const { document } = await fetchDocumentById(docId)
+        if (document) {
+          setSelectedDoc(document)
+          setActiveTab('pending')
+        }
+      } catch {
+        toast.error('Failed to load document')
+      }
+    })()
+  }, [searchParams])
 
   const loadDocuments = useCallback(async () => {
     setLoading(true)

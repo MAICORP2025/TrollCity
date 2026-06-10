@@ -332,6 +332,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
         category: 'Government',
         items: [
           { label: 'Troll Court', icon: Scale, path: '/troll-court' },
+          { label: 'Inmates', icon: Lock, path: '/inmates' },
           { label: 'City Laws & Fees', icon: FileText_M, path: '/home?tab=laws-fees' },
           { label: 'President Candidates', icon: Vote, path: '/home?tab=president' },
           { label: 'Elections', icon: ClipboardList, path: '/government' },

@@ -2010,33 +2010,7 @@ export default function SetupPage() {
 
   // Render Theme Selector for broadcast themes
   const renderThemeSelector = () => {
-    if (ownedThemes.length === 0) return null;
-
-    return (
-      <div className="bg-zinc-900/80 rounded-2xl border border-white/10 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-            🎨
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-white">Broadcast Theme</h3>
-            <p className="text-xs text-gray-400">Customize your stream appearance</p>
-          </div>
-        </div>
-        <select
-          value={selectedTheme}
-          onChange={(e) => setSelectedTheme(e.target.value)}
-          className="w-full bg-zinc-900/80 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
-        >
-          <option value={DEFAULT_BROADCAST_THEME_ID}>Default Theme</option>
-          {ownedThemes.map((themeSlug) => (
-            <option key={themeSlug} value={themeSlug}>
-              {selectableThemeMap.get(themeSlug)?.label ?? themeSlug.replace(/[_-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
+    return null;
   };
 
   // Render Religion Selector for Spiritual category

@@ -106,6 +106,7 @@ const TransactionHistory = lazyWithRetry(() => import("./pages/TransactionHistor
 const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
 const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
 const PrideShop = lazyWithRetry(() => import("./pages/PrideShop"));
+const NotaryDashboard = lazyWithRetry(() => import("./pages/NotaryDashboard"));
 
 
 const CreatorOnboarding = lazyWithRetry(() => import("./pages/CreatorOnboarding"));
@@ -1686,6 +1687,14 @@ const handleVisibilityChange = async () => {
                     element={
                       <RequireRole roles={['attorney']}>
                         <AttorneyDashboard />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/notary"
+                    element={
+                      <RequireRole roles={['notary', 'admin', 'attorney']}>
+                        <NotaryDashboard />
                       </RequireRole>
                     }
                   />
