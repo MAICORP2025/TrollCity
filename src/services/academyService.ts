@@ -1081,6 +1081,52 @@ export const rateTeacher = async (
   if (error) throw error;
 };
 
+export const getLoanPayments = async (studentId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('academy_loan_payments')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+};
+
+export const makeLoanPayment = async (
+  studentId: string,
+  enrollmentId: string,
+  amount: number
+): Promise<void> => {
+  const { data: enrollment, error: fetchError } = await supabase
+    .from('academy_enrollments')
+    .select('loan_balance')
+    .eq('id', enrollmentId)
+    .eq('student_id', studentId)
+    .single();
+  if (fetchError) throw fetchError;
+  if (!enrollment) throw new Error('Enrollment not found');
+
+  const { error: insertError } = await supabase
+    .from('academy_loan_payments')
+    .insert({
+      student_id: studentId,
+      enrollment_id: enrollmentId,
+      amount,
+      payment_type: 'manual',
+      status: 'completed',
+    });
+  if (insertError) throw insertError;
+
+  const newBalance = Math.max(0, (enrollment.loan_balance || 0) - amount);
+  const { error: updateError } = await supabase
+    .from('academy_enrollments')
+    .update({
+      loan_balance: newBalance,
+      access_paused: newBalance > 0 ? false : undefined,
+    })
+    .eq('id', enrollmentId);
+  if (updateError) throw updateError;
+};
+
 export const getTeacherRatings = async (teacherId: string): Promise<AcademyTeacherRating[]> => {
   const { data, error } = await supabase
     .from('academy_teacher_ratings')
@@ -1091,6 +1137,147 @@ export const getTeacherRatings = async (teacherId: string): Promise<AcademyTeach
   return (data || []).map((r: any) => ({
     ...r,
     student_name: r.rater?.display_name || r.rater?.username,
-    student_avatar: r.rater?.avatar_url,
   }));
+};
+
+// ─── Teacher Management ──────────────────────────────────────────────────────
+
+export const suspendTeacher = async (
+  teacherId: string,
+  suspendedBy: string,
+  reason: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from('academy_teachers')
+    .update({ is_active: false, suspension_reason: reason, suspended_by: suspendedBy, suspended_at: new Date().toISOString() })
+    .eq('id', teacherId);
+  if (error) throw error;
+};
+
+export const reactivateTeacher = async (teacherId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('academy_teachers')
+    .update({ is_active: true, suspension_reason: null, suspended_by: null, suspended_at: null })
+    .eq('id', teacherId);
+  if (error) throw error;
+};
+
+export const getTeacherCredentials = async (teacherId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('academy_teacher_credentials')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+};
+
+export const verifyCredential = async (credentialId: string, verifiedBy: string): Promise<void> => {
+  const { error } = await supabase
+    .from('academy_teacher_credentials')
+    .update({ is_verified: true, verified_by: verifiedBy, verified_at: new Date().toISOString() })
+    .eq('id', credentialId);
+  if (error) throw error;
+};
+
+// ─── Accreditation ───────────────────────────────────────────────────────────
+
+export const getAccreditationOrgs = async (): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('academy_accreditation_orgs')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data || [];
+};
+
+export const getAccreditationRequests = async (teacherId?: string): Promise<any[]> => {
+  let query = supabase
+    .from('academy_accreditation_requests')
+    .select('*, course:academy_courses(name, slug), org:academy_accreditation_orgs(name)')
+    .order('created_at', { ascending: false });
+  if (teacherId) query = query.eq('teacher_id', teacherId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+};
+
+export const submitAccreditationRequest = async (request: {
+  course_id: string;
+  teacher_id: string;
+  org_id?: string;
+  request_notes?: string;
+}): Promise<any> => {
+  const { data, error } = await supabase
+    .from('academy_accreditation_requests')
+    .insert({
+      course_id: request.course_id,
+      teacher_id: request.teacher_id,
+      org_id: request.org_id || null,
+      request_notes: request.request_notes || null,
+      status: 'pending',
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+};
+
+// ─── Communication Center ────────────────────────────────────────────────────
+
+export const getCourseDiscussions = async (courseId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('academy_discussions')
+    .select('*, author:user_profiles!academy_discussions_author_id_fkey(username, avatar_url, display_name)')
+    .eq('course_id', courseId)
+    .is('parent_id', null)
+    .order('is_pinned', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+};
+
+export const getDiscussionReplies = async (discussionId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('academy_discussions')
+    .select('*, author:user_profiles!academy_discussions_author_id_fkey(username, avatar_url, display_name)')
+    .eq('parent_id', discussionId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+};
+
+export const createDiscussion = async (discussion: {
+  course_id: string;
+  author_id: string;
+  title: string;
+  content: string;
+  parent_id?: string;
+}): Promise<any> => {
+  const { data, error } = await supabase
+    .from('academy_discussions')
+    .insert({
+      course_id: discussion.course_id,
+      author_id: discussion.author_id,
+      title: discussion.title,
+      content: discussion.content,
+      parent_id: discussion.parent_id || null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+};
+
+// ─── Teacher Payouts ─────────────────────────────────────────────────────────
+
+export const getTeacherPayouts = async (teacherId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('academy_teacher_payouts')
+    .select('*')
+    .eq('teacher_id', teacherId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
 };

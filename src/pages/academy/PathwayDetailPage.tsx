@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
-import { getLearningPathways, enrollInPathway, getPathwayEnrollments, getStudentEnrollments, getPublishedCourses } from '@/services/academyService';
+import { getLearningPathways, getStudentEnrollments, getPublishedCourses } from '@/services/academyService';
 import type { AcademyLearningPathway, AcademyEnrollment, AcademyCourse } from '@/types/academy';
 import {
   ChevronLeft, TrendingUp, BookOpen, Award, CheckCircle, Lock, ArrowRight,
@@ -44,8 +44,11 @@ export default function PathwayDetailPage() {
           }
         }
 
-        const pathwayEnrollments = await getPathwayEnrollments(user.id);
-        const myEnrollment = pathwayEnrollments.find((e: any) => e.pathway_id === pathwayId);
+        const { data: pathwayEnrollments } = await supabase
+          .from('academy_pathway_enrollments')
+          .select('*')
+          .eq('student_id', user.id);
+        const myEnrollment = pathwayEnrollments?.find((e: any) => e.pathway_id === pathwayId);
         setEnrollment(myEnrollment || null);
 
         const enrollments = await getStudentEnrollments(user.id);
@@ -60,8 +63,13 @@ export default function PathwayDetailPage() {
     if (!pathwayId || !user?.id) return;
     setEnrolling(true);
     try {
-      const result = await enrollInPathway(user.id, pathwayId);
-      setEnrollment(result);
+      const { data, error } = await supabase
+        .from('academy_pathway_enrollments')
+        .insert([{ student_id: user.id, pathway_id: pathwayId }])
+        .select()
+        .single();
+      if (error) throw error;
+      setEnrollment(data);
       toast.success('Enrolled in pathway!');
     } catch (err: any) { toast.error(err.message || 'Failed to enroll'); }
     finally { setEnrolling(false); }
