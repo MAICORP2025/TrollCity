@@ -458,6 +458,8 @@ import TrollGamesPage from "./pages/TrollGamesPage";
 import GiveawaysPage from "./pages/GiveawaysPage";
 import TrollWheel from "./pages/TrollWheel";
 import CarDealership from "./pages/CarDealership";
+const GaragePage = lazyWithRetry(() => import("./pages/GaragePage"));
+const VehicleTransactionsPage = lazyWithRetry(() => import("./pages/VehicleTransactionsPage"));
 import UserInventory from "./pages/UserInventory";
 import Troting from "./pages/Troting";
 import ProfileSettings from "./pages/ProfileSettings";
@@ -492,6 +494,9 @@ import AuctionSales from "./pages/auction/AuctionSales.js";
 import AuctionAnalytics from "./pages/auction/AuctionAnalytics.js";
 import AuctionSettings from "./pages/auction/AuctionSettings.js";
 import AuctionInventory from "./pages/auction/AuctionInventory.js";
+import AuctionOrderManagement from "./pages/auction/AuctionOrderManagement.js";
+import PackingStation from "./pages/auction/PackingStation.js";
+import DeviceManagement from "./pages/auction/DeviceManagement.js";
 import CoinStore from "./pages/CoinStore.jsx";
 import SellOnTrollCity from "./pages/SellOnTrollCity.js";
 import SellerOrders from "./pages/SellerOrders.js";
@@ -1638,6 +1643,8 @@ const handleVisibilityChange = async () => {
                   <Route path="/troll-games/giveaways" element={<GiveawaysPage />} />
                   <Route path="/troll-wheel" element={<TrollWheel />} />
                   <Route path="/ktauto" element={<CarDealership />} />
+                  <Route path="/garage" element={<GaragePage />} />
+                  <Route path="/vehicle-transactions" element={<VehicleTransactionsPage />} />
 
                   <Route path="/shop/:username" element={<ShopView />} />
                   <Route path="/inventory" element={<UserInventory />} />
@@ -1800,11 +1807,35 @@ const handleVisibilityChange = async () => {
                      element={
                        <RequireRole roles={['auctioneer']}>
                          <AuctionInventory />
-                       </RequireRole>
-                     }
-                   />
-                   
-                   {/* 🎙️ Podcast Central */}
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/auctions/orders"
+                      element={
+                        <RequireRole roles={['auctioneer']}>
+                          <AuctionOrderManagement />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/auctions/packing"
+                      element={
+                        <RequireRole roles={['auctioneer']}>
+                          <PackingStation />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/auctions/devices"
+                      element={
+                        <RequireRole roles={['auctioneer']}>
+                          <DeviceManagement />
+                        </RequireRole>
+                      }
+                    />
+                    
+                    {/* 🎙️ Podcast Central */}
                    <Route path="/podcast" element={<PodcastCentral />} />
                    <Route path="/podcast/:id" element={<PodcastRoom />} />
                    

@@ -666,7 +666,18 @@ export default function TrollCityWall() {
                       is_admin: post.is_admin,
                       is_troll_officer: post.is_troll_officer,
                       is_og_user: post.is_og_user,
-                      created_at: post.user_created_at
+                      created_at: post.user_created_at,
+                      is_verified: post.is_verified,
+                      is_gold: post.is_gold,
+                      role: post.user_role,
+                      officer_level: post.officer_level,
+                      troller_level: post.troller_level,
+                      is_troller: post.is_troller,
+                      username_style: post.username_style,
+                      badge: post.badge,
+                      empire_role: post.empire_role,
+                      rgb_username_expires_at: post.rgb_username_expires_at,
+                      glowing_username_color: post.glowing_username_color,
                     }}
                     className={`font-semibold hover:text-purple-400 ${post.post_type === 'announcement' ? 'text-amber-400' : 'text-white'}`} 
                   />
@@ -886,7 +897,18 @@ export default function TrollCityWall() {
                               is_admin: reply.is_admin,
                               is_troll_officer: reply.is_troll_officer,
                               is_og_user: reply.is_og_user,
-                              created_at: reply.user_created_at
+                              created_at: reply.user_created_at,
+                              is_verified: reply.is_verified,
+                              is_gold: reply.is_gold,
+                              role: reply.user_role,
+                              officer_level: reply.officer_level,
+                              troller_level: reply.troller_level,
+                              is_troller: reply.is_troller,
+                              username_style: reply.username_style,
+                              badge: reply.badge,
+                              empire_role: reply.empire_role,
+                              rgb_username_expires_at: reply.rgb_username_expires_at,
+                              glowing_username_color: reply.glowing_username_color,
                             }}
                             className="font-semibold text-sm text-white hover:text-purple-400" 
                           />

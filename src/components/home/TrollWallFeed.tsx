@@ -172,6 +172,9 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
       }
 
       try {
+        const start = pageIndex * PAGE_SIZE
+        const end = start + PAGE_SIZE - 1
+
         const { data, error } = await (() => {
           let query = supabase
             .from('troll_wall_posts')
@@ -185,7 +188,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             query = query.lt('created_at', oldestCreatedAt)
           }
 
-          return query.range(0, PAGE_SIZE - 1)
+          return query.range(start, end)
         })()
 
         if (error) throw error
@@ -551,28 +554,9 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
 
             <div className="relative">
              <div className="flex items-start justify-between gap-3">
-                 <div className="flex min-w-0 items-center gap-3">
-                   <button
-                     type="button"
-                     onClick={() => {
-                       if (!post.user_id || !post.username) return
-                       setSelectedUserId(post.user_id)
-                       setSelectedUsername(post.username)
-                     }}
-                     className="relative shrink-0"
-                   >
-                     <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 opacity-70 blur-sm transition group-hover:opacity-100" />
-                     <img
-                       src={avatarUrl}
-                       alt={post.username || 'User'}
-                       loading="lazy"
-                       className="relative h-10 w-10 rounded-full border border-white/10 object-cover"
-                     />
-                   </button>
-
-                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                        {post.is_system_generated ? (
+                  <div className="min-w-0">
+                     <div className="flex flex-wrap items-center gap-2">
+                         {post.is_system_generated ? (
                             <>
                                 <div className="relative h-10 w-10 rounded-full border border-white/10 object-cover">
                                     <div className="absolute inset-0 flex items-center justify-center text-cyan-400 text-[10px]">
@@ -601,8 +585,8 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                                             is_admin: post.is_admin,
                                             is_troll_officer: post.is_troll_officer,
                                             is_og_user: post.is_og_user,
-                                            is_verified: post.user_verified,
-                                            is_gold: post.user_is_gold,
+                                            is_verified: post.is_verified,
+                                            is_gold: post.is_gold,
                                             officer_level: post.officer_level,
                                             troller_level: post.troller_level,
                                             is_troller: post.is_troller,
@@ -629,11 +613,10 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                        <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-cyan-100/70">
                          Troll City Feed
                        </span>
-                     </div>
+                       </div>
                    </div>
-                 </div>
 
-                 {post.reply_to_post_id && (
+                  {post.reply_to_post_id && (
                    <p className="mt-2 rounded-full bg-purple-500/10 px-3 py-1 text-[10px] font-bold text-purple-300">
                      Replying to a post
                    </p>

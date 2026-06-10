@@ -89,6 +89,7 @@
     "gsap": "^3.14.2",
     "hls.js": "^1.6.16",
     "howler": "^2.2.4",
+    "jsbarcode": "^3.12.3",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "leaflet": "^1.9.4",

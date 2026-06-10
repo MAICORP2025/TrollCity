@@ -309,6 +309,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Inventory', icon: Package, path: '/inventory' },
           { label: 'Wallet', icon: Wallet, path: '/wallet' },
           { label: 'Coin Store', icon: Coins, path: '/store' },
+          { label: 'My Garage', icon: Car, path: '/garage' },
         ],
       },
       {

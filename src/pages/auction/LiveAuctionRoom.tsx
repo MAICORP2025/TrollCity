@@ -266,6 +266,18 @@ export default function LiveAuctionRoom() {
   const [wonLots, setWonLots] = useState<AuctionLot[]>([])
   const [winnerPopupChecked, setWinnerPopupChecked] = useState(false)
 
+  // Chat bidding
+  const [showCustomBidModal, setShowCustomBidModal] = useState(false)
+  const [customBidAmount, setCustomBidAmount] = useState('')
+  const [chatMessages, setChatMessages] = useState<Array<{
+    id: string
+    type: 'chat' | 'bid' | 'system'
+    username: string
+    text: string
+    amount?: number
+    timestamp: string
+  }>>([])
+
   const stageRef = useRef<HTMLDivElement | null>(null)
   const localVideoRef = useRef<HTMLDivElement | null>(null)
   const remoteVideoRef = useRef<HTMLDivElement | null>(null)
@@ -860,11 +872,144 @@ export default function LiveAuctionRoom() {
     }
   }, [])
 
-  const sendChatPlaceholder = useCallback(() => {
+  // Detect chat bid patterns: $25, Custom Bid $25, bid $25, etc.
+  const parseChatBid = useCallback((text: string): number | null => {
+    const trimmed = text.trim()
+    // Match: $25, $250, $2500
+    const simpleMatch = trimmed.match(/^\$(\d+)$/)
+    if (simpleMatch) return parseInt(simpleMatch[1], 10)
+
+    // Match: Custom Bid $25, bid $25, Bid $25, BID $25
+    const prefixMatch = trimmed.match(/(?:custom\s+bid|bid)\s+\$(\d+)$/i)
+    if (prefixMatch) return parseInt(prefixMatch[1], 10)
+
+    return null
+  }, [])
+
+  const handleChatOrBid = useCallback(async () => {
     if (!chatDraft.trim()) return
-    toast.info('Auction chat wiring comes next. Bid system is already live.')
+
+    const bidAmountParsed = parseChatBid(chatDraft)
+
+    if (bidAmountParsed && bidAmountParsed > 0 && user?.id && currentLot && currentLot.status === 'live') {
+      // Validate minimum increment
+      if (bidAmountParsed < minimumBid) {
+        toast.error(`Minimum bid is ${formatCoins(minimumBid)} coins`)
+        return
+      }
+
+      // Check balance
+      if (Number(userProfile?.troll_coins || 0) < bidAmountParsed) {
+        toast.error('Insufficient troll coins')
+        return
+      }
+
+      // Check if bid confirmation is required
+      // (In a real system this would be auctioneer setting)
+
+      try {
+        const { data, error } = await supabase.rpc('place_bid', {
+          p_show_id: showId,
+          p_lot_id: currentLot.id,
+          p_bid_amount: bidAmountParsed,
+        })
+
+        if (error) throw error
+
+        const result = data as PlaceBidResult
+        if (result && result.accepted === false) {
+          toast.error(result.reason || 'Bid failed')
+          return
+        }
+
+        // Add to local chat messages
+        setChatMessages(prev => [...prev, {
+          id: crypto.randomUUID(),
+          type: 'bid',
+          username: profile?.username || user?.email || 'You',
+          text: `🔨 Bid ${formatCoins(bidAmountParsed)} coins`,
+          amount: bidAmountParsed,
+          timestamp: new Date().toISOString(),
+        }])
+
+        toast.success(`Bid placed: ${formatCoins(bidAmountParsed)} coins!`, {
+          icon: '🔨',
+          style: { background: '#0c1a32', border: '1px solid #fbbf24', color: '#fbbf24' },
+        })
+
+        await Promise.all([fetchLiveState(), fetchUserProfile()])
+      } catch (error: any) {
+        toast.error(error?.message || 'Failed to place chat bid')
+      }
+
+      setChatDraft('')
+      return
+    }
+
+    // Normal chat message
+    if (canBid) {
+      setChatMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        type: 'chat',
+        username: profile?.username || user?.email || 'You',
+        text: chatDraft.trim(),
+        timestamp: new Date().toISOString(),
+      }])
+    } else {
+      toast.info('Auction chat wiring comes next. Bid system is already live.')
+    }
     setChatDraft('')
+  }, [chatDraft, parseChatBid, user?.id, user?.email, profile?.username, currentLot, minimumBid, showId, userProfile?.troll_coins, canBid, fetchLiveState, fetchUserProfile])
+
+  // Submit custom bid from modal
+  const submitCustomBid = useCallback(async () => {
+    const amount = parseInt(customBidAmount, 10)
+    if (!amount || amount <= 0) {
+      toast.error('Enter a valid amount')
+      return
+    }
+    if (amount < minimumBid) {
+      toast.error(`Minimum bid is ${formatCoins(minimumBid)} coins`)
+      return
+    }
+    setShowCustomBidModal(false)
+    setCustomBidAmount('')
+
+    // Simulate typing the bid in chat
+    chatDraftRef.current = `$${amount}`
+    await handleChatOrBid()
+  }, [customBidAmount, minimumBid, handleChatOrBid])
+
+  const chatDraftRef = useRef('')
+
+  useEffect(() => {
+    chatDraftRef.current = chatDraft
   }, [chatDraft])
+
+  // Auto-detect bids from incoming bids and add to chat
+  const prevBidsLengthRef = useRef(bids.length)
+  useEffect(() => {
+    if (bids.length > prevBidsLengthRef.current && bids.length > 0) {
+      const newBids = bids.slice(0, bids.length - prevBidsLengthRef.current)
+      newBids.forEach(bid => {
+        const bidderName = getBidderName(bid)
+        setChatMessages(prev => {
+          // Avoid duplicating user's own bids
+          const exists = prev.some(m => m.timestamp === bid.created_at && m.amount === bid.bid_amount)
+          if (exists) return prev
+          return [...prev, {
+            id: `bid-${bid.id}`,
+            type: 'bid' as const,
+            username: bidderName,
+            text: `🔨 Bid ${formatCoins(bid.bid_amount)} coins`,
+            amount: bid.bid_amount,
+            timestamp: bid.created_at,
+          }]
+        })
+      })
+    }
+    prevBidsLengthRef.current = bids.length
+  }, [bids])
 
   useEffect(() => {
     void fetchShow()
@@ -1376,44 +1521,108 @@ export default function LiveAuctionRoom() {
             </div>
 
             <div className="max-h-[280px] space-y-3 overflow-y-auto p-4">
-              {bids.slice(0, 5).map((bid) => {
-                const name = getBidderName(bid)
-                return (
-                  <div key={`chat-${bid.id}`} className="flex gap-3">
-                    <BidAvatar name={name} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-black text-white">{name}</p>
-                        <p className="text-xs text-slate-500">{new Date(bid.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+              {chatMessages.length > 0 ? (
+                chatMessages.slice(-20).map((msg) => {
+                  if (msg.type === 'bid') {
+                    return (
+                      <div key={msg.id} className="flex gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-yellow-300/30 bg-yellow-400/10">
+                          <span className="text-xs font-black text-yellow-300">🔨</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-black text-yellow-300">{msg.username}</p>
+                            <p className="text-[10px] text-slate-500">{new Date(msg.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                          </div>
+                          <p className="text-sm font-bold text-amber-200">
+                            Bid {formatCoins(msg.amount)} coins 🔥
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-300">
-                        Bid <span className="font-black text-yellow-300">{formatCoins(bid.bid_amount)}</span> coins 🔥
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
+                    )
+                  }
 
-              {bids.length === 0 && (
+                  return (
+                    <div key={msg.id} className="flex gap-3">
+                      <BidAvatar name={msg.username} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-black text-white">{msg.username}</p>
+                          <p className="text-[10px] text-slate-500">{new Date(msg.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                        </div>
+                        <p className="text-sm text-slate-300">{msg.text}</p>
+                      </div>
+                    </div>
+                  )
+                })
+              ) : bids.length > 0 ? (
+                bids.slice(0, 5).map((bid) => {
+                  const name = getBidderName(bid)
+                  return (
+                    <div key={`chat-${bid.id}`} className="flex gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-yellow-300/30 bg-yellow-400/10">
+                        <span className="text-xs font-black text-yellow-300">🔨</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-black text-yellow-300">{name}</p>
+                          <p className="text-[10px] text-slate-500">{new Date(bid.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                        </div>
+                        <p className="text-sm font-bold text-amber-200">
+                          Bid <span className="text-yellow-300">{formatCoins(bid.bid_amount)}</span> coins 🔥
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
                 <div className="py-8 text-center">
                   <MessageCircle className="mx-auto mb-3 h-10 w-10 text-slate-600" />
                   <p className="text-sm text-slate-500">No live messages yet.</p>
+                  {canBid && (
+                    <p className="mt-1 text-xs text-cyan-400">Type <strong>$25</strong> to place a bid via chat!</p>
+                  )}
                 </div>
               )}
             </div>
 
             <div className="flex gap-2 border-t border-white/10 p-4">
-              <input
-                value={chatDraft}
-                onChange={(event) => setChatDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') sendChatPlaceholder()
-                }}
-                placeholder="Say something..."
-                className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/40"
-              />
+              <div className="flex min-w-0 flex-1 items-center gap-1 rounded-2xl border border-white/10 bg-black/35 px-2">
+                {/* Quick Bid Buttons */}
+                {canBid && (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {[1, 5, 10, 25, 50, 100].map(amount => (
+                      <button
+                        key={amount}
+                        onClick={() => quickBid(amount)}
+                        className="rounded-lg border border-cyan-300/15 bg-cyan-400/8 px-1.5 py-1 text-[10px] font-black text-cyan-200 hover:bg-cyan-400/15 hover:text-cyan-100 transition"
+                        title={`Bid ${minimumBid + amount} coins`}
+                      >
+                        +{amount}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input
+                  value={chatDraft}
+                  onChange={(event) => setChatDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void handleChatOrBid()
+                  }}
+                  placeholder={canBid ? "Type $25 to bid or say something..." : "Say something..."}
+                  className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                />
+                {canBid && (
+                  <button
+                    onClick={() => setShowCustomBidModal(true)}
+                    className="shrink-0 rounded-lg border border-purple-300/20 bg-purple-400/10 px-2 py-1 text-[10px] font-bold text-purple-200 hover:bg-purple-400/20 transition"
+                  >
+                    Custom Bid
+                  </button>
+                )}
+              </div>
               <button
-                onClick={sendChatPlaceholder}
+                onClick={() => void handleChatOrBid()}
                 className="rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 px-5 py-3 text-sm font-black text-white"
               >
                 <Send className="h-4 w-4" />
@@ -1510,6 +1719,68 @@ export default function LiveAuctionRoom() {
           </div>
         </aside>
       </main>
+
+      {/* Custom Bid Modal */}
+      {showCustomBidModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-purple-400/30 bg-gradient-to-br from-[#0c1a32] to-[#0a1628] shadow-[0_0_60px_rgba(168,85,247,0.2)]">
+            <div className="h-1.5 bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-400" />
+            <div className="p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-purple-300/25 bg-purple-400/10">
+                  <Coins className="h-5 w-5 text-purple-200" />
+                </div>
+                <h3 className="text-xl font-black text-white">Custom Bid</h3>
+              </div>
+
+              <p className="mb-1 text-sm text-slate-400">Minimum bid: <span className="font-black text-white">{formatCoins(minimumBid)} coins</span></p>
+              <p className="mb-4 text-sm text-slate-400">Your balance: <span className="font-black text-white">{formatCoins(userProfile?.troll_coins || 0)} coins</span></p>
+
+              <div className="mb-4">
+                <label className="mb-1 block text-xs text-slate-500">Bid Amount (coins)</label>
+                <input
+                  type="number"
+                  value={customBidAmount}
+                  onChange={(e) => setCustomBidAmount(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void submitCustomBid() }}
+                  placeholder={String(minimumBid)}
+                  className="w-full rounded-xl border border-purple-300/20 bg-black/40 px-4 py-3 text-lg font-black text-white outline-none placeholder:text-slate-600 focus:border-purple-300/50 focus:ring-2 focus:ring-purple-300/15"
+                  autoFocus
+                />
+              </div>
+
+              {/* Quick amounts */}
+              <div className="mb-4 flex flex-wrap gap-2">
+                {[minimumBid, minimumBid + 100, minimumBid + 250, minimumBid + 500].map(amt => (
+                  <button
+                    key={amt}
+                    onClick={() => setCustomBidAmount(String(amt))}
+                    className="rounded-lg border border-cyan-300/15 bg-cyan-400/8 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:bg-cyan-400/15"
+                  >
+                    {formatCoins(amt)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowCustomBidModal(false); setCustomBidAmount('') }}
+                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-300 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => void submitCustomBid()}
+                  disabled={!customBidAmount || parseInt(customBidAmount, 10) < minimumBid}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 px-4 py-3 text-sm font-black text-white shadow-[0_0_20px_rgba(168,85,247,0.3)] transition hover:from-purple-500 hover:to-cyan-400 disabled:opacity-50"
+                >
+                  Submit Bid
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Winner Popup — shown when auction ends and user won */}
       {showWinnerPopup && wonLots.length > 0 && (

@@ -7,6 +7,7 @@ import AgoraRTC, {
 } from 'agora-rtc-sdk-ng'
 import {
   ArrowLeft,
+  Barcode,
   Bell,
   CheckCircle,
   Clock,
@@ -20,6 +21,7 @@ import {
   MicOff,
   Pause,
   Play,
+  Scan,
   Send,
   Shield,
   Users,
@@ -102,6 +104,11 @@ export default function AuctioneerDashboard() {
   const [displayTextSaved, setDisplayTextSaved] = useState(false)
   const [agoraDebugLog, setAgoraDebugLog] = useState<string[]>([])
   const MAX_DISPLAY_LENGTH = 5000
+
+  // Barcode scanning
+  const [scanInput, setScanInput] = useState('')
+  const [scanResult, setScanResult] = useState<any>(null)
+  const [scanLoading, setScanLoading] = useState(false)
 
   const logAgora = useCallback((msg: string) => {
     console.log(msg)
@@ -461,9 +468,26 @@ export default function AuctioneerDashboard() {
   const markSold = async (lotId: string) => {
     setActionLoading(true)
     try {
-      const { error } = await supabase.from('auction_lots').update({ status: 'sold' }).eq('id', lotId)
+      // Get current lot to find highest bidder
+      const lot = lots.find(l => l.id === lotId)
+
+      const updateData: any = {
+        status: 'sold',
+        sold_at: new Date().toISOString(),
+      }
+      if (lot?.current_highest_bidder_id) {
+        updateData.winner_user_id = lot.current_highest_bidder_id
+        updateData.final_bid = lot.current_highest_bid
+      }
+      if (lot?.status_extended) {
+        updateData.status_extended = 'sold'
+      }
+
+      const { error } = await supabase.from('auction_lots').update(updateData).eq('id', lotId)
       if (error) throw error
-      toast.success('Lot marked as sold!')
+
+      // The database trigger will auto-create the order and auction_wins record
+      toast.success('Lot marked as sold! Order created automatically.')
       fetchData()
     } catch (error: any) {
       toast.error(error.message || 'Failed to mark sold')
@@ -486,7 +510,32 @@ export default function AuctioneerDashboard() {
     }
   }
 
-  const currentLot = lots.find((l) => l.status === 'live')
+  const handleScanSubmit = async () => {
+    if (!scanInput.trim()) return
+    setScanLoading(true)
+    setScanResult(null)
+    try {
+      const result = await supabase.rpc('scan_lot_barcode', { p_barcode: scanInput.trim() })
+      const data = result.data
+      if (data?.found) {
+        setScanResult(data.lot)
+        // If the lot is in the upcoming queue, activate it
+        const lot = lots.find(l => l.id === data.lot.id)
+        if (lot && (lot.status === 'queued' || lot.status === 'upcoming' || lot.status === 'draft')) {
+          await activateLot(lot.id)
+          toast.success(`Loaded on stage: ${lot.title}`)
+        }
+        setScanInput('')
+      } else {
+        toast.error('Lot not found')
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Scan failed')
+    } finally {
+      setScanLoading(false)
+    }
+  }
+
   const upcomingLots = lots.filter((l) => l.status === 'queued' || l.status === 'upcoming').sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0))
   const soldLots = lots.filter((l) => l.status === 'sold')
   const isLive = show?.status === 'live'
@@ -711,6 +760,42 @@ export default function AuctioneerDashboard() {
             <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-10 text-center">
               <Gavel className="mx-auto mb-4 h-12 w-12 text-slate-600" />
               <p className="text-slate-400">{isLive ? 'No lot currently active — start a lot below' : 'Go live and activate a lot to begin'}</p>
+            </div>
+          )}
+
+          {/* Scan to Stage */}
+          {isLive && (
+            <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+              <h3 className="mb-3 flex items-center gap-2 text-lg font-black">
+                <Scan className="h-5 w-5 text-cyan-300" />
+                Scan Item to Stage
+              </h3>
+              <p className="mb-3 text-xs text-slate-500">
+                Scan a lot barcode to automatically load it on stage.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={scanInput}
+                  onChange={e => setScanInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleScanSubmit() }}
+                  placeholder="Scan barcode (TC-LOT-000001)..."
+                  className="min-w-0 flex-1 rounded-xl border border-cyan-300/20 bg-black/35 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-cyan-300/40"
+                />
+                <button
+                  onClick={() => handleScanSubmit()}
+                  disabled={scanLoading || !scanInput.trim()}
+                  className="rounded-xl border border-cyan-300/30 bg-cyan-500/20 px-4 py-2.5 font-bold text-cyan-100 hover:bg-cyan-500/30 disabled:opacity-50"
+                >
+                  {scanLoading ? 'Scanning...' : 'Scan'}
+                </button>
+              </div>
+              {scanResult && (
+                <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-400/5 p-3">
+                  <p className="text-sm font-bold text-emerald-200">
+                    ✓ Found: {scanResult.title} ({scanResult.lot_number})
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

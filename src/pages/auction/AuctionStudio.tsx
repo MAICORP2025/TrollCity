@@ -26,6 +26,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   Trash2,
   Upload,
   Users,
@@ -1081,6 +1082,9 @@ function TabPlaceholder({ tab }: { tab: string }) {
     sales: { title: 'Sales & Fulfillment', desc: 'Track sales, add tracking numbers, and manage order delivery.' },
     analytics: { title: 'Analytics', desc: 'Performance overview across all your auction shows.' },
     settings: { title: 'Settings', desc: 'Configure your auctioneer defaults and preferences.' },
+    orders: { title: 'Orders', desc: 'Track all auction orders, payments, and fulfillment status.' },
+    packing: { title: 'Packing Station', desc: 'Scan lot barcodes to auto-load winner and order info for packing.' },
+    devices: { title: 'Devices', desc: 'Manage scanners, printers, and hardware integrations.' },
   }
   const info = labels[tab] || { title: tab, desc: 'This section is coming soon.' }
 
@@ -1115,8 +1119,11 @@ function NavigationRail({ activeTab, onTabChange }: { activeTab: string; onTabCh
     { label: 'My Shows', icon: Calendar, tab: 'shows', route: '/auctions/studio' },
     { label: 'Lots', icon: Box, tab: 'lots', route: '/auctions/studio' },
     { label: 'Inventory', icon: Package, tab: 'inventory', route: '/auctions/inventory' },
+    { label: 'Orders', icon: ShoppingBag, tab: 'orders', route: '/auctions/orders' },
+    { label: 'Packing', icon: Layers, tab: 'packing', route: '/auctions/packing' },
     { label: 'Bidders', icon: Users, tab: 'bidders', route: '/auctions/bidders' },
     { label: 'Sales', icon: CheckCircle2, tab: 'sales', route: '/auctions/sales' },
+    { label: 'Devices', icon: Settings, tab: 'devices', route: '/auctions/devices' },
     { label: 'Analytics', icon: BarChart3, tab: 'analytics', route: '/auctions/analytics' },
     { label: 'Settings', icon: Settings, tab: 'settings', route: '/auctions/settings' },
   ]
