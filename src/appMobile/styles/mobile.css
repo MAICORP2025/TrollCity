@@ -1,0 +1,74 @@
+.tc-mobile-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, sans-serif;
+  color: #000;
+  background: #fff;
+}
+
+.tc-mobile-app__topbar {
+  padding: 14px 16px;
+  border-bottom: 1px solid #ddd;
+}
+
+.tc-mobile-app__topbar-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tc-mobile-app__main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.tc-mobile-app__drawer {
+  padding: 12px;
+  border-right: 1px solid #eee;
+  min-width: 160px;
+}
+
+.tc-mobile-app__drawer-heading {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.tc-mobile-app__drawer-item {
+  font-size: 14px;
+}
+
+.tc-mobile-app__content {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+}
+
+.tc-mobile-app__page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tc-mobile-app__page-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.tc-mobile-app__page-content {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.tc-mobile-app__bottom-nav {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 0;
+  border-top: 1px solid #ddd;
+}
+
+.tc-mobile-app__bottom-nav-link {
+  text-decoration: none;
+  color: inherit;
+  font-size: 13px;
+}
