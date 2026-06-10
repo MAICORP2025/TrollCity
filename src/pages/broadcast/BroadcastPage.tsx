@@ -36,6 +36,9 @@ import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
 
 import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
+import { getBroadcastTheme, DEFAULT_BROADCAST_THEME_ID } from '@/lib/broadcastThemes'
+import type { BroadcastTheme } from '@/lib/broadcastThemes'
+import ThemeEffectLayer from '@/components/themes/ThemeEffectLayer'
 
 // Reusable label classes from broadcastTheme
 const guestLabel = 'rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]'
@@ -468,7 +471,6 @@ import { AnimatePresence } from 'framer-motion'
 import { Megaphone } from 'lucide-react'
 import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, ShieldCheck, Sparkles, Skull, Users, Search } from 'lucide-react'
 import { toast } from 'sonner'
-import TCPSMessageBubble from '@/components/broadcast/TCPSMessageBubble'
 import AbilityBox from '@/components/broadcast/AbilityBox'
 import BattleView from '@/components/broadcast/BattleView'
 import BroadcastAbilityEffects from '@/components/broadcast/BroadcastAbilityEffects'
@@ -571,8 +573,32 @@ export function BroadcastPage() {
 
    const videoPreset = isStreamAdmin ? VideoPresets.h1080 : VideoPresets.h720
 
-   const [stream, setStream] = useState<Stream | null>(null)
-   const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
+    const [stream, setStream] = useState<Stream | null>(null)
+    const [broadcastTheme, setBroadcastTheme] = useState<BroadcastTheme | null>(null)
+
+    useEffect(() => {
+      console.log('[THEME DEBUG] stream?.broadcast_theme_slug:', stream?.broadcast_theme_slug);
+      console.log('[THEME DEBUG] stream?.category:', stream?.category);
+      console.log('[THEME DEBUG] DEFAULT_BROADCAST_THEME_ID:', DEFAULT_BROADCAST_THEME_ID);
+
+      if (!stream?.broadcast_theme_slug || stream.broadcast_theme_slug === DEFAULT_BROADCAST_THEME_ID) {
+        console.log('[THEME DEBUG] No theme set, using default');
+        setBroadcastTheme(null);
+        return;
+      }
+      const resolved = getBroadcastTheme(stream.broadcast_theme_slug, stream.category || 'general');
+      console.log('[THEME DEBUG] Resolved theme:', resolved);
+      console.log('[THEME DEBUG] shellClassName:', resolved?.shellClassName);
+      console.log('[THEME DEBUG] effectType:', resolved?.effectType);
+      setBroadcastTheme(resolved);
+    }, [stream?.broadcast_theme_slug, stream?.category]);
+
+    // Debug: log whenever broadcastTheme changes
+    useEffect(() => {
+      console.log('[THEME DEBUG] broadcastTheme state updated:', broadcastTheme?.id, broadcastTheme?.shellClassName);
+    }, [broadcastTheme]);
+
+    const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
 
    // ── Channel diagnostics (dev only) ──
   useEffect(() => {
@@ -2289,14 +2315,13 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
       }
 
       // DEBUG: Log stream fields from DB
-      console.log('[BroadcastPage] Stream data loaded from Supabase:', {
+      console.log('[THEME DEBUG] Stream data from DB:', {
         id: data.id,
         title: data.title,
         status: data.status,
-        is_live: data.is_live,
-        livekit_room_name: data.livekit_room_name,
-        egress_id: data.egress_id,
-        started_at: data.started_at,
+        broadcast_theme_slug: data.broadcast_theme_slug,
+        active_theme_url: data.active_theme_url,
+        category: data.category,
       });
 
 
@@ -2432,9 +2457,9 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
     
     const pollInterval = setInterval(async () => {
       try {
-        const { data, error } = await supabase
+         const { data, error } = await supabase
           .from('streams')
-        .select('status, box_count, is_battle, battle_id, has_rgb_effect, are_seats_locked, total_likes, seat_price, current_viewers, total_gifts_coins, battle_mode, battle_format, battle_status, battle_start_time, battle_end_time, random_battle_queue_enabled, random_battle_queued_at, random_battle_cooldown_until, side_a_score, side_b_score')
+        .select('status, box_count, is_battle, battle_id, has_rgb_effect, are_seats_locked, total_likes, seat_price, current_viewers, total_gifts_coins, battle_mode, battle_format, battle_status, battle_start_time, battle_end_time, random_battle_queue_enabled, random_battle_queued_at, random_battle_cooldown_until, side_a_score, side_b_score, broadcast_theme_slug, active_theme_url, category')
           .eq('id', streamId)
           .maybeSingle()
 
@@ -4934,12 +4959,26 @@ const handleLike = useCallback(async () => {
     );
   }
 
+  console.log('[THEME DEBUG] RENDER — broadcastTheme?.shellClassName:', broadcastTheme?.shellClassName);
+  console.log('[THEME DEBUG] RENDER — final className:', cn(broadcastTheme?.shellClassName || theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden'));
+  console.log('[THEME DEBUG] RENDER — isPresidentTheme:', broadcastTheme?.id === 'president_mansion');
+
   return (
       <GiftSystemProvider streamId={streamId} defaultReceiverId={stream?.user_id}>
           <ErrorBoundary>
 
           {/* ── Outer layout: header + 3-column grid + bottom bar + footer ── */}
-          <div className={cn(theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden')}>
+          <div
+            className={cn(broadcastTheme?.shellClassName || theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden')}
+            data-theme={broadcastTheme?.id || 'default'}
+          >
+
+            {broadcastTheme && (
+              <ThemeEffectLayer
+                effectType={broadcastTheme.effectType}
+                accentColor={broadcastTheme.accentColor}
+              />
+            )}
 
             {/* Background layers — identical to Sidebar ShellBackdrop */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
@@ -6045,13 +6084,6 @@ const handleLike = useCallback(async () => {
               <BroadcastAbilityEffects
                 activeEffects={abilityActiveEffects}
               />
-
-              {/* TCPS Message Bubble */}
-              {stream?.user_id && (
-                <TCPSMessageBubble
-                  broadcasterId={stream.user_id}
-                />
-              )}
 
               {/* More Controls Drawer */}
               {isMoreControlsOpen && (

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 
 interface UseObsHeartbeatOptions {
   streamId: string | null
+  sessionId?: string | null
   enabled?: boolean
   interval?: number // milliseconds between heartbeats
 }
@@ -18,6 +19,7 @@ interface HeartbeatResult {
  */
 export function useObsHeartbeat({
   streamId,
+  sessionId,
   enabled = true,
   interval = 5000, // Default: every 5 seconds
 }: UseObsHeartbeatOptions) {
@@ -25,17 +27,18 @@ export function useObsHeartbeat({
   const isMountedRef = useRef(true)
 
   const sendHeartbeat = useCallback(async (): Promise<HeartbeatResult> => {
-    if (!streamId || !enabled) {
-      return { ok: false, error: 'Stream ID not set or heartbeat disabled' }
+    const targetId = sessionId || streamId
+    if (!targetId || !enabled) {
+      return { ok: false, error: 'Session ID not set or heartbeat disabled' }
     }
 
     try {
-      console.log('[useObsHeartbeat] Sending heartbeat for stream:', streamId)
+      console.log('[useObsHeartbeat] Sending heartbeat for session:', targetId)
 
-      const { data, error } = await supabase.functions.invoke('stream-health-monitor', {
+      const { data, error } = await supabase.functions.invoke('agora-stream', {
         body: {
           action: 'heartbeat',
-          streamId,
+          sessionId: targetId,
         },
       })
 

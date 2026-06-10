@@ -1,13 +1,16 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Construction } from 'lucide-react';
 
 interface UnderConstructionPageProps {
-  pageName: string;
+  pageName?: string;
 }
 
 export default function UnderConstructionPage({ pageName }: UnderConstructionPageProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const path = searchParams.get('path');
+  const displayName = pageName || (path ? path.replace('/', '').replace(/-/g, ' ') : 'This page');
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white gap-6 px-6">
@@ -26,7 +29,7 @@ export default function UnderConstructionPage({ pageName }: UnderConstructionPag
       </h1>
 
       <p className="text-center text-zinc-400 max-w-md text-sm md:text-base">
-        <span className="text-white font-bold">{pageName}</span> is currently being built and is not accessible yet.
+        <span className="text-white font-bold capitalize">{displayName}</span> is currently being built and is not accessible yet.
         Check back later!
       </p>
 

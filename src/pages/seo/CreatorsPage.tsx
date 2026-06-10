@@ -147,13 +147,14 @@ const trendingSearches = [
 export default function CreatorsPage() {
   return (
     <SEOLayout
-      title="Become a Creator | Troll City"
-      description="Start streaming and earn money as a content creator on Troll City. Join our creator program, build your audience, and turn your passion into income. Apply today."
+      title="Creator Monetization on Troll City | Social Streaming Platform"
+      description="Start streaming and earn money as a content creator on Troll City (Mai Troll City). Join our creator program, build your audience, and turn your passion into income on our social streaming platform."
       keywords={[
-        'become a creator', 'content creator', 'streamer', 'make money online', 'work from home',
+        'Troll City', 'Mai Troll City', 'become a creator', 'content creator', 'streamer', 'make money online', 'work from home',
         'creator program', 'streaming career', 'income', 'earnings', 'monetize',
         'creator economy', 'work from home jobs', 'online income', 'side hustle',
-        'become streamer', 'live streaming career', 'content creator jobs'
+        'become streamer', 'live streaming career', 'content creator jobs',
+        'Troll City creator', 'Troll City monetization', 'creator platform', 'social streaming platform'
       ]}
     >
       <Breadcrumb items={[{ label: 'Home', path: '/' }, { label: 'Creators' }]} />
@@ -170,15 +171,15 @@ export default function CreatorsPage() {
             </div>
             
             <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-              Turn Your Passion{' '}
+              Create & Earn on{' '}
               <span className="bg-gradient-to-r from-green-400 via-emerald-400 to-green-400 bg-clip-text text-transparent">
-                Into Profit
+                Troll City
               </span>
             </h1>
             
             <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed">
-              Become a Troll City creator and start earning today. 
-              Stream games, music, chat, or any content you love. 
+              Become a creator on <strong>Troll City</strong> (Mai Troll City) and start earning today. 
+              Stream games, music, chat, or any content you love on our social streaming platform. 
               Build your audience and get paid for what you do best.
             </p>
             

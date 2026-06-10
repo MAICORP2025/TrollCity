@@ -1,4 +1,19 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://trollcity.app/sitemap.xml
+# Sitemaps
+Sitemap: https://maitrollcity.com/sitemap.xml
+Sitemap: https://maitrollcity.com/sitemap-dynamic.xml
+
+# Disallow auth and internal pages from indexing
+Disallow: /auth
+Disallow: /auth/callback
+Disallow: /exit
+Disallow: /stream-ended
+Disallow: /profile/settings
+Disallow: /profile/delete
+Disallow: /profile/setup
+Disallow: /live/command-center/
+Disallow: /live/overlay/
+Disallow: /broadcast/setup
+Disallow: /broadcast/summary/

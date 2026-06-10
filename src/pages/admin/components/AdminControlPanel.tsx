@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { toast } from 'sonner'
@@ -7,15 +8,18 @@ import {
   Award, 
   CheckCircle, 
   X, 
-  AlertTriangle
+  AlertTriangle,
+  Construction
 } from 'lucide-react'
 import UserNameWithAge from '../../../components/UserNameWithAge'
 import BroadcastLockdownControl from '../../../components/admin/BroadcastLockdownControl'
 import BroadcastRestrictionControl from '../../../components/admin/BroadcastRestrictionControl'
+import ShareAThonControl from '../../../components/admin/ShareAThonControl'
 
 
 export default function AdminControlPanel() {
   const { user, profile, refreshProfile } = useAuthStore()
+  const navigate = useNavigate()
   const [searchUsername, setSearchUsername] = useState('')
   const [searchResults, setSearchResults] = useState<Array<{
     id: string
@@ -260,11 +264,32 @@ export default function AdminControlPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Page Visibility / Under Construction Control */}
+      <div className="bg-black/60 border border-amber-500/30 rounded-xl p-6">
+        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          <Construction className="w-6 h-6 text-amber-400" />
+          Page Visibility Control
+        </h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Mark pages as Under Construction to block public access. Only admins can access UC pages.
+        </p>
+        <button
+          onClick={() => navigate('/admin/page-visibility')}
+          className="w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+        >
+          <Construction className="w-5 h-5" />
+          Manage Page Visibility
+        </button>
+      </div>
+
       {/* Broadcast Lockdown Control - Top Priority */}
       <BroadcastLockdownControl />
 
       {/* Broadcast Restriction Controls - Viewer Cap, Start Cap, Remove All */}
       <BroadcastRestrictionControl />
+
+      {/* Share-A-Thon Weekend Event Control */}
+      <ShareAThonControl />
 
       {/* Rest of Admin Controls */}
       <div className="bg-black/60 border border-purple-600/30 rounded-xl p-6">

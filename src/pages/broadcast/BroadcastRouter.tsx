@@ -189,6 +189,42 @@ function injectSocialMetaTags(stream: Stream | null, broadcaster: BroadcasterMet
     link.setAttribute('href', canonicalUrl)
     document.head.appendChild(link)
   }
+
+  // JSON-LD structured data (VideoObject for live streams)
+  const existingSchema = document.querySelector('#stream-schema')
+  if (existingSchema) existingSchema.remove()
+
+  const schemaScript = document.createElement('script')
+  schemaScript.id = 'stream-schema'
+  schemaScript.type = 'application/ld+json'
+
+  const streamStart = (stream as any).started_at || (stream as any).created_at || new Date().toISOString()
+  const broadcasterName = broadcaster?.username || 'Troll City Creator'
+
+  schemaScript.textContent = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': isLive ? 'VideoObject' : 'VideoObject',
+    'name': stream.title || `${broadcasterName} on Troll City`,
+    'description': description,
+    'thumbnailUrl': previewImage,
+    'uploadDate': streamStart,
+    'url': canonicalUrl,
+    'embedUrl': `${APP_URL}/embed/${stream.id}`,
+    'author': {
+      '@type': 'Person',
+      'name': broadcasterName,
+      'url': `${APP_URL}/profile/${encodeURIComponent(broadcasterName)}`
+    },
+    ...(isLive && {
+      'isLiveBroadcast': true,
+      'publication': {
+        '@type': 'BroadcastEvent',
+        'isLiveBroadcast': true,
+        'startDate': streamStart
+      }
+    })
+  })
+  document.head.appendChild(schemaScript)
 }
 
 function injectSafeMetaForPrivateStream(streamId: string, isPrivate: boolean) {
@@ -551,6 +587,20 @@ function BroadcastRouter() {
     )
   }
 
+  // Gaming/TCNN redirects must come BEFORE the ended-stream check so that
+  // gaming streams always route to the HytroGaming viewer regardless of status.
+  const isTCNN = stream.category === 'tcnn'
+  if (isTCNN) {
+    if (isHost) {
+      return <Navigate to={`/tcnn/broadcaster/${streamId}`} replace />
+    }
+    return <Navigate to={`/tcnn/viewer/${streamId}`} replace />
+  }
+
+  if (stream.category === 'gaming' && !isHost) {
+    return <Navigate to={`/gaming/watch/${streamId}`} replace />
+  }
+
   if (isEndedStream(stream)) {
     const fromGovernment = localStorage.getItem('fromGovernmentStreams')
 
@@ -626,16 +676,6 @@ function BroadcastRouter() {
         <p className="ml-4">Checking access...</p>
       </div>
     )
-  }
-
-  const isTCNN = stream.category === 'tcnn'
-
-  if (isTCNN) {
-    if (isHost) {
-      return <Navigate to={`/tcnn/broadcaster/${streamId}`} replace />
-    }
-
-    return <Navigate to={`/tcnn/viewer/${streamId}`} replace />
   }
 
   return shouldUseRtcPage ? <BroadcastPage /> : <ViewerPage />

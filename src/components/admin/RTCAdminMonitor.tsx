@@ -8,26 +8,9 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { useStaffWalkieTalkieContext } from '../StaffWalkieTalkieProvider';
 import { toast } from 'sonner';
 import {
-  Activity,
-  BarChart3,
-  Bug,
-  Clock,
-  Coins,
-  Mail,
-  Monitor,
-  MoreVertical,
-  Radio,
-  RefreshCw,
-  Send,
-  Pause,
-  Search,
-  Shield,
-  ShieldAlert,
-  TrendingUp,
-  UserPlus,
-  Users,
-  Video,
-  X,
+  Activity, BarChart3, Bug, Clock, Coins, Mail, Monitor, MoreVertical,
+  Radio, RefreshCw, Send, Pause, Search, Shield, ShieldAlert, TrendingUp,
+  UserPlus, Users, Video, X, Stamp, FileText,
 } from 'lucide-react';
 import BugCenterPanel from './BugCenterPanel';
 import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton';
@@ -40,6 +23,8 @@ interface LiveStream {
   is_live: boolean | null;
   status: string | null;
   started_at: string | null;
+  category: string | null;
+  agora_channel: string | null;
 }
 
 interface RTSSession {
@@ -117,7 +102,9 @@ interface ModerationActionLog {
   details: string | null;
   status: string | null;
   created_at: string;
-  target?: { username?: string | null } | null;
+  target?: {
+    user_id: void; username?: string | null 
+} | null;
   actor?: { username?: string | null; role?: string | null; is_admin?: boolean | null } | null;
 }
 
@@ -135,7 +122,7 @@ interface StreamAnalyticsDaily {
   peak_concurrent_viewers: number;
 }
 
-type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'team_meeting' | 'bug_center' | 'tromail' | 'walkie_talkie';
+type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'team_meeting' | 'bug_center' | 'tromail' | 'walkie_talkie' | 'notary';
 
 interface TromailInboxItem {
   id: string;
@@ -189,7 +176,7 @@ const { profile } = useAuthStore();
     canAccessWalkieTalkie: contextCanAccessWalkieTalkie,
   } = useStaffWalkieTalkieContext();
 
-const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin', 'empire_partner', 'auctioneer', 'attorney', 'prosecutor', 'pastor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'agency_hr', 'agency_leader', 'ceo_assistant', 'noah_assistant'];
+const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin', 'empire_partner', 'auctioneer', 'attorney', 'prosecutor', 'pastor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'agency_hr', 'agency_leader', 'ceo_assistant', 'noah_assistant', 'academy_teacher', 'academy_director', 'admissions_officer'];
    const isStaff = profile?.is_admin === true || staffRoles.includes(profile?.role || '');
   const isFullAdmin = profile?.is_admin === true || ['admin', 'ceo', 'superadmin'].includes(profile?.role || '');
   const canUseWalkieTalkie = contextCanAccessWalkieTalkie;
@@ -270,10 +257,15 @@ const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
     // Tromail inbox state
    const [tromailInbox, setTromailInbox] = useState<TromailInboxItem[]>([]);
    const [tromailUnreadCount, setTromailUnreadCount] = useState(0);
-   const [tromailLoading, setTromailLoading] = useState(false);
-   const [lastTromailFetch, setLastTromailFetch] = useState<Date>(new Date());
+    const [tromailLoading, setTromailLoading] = useState(false);
+    const [lastTromailFetch, setLastTromailFetch] = useState<Date>(new Date());
 
-   // Walkie-talkie state for LiveKit mic muting coordination
+    // Notary state
+    const [notarySubTab, setNotarySubTab] = useState<'pending' | 'approved' | 'rejected' | 'logs'>('pending');
+    const [notaryDocuments, setNotaryDocuments] = useState<any[]>([]);
+    const [notaryLoading, setNotaryLoading] = useState(false);
+
+    // Walkie-talkie state for LiveKit mic muting coordination
    const [walkieTalkieMutedLiveKit, setWalkieTalkieMutedLiveKit] = useState(false);
 
 // Walkie-talkie allowed roles (same as in StaffWalkieTalkieProvider)
@@ -338,7 +330,7 @@ const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
     try {
       const { data: streams, error: streamsError } = await supabase
         .from('streams')
-        .select('id, broadcaster_id, user_id, title, is_live, status, started_at')
+        .select('id, broadcaster_id, user_id, title, is_live, status, started_at, category, agora_channel')
         .or('is_live.eq.true,status.eq.live')
         .order('started_at', { ascending: false });
 
@@ -1092,6 +1084,27 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       const interval = window.setInterval(fetchCashoutBonusData, 30000);
       return () => window.clearInterval(interval);
     }
+
+    if (activeMainTab === 'notary') {
+      const fetchNotaryDocs = async () => {
+        setNotaryLoading(true);
+        try {
+          const { data } = await supabase
+            .from('documents')
+            .select('id, title, document_type_slug, status, submitted_by, created_at, version')
+            .order('created_at', { ascending: false })
+            .limit(50);
+          setNotaryDocuments(data || []);
+        } catch (err) {
+          console.error('Notary fetch error:', err);
+        } finally {
+          setNotaryLoading(false);
+        }
+      };
+      fetchNotaryDocs();
+      const interval = window.setInterval(fetchNotaryDocs, 30000);
+      return () => window.clearInterval(interval);
+    }
   }, [activeMainTab, fetchCashoutBonusData, fetchClickStats, fetchRTCStats, fetchSignupData, fetchStreamAnalytics, isStaff]);
 
   // Monitor for new user signups to trigger the flashing blue ring notification
@@ -1201,7 +1214,7 @@ const renderFloatingButton = () => {
       const badgeTextSize = isOpen ? 'text-[9px]' : 'text-[18px]';
 
        return (
-         <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+         <div className="fixed bottom-[160px] right-4 z-[100] flex flex-col gap-2 md:bottom-[200px]">
            <button
              type="button"
              onClick={() => setIsOpen((open) => !open)}
@@ -1238,6 +1251,7 @@ const renderFloatingButton = () => {
      { id: 'team_meeting', label: 'Team Meeting', icon: <Video className="h-3 w-3" />, staffOnly: true },
      { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
      { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
+     { id: 'notary', label: 'Notary', icon: <Stamp className="h-3 w-3" /> },
    ];
 
    const visibleMonitorTabs = monitorTabs.filter((tab) => {
@@ -1741,17 +1755,159 @@ const renderFloatingButton = () => {
     </div>
   );
 
-   const renderActiveTab = () => {
+    const renderNotaryTab = () => (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Stamp className="h-4 w-4 text-amber-400" />
+              <span className="text-xs font-bold uppercase tracking-wide text-amber-300">Notary Documents</span>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                setNotaryLoading(true);
+                try {
+                  const { data } = await supabase
+                    .from('documents')
+                    .select('id, title, document_type_slug, status, submitted_by, created_at, version')
+                    .order('created_at', { ascending: false })
+                    .limit(50);
+                  setNotaryDocuments(data || []);
+                } catch (err) {
+                  console.error('Notary refresh error:', err);
+                } finally {
+                  setNotaryLoading(false);
+                }
+              }}
+              disabled={notaryLoading}
+              className="rounded bg-amber-600/30 px-2 py-1 text-[11px] font-medium text-amber-100 hover:bg-amber-600/45 disabled:opacity-50"
+            >
+              {notaryLoading ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
+
+          {/* Sub-tabs */}
+          <div className="mb-3 flex gap-1">
+            {(['pending', 'approved', 'rejected', 'logs'] as const).map((sub) => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setNotarySubTab(sub)}
+                className={`rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider capitalize ${
+                  notarySubTab === sub
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-white/5 text-white/50 hover:bg-white/10'
+                }`}
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
+
+          {notarySubTab === 'logs' ? (
+            <div className="space-y-1">
+              <div className="rounded bg-black/20 px-3 py-3 text-center text-xs text-amber-100/55">
+                Document audit logs will appear here.
+              </div>
+            </div>
+          ) : (
+            <div className="max-h-64 space-y-1 overflow-y-auto">
+              {notaryDocuments.length === 0 ? (
+                <div className="rounded bg-black/20 px-3 py-3 text-center text-xs text-amber-100/55">
+                  No documents found.
+                </div>
+              ) : (
+                notaryDocuments
+                  .filter((doc) => {
+                    if (notarySubTab === 'pending') return doc.status === 'pending' || doc.status === 'submitted';
+                    if (notarySubTab === 'approved') return doc.status === 'approved' || doc.status === 'notarized';
+                    if (notarySubTab === 'rejected') return doc.status === 'rejected';
+                    return true;
+                  })
+                  .map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="rounded border border-white/10 bg-black/20 px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-bold text-white">{doc.title || 'Untitled'}</span>
+                        <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 text-[10px] uppercase text-amber-200">
+                          {doc.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-white/40">
+                        <span>Type: {doc.document_type_slug || 'unknown'}</span>
+                        <span>{doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''}</span>
+                      </div>
+                      <div className="mt-2 flex gap-1">
+                        {(doc.status === 'pending' || doc.status === 'submitted') && (
+                          <>
+                            <button
+                              type="button"
+                              className="rounded bg-green-600/30 px-2 py-1 text-[10px] font-bold text-green-200 hover:bg-green-600/50"
+                              onClick={async () => {
+                                try {
+                                  await supabase.from('documents').update({ status: 'approved' }).eq('id', doc.id);
+                                  setNotaryDocuments((prev) =>
+                                    prev.map((d) => (d.id === doc.id ? { ...d, status: 'approved' } : d))
+                                  );
+                                  toast.success(`Document "${doc.title}" approved`);
+                                } catch (err) {
+                                  toast.error('Failed to approve document');
+                                }
+                              }}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded bg-red-600/30 px-2 py-1 text-[10px] font-bold text-red-200 hover:bg-red-600/50"
+                              onClick={async () => {
+                                try {
+                                  await supabase.from('documents').update({ status: 'rejected' }).eq('id', doc.id);
+                                  setNotaryDocuments((prev) =>
+                                    prev.map((d) => (d.id === doc.id ? { ...d, status: 'rejected' } : d))
+                                  );
+                                  toast.success(`Document "${doc.title}" rejected`);
+                                } catch (err) {
+                                  toast.error('Failed to reject document');
+                                }
+                              }}
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          className="rounded bg-white/5 px-2 py-1 text-[10px] font-bold text-white/50 hover:bg-white/10"
+                          onClick={() => navigate(`/city-registry?tab=notary&doc=${doc.id}`)}
+                        >
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+
+    const renderActiveTab = () => {
      if (activeMainTab === 'rtc') return renderRtcTab();
      if (activeMainTab === 'walkie_talkie') return <WalkieTalkieTab />;
      if (activeMainTab === 'mod_actions') return renderModActionsTab();
      if (isFullAdmin && activeMainTab === 'signups') return renderSignupsTab();
      if (isFullAdmin && activeMainTab === 'cashout') return renderCashoutTab();
      if (activeMainTab === 'team_meeting') return renderTeamMeetingTab();
-     if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
-     if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
-     if (activeMainTab === 'tromail') return renderTromailTab();
-     return <div className="rounded-lg bg-white/5 p-4 text-center text-xs text-gray-500">No access to this tab.</div>;
+      if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
+      if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
+      if (activeMainTab === 'tromail') return renderTromailTab();
+      if (activeMainTab === 'notary') return renderNotaryTab();
+      return <div className="rounded-lg bg-white/5 p-4 text-center text-xs text-gray-500">No access to this tab.</div>;
    };
 
    const renderActionModal = () => {

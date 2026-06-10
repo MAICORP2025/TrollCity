@@ -176,8 +176,15 @@ export function BatterySaverProvider({ children }: { children: React.ReactNode }
       if (cancelled) return
       battery = bat
       handleBatteryUpdate()
-      battery.addEventListener('levelchange', handleBatteryUpdate)
-      battery.addEventListener('chargingchange', handleBatteryUpdate)
+      // Use on* property assignment for cross-browser compatibility
+      // (Firefox/Safari may not support addEventListener on BatteryManager)
+      if (typeof battery.addEventListener === 'function') {
+        battery.addEventListener('levelchange', handleBatteryUpdate)
+        battery.addEventListener('chargingchange', handleBatteryUpdate)
+      } else {
+        battery.onlevelchange = handleBatteryUpdate
+        battery.onchargingchange = handleBatteryUpdate
+      }
     }).catch(() => {
       // Battery API unavailable or denied
     })
@@ -185,8 +192,13 @@ export function BatterySaverProvider({ children }: { children: React.ReactNode }
     return () => {
       cancelled = true
       if (battery) {
-        battery.removeEventListener('levelchange', handleBatteryUpdate)
-        battery.removeEventListener('chargingchange', handleBatteryUpdate)
+        if (typeof battery.removeEventListener === 'function') {
+          battery.removeEventListener('levelchange', handleBatteryUpdate)
+          battery.removeEventListener('chargingchange', handleBatteryUpdate)
+        } else {
+          battery.onlevelchange = null
+          battery.onchargingchange = null
+        }
       }
     }
   }, [])

@@ -9,12 +9,11 @@ import {
   Users, BookOpen, Award, Coins, Star, TrendingUp, FileText, Shield,
   ChevronRight, ChevronDown, CheckCircle, XCircle, AlertTriangle,
   BarChart3, GraduationCap, DollarSign, UserPlus, UserX, Clock,
-  Search, Plus, Edit3, Trash2, Settings, Mail, Eye, Wallet,
+  Search, Plus, Edit3, Trash2, Settings, Mail, Eye,
 } from 'lucide-react';
 import { getAcademyMetrics, getTeacherApplications, getAdmissionsApplications, reviewTeacherApplication, getApprovedTeachers, getPublishedCourses } from '@/services/academyService';
 import type { AcademyMetrics, AcademyTeacherApplication, AcademyAdmissionsApplication, AcademyTeacher, AcademyCourse } from '@/types/academy';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 
 const glass = 'border border-white/10 bg-[#070b19]/70 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]';
 
@@ -26,7 +25,7 @@ export default function AcademyAdminPage() {
   const [pendingAdmissions, setPendingAdmissions] = useState<AcademyAdmissionsApplication[]>([]);
   const [allTeachers, setAllTeachers] = useState<AcademyTeacher[]>([]);
   const [allCourses, setAllCourses] = useState<AcademyCourse[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'admissions' | 'courses' | 'coins' | 'settings' | 'accreditation'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'admissions' | 'courses' | 'coins'>('overview');
   const [loading, setLoading] = useState(true);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,7 +88,7 @@ export default function AcademyAdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 pb-2 overflow-x-auto">
-        {(['overview', 'teachers', 'admissions', 'courses', 'coins', 'settings', 'accreditation'] as const).map(tab => (
+        {(['overview', 'teachers', 'admissions', 'courses', 'coins'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${activeTab === tab ? 'bg-emerald-500/20 text-emerald-300' : 'text-slate-400 hover:text-white'}`}>
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -220,10 +219,7 @@ export default function AcademyAdminPage() {
 
           {/* All Teachers */}
           <section className={`${glass} rounded-2xl p-5`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-black text-white">All Teachers ({allTeachers.length})</h2>
-              <button onClick={() => navigate('/academy/admin/teachers')} className="flex items-center gap-1 rounded-lg bg-purple-500/20 px-3 py-1.5 text-[10px] font-bold text-purple-300"><Settings className="h-3 w-3" /> Manage</button>
-            </div>
+            <h2 className="mb-4 text-sm font-black text-white">All Teachers ({allTeachers.length})</h2>
             {allTeachers.length === 0 ? <p className="text-center text-sm text-slate-500">No teachers yet.</p> : (
               <div className="space-y-2">
                 {allTeachers.map(t => (
@@ -286,172 +282,6 @@ export default function AcademyAdminPage() {
           </div>
         </section>
       )}
-      {/* ===== SETTINGS TAB ===== */}
-      {activeTab === 'settings' && (
-        <AdminSettings />
-      )}
-
-      {/* ===== ACCREDITATION TAB ===== */}
-      {activeTab === 'accreditation' && (
-        <AdminAccreditation />
-      )}
-    </div>
-  );
-}
-
-function AdminSettings() {
-  const [settings, setSettings] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const { user } = useAuthStore();
-
-  useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase.from('academy_settings').select('*');
-      const map: Record<string, string> = {};
-      (data || []).forEach((s: any) => { map[s.key] = s.value; });
-      setSettings(map);
-      setLoading(false);
-    };
-    fetch();
-  }, []);
-
-  const handleUpdate = async (key: string, value: string) => {
-    await supabase.from('academy_settings').update({ value, updated_by: user?.id }).eq('key', key);
-    setSettings(prev => ({ ...prev, [key]: value }));
-    toast.success('Setting updated');
-  };
-
-  if (loading) return <div className="flex justify-center py-8"><div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-300 border-t-transparent" /></div>;
-
-  return (
-    <section className="space-y-4">
-      <div className={`${glass} rounded-2xl p-5`}>
-        <h2 className="mb-4 text-sm font-black text-white">Academy Settings</h2>
-        <div className="space-y-3">
-          {[
-            { key: 'platform_commission_pct', label: 'Platform Commission (%)', type: 'number' },
-            { key: 'max_concurrent_enrollments', label: 'Max Concurrent Enrollments', type: 'number' },
-            { key: 'attendance_weight', label: 'Attendance Weight (%)', type: 'number' },
-            { key: 'assignment_weight', label: 'Assignment Weight (%)', type: 'number' },
-            { key: 'quiz_weight', label: 'Quiz Weight (%)', type: 'number' },
-            { key: 'exam_weight', label: 'Exam Weight (%)', type: 'number' },
-            { key: 'auto_complete_enabled', label: 'Auto Complete', type: 'boolean' },
-            { key: 'loan_reminder_days', label: 'Loan Reminder (days)', type: 'number' },
-            { key: 'delinquency_threshold_days', label: 'Delinquency Threshold (days)', type: 'number' },
-          ].map(setting => (
-            <div key={setting.key} className="flex items-center justify-between rounded-xl bg-white/[0.03] p-3">
-              <span className="text-xs text-slate-300">{setting.label}</span>
-              {setting.type === 'boolean' ? (
-                <button onClick={() => handleUpdate(setting.key, settings[setting.key] === 'true' ? 'false' : 'true')}
-                  className={`rounded-full px-3 py-1 text-[10px] font-bold ${settings[setting.key] === 'true' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-slate-400'}`}>
-                  {settings[setting.key] === 'true' ? 'Enabled' : 'Disabled'}
-                </button>
-              ) : (
-                <input type="number" value={settings[setting.key] || ''} onChange={e => handleUpdate(setting.key, e.target.value)}
-                  className="w-20 rounded border border-white/10 bg-[#050710] px-2 py-1 text-xs text-white text-center outline-none" />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AdminAccreditation() {
-  const [orgs, setOrgs] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showNewOrg, setShowNewOrg] = useState(false);
-  const [newOrg, setNewOrg] = useState({ name: '', slug: '', description: '', website: '', contact_email: '' });
-
-  useEffect(() => {
-    const fetch = async () => {
-      const [orgsData, requestsData] = await Promise.all([
-        supabase.from('academy_accreditation_orgs').select('*').order('name'),
-        supabase.from('academy_accreditation_requests').select('*, course:academy_courses(name), teacher:academy_teachers(teacher_id), org:academy_accreditation_orgs(name)').order('created_at', { ascending: false }),
-      ]);
-      setOrgs(orgsData.data || []);
-      setRequests(requestsData.data || []);
-      setLoading(false);
-    };
-    fetch();
-  }, []);
-
-  const handleCreateOrg = async () => {
-    if (!newOrg.name.trim()) return;
-    const { data } = await supabase.from('academy_accreditation_orgs').insert(newOrg).select().single();
-    setOrgs(prev => [...prev, data]);
-    setShowNewOrg(false);
-    setNewOrg({ name: '', slug: '', description: '', website: '', contact_email: '' });
-    toast.success('Organization created');
-  };
-
-  const handleReviewRequest = async (reqId: string, status: string, reviewNotes: string) => {
-    await supabase.from('academy_accreditation_requests').update({
-      status, review_notes: reviewNotes, reviewed_at: new Date().toISOString(),
-      ...(status === 'approved' ? { approved_at: new Date().toISOString() } : {}),
-    }).eq('id', reqId);
-    setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status } : r));
-    toast.success(`Request ${status}`);
-  };
-
-  if (loading) return <div className="flex justify-center py-8"><div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-300 border-t-transparent" /></div>;
-
-  return (
-    <div className="space-y-4">
-      <div className={`${glass} rounded-2xl p-5`}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-black text-white">Accreditation Organizations</h2>
-          <button onClick={() => setShowNewOrg(!showNewOrg)} className="flex items-center gap-1 rounded-lg bg-amber-500/20 px-3 py-1.5 text-[10px] font-bold text-amber-300"><Plus className="h-3 w-3" /> Add Org</button>
-        </div>
-        {showNewOrg && (
-          <div className="mb-4 rounded-xl border border-amber-400/20 bg-amber-500/[0.05] p-3 space-y-2">
-            <input type="text" value={newOrg.name} onChange={e => setNewOrg(p => ({ ...p, name: e.target.value }))} placeholder="Organization name..."
-              className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white outline-none" />
-            <input type="text" value={newOrg.slug} onChange={e => setNewOrg(p => ({ ...p, slug: e.target.value }))} placeholder="Slug (e.g., ase)"
-              className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white outline-none" />
-            <input type="text" value={newOrg.website} onChange={e => setNewOrg(p => ({ ...p, website: e.target.value }))} placeholder="Website..."
-              className="w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white outline-none" />
-            <button onClick={handleCreateOrg} className="rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-white">Create</button>
-          </div>
-        )}
-        <div className="space-y-2">
-          {orgs.map(org => (
-            <div key={org.id} className="flex items-center justify-between rounded-lg bg-white/[0.03] p-3">
-              <div><p className="text-xs font-bold text-white">{org.name}</p><p className="text-[9px] text-slate-500">{org.website || org.slug}</p></div>
-              <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold ${org.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>{org.is_active ? 'Active' : 'Inactive'}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={`${glass} rounded-2xl p-5`}>
-        <h2 className="mb-4 text-sm font-black text-white">Accreditation Requests ({requests.length})</h2>
-        {requests.length === 0 ? <p className="text-center text-xs text-slate-500 py-6">No requests.</p> : (
-          <div className="space-y-3">
-            {requests.map(req => (
-              <div key={req.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-white">{req.course?.name || 'Course'}</p>
-                    <p className="text-[9px] text-slate-500">Teacher: {req.teacher?.teacher_id} • Org: {req.org?.name || 'N/A'}</p>
-                    {req.request_notes && <p className="mt-1 text-[10px] text-slate-400">{req.request_notes}</p>}
-                  </div>
-                  {req.status === 'pending' ? (
-                    <div className="flex gap-1">
-                      <button onClick={() => handleReviewRequest(req.id, 'approved', 'Approved')} className="rounded-lg bg-emerald-500/20 px-2 py-1 text-[8px] font-bold text-emerald-300">Approve</button>
-                      <button onClick={() => handleReviewRequest(req.id, 'denied', 'Denied')} className="rounded-lg bg-red-500/20 px-2 py-1 text-[8px] font-bold text-red-300">Deny</button>
-                    </div>
-                  ) : (
-                    <span className={`rounded-full px-2 py-0.5 text-[8px] font-bold ${req.status === 'approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>{req.status}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

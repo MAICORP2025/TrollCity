@@ -317,7 +317,7 @@ function useAgoraGamingViewer(channelName: string | null, userId: string | undef
         body: {
           channelName,
           uid,
-          role: 'subscriber',
+          role: 'audience',
         },
       })
 

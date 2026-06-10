@@ -46,10 +46,9 @@ export const lazyWithRetry = <T extends ComponentType<any>>(
       }
     }
 
-    // All retries exhausted — try a page reload in production
+    // All retries exhausted — try a page reload to pick up new assets
     console.error('[lazyWithRetry] All import attempts failed, attempting reload');
-    const env = (import.meta as any).env;
-    if (typeof window !== 'undefined' && env?.PROD) {
+    if (typeof window !== 'undefined') {
       const storageKey = 'lazy-chunk-reload-ts';
       const lastReload = sessionStorage.getItem(storageKey);
       const now = Date.now();

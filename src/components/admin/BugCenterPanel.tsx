@@ -99,7 +99,7 @@ export default function BugCenterPanel() {
         .from('app_bug_reports')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(1000);
 
       if (status) query = query.eq('status', status);
       if (source !== 'all') query = query.eq('source', source);

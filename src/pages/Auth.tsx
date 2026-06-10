@@ -109,6 +109,17 @@ const checkJailIpViolations = async (userId: string, ipAddress: string) => {
 };
 
 const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = {}) => {
+  // Prevent search engines from indexing the auth page
+  useEffect(() => {
+    const meta = document.createElement('meta')
+    meta.name = 'robots'
+    meta.content = 'noindex, nofollow'
+    document.head.appendChild(meta)
+    return () => {
+      document.head.removeChild(meta)
+    }
+  }, [])
+
   const [loading, setLoading] = useState(false)
   const [searchParams] = useSearchParams()
   const initialIsLogin = initialMode
@@ -330,8 +341,7 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
   const landingForProfile = (prof: any) => {
     const userRole = prof?.role || prof?.troll_role
     if (userRole === 'troll_family') return '/family/home'
-    if (userRole === 'organization' || userRole === 'org_admin' || prof?.organization_id) return '/organization/dashboard'
-    if (userRole === 'student' || prof?.is_org_student) return '/mai-class'
+    if (userRole === 'student' || prof?.is_org_student) return '/home'
     return '/home'
   }
 
@@ -499,13 +509,8 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
            // Navigate based on user role to avoid flashing through HomeRedirect
            navigate(landingForProfile(profileData), { replace: true });
         } else {
-          if (profileData?.organization_id || profileData?.role === 'org_admin' || profileData?.role === 'organization') {
-            toast.success('Welcome to your organization dashboard!')
-            navigate('/organization/dashboard', { replace: true })
-          } else {
             toast.success('Login successful!')
             navigate(landingForProfile(profileData), { replace: true })
-          }
         }
       } else {
         // Profile doesn't exist, try polling for it
@@ -587,11 +592,7 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
               console.warn('[Auth] Could not send referral notification:', notifErr)
             }
 
-            if (prof?.organization_id || prof?.role === 'org_admin' || prof?.role === 'organization') {
-              navigate('/organization/dashboard', { replace: true })
-            } else {
-              navigate(landingForProfile(prof), { replace: true })
-            }
+            navigate(landingForProfile(prof), { replace: true })
           }
         } else {
 // Still no profile found - redirect to setup to let it handle creation/fetching

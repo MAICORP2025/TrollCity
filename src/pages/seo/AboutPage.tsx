@@ -188,13 +188,15 @@ const howItWorks = [
 export default function AboutPage() {
   return (
     <SEOLayout
-      title="Troll City - The Ultimate Live Streaming & Social Platform"
-      description="Join Troll City, the fastest-growing live streaming platform. Broadcast live, watch trending content, connect with creators, and earn money from home. Join millions of users today."
+      title="About Troll City | Social Streaming Platform"
+      description="Learn about Troll City (Mai Troll City) — a social streaming platform for creators, streamers, gamers, and online communities. Livestream, create communities, chat, and engage with content creators."
       keywords={[
+        'Troll City', 'Mai Troll City', 'about Troll City', 'social streaming platform',
         'live streaming', 'go live', 'broadcasting', 'content creator', 'make money online',
         'work from home', 'viral app', 'FYP', 'TikTok alternative', 'live chat',
         'streaming platform', 'best streaming app', 'live broadcast', 'watch live streams',
-        'creator economy', 'monetize content', 'social streaming', 'trending', 'live entertainment'
+        'creator economy', 'monetize content', 'social streaming', 'trending', 'live entertainment',
+        'Troll City streaming', 'Troll City social platform', 'creator platform', 'community platform'
       ]}
     >
       <Breadcrumb items={[{ label: 'Home' }, { label: 'About' }]} />
@@ -211,17 +213,17 @@ export default function AboutPage() {
             </div>
             
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
-              The Future of{' '}
+              Welcome to{' '}
               <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                Live Streaming
+                Troll City
               </span>
-              {' '}is Here
+              {' '}(Mai Troll City)
             </h1>
             
             <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed">
-              Welcome to Troll City – the ultimate live streaming and social platform. 
-              Broadcast your passion, connect with creators worldwide, and turn your content into income. 
-              Join the fastest-growing community of streamers, viewers, and entertainers.
+              Known throughout our community as <strong>Troll City</strong>, Mai Troll City is a social streaming platform 
+              built for creators, streamers, gamers, and online communities. Troll City provides livestreaming, 
+              community engagement tools, creator monetization features, and social interaction in one platform.
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -332,6 +334,37 @@ export default function AboutPage() {
                 </Link>
               )
             })}
+          </div>
+        </div>
+      </section>
+
+      <!-- Brand Identity & Clarification Section -->
+      <section className="py-20 bg-gradient-to-b from-slate-900/50 to-slate-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
+              What Is Troll City?
+            </h2>
+            <div className="space-y-6 text-slate-300 text-lg leading-relaxed">
+              <p>
+                <strong className="text-white">Troll City</strong> and <strong className="text-white">Mai Troll City</strong> are the same platform. 
+                Known throughout our community as <strong className="text-white">Troll City</strong>, Mai Troll City is a social streaming and 
+                content-sharing platform built for creators, streamers, gamers, and online communities.
+              </p>
+              <p>
+                Troll City provides livestreaming, community engagement tools, creator monetization features, and social interaction 
+                in one platform. Users can livestream, create communities, chat, and engage with content creators from around the world.
+              </p>
+              <p>
+                <strong className="text-white">Troll City is a social streaming platform.</strong> It is not related to any physical city, 
+                municipality, or geographic location. Troll City exists as a digital platform for online entertainment, creator content, 
+                and community building.
+              </p>
+              <p>
+                Whether you call it <strong className="text-white">Troll City</strong> or <strong className="text-white">Mai Troll City</strong>, 
+                you're referring to the same social streaming platform that empowers creators, entertains viewers, and connects communities worldwide.
+              </p>
+            </div>
           </div>
         </div>
       </section>

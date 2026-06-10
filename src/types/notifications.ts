@@ -58,9 +58,10 @@ export type NotificationType =
   | 'someone_followed'
   | 'friend_request_received'
   | 'request_accepted'
-  | 'tcps_mail_received'
-  | 'paid_message_received'
-  | 'paid_message_unlocked'
+  | 'utromail_received'
+  | 'utromail_request'
+  | 'academy_mail'
+  | 'government_mail'
 
   // GIFTS / COINS / WALLET
   | 'gift_received'

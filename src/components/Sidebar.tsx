@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { SafeLink } from '@/hooks/useSafeNavigate'
 import {
    AlertTriangle,
+   Award,
    Banknote,
    BookOpen,
    Briefcase,
@@ -18,6 +19,7 @@ import {
    FileText,
    Gamepad2,
    Gavel,
+   GraduationCap,
    Home,
    Landmark,
    LayoutDashboard,
@@ -40,12 +42,13 @@ import {
    Store,
    TrendingUp,
    Trophy,
-   Users,
-   Video,
-   Warehouse,
-   Waves,
-   Zap,
- } from 'lucide-react'
+    Users,
+    Video,
+    Wallet,
+    Warehouse,
+    Waves,
+    Zap,
+  } from 'lucide-react'
 
 import CourtEntryModal from './CourtEntryModal'
 import UserProfileWidget from './sidebar/UserProfileWidget'
@@ -58,6 +61,7 @@ import { useXPStore } from '@/stores/useXPStore'
 import { useSidebarUpdates } from '@/hooks/useSidebarUpdates'
 import { useJailMode } from '@/hooks/useJailMode'
 import { useBroadcastLockdown } from '@/hooks/useBroadcastLockdown'
+import { useShareAThonRestriction } from '@/hooks/useShareAThonRestriction'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { STORE_USD_PER_COIN } from '@/lib/coinMath'
 import { NIGHT_WATCH_PATROL_ROLES } from '@/lib/staff'
@@ -124,6 +128,7 @@ export default function Sidebar() {
   const { isUpdated, markAsViewed } = useSidebarUpdates()
   const location = useLocation()
   const isActive = (path: string) => location.pathname === path
+  const isHytroGamingActive = location.pathname === '/hytrogaming' || location.pathname.startsWith('/gaming/watch/')
 
   const [canSeeOfficer, setCanSeeOfficer] = useState(false)
   const [canSeeTrollFamily, setCanSeeTrollFamily] = useState(false)
@@ -137,8 +142,8 @@ export default function Sidebar() {
   const [canSeeInmates, setCanSeeInmates] = useState(false)
   const [isBackgroundJailed, setIsBackgroundJailed] = useState(false)
   const [isApprovedAuctioneer, setIsApprovedAuctioneer] = useState(false)
-  const [isOrgAdmin, setIsOrgAdmin] = useState(false)
-  const [hasOrganization, setHasOrganization] = useState(false)
+  const [isTeacher, setIsTeacher] = useState(false)
+
   const [showCourtModal, setShowCourtModal] = useState(false)
 
   const { isCollapsed, setCollapsed, expandGroup } = useSidebarStore()
@@ -223,8 +228,8 @@ export default function Sidebar() {
     isAdmin
 
   const canSeeCourt = !!user && !!profile
-  const canAccessOrgDashboard = hasOrganization || isOrgAdmin || isAdmin || isStaff || isSecretary || canSeeOfficer || canSeeSecretary
-  const canAccessMaiClass = canAccessOrgDashboard || role === 'student' || (profile as any)?.is_org_student
+
+
 
   const profileRoleLower = String(profile?.role || '').toLowerCase()
   const trollRoleLower = String(profile?.troll_role || '').toLowerCase()
@@ -247,6 +252,9 @@ export default function Sidebar() {
         trollRole === 'broadcaster')
   }
 
+  // Share-A-Thon restriction check
+  const { restricted: isShareAThonRestricted } = useShareAThonRestriction(user?.id);
+
   useEffect(() => {
     const fetchUserData = async () => {
       if (!profile?.id) return
@@ -259,13 +267,7 @@ export default function Sidebar() {
           .maybeSingle()
         setCanSeeOfficer(!!officerData)
 
-        const { data: orgAdminData } = await supabase
-          .from('organization_admins')
-          .select('*')
-          .eq('user_id', profile.id)
-          .maybeSingle()
-        setIsOrgAdmin(!!orgAdminData)
-        setHasOrganization(!!profile.organization_id)
+
 
         const { data: familyData } = await supabase
           .from('troll_families')
@@ -368,6 +370,14 @@ export default function Sidebar() {
           .maybeSingle()
         setIsApprovedAuctioneer(!!auctioneerData)
 
+        const { data: teacherData } = await supabase
+          .from('academy_teachers')
+          .select('id')
+          .eq('user_id', profile.id)
+          .eq('is_approved', true)
+          .maybeSingle()
+        setIsTeacher(!!teacherData)
+
         setCanSeeInmates(
           !!officerData ||
             isAdmin ||
@@ -414,7 +424,7 @@ export default function Sidebar() {
 
   const mainPaths = ['/', '/inventory', '/marketplace', '/leaderboard', '/credit-scores', '/store', '/creator-switch', '/troll-court', '/troll-games']
   const supportPaths = ['/support', '/safety']
-  const socialPaths = ['/tcps', '/pool', '/mai-class']
+  const socialPaths = ['/utromail', '/pool']
   if (profile?.role === 'troll_family') {
     socialPaths.push('/family/home')
   } else {
@@ -560,7 +570,7 @@ export default function Sidebar() {
           ) : (
             <div className={cx('grid gap-2', isSidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2')}>
               <div className={isSidebarCollapsed ? 'col-span-1 mb-2' : 'col-span-2 mb-2'}>
-                {canBroadcast() ? (
+                {canBroadcast() && !isShareAThonRestricted ? (
                   <SafeLink
                     to="/broadcast/setup"
                     className={cx(
@@ -584,14 +594,14 @@ export default function Sidebar() {
                       'flex w-full items-center justify-center rounded-2xl border border-white/10 bg-slate-800/55 font-black text-slate-400',
                       isSidebarCollapsed ? 'h-14 p-3' : 'gap-3 p-3.5'
                     )}
-                    title={isBroadcastLockedDown ? 'Broadcast locked down' : 'Broadcaster access required'}
+                    title={isShareAThonRestricted ? 'Share-A-Thon: Broadcasting restricted' : isBroadcastLockedDown ? 'Broadcast locked down' : 'Broadcaster access required'}
                   >
                     <Video size={isSidebarCollapsed ? 22 : 20} className="text-slate-500" />
                     {!isSidebarCollapsed && (
                       <div className="text-left leading-tight">
                         <div className="text-sm uppercase tracking-wide">Go Live</div>
                         <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                          {isBroadcastLockedDown ? 'Locked' : 'Go TO Neighborhood Page 1st'}
+                          {isShareAThonRestricted ? 'Share-A-Thon Lock' : isBroadcastLockedDown ? 'Locked' : 'Go TO Neighborhood Page 1st'}
                         </div>
                       </div>
                     )}
@@ -605,11 +615,27 @@ export default function Sidebar() {
               <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Live Auctions" to="/auctions" active={isActive('/auctions')} highlight={isUpdated('/auctions')} onClick={() => markAsViewed('/auctions')} className="text-green-400" tone="green" />
               <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} highlight={isUpdated('/troll-court')} onClick={() => markAsViewed('/troll-court')} tone="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighborhood" to="/neighborhood-setup" active={isActive('/neighborhood-setup')} highlight={isUpdated('/neighborhood-setup')} onClick={() => markAsViewed('/neighborhood-setup')} className="text-cyan-400" tone="cyan" />
-              <GridItem collapsed={isSidebarCollapsed} icon={MessageSquare} label="TCPS" to="/tcps" active={isActive('/tcps') || isActive('/messages')} highlight={isUpdated('/tcps')} onClick={() => markAsViewed('/tcps')} tone="cyan" />
-              <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="HytroGaming" to="/hytrogaming" active={isActive('/hytrogaming')} highlight={isUpdated('/hytrogaming')} onClick={() => markAsViewed('/hytrogaming')} className="text-purple-400" tone="purple" glow="pink" underConstruction={true} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="HytroGaming" to="/hytrogaming" active={isHytroGamingActive} highlight={isUpdated('/hytrogaming') || location.pathname.startsWith('/gaming/watch/')} onClick={() => markAsViewed('/hytrogaming')} className="text-purple-400" tone="purple" glow="pink" />
+
+              <SectionTitle title="Troll City Academy" collapsed={isSidebarCollapsed} />
+              <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Academy" to="/academy" active={isActivePath('/academy')} highlight={isUpdated('/academy')} onClick={() => markAsViewed('/academy')} className="text-emerald-400" tone="green" />
+              <GridItem collapsed={isSidebarCollapsed} icon={GraduationCap} label="Courses" to="/academy/courses" active={isActivePath('/academy/courses')} highlight={isUpdated('/academy/courses')} onClick={() => markAsViewed('/academy/courses')} className="text-teal-400" tone="teal" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Award} label="Certificates" to="/academy/certificates" active={isActivePath('/academy/certificates')} highlight={isUpdated('/academy/certificates')} onClick={() => markAsViewed('/academy/certificates')} className="text-yellow-400" tone="orange" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Admissions" to="/academy/admissions" active={isActivePath('/academy/admissions')} highlight={isUpdated('/academy/admissions')} onClick={() => markAsViewed('/academy/admissions')} className="text-cyan-400" tone="cyan" />
+              <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Classroom" to="/academy/classroom" active={isActivePath('/academy/classroom', true)} highlight={isUpdated('/academy/classroom')} onClick={() => markAsViewed('/academy/classroom')} className="text-sky-400" tone="cyan" />
+              {isTeacher && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Teacher Dashboard" to="/academy/teacher/dashboard" active={isActivePath('/academy/teacher/dashboard')} highlight={isUpdated('/academy/teacher/dashboard')} onClick={() => markAsViewed('/academy/teacher/dashboard')} className="text-amber-400" tone="orange" />
+              )}
+              {isAdmin && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Board of Education" to="/academy/admin" active={isActivePath('/academy/admin')} highlight={isUpdated('/academy/admin')} onClick={() => markAsViewed('/academy/admin')} className="text-purple-400" tone="purple" />
+              )}
+              <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Assignments" to="/academy/assignments" active={isActivePath('/academy/assignments', true)} highlight={isUpdated('/academy/assignments')} onClick={() => markAsViewed('/academy/assignments')} className="text-pink-400" tone="pink" />
+              <GridItem collapsed={isSidebarCollapsed} icon={GraduationCap} label="Teachers" to="/academy/teachers" active={isActivePath('/academy/teachers')} highlight={isUpdated('/academy/teachers')} onClick={() => markAsViewed('/academy/teachers')} className="text-amber-400" tone="orange" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Wallet} label="My Loans" to="/academy/loans" active={isActivePath('/academy/loans')} highlight={isUpdated('/academy/loans')} onClick={() => markAsViewed('/academy/loans')} className="text-amber-400" tone="orange" />
+              <GridItem collapsed={isSidebarCollapsed} icon={TrendingUp} label="Transcript" to="/academy/transcript/official" active={isActivePath('/academy/transcript/official')} highlight={isUpdated('/academy/transcript/official')} onClick={() => markAsViewed('/academy/transcript/official')} className="text-blue-400" tone="blue" />
 
               <SectionTitle title="City Services" collapsed={isSidebarCollapsed} />
-              <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Advertise" to="/city-registry/advertise" active={isActive('/city-registry/advertise')} highlight={isUpdated('/city-registry/advertise')} onClick={() => markAsViewed('/city-registry/advertise')} tone="pink" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Advertise" to="/city-registry/advertise" active={isActivePath('/city-registry/advertise')} highlight={isUpdated('/city-registry/advertise')} onClick={() => markAsViewed('/city-registry/advertise')} tone="pink" />
               <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Appeals" to="/city-registry" active={isActive('/city-registry')} highlight={isUpdated('/city-registry')} onClick={() => markAsViewed('/city-registry')} tone="purple" />
               {((profile as any)?.is_journalist || (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster || isAdmin || role === 'superadmin' || (profile as any)?.is_superadmin) && (
                 <GridItem collapsed={isSidebarCollapsed} icon={Newspaper} label="TCNN" to="/tcnn/dashboard" active={location.pathname.startsWith('/tcnn/dashboard')} highlight={isUpdated('/tcnn/dashboard')} onClick={() => markAsViewed('/tcnn/dashboard')} className="text-blue-400" tone="blue" />
@@ -627,6 +653,7 @@ export default function Sidebar() {
               )}
 
               <SectionTitle title="Social + Life" collapsed={isSidebarCollapsed} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Mail} label="UTroMail" to="/utromail" active={isActivePath('/utromail')} highlight={isUpdated('/utromail')} onClick={() => markAsViewed('/utromail')} className="text-emerald-400" tone="green" glow="green" />
               <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Podcast" to="/podcast" active={isActive('/podcast')} highlight={isUpdated('/podcast')} onClick={() => markAsViewed('/podcast')} className="text-purple-400" tone="purple" glow="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Insurance" to="/insurance" active={isActive('/insurance')} highlight={isUpdated('/insurance')} onClick={() => markAsViewed('/insurance')} className="text-cyan-300" tone="cyan" />
               <GridItem collapsed={isSidebarCollapsed} icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} highlight={isUpdated('/inventory')} onClick={() => markAsViewed('/inventory')} tone="purple" />
@@ -634,10 +661,6 @@ export default function Sidebar() {
               <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="My Families" to={isFamilyMember ? "/family/home" : "/family/browse"} active={isActive('/family/home') || isActive('/family/browse')} highlight={isUpdated('/family/home')} onClick={() => markAsViewed('/family/home')} className="text-purple-400" tone="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} highlight={isUpdated('/leaderboard')} onClick={() => markAsViewed('/leaderboard')} tone="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Warehouse} label="Living" to="/living" active={isActive('/living')} highlight={isUpdated('/living')} onClick={() => markAsViewed('/living')} tone="cyan" />
-              {canAccessMaiClass && (
-                <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Mai Class" to="/mai-class" active={isActive('/mai-class')} highlight={isUpdated('/mai-class')} onClick={() => markAsViewed('/mai-class')} className="text-green-400" glow="green" tone="green" />
-              )}
-
               <GridItem collapsed={isSidebarCollapsed} icon={Store} label="Marketplace" to="/marketplace" active={isActive('/marketplace')} highlight={isUpdated('/marketplace')} onClick={() => markAsViewed('/marketplace')} tone="purple" />
               {canSeeAuctionStudio && (
                 <GridItem collapsed={isSidebarCollapsed} icon={List} label="My Shows" to="/auctions/my-shows" active={location.pathname.startsWith('/auctions/my-shows')} highlight={isUpdated('/auctions/my-shows')} onClick={() => markAsViewed('/auctions/my-shows')} className="text-green-400" tone="green" />
@@ -656,9 +679,7 @@ export default function Sidebar() {
               {canSeeInmates && (
                 <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Inmates" to="/inmates" active={isActive('/inmates')} highlight={isUpdated('/inmates')} onClick={() => markAsViewed('/inmates')} className="text-red-300" tone="red" />
               )}
-              {canAccessOrgDashboard && (
-                <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Organization" to="/organization/dashboard" active={isActive('/organization/dashboard')} highlight={isUpdated('/organization/dashboard')} onClick={() => markAsViewed('/organization/dashboard')} className="text-purple-400" tone="purple" />
-              )}
+
               <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="President" to="/president" active={isActive('/president')} highlight={isUpdated('/president')} onClick={() => markAsViewed('/president')} tone="purple" />
               {(canSeeOfficer || canSeeSecretary || isAdmin) && (
                 <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Streams" to="/government/streams" active={location.pathname.startsWith('/government/streams')} highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')} className="text-red-400" tone="red" />
@@ -818,7 +839,7 @@ export default function Sidebar() {
             <GridItem collapsed={isSidebarCollapsed} icon={Gavel} label="Prosecutor Dashboard" to="/prosecutor" active={isActive('/prosecutor')} highlight={isUpdated('/prosecutor')} onClick={() => markAsViewed('/prosecutor')} tone="red" />
             <GridItem collapsed={isSidebarCollapsed} icon={Church} label="Pastor Dashboard" to="/church/pastor" active={isActive('/church/pastor')} highlight={isUpdated('/church/pastor')} onClick={() => markAsViewed('/church/pastor')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Agency HR Dashboard" to="/agency-hr-dashboard" active={isActive('/agency-hr-dashboard')} highlight={isUpdated('/agency-hr-dashboard')} onClick={() => markAsViewed('/agency-hr-dashboard')} tone="cyan" />
-            <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Organization Dashboard" to="/organization/dashboard" active={isActive('/organization/dashboard')} highlight={isUpdated('/organization/dashboard')} onClick={() => markAsViewed('/organization/dashboard')} tone="purple" />
+
             <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="CEO Assistant Dashboard" to="/ceo-assistant-dashboard" active={isActive('/ceo-assistant-dashboard')} highlight={isUpdated('/ceo-assistant-dashboard')} onClick={() => markAsViewed('/ceo-assistant-dashboard')} tone="cyan" />
             <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Noah Assistant Dashboard" to="/noah-assistant-dashboard" active={isActive('/noah-assistant-dashboard')} highlight={isUpdated('/noah-assistant-dashboard')} onClick={() => markAsViewed('/noah-assistant-dashboard')} tone="purple" />
           </div>

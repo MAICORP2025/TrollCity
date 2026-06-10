@@ -277,13 +277,14 @@ const trendingSearches = [
 export default function BroadcastingPage() {
   return (
     <SEOLayout
-      title="Live Broadcasting & Streaming Platform | Troll City"
-      description="Start broadcasting live on Troll City. Stream to unlimited viewers, earn money through virtual gifts and tips, and build your creator career. Free to start, unlimited potential."
+      title="Live Broadcasting on Troll City | Social Streaming Platform"
+      description="Start broadcasting live on Troll City (Mai Troll City). Stream to unlimited viewers, earn money through virtual gifts and tips, and build your creator career on our social streaming platform."
       keywords={[
-        'live broadcasting', 'go live', 'streaming', 'stream live', 'broadcast live',
+        'Troll City', 'Mai Troll City', 'live broadcasting', 'go live', 'streaming', 'stream live', 'broadcast live',
         'live stream', 'how to stream', 'streaming platform', 'live video', 'real-time streaming',
-        'creator streaming', 'broadcasting software', 'live streaming app', 'stream to twitch',
-        'video streaming', 'online streaming', 'webcam streaming', 'mobile streaming'
+        'creator streaming', 'broadcasting software', 'live streaming app',
+        'video streaming', 'online streaming', 'webcam streaming', 'mobile streaming',
+        'Troll City streaming', 'livestreaming on Troll City', 'social streaming platform'
       ]}
     >
       <Breadcrumb items={[{ label: 'Home', path: '/' }, { label: 'Broadcasting' }]} />
@@ -301,16 +302,16 @@ export default function BroadcastingPage() {
               </div>
               
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-                Broadcast Live.{' '}
+                Broadcast Live on{' '}
                 <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  Go Viral.
+                  Troll City
                 </span>
               </h1>
               
               <p className="text-xl text-slate-300 mb-8 leading-relaxed">
-                Start streaming today and reach millions of viewers worldwide. 
-                Our powerful broadcasting tools help you create engaging content that gets discovered. 
-                Whether you're a gamer, musician, or just want to chat – go live and build your audience.
+                Start streaming today on <strong>Troll City</strong> (Mai Troll City) and reach viewers worldwide. 
+                Our social streaming platform provides powerful broadcasting tools to help you create engaging content. 
+                Whether you're a gamer, musician, or just want to chat – go live on Troll City and build your audience.
               </p>
               
               <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">

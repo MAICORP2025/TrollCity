@@ -7,9 +7,7 @@
 -- 1. Drop TCPS-related tables (in dependency order)
 DROP TABLE IF EXISTS public.tcps_messages CASCADE;
 DROP TABLE IF EXISTS public.conversation_messages CASCADE;
-DROP TABLE IF EXISTS public.conversation_members CASCADE;
 DROP TABLE IF EXISTS public.conversations CASCADE;
-DROP TABLE IF EXISTS public.officer_chat_messages CASCADE;
 DROP TABLE IF EXISTS public.call_rooms CASCADE;
 DROP TABLE IF EXISTS public.call_minutes CASCADE;
 DROP TABLE IF EXISTS public.call_history CASCADE;
@@ -22,70 +20,38 @@ DROP FUNCTION IF EXISTS public.mark_conversation_read(uuid) CASCADE;
 DROP FUNCTION IF EXISTS public.handle_new_message_notification() CASCADE;
 DROP FUNCTION IF EXISTS public.get_call_balances(uuid) CASCADE;
 
--- 3. Remove tables from realtime publication
--- (Tables are already dropped above, but if you need to run this separately:)
+-- 3. Disable realtime on any remaining tables that might have been used
+-- (These may fail if tables don't exist, which is fine)
 DO $$
 BEGIN
-    PERFORM 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime'
-    AND tablename = 'conversation_messages';
-    IF FOUND THEN
-        ALTER PUBLICATION supabase_realtime DROP TABLE public.conversation_messages;
-    END IF;
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not drop conversation_messages from publication: %', SQLERRM;
+    -- Remove conversation_messages from realtime publication if it still exists
+    BEGIN
+        ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS public.conversation_messages;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Could not drop conversation_messages from publication: %', SQLERRM;
+    END;
+
+    BEGIN
+        ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS public.conversations;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Could not drop conversations from publication: %', SQLERRM;
+    END;
+
+    BEGIN
+        ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS public.conversation_members;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Could not drop conversation_members from publication: %', SQLERRM;
+    END;
+
+    BEGIN
+        ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS public.tcps_messages;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Could not drop tcps_messages from publication: %', SQLERRM;
+    END;
 END $$;
 
-DO $$
-BEGIN
-    PERFORM 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime'
-    AND tablename = 'conversations';
-    IF FOUND THEN
-        ALTER PUBLICATION supabase_realtime DROP TABLE public.conversations;
-    END IF;
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not drop conversations from publication: %', SQLERRM;
-END $$;
-
-DO $$
-BEGIN
-    PERFORM 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime'
-    AND tablename = 'conversation_members';
-    IF FOUND THEN
-        ALTER PUBLICATION supabase_realtime DROP TABLE public.conversation_members;
-    END IF;
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not drop conversation_members from publication: %', SQLERRM;
-END $$;
-
-DO $$
-BEGIN
-    PERFORM 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime'
-    AND tablename = 'tcps_messages';
-    IF FOUND THEN
-        ALTER PUBLICATION supabase_realtime DROP TABLE public.tcps_messages;
-    END IF;
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not drop tcps_messages from publication: %', SQLERRM;
-END $$;
-
--- 4. Clean up any TCPS-related notifications (safe - only runs if table/column exist)
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public'
-        AND table_name = 'notifications'
-        AND column_name = 'type'
-    ) THEN
-        DELETE FROM public.notifications WHERE type IN ('tcps_mail_received', 'paid_message_received');
-    END IF;
-EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'Could not clean notifications: %', SQLERRM;
-END $$;
+-- 4. Clean up any TCPS-related notifications
+DELETE FROM public.notifications WHERE type IN ('message', 'call', 'tcps_mail_received', 'paid_message_received');
 
 -- 5. Remove message_cost column from user_profiles if it exists
 DO $$

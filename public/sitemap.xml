@@ -1,15 +1,269 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+
+  <!-- ============================================================ -->
+  <!-- HOMEPAGE                                                       -->
+  <!-- ============================================================ -->
   <url>
-    <loc>https://trollcity.app/</loc>
-    <lastmod>2025-01-26</lastmod>
+    <loc>https://maitrollcity.com/</loc>
+    <lastmod>2026-06-08</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
+  <!-- /home redirects to / — no separate entry needed -->
+
+  <!-- ============================================================ -->
+  <!-- DISCOVERY & BROWSING (High Priority for Social Platform)       -->
+  <!-- ============================================================ -->
   <url>
-    <loc>https://trollcity.app/login</loc>
-    <lastmod>2025-01-26</lastmod>
+    <loc>https://maitrollcity.com/explore</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>always</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/live-swipe</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>always</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/auctions</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- SEO CONTENT PAGES                                               -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/about</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/broadcasting</loc>
+    <lastmod>2026-06-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <url>
+    <loc>https://maitrollcity.com/categories</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Individual Category Pages (public, indexable) -->
+  <url>
+    <loc>https://maitrollcity.com/categories/gaming</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/just-chatting</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/music</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/art</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/food</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/sports</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/education</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/entertainment</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/politics</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/categories/news</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- CREATOR PAGES                                                   -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/creators</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/go-live</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- TCNN NEWS                                                       -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/tcnn</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- ACADEMY                                                         -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/academy</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/academy/courses</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- COMMUNITY & GOVERNMENT                                          -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/seo-government</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/agencies</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- CAREERS & SAFETY                                                -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/careers</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/safety</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- LEGAL PAGES                                                     -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/legal/terms</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/legal/privacy</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/legal/safety</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/legal/creator-earnings</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/legal/refunds</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/legal/payouts</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/legal/gambling-disclosure</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- ============================================================ -->
+  <!-- TRENDING & LEADERBOARDS                                        -->
+  <!-- ============================================================ -->
+  <url>
+    <loc>https://maitrollcity.com/trending</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>always</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://maitrollcity.com/top-creators</loc>
+    <lastmod>2026-06-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- ============================================================ -->
+  <!-- NOTE: Dynamic pages (profiles, streams, battles, posts,        -->
+  <!-- academy courses, agency profiles, court sessions, TCNN          -->
+  <!-- articles) are generated at build time via                       -->
+  <!-- scripts/generate-sitemap.mjs and appended to                    -->
+  <!-- sitemap-dynamic.xml. Search engines should read both files.     -->
+  <!-- ============================================================ -->
+
 </urlset>

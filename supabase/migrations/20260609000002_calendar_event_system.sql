@@ -6,15 +6,15 @@
 -- ============================================================
 DROP TRIGGER IF EXISTS tc_auto_update_event_status ON public.events;
 DROP TRIGGER IF EXISTS trigger_update_event_status ON public.events;
--- Drop old functions using CASCADE to handle dependencies
--- This removes ALL functions with the calendar event names regardless of signature
-DROP FUNCTION IF EXISTS public.create_event CASCADE;
-DROP FUNCTION IF EXISTS public.register_for_event CASCADE;
-DROP FUNCTION IF EXISTS public.cancel_event_registration CASCADE;
-DROP FUNCTION IF EXISTS public.get_upcoming_events CASCADE;
-DROP FUNCTION IF EXISTS public.get_events_by_date_range CASCADE;
-DROP FUNCTION IF EXISTS public.auto_update_event_status CASCADE;
-DROP FUNCTION IF EXISTS public.update_event_status CASCADE;
+DROP FUNCTION IF EXISTS public.auto_update_event_status();
+DROP FUNCTION IF EXISTS public.update_event_status();
+DROP FUNCTION IF EXISTS public.create_event(text, text, text, date, time with time zone, time with time zone, text, text, text, text, uuid, text, integer, text, text, integer, text[], text, text, text, text[], jsonb);
+DROP FUNCTION IF EXISTS public.create_event(text, text, text, date, uuid, text, time with time zone, time with time zone, text, text, text, text, integer, text, text, integer, text[], text, text, text, text[], jsonb);
+DROP FUNCTION IF EXISTS public.create_event(text, text, text, time with time zone, time with time zone, text, text, text, text, uuid, text, integer, text, text, integer, text[], text, text, text, text[], jsonb);
+DROP FUNCTION IF EXISTS public.register_for_event(uuid, uuid, text, text);
+DROP FUNCTION IF EXISTS public.cancel_event_registration(uuid, uuid);
+DROP FUNCTION IF EXISTS public.get_upcoming_events(integer, integer);
+DROP FUNCTION IF EXISTS public.get_events_by_date_range(date, date);
 
 DROP TABLE IF EXISTS public.event_invites CASCADE;
 DROP TABLE IF EXISTS public.event_access_rules CASCADE;
@@ -265,7 +265,7 @@ CREATE INDEX IF NOT EXISTS idx_event_invites_status ON public.event_invites(stat
 -- ============================================================
 
 -- Update event status based on current time
-CREATE FUNCTION public.auto_update_event_status()
+CREATE OR REPLACE FUNCTION public.auto_update_event_status()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $func$
@@ -292,8 +292,8 @@ CREATE TRIGGER tc_auto_update_event_status
   FOR EACH ROW
   EXECUTE FUNCTION public.auto_update_event_status();
 
--- Create event RPC (required params first, then optional — matches frontend RPC call)
-CREATE FUNCTION public.create_event(
+-- Create event RPC
+CREATE OR REPLACE FUNCTION public.create_event(
   p_title TEXT,
   p_description TEXT,
   p_category_slug TEXT,
@@ -355,7 +355,7 @@ END;
 $$;
 
 -- Register for event RPC
-CREATE FUNCTION public.register_for_event(
+CREATE OR REPLACE FUNCTION public.register_for_event(
   p_event_id UUID,
   p_user_id UUID,
   p_username TEXT,
@@ -424,7 +424,7 @@ END;
 $$;
 
 -- Cancel registration RPC
-CREATE FUNCTION public.cancel_event_registration(
+CREATE OR REPLACE FUNCTION public.cancel_event_registration(
   p_event_id UUID,
   p_user_id UUID
 )
@@ -470,7 +470,7 @@ END;
 $$;
 
 -- Get upcoming events RPC
-CREATE FUNCTION public.get_upcoming_events(
+CREATE OR REPLACE FUNCTION public.get_upcoming_events(
   p_limit INTEGER DEFAULT 10,
   p_offset INTEGER DEFAULT 0
 )
@@ -511,7 +511,7 @@ END;
 $$;
 
 -- Get events by date range RPC
-CREATE FUNCTION public.get_events_by_date_range(
+CREATE OR REPLACE FUNCTION public.get_events_by_date_range(
   p_start_date DATE,
   p_end_date DATE
 )
@@ -550,20 +550,10 @@ END;
 $$;
 
 -- ============================================================
--- RLS POLICIES (simplified to avoid cross-table recursion)
+-- RLS POLICIES
 -- ============================================================
 
-DROP POLICY IF EXISTS "Anyone can read active event categories" ON public.event_categories;
-DROP POLICY IF EXISTS "Admins can manage event categories" ON public.event_categories;
-DROP POLICY IF EXISTS "Anyone can view public events" ON public.events;
-DROP POLICY IF EXISTS "Authenticated users can create events" ON public.events;
-DROP POLICY IF EXISTS "Creators can update own events" ON public.events;
-DROP POLICY IF EXISTS "Admins can manage all events" ON public.events;
-DROP POLICY IF EXISTS "Users can view own participations" ON public.event_participants;
-DROP POLICY IF EXISTS "Users can register themselves" ON public.event_participants;
-DROP POLICY IF EXISTS "Users can update own registration" ON public.event_participants;
-DROP POLICY IF EXISTS "Event creators can manage participants" ON public.event_participants;
-
+-- Enable RLS on all tables
 ALTER TABLE public.event_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.event_participants ENABLE ROW LEVEL SECURITY;
@@ -571,28 +561,51 @@ ALTER TABLE public.event_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.event_access_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.event_invites ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public can read event categories" ON public.event_categories FOR SELECT USING (true);
-CREATE POLICY "Admins can manage event categories" ON public.event_categories FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role = 'admin'))
-);
+-- event_categories: everyone can read active categories
+CREATE POLICY "Anyone can read active event categories" ON public.event_categories
+  FOR SELECT USING (is_active = true);
+CREATE POLICY "Admins can manage event categories" ON public.event_categories
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role IN ('admin', 'ceo', 'founder', 'owner')))
+  );
 
-CREATE POLICY "Public can view public events" ON public.events FOR SELECT USING (visibility = 'public');
-CREATE POLICY "Creators can update own events" ON public.events FOR UPDATE USING (creator_id = auth.uid());
-CREATE POLICY "Admins can manage all events" ON public.events FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role = 'admin'))
-);
+-- events: public events visible to all, private to participants/invited
+CREATE POLICY "Anyone can view public events" ON public.events
+  FOR SELECT USING (
+    visibility = 'public'
+    OR creator_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM public.event_participants WHERE event_id = events.id AND user_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM public.event_invites WHERE event_id = events.id AND invited_user_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role IN ('admin', 'ceo', 'founder', 'owner', 'moderator')))
+  );
+CREATE POLICY "Authenticated users can create events" ON public.events
+  FOR INSERT WITH CHECK (
+    creator_id = auth.uid()
+    AND EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role IN ('admin', 'ceo', 'founder', 'owner', 'moderator', 'staff')))
+  );
+CREATE POLICY "Creators can update own events" ON public.events
+  FOR UPDATE USING (creator_id = auth.uid());
+CREATE POLICY "Admins can manage all events" ON public.events
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role IN ('admin', 'ceo', 'founder', 'owner')))
+  );
 
-CREATE POLICY "Users can view participants" ON public.event_participants FOR SELECT USING (true);
-CREATE POLICY "Users can insert own registration" ON public.event_participants FOR INSERT WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "Users can view own event_notifications" ON public.event_notifications FOR SELECT USING (user_id = auth.uid());
-
-CREATE POLICY "Public can view access rules" ON public.event_access_rules FOR SELECT USING (true);
-
-CREATE POLICY "Users can view own invites" ON public.event_invites FOR SELECT USING (invited_user_id = auth.uid());
-CREATE POLICY "Admins can manage invites" ON public.event_invites FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role = 'admin'))
-);
+-- event_participants: users see own, event creators see all for their events
+CREATE POLICY "Users can view own participations" ON public.event_participants
+  FOR SELECT USING (
+    user_id = auth.uid()
+    OR EXISTS (SELECT 1 FROM public.events WHERE id = event_participants.event_id AND creator_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role IN ('admin', 'ceo', 'founder', 'owner', 'moderator')))
+  );
+CREATE POLICY "Users can register themselves" ON public.event_participants
+  FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Users can update own registration" ON public.event_participants
+  FOR UPDATE USING (user_id = auth.uid());
+CREATE POLICY "Event creators can manage participants" ON public.event_participants
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.events WHERE id = event_participants.event_id AND creator_id = auth.uid())
+    OR EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND (is_admin = true OR role IN ('admin', 'ceo', 'founder', 'owner')))
+  );
 
 -- event_notifications: users see own
 CREATE POLICY "Users can view own notifications" ON public.event_notifications
@@ -638,13 +651,9 @@ CREATE POLICY "Users can update own invites" ON public.event_invites
 -- GRANT PERMISSIONS
 -- ============================================================
 GRANT ALL ON FUNCTION public.create_event(
-  TEXT, TEXT, TEXT, DATE,
-  UUID, TEXT,
-  TIME WITH TIME ZONE, TIME WITH TIME ZONE,
-  TEXT, TEXT, TEXT, TEXT,
-  INTEGER, TEXT, TEXT, INTEGER,
-  TEXT[], TEXT, TEXT, TEXT,
-  TEXT[], JSONB
+  TEXT, TEXT, TEXT, DATE, TIME WITH TIME ZONE, TIME WITH TIME ZONE,
+  TEXT, TEXT, TEXT, TEXT, UUID, TEXT, INTEGER, TEXT, TEXT, INTEGER,
+  TEXT[], TEXT, TEXT, TEXT, TEXT[], JSONB
 ) TO authenticated;
 GRANT ALL ON FUNCTION public.register_for_event(UUID, UUID, TEXT, TEXT) TO authenticated;
 GRANT ALL ON FUNCTION public.cancel_event_registration(UUID, UUID) TO authenticated;

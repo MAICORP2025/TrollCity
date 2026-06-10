@@ -7,6 +7,7 @@ interface SEOPageProps {
   title: string
   description: string
   keywords?: string[]
+  ogImage?: string
 }
 
 const navLinks = [
@@ -18,33 +19,62 @@ const navLinks = [
   { path: '/live', label: 'Go Live', icon: Play },
 ]
 
-export default function SEOLayout({ children, title, description, keywords = [] }: SEOPageProps) {
+export default function SEOLayout({ children, title, description, keywords = [], ogImage }: SEOPageProps) {
   const location = useLocation()
 
   React.useEffect(() => {
+    const origin = window.location.origin
+    const canonicalUrl = `${origin}${location.pathname}`
+    const imageUrl = ogImage || `${origin}/api/og/default`
+
     document.title = `${title} | Troll City`
-    const metaDesc = document.querySelector('meta[name="description"]')
-    if (metaDesc) {
-      metaDesc.setAttribute('content', description)
-    } else {
-      const newMeta = document.createElement('meta')
-      newMeta.name = 'description'
-      newMeta.content = description
-      document.head.appendChild(newMeta)
-    }
-    if (keywords.length > 0) {
-      const existingKeywords = document.querySelector('meta[name="keywords"]')
-      if (existingKeywords) {
-        existingKeywords.setAttribute('content', keywords.join(', '))
-      } else {
-        const newKeywords = document.createElement('meta')
-        newKeywords.name = 'keywords'
-        newKeywords.content = keywords.join(', ')
-        document.head.appendChild(newKeywords)
+
+    const setMeta = (property: string, content: string, isName = false) => {
+      const selector = isName ? `meta[name="${property}"]` : `meta[property="${property}"]`
+      let meta = document.querySelector(selector) as HTMLMetaElement | null
+      if (!meta) {
+        meta = document.createElement('meta')
+        if (isName) {
+          meta.setAttribute('name', property)
+        } else {
+          meta.setAttribute('property', property)
+        }
+        document.head.appendChild(meta)
       }
+      meta.setAttribute('content', content)
     }
+
+    const setLink = (rel: string, href: string) => {
+      let link = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null
+      if (!link) {
+        link = document.createElement('link')
+        link.rel = rel
+        document.head.appendChild(link)
+      }
+      link.href = href
+    }
+
+    setMeta('description', description, true)
+    if (keywords.length > 0) {
+      setMeta('keywords', keywords.join(', '), true)
+    }
+
+    setMeta('og:title', `${title} | Troll City`)
+    setMeta('og:description', description)
+    setMeta('og:url', canonicalUrl)
+    setMeta('og:type', 'website')
+    setMeta('og:site_name', 'Troll City')
+    setMeta('og:image', imageUrl)
+    setMeta('og:image:alt', `${title} | Troll City`)
+
+    setMeta('twitter:card', 'summary_large_image', true)
+    setMeta('twitter:title', `${title} | Troll City`, true)
+    setMeta('twitter:description', description, true)
+    setMeta('twitter:image', imageUrl, true)
+
+    setLink('canonical', canonicalUrl)
     window.scrollTo(0, 0)
-  }, [title, description, keywords])
+  }, [title, description, keywords, location.pathname, ogImage])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
@@ -151,7 +181,7 @@ export default function SEOLayout({ children, title, description, keywords = [] 
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
                 <Eye className="w-4 h-4 text-white" />
               </div>
-              <span className="text-slate-400">© 2026 Troll City. All rights reserved.</span>
+              <span className="text-slate-400">© 2026 Troll City (Mai Troll City). All rights reserved.</span>
               <Link
                 to="/admin"
                 className="ml-4 px-3 py-1 text-xs text-slate-500 hover:text-purple-400 transition-colors"

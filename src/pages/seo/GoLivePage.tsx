@@ -199,14 +199,15 @@ const trendingSearches = [
 export default function GoLivePage() {
   return (
     <SEOLayout
-      title="Go Live Now | Start Streaming"
-      description="Start broadcasting live on Troll City. Go live in minutes with free streaming tools. Stream from phone, PC, or browser. Join thousands of creators."
+      title="Go Live on Troll City | Livestreaming on Troll City"
+      description="Start broadcasting live on Troll City (Mai Troll City). Go live in minutes with free streaming tools on our social streaming platform. Stream from phone, PC, or browser."
       keywords={[
-        'go live', 'start streaming', 'live broadcast', 'start live stream',
+        'Troll City', 'Mai Troll City', 'go live', 'start streaming', 'live broadcast', 'start live stream',
         'broadcasting', 'live video', 'video streaming', 'stream live',
         'how to go live', 'start streaming free', 'live stream app',
         'go live streaming', 'start broadcasting', 'live video app',
-        'direct streaming', 'stream now', 'start livestream'
+        'direct streaming', 'stream now', 'start livestream', 'Troll City streaming',
+        'livestreaming on Troll City', 'social streaming platform'
       ]}
     >
       <Breadcrumb items={[{ label: 'Home', path: '/' }, { label: 'Go Live' }]} />
@@ -224,15 +225,15 @@ export default function GoLivePage() {
               </div>
               
               <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-                Ready to{' '}
+                Go Live on{' '}
                 <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  Go Live?
+                  Troll City
                 </span>
               </h1>
               
               <p className="text-xl text-slate-300 mb-8 leading-relaxed">
-                Start broadcasting in seconds. No equipment needed – just a device and internet connection. 
-                Join creators worldwide who are sharing their passion with millions of viewers.
+                Start broadcasting in seconds on <strong>Troll City</strong> (Mai Troll City). No equipment needed – just a device and internet connection. 
+                Join creators worldwide on our social streaming platform who are sharing their passion with millions of viewers.
               </p>
               
               <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">

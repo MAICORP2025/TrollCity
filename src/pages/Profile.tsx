@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
+import { buildOGImageUrl } from '../lib/og';
 import CreditScoreBadge from '../components/CreditScoreBadge';
 import UserBadge from '../components/UserBadge';
 import BackgroundCheckView from '../components/broadcast/BackgroundCheckView';
@@ -188,7 +189,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   const [bannerNotificationsEnabled, setBannerNotificationsEnabled] = useState(true);
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [isTabDropdownOpen, setIsTabDropdownOpen] = useState(false);
-  const [organization, setOrganization] = useState<{ name: string; role: string } | null>(null);
+
   const [isFollowing, setIsFollowing] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const tabDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -403,21 +404,6 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
           setInventory(emptyInventory);
         }
 
-        if (data.organization_id) {
-          try {
-            const [{ data: adminData }, { data: orgData }] = await Promise.all([
-              supabase.from('organization_admins').select('id,user_id,organization_id').eq('user_id', data.id).eq('organization_id', data.organization_id).maybeSingle(),
-              supabase.from('organizations').select('name').eq('id', data.organization_id).single(),
-            ]);
-            setOrganization(orgData ? { name: orgData.name, role: adminData ? 'Admin' : 'Member' } : null);
-          } catch (error) {
-            console.error('Error fetching organization data:', error);
-            setOrganization(null);
-          }
-        } else {
-          setOrganization(null);
-        }
-
         setLoading(false);
       }
     };
@@ -428,6 +414,110 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
       isMounted = false;
     };
   }, [currentUser?.id, fetchInventory, fetchXP, subscribeToXP, userId, username]);
+
+  // SEO: Set profile meta tags and structured data
+  useEffect(() => {
+    if (!profile?.username) return
+
+    const displayName = profile.display_name || profile.username
+    const isLive = isProfileLive
+    const liveText = isLive ? ' 🔴 LIVE' : ''
+    const title = `${displayName} Live Streams & Posts | Troll City`
+    const description = `Watch ${displayName}'s live streams, videos, posts, battles, and community activity on Troll City. ${isLive ? 'Currently streaming live!' : 'Follow to get notified when they go live.'}`
+    const profileUrl = `${window.location.origin}/profile/${encodeURIComponent(profile.username)}`
+    const avatarUrl = profile.avatar_url || `${window.location.origin}/preview-default.svg`
+    const ogImageUrl = profile.username
+      ? buildOGImageUrl({ kind: 'profile', username: profile.username })
+      : avatarUrl
+
+    // Set title and meta description
+    document.title = title
+    let metaDesc = document.querySelector('meta[name="description"]')
+    if (metaDesc) {
+      metaDesc.setAttribute('content', description)
+    } else {
+      metaDesc = document.createElement('meta')
+      metaDesc.setAttribute('name', 'description')
+      metaDesc.setAttribute('content', description)
+      document.head.appendChild(metaDesc)
+    }
+
+    // Update Open Graph
+    const updateOG = (prop: string, content: string) => {
+      let el = document.querySelector(`meta[property="og:${prop}"]`)
+      if (el) { el.setAttribute('content', content); return }
+      el = document.createElement('meta')
+      el.setAttribute('property', `og:${prop}`)
+      el.setAttribute('content', content)
+      document.head.appendChild(el)
+    }
+    updateOG('title', title)
+    updateOG('description', description)
+    updateOG('url', profileUrl)
+    updateOG('type', 'profile')
+    updateOG('image', ogImageUrl)
+
+    // Update Twitter
+    const updateTwitter = (name: string, content: string) => {
+      let el = document.querySelector(`meta[name="twitter:${name}"]`)
+      if (el) { el.setAttribute('content', content); return }
+      el = document.createElement('meta')
+      el.setAttribute('name', `twitter:${name}`)
+      el.setAttribute('content', content)
+      document.head.appendChild(el)
+    }
+    updateTwitter('title', title)
+    updateTwitter('description', description)
+    updateTwitter('image', ogImageUrl)
+    updateTwitter('card', 'summary_large_image')
+
+    // Canonical URL
+    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null
+    if (canonical) {
+      canonical.href = profileUrl
+    } else {
+      canonical = document.createElement('link')
+      canonical.setAttribute('rel', 'canonical')
+      canonical.setAttribute('href', profileUrl)
+      document.head.appendChild(canonical)
+    }
+
+    // JSON-LD structured data (ProfilePage + Person)
+    const existingSchema = document.querySelector('#profile-schema')
+    if (existingSchema) existingSchema.remove()
+
+    const schemaScript = document.createElement('script')
+    schemaScript.id = 'profile-schema'
+    schemaScript.type = 'application/ld+json'
+    schemaScript.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      'name': `${displayName} on Troll City`,
+      'description': description,
+      'url': profileUrl,
+      'mainEntity': {
+        '@type': 'Person',
+        'name': displayName,
+        'url': profileUrl,
+        'image': avatarUrl,
+        ...(isLive && {
+          'subjectOf': {
+            '@type': 'VideoObject',
+            'name': `${displayName} is LIVE on Troll City`,
+            'url': liveStreamId ? `${window.location.origin}/live/${liveStreamId}` : profileUrl,
+            'thumbnailUrl': avatarUrl,
+            'isLiveBroadcast': true
+          }
+        })
+      }
+    })
+    document.head.appendChild(schemaScript)
+
+    return () => {
+      const schema = document.querySelector('#profile-schema')
+      if (schema) schema.remove()
+    }
+  }, [profile?.username, profile?.display_name, profile?.avatar_url, isProfileLive, liveStreamId])
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -1310,16 +1400,6 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
                       ))}
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-
-            {profile.organization_id && organization && (
-              <div className={`${innerPanel} p-5`}>
-                <SectionHeader icon={Users} title="Organization" subtitle="Connected group or company" />
-                <div>
-                  <h4 className="font-black text-white">{organization.name}</h4>
-                  <p className="mt-1 text-sm text-zinc-400">Role: {organization.role}</p>
                 </div>
               </div>
             )}

@@ -21,9 +21,8 @@ import {
   TrendingUp,
   Calendar,
   Bell,
-  Wallet,
 } from 'lucide-react';
-import { getPublishedCourses, getStudentEnrollments, getStudentCertificates, getStudentCoinRewards, getStudentIdNumber, getUpcomingSessions, getLearningPathways, getStudentBadges, calculateGPA, getAttendancePercentage, getCourseAssignments } from '@/services/academyService';
+import { getPublishedCourses, getStudentEnrollments, getStudentCertificates, getStudentCoinRewards, getStudentIdNumber, getUpcomingSessions, getLearningPathways, getStudentBadges, calculateGPA } from '@/services/academyService';
 import type { AcademyCourse, AcademyEnrollment, AcademyCertificate, AcademyCoinReward, AcademySession, AcademyLearningPathway, AcademyGraduateBadge } from '@/types/academy';
 
 const glass = 'border border-white/10 bg-[#070b19]/70 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]';
@@ -41,9 +40,6 @@ export default function AcademyHomePage() {
   const [badges, setBadges] = useState<AcademyGraduateBadge[]>([]);
   const [gpa, setGpa] = useState<number>(0);
   const [isTeacher, setIsTeacher] = useState(false);
-  const [attendancePct, setAttendancePct] = useState<number>(100);
-  const [upcomingAssignments, setUpcomingAssignments] = useState<any[]>([]);
-  const [loanBalance, setLoanBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -72,31 +68,6 @@ export default function AcademyHomePage() {
         setBadges(badgesData);
         setGpa(gpaData);
         setIsTeacher(!!teacherData.data);
-
-        // Fetch attendance for active enrollments
-        const activeEnrollments = enrollmentsData.filter(e => e.status === 'accepted');
-        if (activeEnrollments.length > 0) {
-          const attendanceResults = await Promise.all(
-            activeEnrollments.map(e => getAttendancePercentage(user.id, e.course_id))
-          );
-          const avgAttendance = Math.round(attendanceResults.reduce((a, b) => a + b, 0) / attendanceResults.length);
-          setAttendancePct(avgAttendance);
-
-          // Fetch upcoming assignments
-          const assignmentResults = await Promise.all(
-            activeEnrollments.map(e => getCourseAssignments(e.course_id))
-          );
-          const allAssignments = assignmentResults.flat();
-          const upcoming = allAssignments
-            .filter(a => a.due_date && new Date(a.due_date) > new Date())
-            .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
-            .slice(0, 5);
-          setUpcomingAssignments(upcoming);
-
-          // Calculate total loan balance
-          const totalLoan = activeEnrollments.reduce((sum, e) => sum + (e.loan_balance || 0), 0);
-          setLoanBalance(totalLoan);
-        }
       } catch (err) {
         console.error('Error fetching academy data:', err);
       } finally {
@@ -310,7 +281,7 @@ export default function AcademyHomePage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-400">Attendance Rate</span>
-                <span className="text-sm font-bold text-cyan-400">{attendancePct}%</span>
+                <span className="text-sm font-bold text-cyan-400">--</span>
               </div>
               <button onClick={() => navigate('/academy/grades')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] py-2 text-[10px] font-bold text-slate-300 transition hover:bg-white/[0.08]">
                 View Full Gradebook →
@@ -388,49 +359,12 @@ export default function AcademyHomePage() {
               </h2>
               <div className="space-y-2">
                 {pathways.slice(0, 3).map((pathway) => (
-                  <button key={pathway.id} onClick={() => navigate(`/academy/pathway/${pathway.id}`)}
-                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2.5 text-left transition hover:border-cyan-400/20 hover:bg-white/[0.08]">
+                  <div key={pathway.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-2.5">
                     <p className="text-xs font-bold text-white">{pathway.name}</p>
                     <p className="text-[10px] text-slate-400">{pathway.courses.length} courses</p>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Upcoming Assignments */}
-          {upcomingAssignments.length > 0 && (
-            <section className={`${glass} rounded-2xl p-5`}>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
-                <FileText className="h-4 w-4 text-purple-400" /> Upcoming Assignments
-              </h2>
-              <div className="space-y-2">
-                {upcomingAssignments.map(a => (
-                  <div key={a.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-2.5">
-                    <p className="text-xs font-bold text-white">{a.title}</p>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-[9px] text-slate-500">{a.assignment_type} • {a.max_points} pts</span>
-                      <span className="text-[9px] text-amber-400">Due {new Date(a.due_date).toLocaleDateString()}</span>
-                    </div>
                   </div>
                 ))}
               </div>
-            </section>
-          )}
-
-          {/* Loan Balance */}
-          {loanBalance > 0 && (
-            <section className={`${glass} rounded-2xl p-5`}>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-black text-white">
-                <Wallet className="h-4 w-4 text-amber-400" /> Loan Balance
-              </h2>
-              <div className="rounded-lg bg-amber-500/10 p-3 text-center">
-                <p className="text-2xl font-black text-amber-400">{loanBalance.toLocaleString()}</p>
-                <p className="text-[10px] text-slate-400">Outstanding Academy Loan</p>
-              </div>
-              <button onClick={() => navigate('/academy/loans')} className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.04] py-2 text-[10px] font-bold text-slate-300 transition hover:bg-white/[0.08]">
-                Manage Loans →
-              </button>
             </section>
           )}
 
@@ -440,20 +374,14 @@ export default function AcademyHomePage() {
               <Bell className="h-4 w-4 text-slate-400" /> Quick Links
             </h2>
             <div className="space-y-1.5">
-              <button onClick={() => navigate('/academy/transcript/official')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2 text-left text-xs font-bold text-slate-300 transition hover:bg-white/[0.08]">
-                📄 Official Transcript
-              </button>
-              <button onClick={() => navigate('/academy/assignments')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2 text-left text-xs font-bold text-slate-300 transition hover:bg-white/[0.08]">
-                📝 My Assignments
+              <button onClick={() => navigate('/academy/transcript')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2 text-left text-xs font-bold text-slate-300 transition hover:bg-white/[0.08]">
+                📄 Academic Transcript
               </button>
               <button onClick={() => navigate('/academy/admissions')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2 text-left text-xs font-bold text-slate-300 transition hover:bg-white/[0.08]">
-                📋 Admissions Application
+                📝 Admissions Application
               </button>
               <button onClick={() => navigate('/academy/classroom')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2 text-left text-xs font-bold text-slate-300 transition hover:bg-white/[0.08]">
                 🎒 My Classroom
-              </button>
-              <button onClick={() => navigate('/academy/teachers')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2 text-left text-xs font-bold text-slate-300 transition hover:bg-white/[0.08]">
-                👨‍🏫 Teacher Directory
               </button>
               <button onClick={() => navigate('/academy/verify')} className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-2 text-left text-xs font-bold text-slate-300 transition hover:bg-white/[0.08]">
                 🔍 Verify Certificate

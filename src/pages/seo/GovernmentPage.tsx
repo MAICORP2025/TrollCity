@@ -266,13 +266,14 @@ const trendingSearches = [
 export default function GovernmentPage() {
   return (
     <SEOLayout
-      title="Government System | Troll City"
-      description="Learn about Troll City government. Vote in elections, run for office, and participate in our democratic system. Fair courts and community leadership."
+      title="Government System on Troll City | Social Streaming Platform"
+      description="Learn about the Troll City (Mai Troll City) government system. Vote in elections, run for office, and participate in our democratic social streaming community."
       keywords={[
-        'government', 'election', 'vote', 'democracy', 'president', 'voting',
-        ' Troll Court', 'legal', 'court', 'attorney', 'prosecutor', 'officer',
+        'Troll City', 'Mai Troll City', 'government', 'election', 'vote', 'democracy', 'president', 'voting',
+        'Troll Court', 'legal', 'court', 'attorney', 'prosecutor', 'officer',
         'run for office', 'political', 'elections 2026', 'candidate',
-        'community leadership', 'public office', 'government system'
+        'community leadership', 'public office', 'government system', 'Troll City government',
+        'social streaming platform', 'community platform'
       ]}
     >
       <Breadcrumb items={[{ label: 'Home', path: '/' }, { label: 'Government' }]} />

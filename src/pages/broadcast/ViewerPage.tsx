@@ -165,9 +165,9 @@ function participantMatchesUser(participant: any, userId?: string | null) {
 
   return (
     identity === userId ||
-    (identity && identity.includes(userId)) ||
-    (identity && identity.endsWith(`-${userId}`)) ||
-    (identity && identity.startsWith(`${userId}-`)) ||
+    identity.includes(userId) ||
+    identity.endsWith(`-${userId}`) ||
+    identity.startsWith(`${userId}-`) ||
     metadata.user_id === userId ||
     metadata.userId === userId ||
     participant?.user_id === userId ||
@@ -1213,7 +1213,6 @@ const isActive = isStreamActive(stream)
     streamId: streamId || '',
     userId: user?.id,
     isCEO,
-    roomRef: liveKitRoom as any,
   })
 
    // CityStatusOrb for broadcaster display
@@ -2085,70 +2084,29 @@ useStreamRealtime(
 
           <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
 
-{!isMobileViewer && (
-                <>
-                  <BroadcastNeonHeader
-                    stream={stream}
-                    broadcasterProfile={broadcasterProfile
-                      ? {
-                          username: broadcasterProfile.username,
-                          avatar_url: broadcasterProfile.avatar_url,
-                          display_name: broadcasterProfile.display_name,
-                        }
-                        : null}
-                    isHost={false}
-                    liveViewerCount={viewerCount}
-                    handleLike={handleLike}
-                    onGift={() => onGift(hostId)}
-                    onShare={handleShare}
-                    onEndStream={handleLeave}
-                    coinBalance={(profile as any)?.troll_coins ?? 0}
-                    onOpenCoinStore={user?.id ? () => toast.info('Coin Store opens from the viewer action bar.') : undefined}
-                    isLive={isActive}
-                    streamStartedAt={(stream as any).started_at} />
-
-                  {isCEO && isActive && (
-                    <div className="px-4 pb-3">
-                      <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-3xl border border-purple-500/20 bg-slate-950/90 p-4 text-sm text-slate-200 shadow-[0_0_30px_rgba(147,51,234,0.25)] sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/15 text-2xl">
-                            <Skull className="h-6 w-6 text-purple-200" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-black text-white">Ghost Mode</p>
-                            <p className="text-xs text-slate-400">
-                              {ghostSession ? 'Active - Silent mode enabled' : 'Join silently to monitor chat'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="rounded-2xl bg-white/5 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-cyan-200">
-                          {ghostSession ? (
-                            <button
-                              onClick={() => {
-                                leaveGhostMode()
-                              }}
-                              className="hover:text-red-300 transition-colors"
-                            >
-                              Leave Ghost
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                joinGhostMode()
-                              }}
-                              disabled={isJoiningGhost || isLeavingGhost}
-                              className="disabled:opacity-50"
-                            >
-                              {isJoiningGhost ? 'Joining...' : 'Join Ghost'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Audience Bubble Ticker and Top Subscribers Bar */}
-                  <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
+           {!isMobileViewer && (
+             <>
+               <BroadcastNeonHeader
+                 stream={stream}
+                 broadcasterProfile={broadcasterProfile
+                   ? {
+                     username: broadcasterProfile.username,
+                     avatar_url: broadcasterProfile.avatar_url,
+                     display_name: broadcasterProfile.display_name,
+                   }
+                   : null}
+                 isHost={false}
+                 liveViewerCount={viewerCount}
+                 handleLike={handleLike}
+                 onGift={() => onGift(hostId)}
+                 onShare={handleShare}
+                 onEndStream={handleLeave}
+                 coinBalance={(profile as any)?.troll_coins ?? 0}
+                 onOpenCoinStore={user?.id ? () => toast.info('Coin Store opens from the viewer action bar.') : undefined}
+                 isLive={isActive}
+                 streamStartedAt={(stream as any).started_at} />
+{/* Audience Bubble Ticker and Top Subscribers Bar */}
+                <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
                   <div className="w-full max-w-7xl mx-auto flex items-center gap-3 px-4 sm:px-0">
                     <AudienceBubbleTicker
                       streamId={streamId}
@@ -2416,8 +2374,8 @@ useStreamRealtime(
                             participantMatchesUser(participant, seatIdentity) ||
                             participantMatchesUser(participant, seatUserId) ||
                             participantIdentity === String(seatIdentity) ||
-                            (participantIdentity && seatIdentity && participantIdentity.endsWith(`-${seatIdentity}`)) ||
-                            (seatIdentity && participantIdentity && String(seatIdentity).endsWith(participantIdentity))
+                            participantIdentity.endsWith(`-${seatIdentity}`) ||
+                            String(seatIdentity).endsWith(participantIdentity)
                           )
                         })
                       : null
@@ -2581,8 +2539,8 @@ useStreamRealtime(
                             participantMatchesUser(participant, seatIdentity) ||
                             participantMatchesUser(participant, seatUserId) ||
                             participantIdentity === String(seatIdentity) ||
-                            (participantIdentity && seatIdentity && participantIdentity.endsWith(`-${seatIdentity}`)) ||
-                            (seatIdentity && participantIdentity && String(seatIdentity).endsWith(participantIdentity))
+                            participantIdentity.endsWith(`-${seatIdentity}`) ||
+                            String(seatIdentity).endsWith(participantIdentity)
                           )
                         })
                       : null
@@ -3011,23 +2969,7 @@ useStreamRealtime(
           <div className={cn('flex items-center justify-between', isMobileViewer ? 'mx-3' : 'mx-auto max-w-7xl')}>
 
 <div className="flex w-full items-center justify-end gap-2 md:w-auto">
-                  {isCEO && isActive && !isMobileViewer && (
-                    <button
-                      onClick={() => joinGhostMode()}
-                      disabled={isJoiningGhost || isLeavingGhost}
-                      className={cn(
-                        'inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black',
-                        ghostSession
-                          ? 'border border-red-400/30 bg-red-500/15 text-red-300 hover:bg-red-500/20'
-                          : 'border border-purple-400/30 bg-purple-500/15 text-purple-200 hover:bg-purple-500/20'
-                      )}
-                      title={ghostSession ? 'Leave Ghost Mode' : 'Join Ghost Mode'}
-                    >
-                      <Skull className="h-4 w-4" />
-                      {isJoiningGhost || isLeavingGhost ? '...' : ghostSession ? 'Ghost' : 'Ghost'}
-                    </button>
-                  )}
-                  <StaffWalkieTalkieButton
+                <StaffWalkieTalkieButton 
                   showFullControls={false} 
                   onLiveKitMicMute={onLiveKitMicMute}
                   onLiveKitMicUnmute={onLiveKitMicUnmute}

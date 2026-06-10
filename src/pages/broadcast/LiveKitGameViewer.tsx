@@ -532,7 +532,7 @@ export default function LiveKitGameViewer() {
       const userIds = Array.from(new Set(rows.map((row: any) => row.user_id).filter(Boolean)))
       let profileMap = new Map<string, any>()
       if (userIds.length > 0) {
-        const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url, is_verified, verification_expires_at').in('id', userIds)
+        const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url').in('id', userIds)
         if (profiles) profileMap = new Map(profiles.map((p: any) => [p.id, p.username]))
       }
 

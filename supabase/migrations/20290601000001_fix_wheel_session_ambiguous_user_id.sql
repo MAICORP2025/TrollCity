@@ -1,6 +1,27 @@
--- Fix SQL 42702: ambiguous column reference "user_id" in get_or_create_wheel_session
+-- Fix SQL 42702/42703: ambiguous column reference "user_id" in get_or_create_wheel_session
+-- Also ensures the wheel_sessions table exists (it may not if the original migration wasn't applied).
 -- The WHERE clause referenced bare "user_id" which is ambiguous between the table column
 -- and the RETURN TABLE output variable. Fix: use wheel_sessions.user_id everywhere.
+
+-- Ensure the wheel_sessions table exists
+CREATE TABLE IF NOT EXISTS public.wheel_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  session_start TIMESTAMPTZ DEFAULT now(),
+  bankrupt_landed BOOLEAN DEFAULT false,
+  total_spins INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_wheel_sessions_user ON public.wheel_sessions(user_id, session_start DESC);
+
+ALTER TABLE public.wheel_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ONLY public.wheel_sessions FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage their wheel sessions" ON public.wheel_sessions;
+CREATE POLICY "Users can manage their wheel sessions" ON public.wheel_sessions
+  FOR ALL USING (auth.uid() = user_id);
+
+GRANT SELECT ON public.wheel_sessions TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.get_or_create_wheel_session()
 RETURNS TABLE(

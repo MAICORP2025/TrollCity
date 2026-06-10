@@ -5,14 +5,15 @@ import { useAuthStore } from '@/lib/store'
 import HytroViewerLayoutDesktop from '@/components/gaming/HytroViewerLayoutDesktop'
 import HytroViewerLayoutMobile from '@/components/gaming/HytroViewerLayoutMobile'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import { useBroadcastRealtime } from '@/hooks/useBroadcastRealtime'
 import { useGamingStreamRecorder } from '@/hooks/useGamingStreamRecorder'
 
 export default function HytroViewerPage() {
-  const { id: streamId } = useParams<{ id: string }>()
+  const { streamId } = useParams<{ streamId: string }>()
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const isMobile = useIsMobile()
-  const [stream, setStream] = useState<any | null>(null)
+  const [initialStream, setInitialStream] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [isHost, setIsHost] = useState(false)
   const [streamEnded, setStreamEnded] = useState(false)
@@ -30,6 +31,18 @@ export default function HytroViewerPage() {
     error: recorderError,
   } = useGamingStreamRecorder()
 
+  const realtime = useBroadcastRealtime({
+    streamId: streamId || '',
+    userId: user?.id,
+    initialStream,
+    onStreamEnd: () => {
+      setStreamEnded(true)
+    },
+  })
+
+  const stream = realtime.stream || initialStream
+  const isStreamLoading = loading || realtime.isLoading
+
   useEffect(() => {
     let mounted = true
     const fetchStream = async () => {
@@ -44,9 +57,9 @@ export default function HytroViewerPage() {
       if (!mounted) return
       if (error) {
         console.warn('[HytroViewerPage] Failed to fetch stream:', error)
-        setStream(null)
+        setInitialStream(null)
       } else {
-        setStream(data)
+        setInitialStream(data)
         setIsHost(data?.user_id === user?.id || data?.broadcaster_id === user?.id)
       }
       setLoading(false)
@@ -57,27 +70,21 @@ export default function HytroViewerPage() {
   }, [streamId, user?.id])
 
   useEffect(() => {
+    console.log('[HytroViewerPage] render check', { streamId, initialStream })
+  }, [streamId, initialStream])
+
+  useEffect(() => {
+    if (!stream) return
+    setIsHost(stream.user_id === user?.id || stream.broadcaster_id === user?.id)
+  }, [stream, user?.id])
+
+  useEffect(() => {
     if (!isHost || !stream || streamEnded) return
     if (isRecording || isUploading) return
     if (stream.status === 'live' || stream.is_live) {
       void startRecording(contentRef.current)
     }
   }, [isHost, stream, streamEnded, isRecording, isUploading, startRecording])
-
-  useEffect(() => {
-    if (!streamId) return
-    const channel = supabase
-      .channel(`hytro-stream-${streamId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams', filter: `id=eq.${streamId}` }, (payload) => {
-        const updated = payload.new as any
-        if (updated.status === 'ended' && !streamEnded) {
-          setStreamEnded(true)
-          setStream((prev) => prev ? { ...prev, ...updated } : updated)
-        }
-      })
-      .subscribe()
-    return () => { void supabase.removeChannel(channel) }
-  }, [streamId, streamEnded])
 
   const handleStreamEnd = useCallback(async () => {
     if (!streamId || !isHost) return
@@ -93,10 +100,13 @@ export default function HytroViewerPage() {
     if (streamEnded && isHost) void handleStreamEnd()
   }, [streamEnded, isHost, handleStreamEnd])
 
-  if (loading) return <div className="grid min-h-screen place-items-center">Loading stream...</div>
+  if (isStreamLoading) return <div className="grid min-h-screen place-items-center">Loading stream...</div>
   if (!stream) return <div className="p-6">Stream not found</div>
 
   const allowJoinBattle = false
+  // Only show "stream ended" overlay when onStreamEnd fires (live → ended transition).
+  // Don't use realtime.hasEnded because that reflects the DB status which may be stale.
+  const hasEnded = streamEnded
 
   return (
     <div ref={contentRef} className="relative">
@@ -120,10 +130,27 @@ export default function HytroViewerPage() {
           Recording: {recorderError}
         </div>
       )}
+      {hasEnded && (
+        <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-10 h-10 text-red-500"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M12 12h.01" /></svg>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Live Stream Ended</h2>
+          <p className="text-zinc-400 mb-8">This broadcast has ended. Thanks for watching!</p>
+          <div className="flex gap-3">
+            <button onClick={() => navigate('/live')} className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold rounded-full">
+              Go to Live
+            </button>
+            <button onClick={() => navigate('/home', { replace: true })} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full">
+              Go Home
+            </button>
+          </div>
+        </div>
+      )}
       {isMobile ? (
-        <HytroViewerLayoutMobile stream={stream} currentUser={user} allowJoinBattle={allowJoinBattle} />
+        <HytroViewerLayoutMobile stream={stream} currentUser={user} allowJoinBattle={allowJoinBattle} hasEnded={hasEnded} />
       ) : (
-        <HytroViewerLayoutDesktop stream={stream} currentUser={user} allowJoinBattle={allowJoinBattle} />
+        <HytroViewerLayoutDesktop stream={stream} currentUser={user} allowJoinBattle={allowJoinBattle} hasEnded={hasEnded} />
       )}
     </div>
   )

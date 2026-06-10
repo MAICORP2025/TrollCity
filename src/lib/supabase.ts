@@ -580,6 +580,10 @@ export enum UserRole {
   MARKETING_READONLY = 'marketing_readonly',
   SUPERADMIN = 'superadmin',
   CEO = 'ceo',
+  ACADEMY_TEACHER = 'academy_teacher',
+  ACADEMY_STUDENT = 'academy_student',
+  ACADEMY_DIRECTOR = 'academy_director',
+  ADMISSIONS_OFFICER = 'admissions_officer',
 }
 
 export enum Permission {

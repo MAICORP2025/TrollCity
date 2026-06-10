@@ -1,14 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import BottomNavigation from '../BottomNavigation'
+import BottomNavBar from '../nav/BottomNavBar'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
 import { useLocation } from 'react-router-dom'
 import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
 import { useAuthStore } from '../../lib/store'
-import { useChatStore } from '../../lib/chatStore'
-import { setupGlobalMessageNotifications, OFFICER_GROUP_CONVERSATION_ID } from '../../lib/supabase'
-import ChatBubble from '../ChatBubble'
 import { useSidebarStore } from '../../stores/useSidebarStore'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { isStandalone } from '../../pwa/install'
@@ -43,34 +41,21 @@ export default function AppLayout({
   const user = useAuthStore((s) => s.user)
   const { isCollapsed } = useSidebarStore()
   const { isMobileWidth } = useIsMobile()
-  useChatStore()
    const isAuthPage = location.pathname.startsWith('/auth');
-   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/watch/') || (location.pathname.startsWith('/broadcast/') && !location.pathname.startsWith('/broadcast/setup')) || location.pathname.startsWith('/stream/') || location.pathname === '/live-swipe';
-   const isMaiClassPage = location.pathname.startsWith('/mai-class');
+   const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/watch/') || location.pathname.startsWith('/gaming/watch/') || (location.pathname.startsWith('/broadcast/') && !location.pathname.startsWith('/broadcast/setup')) || location.pathname.startsWith('/stream/') || location.pathname === '/live-swipe';
+   const isUtromailPage = location.pathname.startsWith('/utromail') || location.pathname.startsWith('/tromail') || location.pathname.startsWith('/messages');
    const normalizedPath = location.pathname.toLowerCase();
-   const isThemeExemptPage = normalizedPath.includes('court') || normalizedPath.startsWith('/church') || normalizedPath.startsWith('/mai-class');
+   const isThemeExemptPage = normalizedPath.includes('court') || normalizedPath.startsWith('/church');
    const isKeyboardVisible = false;
    const isMobileLayout = isMobileWidth && !isAuthPage;
+
+   // New bottom nav bar is always shown (replaces sidebar on all screen sizes)
+   // Hidden on live pages only
+   const showNewBottomNavBar = !isAuthPage && !isLivePage;
 
   // Setup global message notifications - opens chat bubble when message received
   useEffect(() => {
     if (!user?.id) return
-    
-    const cleanup = setupGlobalMessageNotifications(
-      user.id,
-      (senderId, senderUsername, senderAvatar, isOpsMessage, _messageBody) => {
-        const { openChatBubble } = useChatStore.getState()
-        
-        // Open chat bubble directly without toast notification
-        if (isOpsMessage) {
-          openChatBubble(OFFICER_GROUP_CONVERSATION_ID, '🛡️ Officer Operations', null)
-        } else {
-          openChatBubble(senderId, senderUsername, senderAvatar)
-        }
-      }
-    )
-    
-    return cleanup
   }, [user?.id])
 
   useEffect(() => {
@@ -85,11 +70,11 @@ export default function AppLayout({
     };
   }, [isThemeExemptPage]);
 
-   const effectiveShowSidebar = showSidebar && showLegacySidebar && !isAuthPage && !isLivePage && !isMaiClassPage && !(isStandalone && isMobileWidth);
-   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isMaiClassPage;
-   const effectiveShowBottomNav = showBottomNav && !isAuthPage && !isLivePage && !isMaiClassPage;
+   const effectiveShowSidebar = false;
+   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage;
+   const effectiveShowBottomNav = false;
   const mainOverflowClass = isLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
-  const mainPaddingClass = effectiveShowBottomNav && !isLivePage ? 'pb-[calc(var(--bottom-nav-height,64px)+env(safe-area-inset-bottom,0px))]' : '';
+  const mainPaddingClass = showNewBottomNavBar && !isLivePage ? 'pb-[calc(var(--bottom-nav-height,128px)+env(safe-area-inset-bottom,0px))]' : '';
   const appThemeClass = isThemeExemptPage ? 'tc-theme-exempt' : 'tc-app-shell';
 
   return (
@@ -152,14 +137,17 @@ export default function AppLayout({
           )}
         </main>
 
-        {/* Bottom Navigation Bubble - Always visible on all screen sizes */}
-        {effectiveShowBottomNav && !isKeyboardVisible && (
+        {/* Old Bottom Navigation Bubble - Hidden, replaced by BottomNavBar */}
+        {false && effectiveShowBottomNav && !isKeyboardVisible && (
           <BottomNavigation />
         )}
 
-        {/* Global Chat Bubble */}
-        {!isAuthPage && <ChatBubble />}
       </div>
+
+      {/* New OS-Style Bottom Navigation Bar */}
+      {showNewBottomNavBar && (
+        <BottomNavBar />
+      )}
     </div>
   )
 }

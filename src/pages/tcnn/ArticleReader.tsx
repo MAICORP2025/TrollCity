@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
+import { buildOGImageUrl } from '@/lib/og';
 import { useTCNNTipping } from '@/hooks/useTCNNTipping';
 import { useTCNNRoles } from '@/hooks/useTCNNRoles';
 import { TCNNArticle } from '@/types/tcnn';
@@ -86,6 +87,50 @@ export default function ArticleReader() {
       setCanUserTip(false);
     }
   }, [user, article, checkCanTip]);
+
+  useEffect(() => {
+    if (!article) return;
+
+    const title = `${article.headline} | TCNN | Troll City`;
+    const description = article.excerpt || article.headline || 'Read the latest TCNN story on Troll City.';
+    const url = `${window.location.origin}/tcnn/article/${article.id}`;
+    const ogImageUrl = buildOGImageUrl({ kind: 'tcnn', id: article.id });
+
+    const updateMeta = (selector: string, attr: string, value: string) => {
+      let el = document.querySelector(selector) as HTMLMetaElement | null;
+      if (el) {
+        el.setAttribute(attr, value);
+      } else {
+        el = document.createElement('meta');
+        const nameAttr = selector.includes('name=') ? 'name' : 'property';
+        el.setAttribute(nameAttr, selector.match(/"([^\"]+)"/)?.[1] || '');
+        el.setAttribute(attr, value);
+        document.head.appendChild(el);
+      }
+    };
+
+    document.title = title;
+    updateMeta('meta[name="description"]', 'content', description);
+    updateMeta('meta[property="og:title"]', 'content', title);
+    updateMeta('meta[property="og:description"]', 'content', description);
+    updateMeta('meta[property="og:url"]', 'content', url);
+    updateMeta('meta[property="og:type"]', 'content', 'article');
+    updateMeta('meta[property="og:image"]', 'content', ogImageUrl);
+    updateMeta('meta[name="twitter:card"]', 'content', 'summary_large_image');
+    updateMeta('meta[name="twitter:title"]', 'content', title);
+    updateMeta('meta[name="twitter:description"]', 'content', description);
+    updateMeta('meta[name="twitter:image"]', 'content', ogImageUrl);
+
+    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (canonical) {
+      canonical.href = url;
+    } else {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      canonical.href = url;
+      document.head.appendChild(canonical);
+    }
+  }, [article]);
 
   const loadArticle = async () => {
     setIsLoading(true);

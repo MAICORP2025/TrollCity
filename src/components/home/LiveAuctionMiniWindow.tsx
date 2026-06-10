@@ -6,25 +6,9 @@ import { supabase } from '@/lib/supabase';
 import { Coins, Play, XCircle, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type AuctionShowStatus = 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled';
-type AuctionLotStatus = 'upcoming' | 'live' | 'sold' | 'unsold' | 'cancelled';
+import { type AuctionShow } from '@/contexts/LiveContentContext'
 
-interface AuctionShow {
-  id: string;
-  title: string;
-  description?: string | null;
-  category?: string | null;
-  thumbnail_url?: string | null;
-  status: AuctionShowStatus;
-  scheduled_for?: string | null;
-  live_started_at?: string | null;
-  ended_at?: string | null;
-  livekit_room_name?: string | null;
-  auctioneer_id: string;
-  current_lot_id?: string | null;
-  hls_url?: string | null;
-  egress_id?: string | null;
-}
+type AuctionLotStatus = 'upcoming' | 'live' | 'sold' | 'unsold' | 'cancelled';
 
 interface AuctionLot {
   id: string;
@@ -93,7 +77,7 @@ function getDisplayName(profile?: UserProfile | null) {
 }
 
 interface LiveAuctionMiniWindowProps {
-  auction: AuctionShow;
+  auction: any;
   onRequireAuth: (intent?: string) => boolean;
 }
 

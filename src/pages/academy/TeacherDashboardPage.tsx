@@ -11,74 +11,14 @@ import {
   Calendar, FileText, ClipboardList, Clock, TrendingUp, UserPlus, Settings,
   MessageSquare, CheckCircle, AlertCircle, Eye, Edit3, Trash2, Save, X,
   Loader2, Search, Filter, Download, Bell, BarChart3, UserCheck, UserX,
-  DollarSign, HelpCircle, Wallet, UserCheck as UserCheckIcon,
+  DollarSign,
 } from 'lucide-react';
 import { getTeacherByUserId, getTeacherCourses, getCourseEnrollments, getAssignmentSubmissions } from '@/services/academyService';
 import type { AcademyTeacher, AcademyCourse, AcademyEnrollment, AcademySubmission, AcademySession } from '@/types/academy';
 import { toast } from 'sonner';
 
 const glass = 'border border-white/10 bg-[#070b19]/70 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]';
-type DashboardTab = 'overview' | 'courses' | 'students' | 'assignments' | 'quizzes' | 'attendance' | 'gradebook' | 'calendar' | 'revenue' | 'settings';
-
-function QuizList({ teacherId, courses, navigate }: { teacherId: string; courses: AcademyCourse[]; navigate: any }) {
-  const [quizzes, setQuizzes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const fetch = async () => {
-      if (courses.length === 0) { setLoading(false); return; }
-      const { data } = await supabase.from('academy_quizzes').select('*').in('course_id', courses.map(c => c.id)).order('created_at', { ascending: false });
-      setQuizzes(data || []);
-      setLoading(false);
-    };
-    fetch();
-  }, [teacherId, courses.length]);
-  if (loading) return <div className="text-center text-xs text-slate-500 py-4">Loading...</div>;
-  if (quizzes.length === 0) return <div className="text-center text-xs text-slate-500 py-6">No quizzes yet. Create your first quiz!</div>;
-  return (
-    <div className="space-y-2">
-      {quizzes.map(q => {
-        const course = courses.find(c => c.id === q.course_id);
-        return (
-          <div key={q.id} className="flex items-center gap-3 rounded-lg bg-white/[0.04] p-3">
-            <HelpCircle className="h-4 w-4 shrink-0 text-indigo-400" />
-            <div className="min-w-0 flex-1"><p className="text-xs font-bold text-white">{q.title}</p><p className="text-[9px] text-slate-500">{course?.name || 'Unknown'} • {q.quiz_type} • {q.is_published ? 'Published' : 'Draft'}</p></div>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[8px] font-bold ${q.is_published ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'}`}>{q.is_published ? 'Live' : 'Draft'}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function AssignmentList({ teacherId, courses, navigate }: { teacherId: string; courses: AcademyCourse[]; navigate: any }) {
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const fetch = async () => {
-      if (courses.length === 0) { setLoading(false); return; }
-      const { data } = await supabase.from('academy_assignments').select('*').in('course_id', courses.map(c => c.id)).order('created_at', { ascending: false }).limit(10);
-      setAssignments(data || []);
-      setLoading(false);
-    };
-    fetch();
-  }, [teacherId, courses.length]);
-  if (loading) return <div className="text-center text-xs text-slate-500 py-4">Loading...</div>;
-  if (assignments.length === 0) return <div className="text-center text-xs text-slate-500 py-4">No assignments yet. Create your first assignment!</div>;
-  return (
-    <div className="space-y-2 mb-4">
-      {assignments.map(a => {
-        const course = courses.find(c => c.id === a.course_id);
-        return (
-          <div key={a.id} className="flex items-center gap-3 rounded-lg bg-white/[0.04] p-3">
-            <FileText className="h-4 w-4 shrink-0 text-purple-400" />
-            <div className="min-w-0 flex-1"><p className="text-xs font-bold text-white">{a.title}</p><p className="text-[9px] text-slate-500">{course?.name || 'Unknown'} • {a.assignment_type} • {a.is_published ? 'Published' : 'Draft'}</p></div>
-            <button onClick={() => navigate(`/academy/assignment/grade/${a.id}`)} className="shrink-0 rounded-lg bg-purple-500/20 px-2 py-1 text-[8px] font-bold text-purple-300">Grade</button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+type DashboardTab = 'overview' | 'courses' | 'students' | 'assignments' | 'gradebook' | 'calendar' | 'settings';
 
 export default function TeacherDashboardPage() {
   const navigate = useNavigate();
@@ -206,11 +146,8 @@ export default function TeacherDashboardPage() {
           { id: 'courses' as const, label: 'Courses', icon: BookOpen },
           { id: 'students' as const, label: 'Students', icon: Users },
           { id: 'assignments' as const, label: 'Assignments', icon: ClipboardList },
-          { id: 'quizzes' as const, label: 'Quizzes', icon: HelpCircle },
-          { id: 'attendance' as const, label: 'Attendance', icon: UserCheckIcon },
           { id: 'gradebook' as const, label: 'Gradebook', icon: FileText },
           { id: 'calendar' as const, label: 'Calendar', icon: Calendar },
-          { id: 'revenue' as const, label: 'Revenue', icon: Wallet },
           { id: 'settings' as const, label: 'Settings', icon: Settings },
         ]).map(tab => {
           const Icon = tab.icon;
@@ -365,12 +302,7 @@ export default function TeacherDashboardPage() {
       {/* ASSIGNMENTS TAB */}
       {activeTab === 'assignments' && (
         <section className={`${glass} rounded-2xl p-5`}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black text-white">Assignments</h2>
-            <button onClick={() => navigate('/academy/assignment/new')} className="flex items-center gap-1 rounded-lg bg-purple-500/20 px-3 py-1.5 text-[10px] font-bold text-purple-300"><Plus className="h-3 w-3" /> New Assignment</button>
-          </div>
-          <AssignmentList teacherId={teacher.id} courses={courses} navigate={navigate} />
-          <h3 className="mt-6 mb-3 text-xs font-black text-white">Student Submissions ({submissions.length})</h3>
+          <h2 className="mb-4 text-sm font-black text-white">Student Submissions ({submissions.length})</h2>
           {submissions.length === 0 ? <p className="text-center text-xs text-slate-500 py-8">No submissions yet</p> : (
             <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
               {submissions.map(sub => (
@@ -492,51 +424,6 @@ export default function TeacherDashboardPage() {
             </div>
           </section>
         </div>
-      )}
-
-      {/* QUIZZES TAB */}
-      {activeTab === 'quizzes' && (
-        <section className={`${glass} rounded-2xl p-5`}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black text-white">Quizzes</h2>
-            <button onClick={() => navigate('/academy/quiz/new')} className="flex items-center gap-1 rounded-lg bg-indigo-500/20 px-3 py-1.5 text-[10px] font-bold text-indigo-300"><Plus className="h-3 w-3" /> New Quiz</button>
-          </div>
-          <QuizList teacherId={teacher.id} courses={courses} navigate={navigate} />
-        </section>
-      )}
-
-      {/* ATTENDANCE TAB */}
-      {activeTab === 'attendance' && (
-        <section className={`${glass} rounded-2xl p-5`}>
-          <h2 className="mb-4 text-sm font-black text-white">Attendance</h2>
-          {courses.length === 0 ? <p className="text-center text-xs text-slate-500 py-6">No courses yet.</p> : (
-            <div className="space-y-2">
-              {courses.map(course => (
-                <button key={course.id} onClick={() => navigate(`/academy/attendance/${course.id}`)}
-                  className="flex w-full items-center gap-3 rounded-lg bg-white/[0.04] p-3 text-left hover:bg-white/[0.08]">
-                  <UserCheckIcon className="h-4 w-4 shrink-0 text-cyan-400" />
-                  <div className="min-w-0 flex-1"><p className="text-xs font-bold text-white">{course.name}</p><p className="text-[9px] text-slate-500">{course.status}</p></div>
-                  <ChevronRight className="h-3 w-3 shrink-0 text-slate-500" />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* REVENUE TAB */}
-      {activeTab === 'revenue' && (
-        <section className={`${glass} rounded-2xl p-5`}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black text-white">Revenue</h2>
-            <button onClick={() => navigate('/academy/teacher/revenue')} className="flex items-center gap-1 rounded-lg bg-amber-500/20 px-3 py-1.5 text-[10px] font-bold text-amber-300"><DollarSign className="h-3 w-3" /> Full Report</button>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-white/[0.04] p-3 text-center"><DollarSign className="mx-auto h-5 w-5 text-emerald-400" /><p className="mt-1 text-lg font-black text-white">{teacher.total_earnings || 0}</p><p className="text-[9px] text-slate-400">Total Earnings</p></div>
-            <div className="rounded-xl bg-white/[0.04] p-3 text-center"><Clock className="mx-auto h-5 w-5 text-amber-400" /><p className="mt-1 text-lg font-black text-white">{teacher.pending_payout || 0}</p><p className="text-[9px] text-slate-400">Pending</p></div>
-            <div className="rounded-xl bg-white/[0.04] p-3 text-center"><Users className="mx-auto h-5 w-5 text-blue-400" /><p className="mt-1 text-lg font-black text-white">{teacher.total_students}</p><p className="text-[9px] text-slate-400">Students</p></div>
-          </div>
-        </section>
       )}
 
       {/* SETTINGS TAB */}

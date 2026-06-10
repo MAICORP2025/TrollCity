@@ -1,11 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import AgoraRTC, {
-  IAgoraRTCClient,
-  IRemoteAudioTrack,
-  IRemoteVideoTrack,
-} from 'agora-rtc-sdk-ng'
-import Hls from 'hls.js'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -17,7 +11,6 @@ import {
   Heart,
   Loader2,
   MessageCircle,
-  Mic,
   MonitorPlay,
   MoreVertical,
   Plus,
@@ -33,11 +26,13 @@ import {
   WifiOff,
   Zap,
 } from 'lucide-react'
+import { IRemoteVideoTrack, IRemoteAudioTrack } from 'agora-rtc-sdk-ng'
 import { toast } from 'sonner'
 
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { useAgoraGamingViewer } from '@/hooks/useAgoraGamingViewer'
 
 interface GamingStream {
   id: string
@@ -56,7 +51,6 @@ interface GamingStream {
   agora_channel: string | null
   hls_url?: string | null
   playback_url?: string | null
-  obs_playback_url?: string | null
   stream_url?: string | null
   layout_mode?: string | null
 }
@@ -71,14 +65,6 @@ interface ChatMessage {
   is_system?: boolean
 }
 
-interface AgoraViewerState {
-  isConnecting: boolean
-  isConnected: boolean
-  remoteVideoTrack: IRemoteVideoTrack | null
-  remoteAudioTrack: IRemoteAudioTrack | null
-  error: string | null
-}
-
 function formatCompactNumber(value: number | null | undefined) {
   const safe = Number(value || 0)
 
@@ -86,29 +72,6 @@ function formatCompactNumber(value: number | null | undefined) {
   if (safe >= 1_000) return `${(safe / 1_000).toFixed(1)}K`
 
   return safe.toLocaleString()
-}
-
-function getViewerUid(id: string): number {
-  let hash = 0
-
-  for (let i = 0; i < id.length; i += 1) {
-    hash = (hash << 5) - hash + id.charCodeAt(i)
-    hash |= 0
-  }
-
-  return Math.abs(hash) % 4_294_967_295
-}
-
-function getWatchablePlaybackUrl(stream: GamingStream | null): string | null {
-  if (!stream) return null
-
-  return (
-    stream.hls_url ||
-    stream.playback_url ||
-    stream.obs_playback_url ||
-    stream.stream_url ||
-    null
-  )
 }
 
 function isStreamWatchable(stream: GamingStream | null): boolean {
@@ -122,356 +85,47 @@ function isStreamWatchable(stream: GamingStream | null): boolean {
   )
 }
 
-function useAgoraGamingViewer(channelName: string | null, userId: string | undefined) {
-  const [state, setState] = useState<AgoraViewerState>({
-    isConnecting: false,
-    isConnected: false,
-    remoteVideoTrack: null,
-    remoteAudioTrack: null,
-    error: null,
-  })
+// ─── Agora Gaming Viewer (replaces LiveKit) ─────────────────────────────────
 
-  const clientRef = useRef<IAgoraRTCClient | null>(null)
-  const joinedRef = useRef(false)
+function useAgoraGamingViewerInline(stream: GamingStream | null, userId: string | undefined) {
+  const agoraViewer = useAgoraGamingViewer()
+  const videoContainerRef = useRef<HTMLDivElement | null>(null)
   const mountedRef = useRef(true)
-
-  const leave = useCallback(async () => {
-    try {
-      if (clientRef.current && joinedRef.current) {
-        await clientRef.current.leave()
-      }
-    } catch (error) {
-      console.warn('[GamingViewerPage] Agora leave failed:', error)
-    } finally {
-      joinedRef.current = false
-      clientRef.current = null
-
-      if (mountedRef.current) {
-        setState({
-          isConnecting: false,
-          isConnected: false,
-          remoteVideoTrack: null,
-          remoteAudioTrack: null,
-          error: null,
-        })
-      }
-    }
-  }, [])
-
-  const join = useCallback(async () => {
-    if (!channelName || !userId || joinedRef.current) return
-
-    setState((prev) => ({
-      ...prev,
-      isConnecting: true,
-      error: null,
-    }))
-
-    try {
-      const appId = import.meta.env.VITE_AGORA_APP_ID as string | undefined
-
-      if (!appId) {
-        throw new Error('Agora App ID is missing')
-      }
-
-      const client = AgoraRTC.createClient({
-        mode: 'rtc',
-        codec: 'vp8',
-      })
-
-      clientRef.current = client
-
-      client.on('user-published', async (remoteUser, mediaType) => {
-        try {
-          await client.subscribe(remoteUser, mediaType)
-
-          if (mediaType === 'video') {
-            setState((prev) => ({
-              ...prev,
-              remoteVideoTrack: remoteUser.videoTrack || null,
-            }))
-          }
-
-          if (mediaType === 'audio') {
-            const audioTrack = remoteUser.audioTrack || null
-
-            setState((prev) => ({
-              ...prev,
-              remoteAudioTrack: audioTrack,
-            }))
-
-            audioTrack?.play()
-          }
-        } catch (error) {
-          console.warn('[GamingViewerPage] Agora subscribe failed:', error)
-        }
-      })
-
-      client.on('user-unpublished', (_remoteUser, mediaType) => {
-        if (mediaType === 'video') {
-          setState((prev) => ({
-            ...prev,
-            remoteVideoTrack: null,
-          }))
-        }
-
-        if (mediaType === 'audio') {
-          setState((prev) => ({
-            ...prev,
-            remoteAudioTrack: null,
-          }))
-        }
-      })
-
-      client.on('user-left', () => {
-        setState((prev) => ({
-          ...prev,
-          remoteVideoTrack: null,
-          remoteAudioTrack: null,
-        }))
-      })
-
-      const uid = getViewerUid(userId)
-
-      const { data: tokenData, error: tokenError } = await supabase.functions.invoke(
-        'agora-token',
-        {
-          body: {
-            channel: channelName,
-            userId: uid.toString(),
-            tokenType: 'rtc',
-            role: 'subscriber',
-          },
-        },
-      )
-
-      if (tokenError) throw new Error(tokenError.message)
-      if (!tokenData?.token) throw new Error('No Agora token received')
-
-      await client.join(appId, channelName, tokenData.token, uid)
-
-      joinedRef.current = true
-
-      if (mountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          isConnecting: false,
-          isConnected: true,
-          error: null,
-        }))
-      }
-    } catch (error: any) {
-      console.error('[GamingViewerPage] Agora join failed:', error)
-
-      if (mountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          isConnecting: false,
-          isConnected: false,
-          error: error?.message || 'Failed to connect to stream',
-        }))
-      }
-    }
-  }, [channelName, userId])
 
   useEffect(() => {
     mountedRef.current = true
-
-    if (channelName && userId) {
-      join()
+    if (stream?.agora_channel && userId) {
+      agoraViewer.join(stream.agora_channel, userId)
     }
-
     return () => {
       mountedRef.current = false
-      leave()
+      agoraViewer.leave()
     }
-  }, [channelName, userId, join, leave])
+  }, [stream?.agora_channel, userId])
 
   return {
-    ...state,
-    join,
-    leave,
+    isConnecting: agoraViewer.isConnecting,
+    isConnected: agoraViewer.isConnected,
+    remoteVideoTrack: agoraViewer.remoteVideoTrack,
+    remoteAudioTrack: agoraViewer.remoteAudioTrack,
+    error: agoraViewer.error,
+    join: agoraViewer.join,
+    leave: agoraViewer.leave,
+    videoContainerRef,
   }
 }
 
-function HlsVideoPlayer({
-  src,
-  poster,
-  muted = false,
-}: {
-  src: string
-  poster?: string | null
-  muted?: boolean
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const hlsRef = useRef<Hls | null>(null)
-  const [isWarming, setIsWarming] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isMuted, setIsMuted] = useState(muted)
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !src) return
-
-    setIsWarming(true)
-    setError(null)
-
-    if (hlsRef.current) {
-      hlsRef.current.destroy()
-      hlsRef.current = null
-    }
-
-    const playVideo = async () => {
-      try {
-        video.muted = isMuted
-        await video.play()
-      } catch {
-        // Browser may require tap to play with sound.
-      }
-    }
-
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = src
-      video.addEventListener('loadedmetadata', playVideo)
-    } else if (Hls.isSupported()) {
-      const hls = new Hls({
-        lowLatencyMode: true,
-        liveSyncDurationCount: 2,
-        maxLiveSyncPlaybackRate: 1.5,
-        backBufferLength: 30,
-      })
-
-      hlsRef.current = hls
-      hls.loadSource(src)
-      hls.attachMedia(video)
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        playVideo()
-      })
-
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        console.warn('[GamingViewerPage] HLS error:', data)
-
-        if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            setError('Gaming feed is reconnecting...')
-            hls.startLoad()
-            return
-          }
-
-          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            setError('Recovering gaming feed...')
-            hls.recoverMediaError()
-            return
-          }
-
-          setError('Gaming feed failed to load')
-          hls.destroy()
-        }
-      })
-    } else {
-      setError('This browser does not support this live playback format.')
-    }
-
-    const handleCanPlay = () => {
-      setIsWarming(false)
-      setError(null)
-    }
-
-    const handleWaiting = () => {
-      setIsWarming(true)
-    }
-
-    const handlePlaying = () => {
-      setIsWarming(false)
-      setError(null)
-    }
-
-    video.addEventListener('canplay', handleCanPlay)
-    video.addEventListener('waiting', handleWaiting)
-    video.addEventListener('playing', handlePlaying)
-
-    return () => {
-      video.removeEventListener('canplay', handleCanPlay)
-      video.removeEventListener('waiting', handleWaiting)
-      video.removeEventListener('playing', handlePlaying)
-      video.removeEventListener('loadedmetadata', playVideo)
-
-      if (hlsRef.current) {
-        hlsRef.current.destroy()
-        hlsRef.current = null
-      }
-
-      video.pause()
-      video.removeAttribute('src')
-      video.load()
-    }
-  }, [src, isMuted])
-
-  return (
-    <div className="relative h-full w-full bg-black">
-      <video
-        ref={videoRef}
-        className="h-full w-full object-cover"
-        playsInline
-        autoPlay
-        muted={isMuted}
-        poster={poster || undefined}
-        controls={false}
-      />
-
-      {isMuted && (
-        <button
-          type="button"
-          onClick={() => setIsMuted(false)}
-          className="absolute left-1/2 top-20 -translate-x-1/2 rounded-full border border-cyan-300/30 bg-black/65 px-4 py-2 text-xs font-black text-cyan-100 shadow-[0_0_25px_rgba(34,211,238,0.18)] backdrop-blur-xl"
-        >
-          Tap for sound
-        </button>
-      )}
-
-      {(isWarming || error) && (
-        <div className="absolute inset-0 grid place-items-center bg-black/35 backdrop-blur-[2px]">
-          <div className="rounded-3xl border border-white/10 bg-black/70 px-5 py-4 text-center shadow-2xl">
-            {error ? (
-              <>
-                <AlertTriangle className="mx-auto h-8 w-8 text-amber-300" />
-                <p className="mt-2 text-sm font-black text-white">{error}</p>
-              </>
-            ) : (
-              <>
-                <Loader2 className="mx-auto h-8 w-8 animate-spin text-cyan-300" />
-                <p className="mt-2 text-sm font-black text-white">Loading gaming feed...</p>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function AgoraVideoSurface({ track }: { track: IRemoteVideoTrack }) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-
+function AgoraVideoSurface({ track, containerRef }: { track: IRemoteVideoTrack | null; containerRef: React.RefObject<HTMLDivElement | null> }) {
   useEffect(() => {
     const node = containerRef.current
     if (!node || !track) return
-
     try {
       track.play(node)
     } catch (error) {
       console.warn('[GamingViewerPage] Failed to play Agora video:', error)
     }
-
-    return () => {
-      try {
-        track.stop()
-      } catch {
-        // ignore
-      }
-    }
-  }, [track])
+    return () => { try { track.stop() } catch { /* ignore */ } }
+  }, [track, containerRef])
 
   return <div ref={containerRef} className="h-full w-full bg-black" />
 }
@@ -501,14 +155,12 @@ export default function GamingViewerPage() {
     score: number
   }>>([])
 
+  const shouldUseAgora = Boolean(stream?.agora_channel)
+  const userId = user?.id || `anon-${streamId || 'gaming-viewer'}`
 
-  const playbackUrl = useMemo(() => getWatchablePlaybackUrl(stream), [stream])
-
-  const shouldUseAgora = Boolean(!playbackUrl && stream?.agora_channel)
-
-  const agoraViewer = useAgoraGamingViewer(
-    shouldUseAgora ? stream?.agora_channel || null : null,
-    user?.id || `anon-${streamId || 'gaming-viewer'}`,
+  const agoraViewer = useAgoraGamingViewerInline(
+    shouldUseAgora ? stream : null,
+    userId,
   )
 
   const fetchStream = useCallback(async () => {
@@ -532,7 +184,6 @@ export default function GamingViewerPage() {
           agora_channel,
           hls_url,
           playback_url,
-          obs_playback_url,
           stream_url,
           layout_mode,
           battle_id
@@ -574,7 +225,6 @@ export default function GamingViewerPage() {
         agora_channel: data.agora_channel || null,
         hls_url: data.hls_url || null,
         playback_url: data.playback_url || null,
-        obs_playback_url: data.obs_playback_url || null,
         stream_url: data.stream_url || null,
         layout_mode: data.layout_mode || null,
       }
@@ -825,30 +475,27 @@ export default function GamingViewerPage() {
     <div className="relative overflow-hidden bg-[#02040a] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(34,211,238,0.16),transparent_30%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,0.16),transparent_30%),radial-gradient(circle_at_50%_100%,rgba(16,185,129,0.10),transparent_34%)]" />
       <div className="relative z-10 grid lg:grid-cols-[minmax(0,1fr)_360px] min-h-screen">
-        {/* Main video area */}
         <main className="relative min-h-screen bg-black">
           <div className="absolute inset-0">
-            {watchable && playbackUrl ? (
-              <HlsVideoPlayer src={playbackUrl} poster={stream.thumbnail_url} muted />
-            ) : watchable && shouldUseAgora && agoraViewer.remoteVideoTrack ? (
-              <AgoraVideoSurface track={agoraViewer.remoteVideoTrack} />
+            {watchable && shouldUseAgora && agoraViewer.remoteVideoTrack ? (
+              <AgoraVideoSurface track={agoraViewer.remoteVideoTrack} containerRef={agoraViewer.videoContainerRef} />
             ) : watchable && shouldUseAgora && agoraViewer.isConnecting ? (
               <CenterStatus
                 icon={<Loader2 className="h-10 w-10 animate-spin text-cyan-300" />}
-                title="Connecting to gaming room..."
-                detail="Agora viewer is joining the live channel."
+                title="Connecting to Agora..."
+                detail="Joining the live gaming stream via Agora RTC."
               />
             ) : watchable && shouldUseAgora && agoraViewer.isConnected ? (
               <CenterStatus
                 icon={<MonitorPlay className="h-12 w-12 text-cyan-300" />}
                 title="Waiting for gameplay feed"
-                detail="The broadcaster is connected, but video has not published yet."
+                detail="Connected to Agora. Waiting for the broadcaster to publish screen share."
               />
             ) : watchable ? (
               <CenterStatus
                 icon={<MonitorPlay className="h-12 w-12 text-cyan-300" />}
-                title="Waiting for OBS signal"
-                detail="The stream is live, but the gaming feed is still connecting."
+                title="Stream is live"
+                detail="Waiting for the gaming feed to connect."
               />
             ) : (
               <CenterStatus
@@ -859,7 +506,6 @@ export default function GamingViewerPage() {
             )}
           </div>
 
-          {/* Top overlay */}
           <div className="absolute left-0 right-0 top-0 z-20 bg-gradient-to-b from-black/85 to-transparent p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
@@ -932,7 +578,6 @@ export default function GamingViewerPage() {
             </div>
           </div>
 
-          {/* Right mobile action stack */}
           <div className="absolute bottom-32 right-4 z-20 flex flex-col items-center gap-4 lg:hidden">
             <ViewerAction
               icon={<Heart className={cn('h-7 w-7', liked && 'fill-pink-400 text-pink-400')} />}
@@ -945,7 +590,6 @@ export default function GamingViewerPage() {
             <ViewerAction icon={<Flag className="h-7 w-7" />} label="Report" muted />
           </div>
 
-          {/* Floating gaming HUD */}
           <div className="absolute bottom-24 left-4 z-20 hidden max-w-md rounded-3xl border border-cyan-300/20 bg-black/55 p-4 shadow-2xl backdrop-blur-xl sm:block">
             <div className="flex items-center gap-3">
               <div className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10">
@@ -960,7 +604,6 @@ export default function GamingViewerPage() {
             </div>
           </div>
 
-          {/* Bottom chat input mobile/tablet */}
           <div className="absolute bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 p-3 backdrop-blur-2xl lg:hidden">
             <ChatInput
               value={chatInput}
@@ -971,7 +614,6 @@ export default function GamingViewerPage() {
           </div>
         </main>
 
-        {/* Desktop right panel */}
         <aside className="relative z-20 hidden min-h-screen border-l border-cyan-400/15 bg-[#05101c]/92 p-4 backdrop-blur-2xl lg:flex lg:flex-col">
           <div className="mb-4 rounded-3xl border border-cyan-300/20 bg-cyan-400/10 p-4">
             <div className="flex items-center gap-3">

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, Outlet, useLocation } from 'react-router-dom'
 import { Gamepad2 } from 'lucide-react'
 import GamingSetup from '@/components/broadcast/GamingSetup'
@@ -6,193 +6,33 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { generateUUID } from '@/lib/uuid'
 import { toast } from 'sonner'
-import { useObsHeartbeat } from '@/hooks/useObsHeartbeat'
-import { useBroadcastRecorder } from '@/hooks/useBroadcastRecorder'
+import { useAgoraScreenShare } from '@/hooks/useAgoraScreenShare'
+import { useGamingHeartbeat } from '@/hooks/useGamingHeartbeat'
 import GamingChat from '@/components/broadcast/GamingChat'
-import SaveBroadcastButton from '@/components/broadcast/SaveBroadcastButton'
+import { GamingStreamProvider, useSetGamingStreamId } from '@/contexts/GamingStreamContext'
 import {
-  GamingStreamProvider,
-  useSetGamingStreamId,
-} from '@/contexts/GamingStreamContext'
+  DEFAULT_SCENES,
+  SceneConfig,
+} from '@/components/broadcast/GamingSceneManager'
 
-type ObsStatus =
-  | 'idle'
-  | 'generating'
-  | 'ready'
-  | 'waiting'
-  | 'connected'
-  | 'live'
-  | 'error'
-  | 'gateway_not_configured'
-  | 'reconnecting'
-
-type StreamHealthLabel =
-  | 'Excellent'
-  | 'Good'
-  | 'Fair'
-  | 'Poor'
-  | 'Offline'
-  | 'Unknown'
-  | string
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface StreamData {
   id: string
   title: string
   status: string
   is_live: boolean
-  stream_key: string | null
+  current_viewers: number | null
+  started_at: string | null
+  ended_at: string | null
+  created_at: string | null
+  user_id: string | null
+  category: string | null
+  game_title: string | null
   agora_channel: string | null
-  current_viewers?: number | null
-  started_at?: string | null
-  ended_at?: string | null
-  created_at?: string | null
-  user_id?: string | null
-  category?: string | null
 }
 
-interface StreamHealthSnapshot {
-  status: string
-  obsConnected: boolean
-  bitrateKbps: number | null
-  health: StreamHealthLabel
-  checkedAt: number | null
-  raw: any
-}
-
-const ACTIVE_GAMING_STATUSES = ['starting', 'waiting', 'ready', 'connected', 'live', 'reconnecting']
-const HEALTH_CHECK_INTERVAL_MS = 10_000
-const DURATION_TICK_MS = 1_000
-
-function normalizeStatus(value: unknown): string {
-  return String(value || '').trim().toLowerCase()
-}
-
-function parseNumber(value: unknown): number | null {
-  if (value === null || typeof value === 'undefined') return null
-
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null
-  }
-
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[^\d.]/g, '')
-    if (!cleaned) return null
-    const parsed = Number(cleaned)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-
-  return null
-}
-
-function resolveHealthStatus(data: any): string {
-  return normalizeStatus(
-    data?.status ||
-      data?.streamStatus ||
-      data?.connectionStatus ||
-      data?.state ||
-      data?.obsStatus ||
-      '',
-  )
-}
-
-function resolveObsConnected(data: any): boolean {
-  const status = resolveHealthStatus(data)
-
-  return Boolean(
-    data?.obsConnected === true ||
-      data?.connected === true ||
-      data?.isConnected === true ||
-      data?.streamConnected === true ||
-      status === 'connected' ||
-      status === 'live' ||
-      status === 'publishing' ||
-      status === 'active',
-  )
-}
-
-function resolveBitrateKbps(data: any): number | null {
-  const candidates = [
-    data?.bitrateKbps,
-    data?.bitrate_kbps,
-    data?.bitrate,
-    data?.currentBitrate,
-    data?.current_bitrate,
-    data?.ingestBitrate,
-    data?.ingest_bitrate,
-    data?.stats?.bitrateKbps,
-    data?.stats?.bitrate_kbps,
-    data?.stats?.bitrate,
-    data?.metrics?.bitrateKbps,
-    data?.metrics?.bitrate_kbps,
-    data?.metrics?.bitrate,
-  ]
-
-  for (const candidate of candidates) {
-    const parsed = parseNumber(candidate)
-    if (parsed !== null) return parsed
-  }
-
-  return null
-}
-
-function resolveHealthLabel(data: any, connected: boolean, isLive: boolean): StreamHealthLabel {
-  const explicit =
-    data?.health ||
-    data?.streamHealth ||
-    data?.quality ||
-    data?.qualityLabel ||
-    data?.metrics?.health ||
-    data?.metrics?.quality
-
-  if (explicit) return String(explicit)
-
-  const bitrate = resolveBitrateKbps(data)
-
-  if (!connected && !isLive) return 'Offline'
-  if (bitrate === null) return connected || isLive ? 'Good' : 'Unknown'
-  if (bitrate >= 4500) return 'Excellent'
-  if (bitrate >= 2500) return 'Good'
-  if (bitrate >= 1000) return 'Fair'
-  return 'Poor'
-}
-
-function formatBitrate(bitrateKbps: number | null, connected: boolean): string {
-  if (!connected) return '0 kbps'
-  if (bitrateKbps === null) return 'Connected'
-  return `${Math.round(bitrateKbps).toLocaleString()} kbps`
-}
-
-function formatDurationFromStartedAt(startedAt?: string | null): string {
-  if (!startedAt) return '00:00:00'
-
-  const start = new Date(startedAt).getTime()
-  if (!Number.isFinite(start)) return '00:00:00'
-
-  const elapsedMs = Math.max(0, Date.now() - start)
-  const totalSeconds = Math.floor(elapsedMs / 1000)
-
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  return [hours, minutes, seconds]
-    .map((part) => String(part).padStart(2, '0'))
-    .join(':')
-}
-
-function mapStreamStatusToObsStatus(stream: StreamData | null): ObsStatus {
-  const status = normalizeStatus(stream?.status)
-
-  if (!stream) return 'idle'
-  if (stream.is_live || status === 'live') return 'live'
-  if (status === 'connected') return 'connected'
-  if (status === 'reconnecting') return 'reconnecting'
-  if (status === 'error') return 'error'
-  if (stream.stream_key) return 'ready'
-  if (status === 'starting' || status === 'waiting' || status === 'ready') return 'waiting'
-
-  return 'idle'
-}
+// ─── Wrapper with context ────────────────────────────────────────────────────
 
 export default function GamingSetupPage() {
   return (
@@ -202,386 +42,117 @@ export default function GamingSetupPage() {
   )
 }
 
+// ─── Inner component ─────────────────────────────────────────────────────────
+
 function GamingSetupPageInner() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, profile } = useAuthStore()
   const setGamingStreamId = useSetGamingStreamId()
-
   const isSubPage = location.pathname !== '/broadcast/setup/gaming'
 
+  // ── Stream state ──
   const [streamTitle, setStreamTitle] = useState('')
   const [selectedGame, setSelectedGame] = useState('')
   const [streamId] = useState(() => generateUUID())
   const [streamData, setStreamData] = useState<StreamData | null>(null)
-  const [obsStatus, setObsStatus] = useState<ObsStatus>('idle')
-  const [isGeneratingCredentials, setIsGeneratingCredentials] = useState(false)
-  const [isObsConnected, setIsObsConnected] = useState(false)
   const [isLive, setIsLive] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [isCameraEnabled, setIsCameraEnabled] = useState(true)
-  const [isMicEnabled, setIsMicEnabled] = useState(true)
-  const [hasCameraTrack, setHasCameraTrack] = useState(false)
-  const [hasMicTrack, setHasMicTrack] = useState(false)
   const [initialized, setInitialized] = useState(false)
-  const [rtmpUrl, setRtmpUrl] = useState<string | null>(null)
   const [viewerCount, setViewerCount] = useState(0)
   const [streamDuration, setStreamDuration] = useState('00:00:00')
-  const [healthSnapshot, setHealthSnapshot] = useState<StreamHealthSnapshot>({
-    status: 'idle',
-    obsConnected: false,
-    bitrateKbps: null,
-    health: 'Offline',
-    checkedAt: null,
-    raw: null,
-  })
 
-  const reconnectAttempts = useRef(0)
-  const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // ── Agora screen share ──
+  const agora = useAgoraScreenShare()
+
+  // ── Scenes ──
+  const [scenes, setScenes] = useState<SceneConfig[]>(DEFAULT_SCENES)
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(DEFAULT_SCENES[0]?.id || null)
+
+  // ── Refs ──
   const isMountedRef = useRef(true)
 
-  const recorder = useBroadcastRecorder()
-  
-  // Enable heartbeat when OBS credentials exist (stream_key is set)
-  // This allows the system to detect when OBS is actually streaming
-  // Heartbeat runs periodically to keep the backend informed
-  const heartbeat = useObsHeartbeat({
-    streamId: streamData?.id || null,
-    // Enable as soon as we have credentials, regardless of detected connection status
-    // The heartbeat will trigger the first backend detection when OBS is streaming
-    enabled: Boolean(streamData?.stream_key && !isLive),
-    interval: 5000, // Send heartbeat every 5 seconds when credentials exist
-  })
-
+  // ── Derived ──
   const username = profile?.username || profile?.display_name || 'Broadcaster'
   const userLevel = Number(profile?.level || 1)
   const userAvatar = profile?.avatar_url || null
+  const channelName = streamData?.agora_channel || streamData?.id || null
 
-  const bitrateDisplay = useMemo(() => {
-    return formatBitrate(healthSnapshot.bitrateKbps, isObsConnected || isLive)
-  }, [healthSnapshot.bitrateKbps, isObsConnected, isLive])
+  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false } }, [])
+  useEffect(() => { setGamingStreamId(streamData?.id || null) }, [streamData?.id, setGamingStreamId])
 
-  const streamHealthDisplay = useMemo(() => {
-    return healthSnapshot.health || (isLive ? 'Good' : isObsConnected ? 'Good' : 'Offline')
-  }, [healthSnapshot.health, isLive, isObsConnected])
-
-  useEffect(() => {
-    isMountedRef.current = true
-
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
-
-  useEffect(() => {
-    setGamingStreamId(streamData?.id || null)
-  }, [streamData?.id, setGamingStreamId])
-
-  const applyStreamState = useCallback((stream: StreamData | null) => {
-    if (!stream) {
-      setStreamData(null)
-      setIsLive(false)
-      setIsObsConnected(false)
-      setObsStatus('idle')
-      setViewerCount(0)
-      return
-    }
-
-    const mappedStatus = mapStreamStatusToObsStatus(stream)
-    const status = normalizeStatus(stream.status)
-
-    setStreamData(stream)
-    setStreamTitle(stream.title || '')
-    setSelectedGame(stream.game_title || '')
-    setViewerCount(Number(stream.current_viewers || 0))
-    setIsLive(Boolean(stream.is_live || status === 'live'))
-    setIsObsConnected(status === 'connected' || status === 'live' || Boolean(stream.is_live))
-    setObsStatus(mappedStatus)
-  }, [])
-
-  const refreshStreamRow = useCallback(async (): Promise<StreamData | null> => {
-    if (!streamData?.id) return null
-
-    const { data, error } = await supabase
-      .from('streams')
-      .select(
-        [
-          'id',
-          'title',
-          'game_title',
-          'status',
-          'is_live',
-          'stream_key',
-          'agora_channel',
-          'current_viewers',
-          'started_at',
-          'ended_at',
-          'created_at',
-          'user_id',
-          'category',
-        ].join(','),
-      )
-      .eq('id', streamData.id)
-      .maybeSingle()
-
-    if (error) {
-      console.warn('[GamingSetupPage] Failed to refresh stream row:', error)
-      return null
-    }
-
-    if (data && isMountedRef.current) {
-      applyStreamState(data as unknown as StreamData)
-    }
-
-    return (data as unknown as StreamData) || null
-  }, [streamData?.id, applyStreamState])
-
-  const updateStreamConnectionState = useCallback(
-    async (nextStatus: string, nextIsLive?: boolean) => {
-      if (!streamData?.id) return
-
-      const payload: Record<string, any> = {
-        status: nextStatus,
-      }
-
-      if (typeof nextIsLive === 'boolean') {
-        payload.is_live = nextIsLive
-      }
-
-      const { error } = await supabase
-        .from('streams')
-        .update(payload)
-        .eq('id', streamData.id)
-
-      if (error) {
-        console.warn('[GamingSetupPage] Failed to update stream connection state:', error)
-      }
-    },
-    [streamData?.id],
+  // ── Heartbeat + auto-disconnect ──
+  const isAdmin = Boolean(
+    user?.id && (
+      profile?.role === 'admin' ||
+      profile?.role === 'superadmin' ||
+      profile?.is_admin === true ||
+      profile?.is_superadmin === true ||
+      profile?.role === 'ceo' ||
+      profile?.is_ceo === true
+    )
   )
+  const heartbeat = useGamingHeartbeat({
+    streamId: streamData?.id || '',
+    channelName: channelName || '',
+    enabled: Boolean(streamData?.id && agora.isLive && !isAdmin),
+    chatTimeoutMs: 10 * 60 * 1000,
+    audioTimeoutMs: 8 * 60 * 1000,
+    checkIntervalMs: 30 * 1000,
+    onAutoDisconnect: useCallback(
+      (reason: string) => {
+        console.log('[GamingSetupPage] Auto-disconnect:', reason);
+        toast.warning(`Stream ending: ${reason}`);
+        void handleEndStream();
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [],
+    ),
+  })
 
-  const runHealthCheck = useCallback(
-    async (options?: { silent?: boolean; forceStream?: StreamData | null }) => {
-      const targetStream = options?.forceStream || streamData
-
-      if (!targetStream?.id || !targetStream?.stream_key) {
-        if (isMountedRef.current) {
-          setIsObsConnected(false)
-          setHealthSnapshot({
-            status: 'missing_credentials',
-            obsConnected: false,
-            bitrateKbps: null,
-            health: 'Offline',
-            checkedAt: Date.now(),
-            raw: null,
-          })
-
-          if (!isGeneratingCredentials) {
-            setObsStatus(targetStream?.id ? 'idle' : 'idle')
-          }
-        }
-
-        return {
-          connected: false,
-          status: 'missing_credentials',
-          data: null,
-          bitrateKbps: null,
-          health: 'Offline',
-        }
-      }
-
-      try {
-        const { data, error } = await supabase.functions.invoke('stream-health-monitor', {
-          body: {
-            action: 'checkStream',
-            streamId: targetStream.id,
-            streamKey: targetStream.stream_key,
-            channel: targetStream.agora_channel,
-          },
-        })
-
-        if (error) {
-          if (!options?.silent) {
-            console.warn('[GamingSetupPage] Health check error:', error)
-          }
-
-          if (isMountedRef.current) {
-            setHealthSnapshot((prev) => ({
-              ...prev,
-              status: 'error',
-              health: isObsConnected || isLive ? prev.health : 'Unknown',
-              checkedAt: Date.now(),
-              raw: { error },
-            }))
-          }
-
-          return {
-            connected: isObsConnected,
-            status: 'error',
-            data: null,
-            bitrateKbps: null,
-            health: 'Unknown',
-          }
-        }
-
-        const status = resolveHealthStatus(data)
-        const connected = resolveObsConnected(data)
-        const bitrateKbps = resolveBitrateKbps(data)
-        const health = resolveHealthLabel(data, connected, Boolean(targetStream.is_live))
-
-        if (!isMountedRef.current) {
-          return {
-            connected,
-            status,
-            data,
-            bitrateKbps,
-            health,
-          }
-        }
-
-        setHealthSnapshot({
-          status: status || (connected ? 'connected' : 'disconnected'),
-          obsConnected: connected,
-          bitrateKbps,
-          health,
-          checkedAt: Date.now(),
-          raw: data,
-        })
-
-        if (status === 'key_invalid') {
-          setIsObsConnected(false)
-          setObsStatus('error')
-          setErrorMessage('Stream key expired or invalid — regenerate credentials')
-          return {
-            connected: false,
-            status,
-            data,
-            bitrateKbps,
-            health,
-          }
-        }
-
-        if (connected) {
-          reconnectAttempts.current = 0
-          setIsObsConnected(true)
-          setErrorMessage(null)
-
-          if (targetStream.is_live || normalizeStatus(targetStream.status) === 'live') {
-            setIsLive(true)
-            setObsStatus('live')
-          } else {
-            setObsStatus('connected')
-
-            if (normalizeStatus(targetStream.status) !== 'connected') {
-              void updateStreamConnectionState('connected', false)
-            }
-          }
-        } else {
-          setIsObsConnected(false)
-
-          if (targetStream.is_live || normalizeStatus(targetStream.status) === 'live') {
-            reconnectAttempts.current += 1
-
-            if (reconnectAttempts.current >= 3) {
-              setObsStatus('reconnecting')
-              setErrorMessage('OBS signal lost — attempting to reconnect...')
-            }
-          } else {
-            setObsStatus(targetStream.stream_key ? 'waiting' : 'idle')
-          }
-        }
-
-        return {
-          connected,
-          status,
-          data,
-          bitrateKbps,
-          health,
-        }
-      } catch (err: any) {
-        if (!options?.silent) {
-          console.warn('[GamingSetupPage] Health check failed:', err)
-        }
-
-        if (isMountedRef.current) {
-          setHealthSnapshot((prev) => ({
-            ...prev,
-            status: 'error',
-            health: isObsConnected || isLive ? prev.health : 'Unknown',
-            checkedAt: Date.now(),
-            raw: { error: err?.message || String(err) },
-          }))
-        }
-
-        return {
-          connected: isObsConnected,
-          status: 'error',
-          data: null,
-          bitrateKbps: null,
-          health: 'Unknown',
-        }
-      }
-    },
-    [streamData, isGeneratingCredentials, isObsConnected, isLive, updateStreamConnectionState],
-  )
+  // ── Lifecycle ──
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
-    if (!user?.id) {
-      setInitialized(true)
-      return
-    }
+    setGamingStreamId(streamData?.id || null);
+  }, [streamData?.id, setGamingStreamId]);
 
-    let cancelled = false
+  // ── Initialize stream record ──
+  useEffect(() => {
+    if (!user?.id) { setInitialized(true); return; }
+    let cancelled = false;
 
-    const initStream = async () => {
-      setInitialized(false)
-
+    const init = async () => {
       try {
-          const defaultTitle = profile?.username || profile?.display_name
-            ? `${profile?.username || profile?.display_name}'s gaming stream`
-            : 'Live gaming stream'
+        const defaultTitle = profile?.username || profile?.display_name
+          ? `${profile?.username || profile?.display_name}'s gaming stream`
+          : 'Live gaming stream';
 
-        const { data: existingStream, error: existingError } = await supabase
+        // Check for existing active gaming stream
+        const { data: existing } = await supabase
           .from('streams')
-          .select(
-            [
-              'id',
-              'title',
-              'game_title',
-              'status',
-              'is_live',
-              'stream_key',
-              'agora_channel',
-              'current_viewers',
-              'started_at',
-              'ended_at',
-              'created_at',
-              'user_id',
-              'category',
-            ].join(','),
-          )
+          .select('id,title,game_title,status,is_live,current_viewers,started_at,ended_at,created_at,user_id,category,agora_channel')
           .eq('user_id', user.id)
           .eq('category', 'gaming')
-          .in('status', ACTIVE_GAMING_STATUSES)
+          .in('status', ['starting', 'live'])
           .order('created_at', { ascending: false })
           .limit(1)
-          .maybeSingle()
+          .maybeSingle();
 
-        if (existingError) throw existingError
-        if (cancelled) return
+        if (cancelled) return;
 
-        if (existingStream) {
-          const stream = existingStream as unknown as StreamData
-          applyStreamState(stream)
-
-          if (stream.stream_key) {
-            setObsStatus('waiting')
-            void runHealthCheck({ silent: true, forceStream: stream })
-          }
-
-          return
+        if (existing) {
+          setStreamData(existing as StreamData);
+          setStreamTitle(existing.title || '');
+          setSelectedGame(existing.game_title || '');
+          setIsLive(Boolean(existing.is_live));
+          return;
         }
 
+        // Create new stream record
+        const agoraChannel = `gaming-${streamId}`;
         const { data: newStream, error: createError } = await supabase
           .from('streams')
           .insert({
@@ -592,451 +163,175 @@ function GamingSetupPageInner() {
             category: 'gaming',
             status: 'starting',
             is_live: false,
+            agora_channel: agoraChannel,
           })
-          .select(
-            [
-              'id',
-              'title',
-              'game_title',
-              'status',
-              'is_live',
-              'stream_key',
-              'agora_channel',
-              'current_viewers',
-              'started_at',
-              'ended_at',
-              'created_at',
-              'user_id',
-              'category',
-            ].join(','),
-          )
-          .single()
+          .select('id,title,game_title,status,is_live,current_viewers,started_at,ended_at,created_at,user_id,category,agora_channel')
+          .single();
 
-        if (createError) throw createError
-        if (cancelled) return
-
-        if (newStream) {
-          applyStreamState(newStream as unknown as StreamData)
+        if (createError) throw createError;
+        if (!cancelled && newStream) {
+          setStreamData(newStream as StreamData);
+          setStreamTitle(newStream.title || '');
         }
       } catch (err: any) {
-        console.error('[GamingSetupPage] Failed to initialize stream:', err)
-        toast.error(err?.message || 'Failed to initialize gaming stream')
+        console.error('[GamingSetupPage] Init failed:', err);
+        toast.error(err?.message || 'Failed to initialize gaming stream');
       } finally {
-        if (!cancelled) {
-          setInitialized(true)
-        }
+        if (!cancelled) setInitialized(true);
       }
-    }
+    };
 
-    void initStream()
+    void init();
+    return () => { cancelled = true; };
+  }, [user?.id, profile?.username, profile?.display_name, streamId]);
 
-    return () => {
-      cancelled = true
-    }
-  }, [
-    user?.id,
-    profile?.username,
-    profile?.display_name,
-    streamId,
-    applyStreamState,
-  ])
-
+  // ── Realtime subscription ──
   useEffect(() => {
-    if (!streamData?.id) return
-
+    if (!streamData?.id) return;
     const channel = supabase
       .channel(`gaming-setup-${streamData.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'streams',
-          filter: `id=eq.${streamData.id}`,
-        },
-        (payload) => {
-          const next = payload.new as StreamData | null
-          if (!next) return
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'streams',
+        filter: `id=eq.${streamData.id}`,
+      }, (payload) => {
+        const next = payload.new as StreamData | null;
+        if (!next) return;
+        setStreamData((prev) => ({ ...(prev || {}), ...next } as StreamData));
+        setViewerCount(Number(next.current_viewers || 0));
+        setIsLive(Boolean(next.is_live || next.status === 'live'));
+      }).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [streamData?.id]);
 
-          setStreamData((prev) => {
-            const merged = {
-              ...(prev || {}),
-              ...next,
-            } as StreamData
-
-            setViewerCount(Number(merged.current_viewers || 0))
-
-            const status = normalizeStatus(merged.status)
-            setIsLive(Boolean(merged.is_live || status === 'live'))
-
-            if (status === 'connected' || status === 'live' || merged.is_live) {
-              setIsObsConnected(true)
-              setObsStatus(status === 'live' || merged.is_live ? 'live' : 'connected')
-              setErrorMessage(null)
-              reconnectAttempts.current = 0
-            } else if (status === 'error') {
-              setObsStatus('error')
-              setErrorMessage('Stream connection error')
-            } else if (merged.stream_key && !isObsConnected) {
-              setObsStatus('waiting')
-            }
-
-            return merged
-          })
-        },
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [streamData?.id, isObsConnected])
-
+  // ── Duration ticker ──
   useEffect(() => {
-    if (!streamData?.id || !streamData?.stream_key) return
-
-    void runHealthCheck({ silent: true })
-
-    healthCheckRef.current = setInterval(() => {
-      void runHealthCheck({ silent: true })
-    }, HEALTH_CHECK_INTERVAL_MS)
-
-    return () => {
-      if (healthCheckRef.current) {
-        clearInterval(healthCheckRef.current)
-        healthCheckRef.current = null
-      }
-    }
-  }, [streamData?.id, streamData?.stream_key, runHealthCheck])
-
-  useEffect(() => {
-    const refreshOnFocus = () => {
-      if (!streamData?.id) return
-
-      void refreshStreamRow().then((freshStream) => {
-        if (freshStream?.stream_key) {
-          void runHealthCheck({ silent: true, forceStream: freshStream })
-        }
-      })
-    }
-
-    window.addEventListener('focus', refreshOnFocus)
-    document.addEventListener('visibilitychange', refreshOnFocus)
-
-    return () => {
-      window.removeEventListener('focus', refreshOnFocus)
-      document.removeEventListener('visibilitychange', refreshOnFocus)
-    }
-  }, [streamData?.id, refreshStreamRow, runHealthCheck])
-
-  useEffect(() => {
-    const updateDuration = () => {
+    const update = () => {
       if (isLive && streamData?.started_at) {
-        setStreamDuration(formatDurationFromStartedAt(streamData?.started_at))
-      } else {
-        setStreamDuration('00:00:00')
-      }
-    }
+        const start = new Date(streamData.started_at).getTime();
+        if (Number.isFinite(start)) {
+          const ms = Math.max(0, Date.now() - start);
+          const ts = Math.floor(ms / 1000);
+          const h = Math.floor(ts / 3600), m = Math.floor((ts % 3600) / 60), s = ts % 60;
+          setStreamDuration([h, m, s].map((p) => String(p).padStart(2, '0')).join(':'));
+        }
+      } else { setStreamDuration('00:00:00'); }
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [streamData?.started_at, isLive]);
 
-    updateDuration()
-
-    const interval = setInterval(updateDuration, DURATION_TICK_MS)
-
-    return () => clearInterval(interval)
-  }, [streamData?.started_at, isLive])
-
+  // ── Cleanup on unmount ──
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!streamData?.id || !streamData?.stream_key) return
-
-      const edgeUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL
-      if (!edgeUrl) return
-
-      navigator.sendBeacon(
-        `${edgeUrl}/stream-health-monitor`,
-        JSON.stringify({
-          action: 'cleanupStream',
-          streamId: streamData.id,
-          streamKey: streamData.stream_key,
-        }),
-      )
-    }
-
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [streamData?.id, streamData?.stream_key])
-
-  const runCredentialFlow = useCallback(
-    async (regenerate: boolean) => {
-      if (!user?.id || !streamData?.id) {
-        toast.error('User or stream not initialized')
-        return
+      if (streamData?.id) {
+        navigator.sendBeacon(
+          `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/agora-token`,
+          JSON.stringify({ action: 'endStream', streamId: streamData.id }),
+        );
       }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [streamData?.id]);
 
-      setIsGeneratingCredentials(true)
-      setObsStatus('generating')
-      setErrorMessage(null)
+  // ── Handlers ──
 
-      try {
-        if (regenerate) {
-          await supabase
-            .from('streams')
-            .update({
-              stream_key: null,
-              agora_channel: null,
-              status: 'starting',
-              is_live: false,
-            })
-            .eq('id', streamData.id)
-        }
+  // Phase 1: Start preview (get display media, show locally)
+  const handleStartPreview = useCallback(async () => {
+    if (!streamData?.id) { toast.error('Stream not initialized yet'); return; }
+    await supabase.from('streams').update({ status: 'starting' }).eq('id', streamData.id);
+    await agora.startPreview();
+  }, [streamData?.id, agora]);
 
-        const { data: credsData, error: credsError } =
-          await supabase.functions.invoke('generate-obs-credentials', {
-            body: {
-              streamId: streamData.id,
-              userId: user.id,
-              regenerate,
-            },
-          })
-
-        if (credsError) {
-          throw new Error(credsError.message)
-        }
-
-        if (credsData?.error) {
-          setObsStatus('gateway_not_configured')
-          setErrorMessage(credsData.error)
-          toast.error(credsData.error)
-          return
-        }
-
-        if (!credsData?.rtmpUrl || !credsData?.streamKey) {
-          throw new Error('No OBS credentials received from server')
-        }
-
-        const nextRtmpUrl = String(credsData.rtmpUrl)
-        const nextStreamKey = String(credsData.streamKey)
-        const nextAgoraChannel = credsData?.agoraChannel
-          ? String(credsData.agoraChannel)
-          : streamData.agora_channel
-
-        setRtmpUrl(nextRtmpUrl)
-
-        const updatePayload: Record<string, any> = {
-          stream_key: nextStreamKey,
-          status: 'waiting',
-          is_live: false,
-        }
-
-        if (nextAgoraChannel) {
-          updatePayload.agora_channel = nextAgoraChannel
-        }
-
-        const { data: updatedStream, error: updateError } = await supabase
-          .from('streams')
-          .update(updatePayload)
-          .eq('id', streamData.id)
-          .select(
-            [
-              'id',
-              'title',
-              'status',
-              'is_live',
-              'stream_key',
-              'agora_channel',
-              'current_viewers',
-              'started_at',
-              'ended_at',
-              'created_at',
-              'user_id',
-              'category',
-            ].join(','),
-          )
-          .single()
-
-        if (updateError) throw updateError
-
-        const nextStream = updatedStream as unknown as StreamData
-        applyStreamState(nextStream)
-        setObsStatus('waiting')
-        setIsObsConnected(false)
-
-        toast.success(
-          regenerate
-            ? 'OBS credentials regenerated'
-            : 'OBS credentials generated',
-        )
-
-        void runHealthCheck({ silent: true, forceStream: nextStream })
-      } catch (err: any) {
-        console.error('[GamingSetupPage] Credential flow failed:', err)
-        setObsStatus('error')
-        setErrorMessage(err?.message || 'Failed to generate OBS credentials')
-        toast.error(err?.message || 'Failed to generate OBS credentials')
-      } finally {
-        setIsGeneratingCredentials(false)
-      }
-    },
-    [user?.id, streamData, applyStreamState, runHealthCheck],
-  )
-
-  const handleGenerateCredentials = useCallback(() => {
-    void runCredentialFlow(false)
-  }, [runCredentialFlow])
-
-  const handleRegenerateCredentials = useCallback(() => {
-    void runCredentialFlow(true)
-  }, [runCredentialFlow])
-
+  // Phase 2: Go live (join Agora + publish)
   const handleGoLive = useCallback(async () => {
-    if (!streamData?.id || !user?.id) {
-      toast.error('Stream not initialized')
-      return
-    }
-
-    if (!streamData.stream_key) {
-      toast.error('Generate OBS credentials first')
-      return
-    }
-
-    const freshHealth = await runHealthCheck({
-      silent: false,
-      forceStream: streamData,
-    })
-
-    if (!freshHealth.connected) {
-      toast.error('Waiting for OBS signal. Start streaming in OBS first.')
-      return
-    }
-
+    if (!streamData?.id || !channelName) { toast.error('Stream not ready'); return; }
     try {
-      const startedAt = streamData.started_at || new Date().toISOString()
-
-      const { data: updatedStream, error } = await supabase
-        .from('streams')
-        .update({
-          status: 'live',
-          is_live: true,
-          started_at: startedAt,
-        })
-        .eq('id', streamData.id)
-        .select(
-          [
-            'id',
-            'title',
-            'status',
-            'is_live',
-            'stream_key',
-            'agora_channel',
-            'current_viewers',
-            'started_at',
-            'ended_at',
-            'created_at',
-            'user_id',
-            'category',
-          ].join(','),
-        )
-        .single()
-
-      if (error) throw error
-
-      if (updatedStream) {
-        applyStreamState(updatedStream as unknown as StreamData)
-      }
-
-      setIsLive(true)
-      setObsStatus('live')
-      setIsObsConnected(true)
-      setErrorMessage(null)
-
-      setIsLive(true)
-      setObsStatus('live')
-      setIsObsConnected(true)
-      setErrorMessage(null)
-
+      await supabase.from('streams').update({ status: 'live', is_live: true, started_at: new Date().toISOString() }).eq('id', streamData.id);
+      await agora.goLive(channelName, streamData.id);
+      setIsLive(true);
+      toast.success('You are now LIVE on HytroGaming!');
       await supabase.functions.invoke('notify-stream-live', {
-        body: {
-          streamId: streamData.id,
-          userId: user.id,
-          category: 'gaming',
-        },
-      })
+        body: { streamId: streamData.id, userId: user?.id, category: 'gaming' },
+      });
     } catch (err: any) {
-      console.error('[GamingSetupPage] Failed to go live:', err)
-      toast.error(err?.message || 'Failed to go live')
+      console.error('[GamingSetupPage] Go live failed:', err);
+      toast.error(err?.message || 'Failed to go live');
     }
-  }, [streamData, user?.id, runHealthCheck, applyStreamState, navigate])
+  }, [streamData?.id, channelName, user?.id, agora]);
 
-  const handleTestStream = useCallback(async () => {
-    if (!streamData?.id) {
-      toast.error('Stream not initialized')
-      return
-    }
-
-    if (!streamData.stream_key) {
-      toast.info('Generate OBS credentials first to test stream')
-      return
-    }
-
-    const result = await runHealthCheck({
-      silent: false,
-      forceStream: streamData,
-    })
-
-    if (result.status === 'key_invalid') {
-      toast.error('Stream key expired or invalid — regenerate credentials')
-      return
-    }
-
-    if (result.connected) {
-      toast.success('OBS signal detected. Stream is connected and ready.')
-      return
-    }
-
-    toast.warning('OBS signal not detected. Start streaming in OBS first.')
-  }, [streamData, runHealthCheck])
-
+  // Phase 3: End stream (full disconnect)
   const handleEndStream = useCallback(async () => {
-    if (!streamData?.id) {
-      toast.error('No active stream to end')
-      return
-    }
+    await agora.endStream();
+    setIsLive(false);
+  }, [agora]);
 
-    try {
-      const { error } = await supabase
-        .from('streams')
-        .update({
-          status: 'ended',
-          is_live: false,
-          ended_at: new Date().toISOString(),
-        })
-        .eq('id', streamData.id)
+  // Stop preview (back to idle)
+  const handleStopPreview = useCallback(async () => {
+    await agora.stopPreview();
+  }, [agora]);
 
-      if (error) throw error
+  const handleToggleMic = useCallback(async () => {
+    await agora.toggleMic();
+  }, [agora]);
 
-      setIsLive(false)
-      setObsStatus('idle')
-      setIsObsConnected(false)
-      setErrorMessage(null)
+  const handleToggleCamera = useCallback(async () => {
+    await agora.toggleCamera();
+  }, [agora]);
 
-      toast.success('Stream ended')
-    } catch (err: any) {
-      console.error('[GamingSetupPage] Failed to end stream:', err)
-      toast.error(err?.message || 'Failed to end stream')
-    }
-  }, [streamData?.id])
+  // ── Scene handlers ──
+  const handleCreateScene = useCallback((name: string) => {
+    const newScene: SceneConfig = {
+      id: `scene-${Date.now()}`, name, backgroundColor: '#02040a',
+      backgroundImage: null, textOverlays: [], audioUrl: null,
+      audioVolume: 0.5, audioMuted: false,
+    };
+    setScenes((prev) => [...prev, newScene]);
+  }, []);
 
-  const handleToggleCamera = useCallback(() => {
-    setIsCameraEnabled((prev) => !prev)
-    setHasCameraTrack(true)
-  }, [])
+  const handleDeleteScene = useCallback((sceneId: string) => {
+    setScenes((prev) => {
+      const filtered = prev.filter((s) => s.id !== sceneId);
+      if (activeSceneId === sceneId && filtered.length > 0) setActiveSceneId(filtered[0].id);
+      return filtered;
+    });
+  }, [activeSceneId]);
 
-  const handleToggleMic = useCallback(() => {
-    setIsMicEnabled((prev) => !prev)
-    setHasMicTrack(true)
-  }, [])
+  const handleSwitchScene = useCallback((sceneId: string) => {
+    setActiveSceneId(sceneId);
+  }, []);
 
+  const handleUpdateScene = useCallback((sceneId: string, updates: Partial<SceneConfig>) => {
+    setScenes((prev) => prev.map((s) => (s.id === sceneId ? { ...s, ...updates } : s)));
+  }, []);
+
+  const handleAddTextOverlay = useCallback((sceneId: string) => {
+    setScenes((prev) => prev.map((s) => s.id === sceneId ? {
+      ...s, textOverlays: [...s.textOverlays, {
+        id: `text-${Date.now()}`, text: 'New Text', x: 50, y: 50,
+        fontSize: 24, color: '#ffffff', bold: false,
+      }],
+    } : s));
+  }, []);
+
+  const handleUpdateTextOverlay = useCallback((sceneId: string, overlayId: string, updates: Partial<SceneConfig['textOverlays'][0]>) => {
+    setScenes((prev) => prev.map((s) => s.id === sceneId ? {
+      ...s, textOverlays: s.textOverlays.map((o) => o.id === overlayId ? { ...o, ...updates } : o),
+    } : s));
+  }, []);
+
+  const handleDeleteTextOverlay = useCallback((sceneId: string, overlayId: string) => {
+    setScenes((prev) => prev.map((s) => s.id === sceneId ? {
+      ...s, textOverlays: s.textOverlays.filter((o) => o.id !== overlayId),
+    } : s));
+  }, []);
+
+  const handleSetBackgroundImage = useCallback((sceneId: string, imageUrl: string | null) => {
+    setScenes((prev) => prev.map((s) => (s.id === sceneId ? { ...s, backgroundImage: imageUrl } : s)));
+  }, []);
+
+  // ── Loading state ──
   if (!initialized) {
     return (
       <div className="grid min-h-screen place-items-center bg-[#05080f] text-white">
@@ -1044,73 +339,63 @@ function GamingSetupPageInner() {
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10">
             <Gamepad2 className="h-8 w-8 animate-pulse text-cyan-300" />
           </div>
-          <p className="mt-4 text-sm font-black text-slate-300">
-            Initializing gaming setup...
-          </p>
+          <p className="mt-4 text-sm font-black text-slate-300">Initializing HytroGaming...</p>
         </div>
       </div>
-    )
+    );
   }
 
-  if (isSubPage) {
-    return <Outlet />
-  }
+  if (isSubPage) return <Outlet />;
 
+  // ── Render ──
   return (
     <GamingSetup
       streamTitle={streamTitle}
       onStreamTitleChange={setStreamTitle}
-      rtmpUrl={rtmpUrl}
-      streamKey={streamData?.stream_key || null}
-      agoraChannel={streamData?.agora_channel || null}
-      gameTitle={streamData?.game_title || ''}
+      gameTitle={streamData?.game_title || selectedGame}
       onGameChange={(game) => {
-        setStreamData(prev => prev ? { ...prev, game_title: game } : prev)
+        setSelectedGame(game);
+        setStreamData((prev) => (prev ? { ...prev, game_title: game } : prev));
       }}
-      obsStatus={obsStatus}
-      isCameraEnabled={isCameraEnabled}
-      isMicEnabled={isMicEnabled}
-      hasCameraTrack={hasCameraTrack}
-      hasMicTrack={hasMicTrack}
-      isGeneratingCredentials={isGeneratingCredentials}
-      isObsConnected={isObsConnected}
       isLive={isLive}
-      errorMessage={errorMessage}
+      isPreviewing={agora.isPreviewing}
+      isConnecting={agora.isConnecting}
+      hasMicTrack={agora.hasMicTrack}
+      isMicEnabled={agora.micEnabled}
+      hasCameraTrack={agora.hasCameraTrack}
+      isCameraEnabled={agora.cameraEnabled}
       viewerCount={viewerCount}
       streamDuration={streamDuration}
-      bitrate={bitrateDisplay}
-      streamHealth={streamHealthDisplay}
       username={username}
       userLevel={userLevel}
       userAvatar={userAvatar}
-      onToggleCamera={handleToggleCamera}
-      onToggleMic={handleToggleMic}
-      onGenerateCredentials={handleGenerateCredentials}
-      onRegenerateCredentials={handleRegenerateCredentials}
+      errorMessage={agora.error}
+      heartbeatStatus={{
+        isChatActive: heartbeat.isChatActive,
+        isAudioActive: heartbeat.isAudioActive,
+        isIdle: heartbeat.isIdle,
+        idleReason: heartbeat.idleReason,
+      }}
+      scenes={scenes}
+      activeSceneId={activeSceneId}
+      onStartPreview={() => void handleStartPreview()}
       onGoLive={() => void handleGoLive()}
-      onTestStream={() => void handleTestStream()}
       onEndStream={() => void handleEndStream()}
-      chatPanel={
-        streamData?.id ? (
-          <GamingChat streamId={streamData.id} />
-        ) : null
-      }
-      cameraPreview={undefined}
-      saveBroadcastButton={
-        <SaveBroadcastButton
-          isRecording={recorder.isRecording}
-          isUploading={recorder.isUploading}
-          recordingDuration={recorder.recordingDuration}
-          hasRecording={!!recorder.recordedBlob}
-          onStartRecording={recorder.startRecording}
-          onStopRecording={recorder.stopRecording}
-          onUploadRecording={() =>
-            streamData?.id
-              ? recorder.uploadRecording(streamData.id)
-              : Promise.resolve()
-          }
-        />
-      }
+      onStopPreview={() => void handleStopPreview()}
+      onToggleMic={() => void handleToggleMic()}
+      onToggleCamera={() => void handleToggleCamera()}
+      onCreateScene={handleCreateScene}
+      onDeleteScene={handleDeleteScene}
+      onSwitchScene={handleSwitchScene}
+      onUpdateScene={handleUpdateScene}
+      onAddTextOverlay={handleAddTextOverlay}
+      onUpdateTextOverlay={handleUpdateTextOverlay}
+      onDeleteTextOverlay={handleDeleteTextOverlay}
+      onSetBackgroundImage={handleSetBackgroundImage}
+      chatPanel={streamData?.id ? <GamingChat streamId={streamData.id} /> : null}
+      screenStream={agora.screenStream}
+      cameraStream={agora.cameraStream}
+      micStream={agora.micStream}
     />
-  )
+  );
 }

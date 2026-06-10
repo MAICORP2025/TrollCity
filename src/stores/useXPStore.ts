@@ -338,7 +338,7 @@ export const useXPStore = create<XPState>((set) => {
         .subscribe((status) => {
           console.log('[XP Store] Subscription status:', status)
           if (status === 'CHANNEL_ERROR') {
-            console.error('[XP Store] Channel error, will retry in 5s')
+            console.warn('[XP Store] Channel error, will retry in 5s')
             const capturedChannel = channel
             channel = null
             xpChannelUserId = null

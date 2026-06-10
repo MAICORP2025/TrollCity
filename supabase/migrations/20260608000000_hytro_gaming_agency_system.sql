@@ -104,23 +104,6 @@ DO $$
 BEGIN
     -- agency_applications
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'agency_applications') THEN
-        -- Drop old check constraint on status that doesn't include hytrogaming values
-        DO $$
-        DECLARE
-            conname TEXT;
-        BEGIN
-            FOR conname IN
-                SELECT tc.constraint_name
-                FROM information_schema.table_constraints tc
-                WHERE tc.table_schema = 'public' AND tc.table_name = 'agency_applications'
-                AND tc.constraint_type IN ('CHECK', 'FOREIGN KEY')
-            LOOP
-                EXECUTE format('ALTER TABLE public.agency_applications DROP CONSTRAINT IF EXISTS %I', conname);
-            END LOOP;
-        END $$;
-        -- Add unified check constraint supporting both Talent Offices and HytroGaming statuses
-        ALTER TABLE public.agency_applications ADD CONSTRAINT agency_applications_status_check
-            CHECK (status IN ('pending', 'approved', 'rejected', 'denied', 'withdrawn', 'changes_requested'));
         -- Drop NOT NULL constraints from old Talent Offices schema for hytrogaming compatibility
         DECLARE
             col_record RECORD;
@@ -152,39 +135,6 @@ BEGIN
         ALTER TABLE public.agency_applications ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
         ALTER TABLE public.agency_applications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
         ALTER TABLE public.agency_applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-
-        -- Auto-fill applicant_id and agency_id for hytrogaming applications
-        CREATE OR REPLACE FUNCTION public.auto_fill_agency_application_defaults()
-        RETURNS TRIGGER AS $$
-        DECLARE
-            v_username TEXT;
-            v_agency_id UUID;
-        BEGIN
-            IF NEW.applicant_id IS NULL AND NEW.user_id IS NOT NULL THEN
-                NEW.applicant_id := NEW.user_id;
-            END IF;
-            IF NEW.agency_id IS NULL AND NEW.user_id IS NOT NULL THEN
-                SELECT username INTO v_username FROM public.user_profiles WHERE id = NEW.user_id LIMIT 1;
-                IF v_username IS NOT NULL THEN
-                    INSERT INTO public.agencies (owner_id, name, slug, status)
-                    VALUES (NEW.user_id, v_username, 'hytrogaming-' || LOWER(REGEXP_REPLACE(v_username, '[^a-zA-Z0-9]', '-', 'g')), 'approved')
-                    ON CONFLICT (slug) DO NOTHING
-                    RETURNING id INTO v_agency_id;
-                    IF v_agency_id IS NULL THEN
-                        SELECT id INTO v_agency_id FROM public.agencies WHERE slug = 'hytrogaming-' || LOWER(REGEXP_REPLACE(v_username, '[^a-zA-Z0-9]', '-', 'g')) LIMIT 1;
-                    END IF;
-                    NEW.agency_id := v_agency_id;
-                END IF;
-            END IF;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-
-        DROP TRIGGER IF EXISTS tr_auto_fill_agency_application_defaults ON public.agency_applications;
-        CREATE TRIGGER tr_auto_fill_agency_application_defaults
-            BEFORE INSERT ON public.agency_applications
-            FOR EACH ROW
-            EXECUTE FUNCTION public.auto_fill_agency_application_defaults();
     END IF;
 
     -- agency_members

@@ -1,7 +1,7 @@
 /**
  * HytroGaming — Premium standalone gaming broadcasts page
  *
- * Shows all active gaming broadcasts using Agora RTC.
+ * Shows all active gaming broadcasts using LiveKit.
  * Public page: anyone can view.
  * Preserves:
  * - Supabase stream fetch logic
@@ -21,11 +21,6 @@ import React, {
   useState,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AgoraRTC, {
-  IAgoraRTCClient,
-  IRemoteAudioTrack,
-  IRemoteVideoTrack,
-} from 'agora-rtc-sdk-ng';
 import {
   ArrowLeft,
   ChevronRight,
@@ -260,7 +255,7 @@ function GamingStreamCard({
 
         <div className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur-md">
           <Eye className="h-3.5 w-3.5 text-white/65" />
-          <span className="text-xs font-bold text-white">{formatCompactNumber(viewers)}</span>
+          <span className="text-xs font-bold text-white">{formatCompactNumber(getStreamViewers(stream))}</span>
         </div>
 
         <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
@@ -320,129 +315,6 @@ function GamingStreamCard({
         </div>
       </div>
     </button>
-  );
-}
-
-// ─── Full-screen Agora Viewer ────────────────────────────────────────────────
-
-function FullScreenGamingViewer({
-  stream,
-  viewer,
-  onBack,
-}: {
-  stream: GamingStream;
-  viewer: ReturnType<typeof useGamingViewer>;
-  onBack: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black">
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
-        {viewer.isConnecting ? (
-          <div className="flex flex-col items-center gap-4">
-            <div className="grid h-20 w-20 place-items-center rounded-3xl border border-cyan-300/20 bg-cyan-300/10">
-              <Loader2 className="h-10 w-10 animate-spin text-cyan-300" />
-            </div>
-            <p className="text-sm font-semibold text-white/65">Connecting to arena...</p>
-          </div>
-        ) : viewer.remoteVideoTrack ? (
-          <AgoraVideoSurface track={viewer.remoteVideoTrack} />
-        ) : viewer.isConnected ? (
-          <div className="flex flex-col items-center gap-4 px-6 text-center">
-            <div className="grid h-24 w-24 place-items-center rounded-3xl border border-white/10 bg-white/[0.04]">
-              <MonitorPlay className="h-12 w-12 text-white/25" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-white">Waiting for broadcaster video</h2>
-              <p className="mt-1 text-sm text-white/45">
-                Audio may already be live. Video will appear when the host publishes.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-4 px-6 text-center">
-            <div className="grid h-24 w-24 place-items-center rounded-3xl border border-red-400/20 bg-red-500/10">
-              <WifiOff className="h-12 w-12 text-red-300/70" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-white">Connection failed</h2>
-              <p className="mt-1 text-sm text-red-200/70">
-                {viewer.error || 'Unable to connect to this stream.'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => viewer.join()}
-              className="rounded-2xl bg-cyan-500 px-5 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/85 to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black/80 to-transparent" />
-
-        <div className="absolute left-0 right-0 top-0 flex items-center gap-3 p-4">
-          <button
-            type="button"
-            onClick={onBack}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-white/10 bg-black/40 text-white backdrop-blur-xl transition hover:bg-white/10"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-black text-white">{stream.title}</h2>
-            <div className="mt-1 flex items-center gap-2 text-xs text-white/55">
-              <span className="truncate">{stream.broadcaster_name}</span>
-              <span>•</span>
-              <span>{getTimeAgo(stream.started_at)}</span>
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-2 rounded-xl bg-red-600 px-3 py-2 sm:flex">
-            <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-            <span className="text-xs font-black uppercase text-white">Live</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/40 px-3 py-2 backdrop-blur-xl">
-            <Eye className="h-4 w-4 text-white/70" />
-            <span className="text-xs font-bold text-white">
-              {formatCompactNumber(getStreamViewers(stream))}
-            </span>
-          </div>
-        </div>
-
-        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3 rounded-3xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-cyan-400/15">
-              <Zap className="h-5 w-5 text-cyan-200" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black text-white">HytroGaming Viewer Mode</p>
-              <p className="truncate text-xs text-white/45">
-                Low-latency Agora arena stream
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-2 sm:flex">
-            <button
-              type="button"
-              className="rounded-2xl border border-purple-300/25 bg-purple-400/10 px-4 py-2 text-xs font-black text-purple-100"
-            >
-              Gift
-            </button>
-            <button
-              type="button"
-              className="rounded-2xl border border-cyan-300/25 bg-cyan-400/10 px-4 py-2 text-xs font-black text-cyan-100"
-            >
-              Hype
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -930,4 +802,21 @@ export default function HytroGaming() {
       </main>
     </div>
   );
+}
+
+function getStreamViewers(stream: GamingStream) {
+  return stream.current_viewers || stream.viewer_count || 0;
+}
+
+function getTimeAgo(startedAt: string | null): string {
+  if (!startedAt) return 'Just now'
+  const start = new Date(startedAt).getTime()
+  if (!Number.isFinite(start)) return 'Just now'
+  const elapsedMs = Math.max(0, Date.now() - start)
+  const totalSeconds = Math.floor(elapsedMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m ago`
+  if (minutes > 0) return `${minutes}m ago`
+  return 'Just now'
 }

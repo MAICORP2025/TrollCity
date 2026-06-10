@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
-import { SignJWT } from "https://esm.sh/jose@5.9.6";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,111 +29,58 @@ function getSupabase() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
-async function createLiveKitToken(): Promise<string> {
-  if (!LIVEKIT_API_KEY) {
-    throw new Error("LIVEKIT_API_KEY is missing");
-  }
-  if (!LIVEKIT_API_SECRET) {
-    throw new Error("LIVEKIT_API_SECRET is missing");
-  }
-
-  const secret = new TextEncoder().encode(LIVEKIT_API_SECRET);
-
-  const token = await new SignJWT({
-    video: {
-      roomCreate: true,
-      roomAdmin: true,
-      ingressAdmin: true,
-    },
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuer(LIVEKIT_API_KEY)
-    .setSubject("livekit-gaming-server")
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(secret);
-
-  console.log("[livekit-gaming] JWT generated successfully");
-  return token;
-}
-
-function liveKitHeaders(token: string): HeadersInit {
+function liveKitHeaders(): Record<string, string> {
+  const key = LIVEKIT_API_KEY;
+  const secret = LIVEKIT_API_SECRET;
+  const encoded = btoa(`${key}:${secret}`);
   return {
-    "Authorization": `Bearer ${token}`,
+    "Authorization": `Basic ${encoded}`,
     "Content-Type": "application/json",
-    "Accept": "application/json",
   };
 }
 
 function livekitHttpUrl(): string {
-  // LiveKit Cloud uses https://<project>.livekit.cloud for API calls
-  return LIVEKIT_URL.replace(/^wss?:\/\//, "https://").replace(/\/$/, "");
+  return LIVEKIT_URL.replace(/^wss?:\/\//, "https://");
 }
 
-async function createLiveKitIngest(roomName: string): Promise<{ rtmpUrl: string; streamKey: string }> {
-  console.log(`[livekit-gaming] createLiveKitIngest START: room=${roomName}`);
-
-  const token = await createLiveKitToken();
-  const url = `${livekitHttpUrl()}/twirp/livekit.IngressService/CreateIngress`;
-
-  console.log(`[livekit-gaming] POST to: ${url}`);
-  console.log(`[livekit-gaming] LIVEKIT_URL env: ${LIVEKIT_URL}`);
-
-  const payload = {
-    input_type: 0,
-    name: `ingress-${roomName}`,
-    room_name: roomName,
-    participant_identity: `ingress-${roomName}`,
-    participant_name: `Ingress for ${roomName}`,
-    enable_transcoding: true,
-  };
-
-  console.log(`[livekit-gaming] Request payload:`, JSON.stringify(payload));
+async function createLiveKitIngest(roomName: Promise<{ rtmpUrl: string; streamKey: string }> {
+  const url = `${livekitHttpUrl()}/api/ingress/rtmp`;
+  console.log(`[livekit-gaming] createLiveKitIngest: room=${roomName}`);
 
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      ...liveKitHeaders(token),
-      "Twirp-Version": "v7.0.0",
-    },
-    body: JSON.stringify(payload),
+    headers: liveKitHeaders(),
+    body: JSON.stringify({
+      room_name: roomName,
+      ingress_type: "rtmp",
+    }),
   });
 
-  const responseText = await res.text();
-  console.log(`[livekit-gaming] Status: ${res.status} ${res.statusText}`);
-  console.log(`[livekit-gaming] Content-Type: ${res.headers.get("content-type")}`);
-  console.log(`[livekit-gaming] Response body (first 800 chars):`, responseText.slice(0, 800));
+  const body = await res.json().catch(() => null);
+  console.log(`[livekit-gaming] createLiveKitIngest: status=${res.status}, body=${JSON.stringify(body)?.slice(0, 500)}`);
 
-  let body: any = null;
-  try {
-    body = JSON.parse(responseText);
-  } catch (e) {
-    console.error("[livekit-gaming] JSON parse failed - likely Twirp error or HTML error page");
+  if (res.status >= 400) {
+    throw new Error(`LiveKit Ingress error ${res.status}: ${body?.message || "Unknown error"}`);
   }
 
-  if (!res.ok) {
-    const errorMsg = body?.msg || body?.message || responseText;
-    throw new Error(`LiveKit CreateIngress failed (${res.status}): ${errorMsg}`);
-  }
+  const rtmpUrl = body?.ingress?.address || body?.rtmp?.address || body?.address || null;
 
-  const rtmpUrl = body?.url || body?.rtmp_url || body?.ingress?.url;
-  const streamKey = body?.stream_key || body?.key || roomName;
+  // LiveKit generates a stream key per ingress
+  const streamKey = body?.ingress?.stream_key || body?.rtmp?.stream_key || body?.stream_key || null;
 
   if (!rtmpUrl) {
-    throw new Error(`No RTMP URL in successful response. Body: ${JSON.stringify(body)}`);
+    throw new Error(`LiveKit returned no RTMP URL. Response: ${JSON.stringify(body)}`);
   }
 
-  console.log(`[livekit-gaming] ✅ Ingest created - RTMP URL: ${rtmpUrl}`);
-  return { rtmpUrl, streamKey };
+  return { rtmpUrl, streamKey: streamKey || roomName };
 }
 
 async function listActiveRooms(): Promise<string[]> {
-  const token = await createLiveKitToken();
   const url = `${livekitHttpUrl()}/twirp/livekit.RoomService/ListRooms`;
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: liveKitHeaders(token),
+      headers: liveKitHeaders(),
       body: JSON.stringify({}),
     });
     if (res.status >= 400) return [];
@@ -157,22 +103,12 @@ async function handleStartStream(body: any, supabase: any) {
   // Check for existing active stream for this user in gaming category
   const { data: existingStream } = await supabase
     .from("streams")
-    .select("id, livekit_room_name, stream_key, status, rtmp_url")
+    .select("id, livekit_room_name, stream_key, status")
     .eq("id", streamId)
     .in("status", ["starting", "waiting", "signal_detected", "ready", "live"])
     .maybeSingle();
 
-  console.log(
-    "[livekit-gaming] Existing stream found:",
-    JSON.stringify(existingStream)
-  );
-
-  const hasCredentials =
-    existingStream?.stream_key &&
-    existingStream?.rtmp_url &&
-    existingStream?.livekit_room_name;
-
-  if (hasCredentials && !regenerate) {
+  if (existingStream && !regenerate) {
     console.log(`[livekit-gaming] Found existing stream id=${existingStream.id}`);
     return {
       ok: true,
@@ -182,7 +118,7 @@ async function handleStartStream(body: any, supabase: any) {
         roomName: existingStream.livekit_room_name,
         streamKey: existingStream.stream_key,
         status: existingStream.status,
-        rtmpUrl: existingStream.rtmp_url ?? null,
+        rtmpUrl: null,
       },
     };
   }
@@ -191,7 +127,7 @@ async function handleStartStream(body: any, supabase: any) {
   if (regenerate) {
     await supabase
       .from("streams")
-      .update({ stream_key: null, rtmp_url: null, status: "starting", is_live: false })
+      .update({ stream_key: null, status: "starting", is_live: false })
       .eq("id", streamId);
   }
 
@@ -206,7 +142,6 @@ async function handleStartStream(body: any, supabase: any) {
     .from("streams")
     .update({
       stream_key: streamKey,
-      rtmp_url: rtmpUrl,
       status: "waiting",
       is_live: false,
       livekit_room_name: roomName,
@@ -436,64 +371,6 @@ serve(async (req: Request) => {
       case "getSession":
         result = await handleGetSession(body, supabase);
         break;
-      case "test": {
-        const token = await createLiveKitToken();
-        const httpUrl = livekitHttpUrl();
-        const ingestUrl = `${httpUrl}/twirp/livekit.IngressService/CreateIngress`;
-        const roomUrl = `${httpUrl}/twirp/livekit.RoomService/ListRooms`;
-
-        const twirpHeaders = {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "Twirp-Version": "v7.0.0",
-        };
-
-        let ingestCheck: any = null;
-        try {
-          const r = await fetch(ingestUrl, {
-            method: "POST",
-            headers: twirpHeaders,
-            body: JSON.stringify({
-              inputType: "RTMP_INPUT",
-              name: "test-room",
-              roomName: "test-room",
-              participantIdentity: "test",
-              participantName: "test",
-            }),
-          });
-          const raw = await r.text();
-          ingestCheck = { status: r.status, contentType: r.headers.get("content-type"), raw: raw.slice(0, 500) };
-        } catch (e: any) {
-          ingestCheck = { error: e.message };
-        }
-
-        let roomCheck: any = null;
-        try {
-          const r = await fetch(roomUrl, {
-            method: "POST",
-            headers: twirpHeaders,
-            body: JSON.stringify({}),
-          });
-          const raw = await r.text();
-          roomCheck = { status: r.status, contentType: r.headers.get("content-type"), raw: raw.slice(0, 500) };
-        } catch (e: any) {
-          roomCheck = { error: e.message };
-        }
-
-        result = {
-          ok: true,
-          debug: {
-            livekitUrl: httpUrl,
-            hasApiKey: !!LIVEKIT_API_KEY,
-            hasApiSecret: !!LIVEKIT_API_SECRET,
-            tokenPrefix: token.slice(0, 40) + "...",
-            ingestCheck,
-            roomCheck,
-          },
-        };
-        break;
-      }
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),

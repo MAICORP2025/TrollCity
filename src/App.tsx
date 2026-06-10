@@ -32,6 +32,7 @@ import { initTimeUpdater } from "./hooks/useGlobalTime";
 import { APP_DATA_REFETCH_EVENT_NAME } from "./lib/appEvents";
 import { autoUnlockPayouts } from "./lib/supabase";
 import { PageVisibilityProvider } from "./contexts/PageVisibilityContext";
+import { LiveContentProvider } from "./contexts/LiveContentContext";
 import TabSwitchHandler from "./components/TabSwitchHandler";
 import { initTelemetry } from "./lib/telemetry";
 import GlobalPresenceTracker from "./components/GlobalPresenceTracker";
@@ -62,6 +63,8 @@ const CreateAgencyPage = lazyWithRetry(() => import("./pages/agencies/CreateAgen
 const AgencyProfilePage = lazyWithRetry(() => import("./pages/agency/[agencyId]"));
 const AgencyApplyPage = lazyWithRetry(() => import("./pages/agency-apply/[agencyId]"));
 const AgencyDashboard = lazyWithRetry(() => import("./pages/agency-dashboard"));
+import HytroGamingApply from "./pages/gaming/HytroGamingApply";
+import HytroGamingContract from "./pages/gaming/HytroGamingContract";
 const AgencyHRDashboard = lazyWithRetry(() => import("./pages/agency-hr-dashboard"));
 const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
 const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
@@ -102,6 +105,7 @@ const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
 const TransactionHistory = lazyWithRetry(() => import("./pages/TransactionHistory"));
 const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
 const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
+const PrideShop = lazyWithRetry(() => import("./pages/PrideShop"));
 
 
 const CreatorOnboarding = lazyWithRetry(() => import("./pages/CreatorOnboarding"));
@@ -116,7 +120,6 @@ const Call = lazyWithRetry(() => import("./pages/Call"));
 const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
 const HytroGaming = lazyWithRetry(() => import("./pages/gaming/HytroGaming"));
 const HytroViewerPage = lazyWithRetry(() => import("./pages/gaming/HytroViewerPage"));
-const AgoraPlayerPage = lazyWithRetry(() => import("./pages/broadcast/AgoraPlayerPage"));
 const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
 const Trollifieds = lazyWithRetry(() => import("./pages/Trollifieds"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
@@ -129,6 +132,18 @@ const PayoutPolicyLegal = lazyWithRetry(() => import("./pages/legal/PayoutPolicy
 const SafetyGuidelinesLegal = lazyWithRetry(() => import("./pages/legal/SafetyGuidelines"));
 const CreatorEarnings = lazyWithRetry(() => import("./pages/legal/CreatorEarnings"));
 const GamblingDisclosure = lazyWithRetry(() => import("./pages/legal/GamblingDisclosure"));
+
+// SEO Pages (public, indexed by search engines)
+const SEOAboutPage = lazyWithRetry(() => import("./pages/seo/AboutPage"));
+const SEOBroadcastingPage = lazyWithRetry(() => import("./pages/seo/BroadcastingPage"));
+const SEOCategoriesPage = lazyWithRetry(() => import("./pages/seo/CategoriesPage"));
+const SEOCreatorsPage = lazyWithRetry(() => import("./pages/seo/CreatorsPage"));
+const SEOGoLivePage = lazyWithRetry(() => import("./pages/seo/GoLivePage"));
+const SEOGovernmentPage = lazyWithRetry(() => import("./pages/seo/GovernmentPage"));
+const SEOCategoryPage = lazyWithRetry(() => import("./pages/seo/CategoryPage"));
+const SEOTopCreatorsPage = lazyWithRetry(() => import("./pages/seo/TopCreatorsPage"));
+const SEOTrendingPage = lazyWithRetry(() => import("./pages/seo/TrendingPage"));
+
 const OfficerPayrollDashboard = lazyWithRetry(() => import("./pages/officer/OfficerPayrollDashboard"));
 const OfficerDashboard = lazyWithRetry(() => import("./pages/officer/OfficerDashboard"));
 const OfficerOWCDashboard = lazyWithRetry(() => import("./pages/OfficerOWCDashboard"));
@@ -161,6 +176,12 @@ const OfficerShifts = lazyWithRetry(() => import("./pages/admin/OfficerShifts"))
 
 const ReferralBonuses = lazyWithRetry(() => import("./pages/admin/ReferralBonuses"));
 const ControlPanel = lazyWithRetry(() => import("./pages/admin/ControlPanel"));
+const AdminPageVisibility = lazyWithRetry(() => import("./pages/admin/AdminPageVisibility"));
+const ShareAThonLanding = lazyWithRetry(() => import("./pages/shareathon/ShareAThonLanding"));
+const ShareAThonSubmit = lazyWithRetry(() => import("./pages/shareathon/ShareAThonSubmit"));
+const ShareAThonLeaderboard = lazyWithRetry(() => import("./pages/shareathon/ShareAThonLeaderboard"));
+const ShareAThonAdminDashboard = lazyWithRetry(() => import("./pages/shareathon/ShareAThonAdminDashboard"));
+const ShareAThonVerification = lazyWithRetry(() => import("./pages/shareathon/ShareAThonVerification"));
  const Career = lazyWithRetry(() => import("./pages/Career"));
  const TestDiagnosticsPage = lazyWithRetry(() => import("./pages/admin/TestDiagnosticsPage"));
 const ResetMaintenance = lazyWithRetry(() => import("./pages/admin/ResetMaintenance"));
@@ -193,8 +214,39 @@ const BlockedUsers = lazyWithRetry(() => import("./pages/BlockedUsers"));
 
 const AuthenticatedHome = lazyWithRetry(() => import("./pages/Home"));
 
-// Tromail
+// Tromail & UTroMail
 const TromailPage = lazyWithRetry(() => import("./pages/tromail/TromailPage"));
+const UtromailPage = lazyWithRetry(() => import("./pages/utromail/UtromailPage"));
+const UtromailThreadView = lazyWithRetry(() => import("./pages/utromail/UtromailThreadView"));
+const UtromailCompose = lazyWithRetry(() => import("./pages/utromail/UtromailCompose"));
+const AcademyHomePage = lazyWithRetry(() => import("./pages/academy/AcademyHomePage"));
+const CourseCatalogPage = lazyWithRetry(() => import("./pages/academy/CourseCatalogPage"));
+const CourseDetailPage = lazyWithRetry(() => import("./pages/academy/CourseDetailPage"));
+const VerifyCertificatePage = lazyWithRetry(() => import("./pages/academy/VerifyCertificatePage"));
+const TeacherApplyPage = lazyWithRetry(() => import("./pages/academy/TeacherApplyPage"));
+const TeacherDashboardPage = lazyWithRetry(() => import("./pages/academy/TeacherDashboardPage"));
+const TeacherCoursePage = lazyWithRetry(() => import("./pages/academy/TeacherCoursePage"));
+const AcademyAdmissionsPage = lazyWithRetry(() => import("./pages/academy/AdmissionsDashboardPage"));
+const AcademyCertificatesPage = lazyWithRetry(() => import("./pages/academy/AcademyCertificatesPage"));
+const AcademyTranscriptPage = lazyWithRetry(() => import("./pages/academy/AcademyTranscriptPage"));
+const AcademyCoinsPage = lazyWithRetry(() => import("./pages/academy/AcademyCoinsPage"));
+const AcademyClassroomPage = lazyWithRetry(() => import("./pages/academy/AcademyClassroomPage"));
+const AcademyAdminPage = lazyWithRetry(() => import("./pages/academy/AcademyAdminPage"));
+const AssignmentCreatePage = lazyWithRetry(() => import("./pages/academy/AssignmentCreatePage"));
+const AssignmentStudentPage = lazyWithRetry(() => import("./pages/academy/AssignmentStudentPage"));
+const AssignmentGradingPage = lazyWithRetry(() => import("./pages/academy/AssignmentGradingPage"));
+const AttendancePage = lazyWithRetry(() => import("./pages/academy/AttendancePage"));
+const QuizBuilderPage = lazyWithRetry(() => import("./pages/academy/QuizBuilderPage"));
+const QuizTakePage = lazyWithRetry(() => import("./pages/academy/QuizTakePage"));
+const PathwayDetailPage = lazyWithRetry(() => import("./pages/academy/PathwayDetailPage"));
+const LoanServicingPage = lazyWithRetry(() => import("./pages/academy/LoanServicingPage"));
+const TeacherRevenuePage = lazyWithRetry(() => import("./pages/academy/TeacherRevenuePage"));
+const CommunicationCenterPage = lazyWithRetry(() => import("./pages/academy/CommunicationCenterPage"));
+const TranscriptPage = lazyWithRetry(() => import("./pages/academy/TranscriptPage"));
+const AccreditationPage = lazyWithRetry(() => import("./pages/academy/AccreditationPage"));
+const TeacherManagementPage = lazyWithRetry(() => import("./pages/academy/TeacherManagementPage"));
+const TeacherDirectoryPage = lazyWithRetry(() => import("./pages/academy/TeacherDirectoryPage"));
+const AssignmentsListPage = lazyWithRetry(() => import("./pages/academy/AssignmentsListPage"));
 
 const LoadingScreen = () => (
     <div className="min-h-screen flex items-center justify-center bg-[#0A0814] text-white">
@@ -220,6 +272,22 @@ const isPublicRoute = (pathname: string) => {
   // Live auctions browse/watch are public — anyone can view
   if (pathname === '/auctions') return true
   if (pathname.startsWith('/auctions/') && !pathname.startsWith('/auctions/studio')) return true
+
+  // SEO pages are public — indexable by search engines
+  if (pathname === '/about') return true
+  if (pathname === '/broadcasting') return true
+  if (pathname === '/categories') return true
+  if (pathname === '/creators') return true
+  if (pathname === '/go-live') return true
+  if (pathname === '/seo-government') return true
+  if (pathname.startsWith('/categories/')) return true
+  if (pathname === '/top-creators') return true
+  if (pathname === '/trending') return true
+  if (pathname === '/trending-creators') return true
+  if (pathname === '/new-creators') return true
+
+  // Legal pages are public
+  if (pathname.startsWith('/legal/')) return true
 
   return (
     pathname.startsWith('/broadcast/') &&
@@ -307,7 +375,30 @@ const isPublicRoute = (pathname: string) => {
     );
   };
 
+  // 🔒 Internal Route Guard — prevents direct URL access to pages that should only be reached via internal navigation
+  // Pages like /exit, /stream-ended, /broadcast/summary should not be accessible by typing the URL directly
+  const INTERNAL_ONLY_PATHS = ['/exit', '/stream-ended']
 
+  const RequireInternalNavigation = ({ children }: { children: React.ReactNode }) => {
+    const location = useLocation()
+    const navigate = useNavigate()
+
+    React.useEffect(() => {
+      // Check if the page was reached via internal navigation (has navigation state)
+      // or if it was a direct URL entry / external link (no state, referrer is external)
+      const navState = location.state
+      const hasDocumentReferrer = document.referrer && document.referrer.includes(window.location.hostname)
+
+      // Allow access if: has navigation state from React Router, or has a document referrer from same origin
+      // Block if: direct URL entry with no state and no same-origin referrer
+      if (!navState && !hasDocumentReferrer && INTERNAL_ONLY_PATHS.includes(location.pathname)) {
+        console.warn(`[Route Guard] Blocked direct access to ${location.pathname}`)
+        navigate('/', { replace: true })
+      }
+    }, [location.pathname, navigate])
+
+    return <>{children}</>
+  }
 
 import { useSidebarStore } from './stores/useSidebarStore';
 import TCNNMainPage from "./pages/tcnn/TCNNMainPage.js";
@@ -351,41 +442,37 @@ import GamingAnalytics from "./pages/broadcast/gaming/GamingAnalytics.tsx";
 import GamingCommunity from "./pages/broadcast/gaming/GamingCommunity.tsx";
 import GamingMonetization from "./pages/broadcast/gaming/GamingMonetization.tsx";
 import GamingStore from "./pages/broadcast/gaming/GamingStore.tsx";
-import GamingViewerPage from './components/broadcast/GamingViewerPage'
 import BroadcastRouter from "./pages/broadcast/BroadcastRouter.js";
 import StreamSummary from "./pages/broadcast/StreamSummary.js";
 import PresidentPage from "./pages/President.js";
 import PresidentDashboard from "./pages/president/PresidentDashboard.js";
 import SecretaryDashboard from "./pages/president/SecretaryDashboard.js";
-import TreasuryDashboard from "./pages/TreasuryDashboard.js";
-import TCPS from "./pages/TCPS.js";
-import MatchPage from "./pages/MatchPage.js";
-import CityRegistry from "./pages/CityRegistry.js";
-import AdvertisePage from "./pages/city-registry/AdvertisePage.js";
-import Following from "./pages/Following.js";
-import Marketplace from "./pages/Marketplace.js";
-import PublicPool from "./pages/PublicPool.js";
-import MaiClass from "./pages/MaiClass.js";
-import OrganizationDashboard from "./pages/organizations/OrganizationDashboard.js";
-import TrollGamesPage from "./pages/TrollGamesPage.js";
-import GiveawaysPage from "./pages/GiveawaysPage.js";
-import TrollWheel from "./pages/TrollWheel.js";
-import CarDealership from "./pages/CarDealership.js";
-import UserInventory from "./pages/UserInventory.js";
-import Troting from "./pages/Troting.js";
-import ProfileSettings from "./pages/ProfileSettings.js";
-import DeleteAccount from "./pages/DeleteAccount.js";
-import TrollBank from "./pages/TrollBank.js";
-import Leaderboard from "./pages/Leaderboard.js";
-import TrollCityWall from "./pages/TrollCityWall.js";
-import WallPostPage from "./pages/WallPostPage.js";
-import DistrictTour from "./pages/DistrictTour.js";
-import LivingPage from "./pages/UnderConstructionPage.js";
-import ChurchPage from "./pages/ChurchPage.js";
-import PastorDashboard from "./pages/church/PastorDashboard.js";
+import TreasuryDashboard from "./pages/TreasuryDashboard";
+import MatchPage from "./pages/MatchPage";
+import CityRegistry from "./pages/CityRegistry";
+import AdvertisePage from "./pages/city-registry/AdvertisePage";
+import Following from "./pages/Following";
+import Marketplace from "./pages/Marketplace";
+import PublicPool from "./pages/PublicPool";
+import TrollGamesPage from "./pages/TrollGamesPage";
+import GiveawaysPage from "./pages/GiveawaysPage";
+import TrollWheel from "./pages/TrollWheel";
+import CarDealership from "./pages/CarDealership";
+import UserInventory from "./pages/UserInventory";
+import Troting from "./pages/Troting";
+import ProfileSettings from "./pages/ProfileSettings";
+import DeleteAccount from "./pages/DeleteAccount";
+import TrollBank from "./pages/TrollBank";
+import Leaderboard from "./pages/Leaderboard";
+import TrollCityWall from "./pages/TrollCityWall";
+import WallPostPage from "./pages/WallPostPage";
+import DistrictTour from "./pages/DistrictTour";
+import LivingPage from "./pages/UnderConstructionPage";
+import ChurchPage from "./pages/ChurchPage";
+import PastorDashboard from "./pages/church/PastorDashboard";
 const ChurchLivePage = lazyWithRetry(() => import("./pages/church/ChurchLivePage.tsx"));
-import LiveCommandCenter from "./pages/live/LiveCommandCenter.js";
-import LiveStreamOverlay from "./pages/live/LiveStreamOverlay.js";
+import LiveCommandCenter from "./pages/live/LiveCommandCenter";
+import LiveStreamOverlay from "./pages/live/LiveStreamOverlay";
 import AudioSettings from "./pages/live/AudioSettings.js";
 import TrollCourt from "./pages/TrollCourt.js";
 import AuctionsPage from "./pages/AuctionsPage.js";
@@ -1305,7 +1392,7 @@ const handleVisibilityChange = async () => {
                  {/* Authentication */}
                  <Route path="/auth" element={user ? <Navigate to="/home" replace /> : <Auth />} />
                  <Route path="/auth/callback" element={<AuthCallback />} />
-                 <Route path="/exit" element={<ExitPage />} />
+                 <Route path="/exit" element={<RequireInternalNavigation><ExitPage /></RequireInternalNavigation>} />
                  <Route path="/terms" element={<Navigate to="/legal/terms" replace />} />
                  <Route path="/access-denied" element={<AccessDenied />} />
                  <Route path="/terms-of-service" element={<Navigate to="/legal/terms" replace />} />
@@ -1336,14 +1423,29 @@ const handleVisibilityChange = async () => {
                 <Route path="/explore" element={<ExploreFeed />} />
                 <Route path="/live-swipe" element={<StreamSwipePage />} />
                 <Route path="/embed/:id" element={<EmbedPage />} />
-                <Route path="/hytrogaming" element={<UnderConstructionPage pageName="HytroGaming" />} />
+                <Route path="/hytrogaming" element={<HytroGaming />} />
+                <Route path="/hytrogaming/apply" element={<HytroGamingApply />} />
+                <Route path="/hytrogaming/contract/:id" element={<HytroGamingContract />} />
                 <Route path="/hytro/:id" element={<HytroViewerPage />} />
-                <Route path="/agora-player" element={<AgoraPlayerPage />} />
                 <Route path="/dev/theme-preview" element={<ThemePreviewPage />} />
                 <Route path="/dev/homepage-preview" element={<HomepageBackgroundShowcase />} />
 
                 {/* Safety Page (standalone) */}
                 <Route path="/safety" element={<Safety />} />
+
+                {/* 🔍 SEO Pages (Public, Indexable by Search Engines) */}
+                <Route path="/about" element={<SEOAboutPage />} />
+                <Route path="/broadcasting" element={<SEOBroadcastingPage />} />
+                <Route path="/categories" element={<SEOCategoriesPage />} />
+                <Route path="/creators" element={<SEOCreatorsPage />} />
+                <Route path="/go-live" element={<SEOGoLivePage />} />
+                <Route path="/seo-government" element={<SEOGovernmentPage />} />
+                <Route path="/categories/:slug" element={<SEOCategoryPage />} />
+                <Route path="/categories/:slug/live" element={<SEOCategoryPage />} />
+                <Route path="/top-creators" element={<SEOTopCreatorsPage />} />
+                <Route path="/trending" element={<SEOTrendingPage />} />
+                <Route path="/trending-creators" element={<Navigate to="/top-creators" replace />} />
+                <Route path="/new-creators" element={<Navigate to="/top-creators" replace />} />
 
 {/* 🏢 Talent Offices (Public) */}
                 <Route path="/agencies" element={<AgenciesPage />} />
@@ -1361,12 +1463,54 @@ const handleVisibilityChange = async () => {
                 <Route path="/career" element={<Navigate to="/careers" replace />} />
 
                 {/* 🏠 Home - Public with limited auth for interactions */}
-                <Route path="/home" element={<AuthenticatedHome />} />
-                 <Route path="/" element={<AuthenticatedHome />} />
+                <Route path="/home" element={<Navigate to="/" replace />} />
+                 <Route path="/" element={<LiveContentProvider><AuthenticatedHome /></LiveContentProvider>} />
 
                 {/* 🎤 Live Auctions — Public browse/watch, studio gated below */}
                 <Route path="/auctions" element={<AuctionsPage />} />
                 <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
+
+                {/* 🎓 Troll City Academy */}
+                <Route path="/academy" element={<AcademyHomePage />} />
+                <Route path="/academy/courses" element={<CourseCatalogPage />} />
+                <Route path="/academy/course/:slug" element={<CourseDetailPage />} />
+                <Route path="/academy/verify" element={<VerifyCertificatePage />} />
+                <Route path="/academy/teacher/apply" element={<TeacherApplyPage />} />
+                <Route path="/academy/teacher/dashboard" element={<TeacherDashboardPage />} />
+                <Route path="/academy/teacher/course/new" element={<TeacherCoursePage />} />
+                <Route path="/academy/teacher/course/:courseId" element={<TeacherCoursePage />} />
+                <Route path="/academy/grades" element={<AcademyTranscriptPage />} />
+                <Route path="/academy/certificates" element={<AcademyCertificatesPage />} />
+                <Route path="/academy/transcript" element={<AcademyTranscriptPage />} />
+                <Route path="/academy/coins" element={<AcademyCoinsPage />} />
+                <Route path="/academy/admissions" element={<AcademyAdmissionsPage />} />
+                <Route path="/academy/classroom" element={<AcademyClassroomPage />} />
+                <Route path="/academy/classroom/:courseId" element={<AcademyClassroomPage />} />
+                <Route path="/academy/admin" element={<RequireRole roles={[UserRole.ADMIN]}><AcademyAdminPage /></RequireRole>} />
+                <Route path="/academy/assignment/new" element={<AssignmentCreatePage />} />
+                <Route path="/academy/assignment/edit/:assignmentId" element={<AssignmentCreatePage />} />
+                <Route path="/academy/assignment/grade/:assignmentId" element={<AssignmentGradingPage />} />
+                <Route path="/academy/course/:slug/assignments" element={<AssignmentStudentPage />} />
+                <Route path="/academy/course/:slug/quiz/:quizId" element={<QuizTakePage />} />
+                <Route path="/academy/quiz/new" element={<QuizBuilderPage />} />
+                <Route path="/academy/quiz/new/:courseId" element={<QuizBuilderPage />} />
+                <Route path="/academy/attendance/:courseId" element={<AttendancePage />} />
+                <Route path="/academy/attendance/:courseId/:sessionId" element={<AttendancePage />} />
+                <Route path="/academy/pathway/:pathwayId" element={<PathwayDetailPage />} />
+                <Route path="/academy/loans" element={<LoanServicingPage />} />
+                <Route path="/academy/teacher/revenue" element={<TeacherRevenuePage />} />
+                <Route path="/academy/course/:slug/communication" element={<CommunicationCenterPage />} />
+                <Route path="/academy/transcript/official" element={<TranscriptPage />} />
+                <Route path="/academy/accreditation" element={<AccreditationPage />} />
+                <Route path="/academy/admin/teachers" element={<RequireRole roles={[UserRole.ADMIN]}><TeacherManagementPage /></RequireRole>} />
+                <Route path="/academy/teachers" element={<TeacherDirectoryPage />} />
+                <Route path="/academy/assignments" element={<AssignmentsListPage />} />
+
+                {/* 📨 UTroMail */}
+                <Route path="/utromail" element={<UtromailPage />} />
+                <Route path="/utromail/thread/:threadId" element={<UtromailPage />} />
+                <Route path="/utromail/compose" element={<UtromailPage />} />
+                <Route path="/utromail/settings" element={<UtromailPage />} />
 
                 {/* 🔐 Protected Routes */}
                 <Route element={<RequireAuth />}>
@@ -1398,7 +1542,7 @@ const handleVisibilityChange = async () => {
   <Route path="monetization" element={<GamingMonetization />} />
   <Route path="store" element={<GamingStore />} />
 </Route>
-                    <Route path="/gaming/watch/:streamId" element={<GamingViewerPage />} />
+                    <Route path="/gaming/watch/:streamId" element={<HytroViewerPage />} />
                     <Route path="/broadcast/:id" element={<BroadcastRouter />} />
                     <Route path="/watch/:id" element={<BroadcastRouter />} />
                    <Route path="/kick-fee/:streamId" element={<KickFeePage />} />
@@ -1429,8 +1573,8 @@ const handleVisibilityChange = async () => {
 
                   <Route path="/mobile" element={<Navigate to="/home" replace />} />
                   <Route path="/live" element={<ExploreFeed />} />
-                  <Route path="/messages" element={<Navigate to="/tcps" replace />} />
-                  <Route path="/tcps" element={<TCPS />} />
+                  <Route path="/messages" element={<Navigate to="/utromail" replace />} />
+                  <Route path="/tcps" element={<Navigate to="/utromail" replace />} />
                   <Route path="/match" element={<MatchPage />} />
           <Route path="/city-hall" element={<Navigate to="/home" replace />} />
                   <Route path="/city-registry" element={<CityRegistry />} />
@@ -1485,9 +1629,7 @@ const handleVisibilityChange = async () => {
                   <Route path="/marketplace/orders" element={<Marketplace />} />
                   <Route path="/marketplace/sales" element={<Marketplace />} />
                   <Route path="/pool" element={<PublicPool />} />
-                   <Route path="/mai-class" element={<MaiClass />} />
-                   <Route path="/mai-class/:classId" element={<MaiClass />} />
-                   <Route path="/organization/dashboard" element={<OrganizationDashboard />} />
+
                    <Route path="/troll-games" element={<TrollGamesPage />} />
                   <Route path="/troll-games/queue" element={<TrollGamesPage />} />
                   <Route path="/troll-games/live" element={<TrollGamesPage />} />
@@ -1676,7 +1818,9 @@ const handleVisibilityChange = async () => {
                   <Route path="/onboarding/creator" element={<CreatorOnboarding />} />
                   <Route path="/creator-switch" element={<CreatorSwitchProgram />} />
 
-{/* 💰 Earnings & Coins */}
+{/* 🏳️‍🌈 Pride Shop */}
+                   <Route path="/pride-shop" element={<PrideShop />} />
+                   {/* 💰 Earnings & Coins */}
                    <Route path="/store" element={<CoinStore />} />
                    <Route path="/coins" element={<CoinStore />} />
                    <Route path="/coins/complete" element={<CoinsComplete />} />
@@ -2224,13 +2368,42 @@ const handleVisibilityChange = async () => {
                       }
                     />
                     <Route
-                      path="/admin/test-diagnostics"
+                      path="/admin/page-visibility"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
-                          <TestDiagnosticsPage />
+                          <AdminPageVisibility />
                         </RequireRole>
                       }
                     />
+                     <Route
+                       path="/admin/test-diagnostics"
+                       element={
+                         <RequireRole roles={[UserRole.ADMIN]}>
+                           <TestDiagnosticsPage />
+                         </RequireRole>
+                       }
+                     />
+
+                     {/* Share-A-Thon Weekend Routes */}
+                     <Route path="/shareathon" element={<ShareAThonLanding />} />
+                     <Route path="/shareathon/submit" element={<RequireAuth><ShareAThonSubmit /></RequireAuth>} />
+                     <Route path="/shareathon/leaderboard" element={<ShareAThonLeaderboard />} />
+                     <Route
+                       path="/admin/shareathon/dashboard"
+                       element={
+                         <RequireRole roles={[UserRole.ADMIN]}>
+                           <ShareAThonAdminDashboard />
+                         </RequireRole>
+                       }
+                     />
+                     <Route
+                       path="/admin/shareathon/verification"
+                       element={
+                         <RequireRole roles={[UserRole.ADMIN]}>
+                           <ShareAThonVerification />
+                         </RequireRole>
+                       }
+                     />
                     <Route
                       path="/admin/reset-maintenance"
                       element={

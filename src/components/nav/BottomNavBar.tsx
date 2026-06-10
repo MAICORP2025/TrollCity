@@ -132,7 +132,6 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   const currentXp = xpStore.xpTotal ?? profile?.xp ?? profile?.total_xp ?? 0;
   const nextXp = xpStore.xpToNext ?? profile?.next_level_xp ?? 1;
   const progress = xpStore.progress ?? (nextXp > 0 ? Math.min((currentXp / nextXp) * 100, 100) : 0);
-  const [activeTheme, setActiveTheme] = useState<any>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -143,70 +142,20 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
       };
     }
   }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) { setActiveTheme(null); return; }
-    (async () => {
-      try {
-        const { data: stateData } = await supabase
-          .from('user_broadcast_theme_state')
-          .select('active_theme_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (!stateData?.active_theme_id) { setActiveTheme(null); return; }
-        const { data: theme } = await supabase
-          .from('broadcast_background_themes')
-          .select('slug, name, background_css, background_type, background_asset_url, preview_url, image_url, reactive_enabled, reactive_style')
-          .eq('id', stateData.active_theme_id)
-          .maybeSingle();
-        setActiveTheme(theme || null);
-      } catch {
-        setActiveTheme(null);
-      }
-    })();
-  }, [user?.id]);
   const displayName = profile?.display_name || profile?.username || 'Citizen';
   const avatarUrl = profile?.avatar_url;
   const prideActive = isPrideMonth();
-
-  const hasActiveFrame = !!activeTheme;
 
   if (collapsed) {
     return (
       <div className="flex items-center gap-2 px-2">
         <div className="relative">
           {avatarUrl ? (
-            <>
-              {hasActiveFrame && (
-                <div className="absolute -inset-1 rounded-full opacity-60" style={{
-                  background: activeTheme.background_css?.match(/linear-gradient\([^)]+\)/)?.[0]
-                    || activeTheme.background_css?.match(/radial-gradient\([^)]+\)/)?.[0]
-                    || 'none',
-                  animation: activeTheme.reactive_style === 'pulse' ? 'pulse 4s ease-in-out infinite'
-                    : activeTheme.reactive_style === 'gradient' ? 'gradientShift 8s linear infinite'
-                    : undefined,
-                  backgroundSize: '400% 400%',
-                  filter: 'blur(4px)',
-                }} />
-              )}
-              <img src={avatarUrl} alt="" className={`h-9 w-9 rounded-full object-cover ${hasActiveFrame ? '' : 'border-2 border-cyan-400/50'}`} />
-            </>
+            <img src={avatarUrl} alt="" className="h-9 w-9 rounded-full border-2 border-cyan-400/50 object-cover" />
           ) : (
-            <>
-              {hasActiveFrame && (
-                <div className="absolute -inset-1 rounded-full opacity-60" style={{
-                  background: activeTheme.background_css?.match(/linear-gradient\([^)]+\)/)?.[0]
-                    || activeTheme.background_css?.match(/radial-gradient\([^)]+\)/)?.[0]
-                    || 'none',
-                  animation: activeTheme.reactive_style === 'pulse' ? 'pulse 4s ease-in-out infinite' : undefined,
-                  backgroundSize: '400% 400%',
-                  filter: 'blur(4px)',
-                }} />
-              )}
-              <div className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-black text-white ${hasActiveFrame ? '' : 'border-2 border-cyan-400/50 bg-gradient-to-br from-purple-600 to-cyan-500'}`} style={hasActiveFrame ? { background: 'linear-gradient(135deg, #6a00ff, #0096ff)' } : {}}>
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            </>
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-cyan-400/50 bg-gradient-to-br from-purple-600 to-cyan-500 text-xs font-black text-white">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
           )}
           <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-950 text-[7px] font-black text-cyan-300 ring-1 ring-cyan-400/60">
             {currentLevel}
@@ -219,67 +168,22 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex items-center gap-2 px-2 py-1.5">
       {/* Avatar */}
-      {hasActiveFrame ? (
-        <div className="relative shrink-0">
-          <div className="absolute -inset-1.5 rounded-full opacity-70" style={{
-            background: activeTheme.background_css?.match(/linear-gradient\([^)]+\)/)?.[0]
-              || activeTheme.background_css?.match(/radial-gradient\([^)]+\)/)?.[0]
-              || 'linear-gradient(90deg, #ff0057, #0096ff)',
-            animation: activeTheme.reactive_style === 'pulse' ? 'pulse 4s ease-in-out infinite'
-              : activeTheme.reactive_style === 'gradient' ? 'gradientShift 8s linear infinite'
-              : activeTheme.reactive_style === 'aurora' ? 'auroraShift 12s ease-in-out infinite'
-              : activeTheme.reactive_style === 'prismatic' ? 'prismaticShift 10s linear infinite'
-              : activeTheme.reactive_style === 'stars' ? 'starsTwinkle 9s infinite'
-              : undefined,
-            backgroundSize: '400% 400%',
-            filter: 'blur(6px)',
-          }} />
-          <div className="relative rounded-full p-[3px]" style={{
-            background: activeTheme.background_css?.match(/linear-gradient\([^)]+\)/)?.[0]
-              || activeTheme.background_css?.match(/radial-gradient\([^)]+\)/)?.[0]
-              || 'linear-gradient(90deg, #ff0057, #0096ff)',
-            backgroundSize: '400% 400%',
-            animation: activeTheme.reactive_style === 'pulse' ? 'pulse 4s ease-in-out infinite'
-              : activeTheme.reactive_style === 'gradient' ? 'gradientShift 8s linear infinite'
-              : activeTheme.reactive_style === 'aurora' ? 'auroraShift 12s ease-in-out infinite'
-              : activeTheme.reactive_style === 'prismatic' ? 'prismaticShift 10s linear infinite'
-              : activeTheme.reactive_style === 'stars' ? 'starsTwinkle 9s infinite'
-              : undefined,
-          }}>
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt=""
-                className="h-10 w-10 rounded-full object-cover md:h-11 md:w-11"
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white md:h-11 md:w-11">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            )}
+      <div className="relative shrink-0">
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt=""
+            className={`h-10 w-10 rounded-full object-cover ring-2 md:h-11 md:w-11 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}
+          />
+        ) : (
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-11 md:w-11 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}>
+            {displayName.charAt(0).toUpperCase()}
           </div>
-          <span className="absolute -bottom-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-slate-950 px-1 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/60 md:h-5 md:min-w-[20px] md:text-[9px]">
-            {currentLevel}
-          </span>
-        </div>
-      ) : (
-        <div className="relative shrink-0">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt=""
-              className={`h-10 w-10 rounded-full object-cover ring-2 md:h-11 md:w-11 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}
-            />
-          ) : (
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-11 md:w-11 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}>
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <span className="absolute -bottom-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-slate-950 px-1 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/60 md:h-5 md:min-w-[20px] md:text-[9px]">
-            {currentLevel}
-          </span>
-        </div>
-      )}
+        )}
+        <span className="absolute -bottom-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-slate-950 px-1 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/60 md:h-5 md:min-w-[20px] md:text-[9px]">
+          {currentLevel}
+        </span>
+      </div>
 
       {/* Info */}
       <div className="min-w-0 flex flex-col gap-0.5">
@@ -677,25 +581,6 @@ export default function BottomNavBar() {
           50% { border-color: rgb(0, 0, 255); }
           75% { border-color: rgb(255, 0, 255); }
           100% { border-color: rgb(255, 0, 0); }
-        }
-        @keyframes gradientShift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        @keyframes auroraShift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        @keyframes prismaticShift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        @keyframes starsTwinkle {
-          0%, 100% { opacity: 0.7; }
-          50% { opacity: 1; }
         }
         .rgb-pulsing-nav-bar {
           animation: rgbPulse 3s infinite;

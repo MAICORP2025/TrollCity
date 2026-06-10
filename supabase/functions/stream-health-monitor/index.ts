@@ -70,6 +70,65 @@ async function getStreamKeyStatus(streamKey: string): Promise<{
   return { exists: true, expired: false, expiresAt: null };
 }
 
+async function getRtlsStreamStatus(channel: string, streamKey: string): Promise<{
+  isActive: boolean;
+  bitrateKbps: number | null;
+  fps: number | null;
+  resolution: string | null;
+  raw: Record<string, unknown> | null;
+}> {
+  // Query Agora RTLS ingress status for the channel
+  const url = `${AGORA_BASE_URL}/${AGORA_REGION}/v1/projects/${AGORA_APP_ID}/rtls/ingress/channels/${encodeURIComponent(channel)}/status`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": basicAuth(),
+        "X-Request-ID": crypto.randomUUID(),
+      },
+    });
+
+    if (res.status === 404) {
+      // Channel not found — no active ingress
+      return { isActive: false, bitrateKbps: null, fps: null, resolution: null, raw: null };
+    }
+
+    if (res.status >= 400) {
+      console.warn("[stream-health-monitor] getRtlsStreamStatus failed:", res.status);
+      return { isActive: false, bitrateKbps: null, fps: null, resolution: null, raw: null };
+    }
+
+    const data = await res.json().catch(() => null) as Record<string, unknown> | null;
+    if (!data) {
+      return { isActive: false, bitrateKbps: null, fps: null, resolution: null, raw: null };
+    }
+
+    // Check if the stream is actively publishing
+    const status = String(data?.status || data?.state || data?.streamStatus || "").toLowerCase();
+    const isActive = status === "active" || status === "publishing" || status === "streaming" || status === "connected" || status === "live";
+
+    // Extract bitrate from various possible response shapes
+    const bitrateRaw = data?.bitrate ?? data?.bitrateKbps ?? data?.currentBitrate ?? data?.ingestBitrate
+      ?? data?.stats?.bitrate ?? data?.stats?.bitrateKbps ?? data?.metrics?.bitrate;
+    const bitrateKbps = bitrateRaw != null ? Number(bitrateRaw) : null;
+
+    // Extract FPS
+    const fpsRaw = data?.fps ?? data?.currentFps ?? data?.stats?.fps ?? data?.metrics?.fps;
+    const fps = fpsRaw != null ? Number(fpsRaw) : null;
+
+    // Extract resolution
+    const width = data?.width ?? data?.videoWidth ?? data?.stats?.width;
+    const height = data?.height ?? data?.videoHeight ?? data?.stats?.height;
+    const resolution = width && height ? `${width}x${height}` : null;
+
+    return { isActive: isActive || false, bitrateKbps: bitrateKbps ?? null, fps: fps ?? null, resolution, raw: data };
+  } catch (err) {
+    console.error("[stream-health-monitor] getRtlsStreamStatus exception:", err);
+    return { isActive: false, bitrateKbps: null, fps: null, resolution: null, raw: null };
+  }
+}
+
 async function createNewStreamKey(channel: string, ttlSeconds: number): Promise<string | null> {
   const url = `${AGORA_BASE_URL}/${AGORA_REGION}/v1/projects/${AGORA_APP_ID}/rtls/ingress/streamkeys`;
 
@@ -141,30 +200,29 @@ serve(async (req) => {
         );
       }
 
-      const activeThreshold = Math.floor(Date.now() / 1000) - 15;
       const { data: stream } = await supabase
         .from("streams")
         .select("id, status, is_live, updated_at")
         .eq("id", streamId)
         .maybeSingle();
 
-      const lastUpdate = stream?.updated_at ? new Date(stream.updated_at).getTime() / 1000 : 0;
-      const heartbeatFresh = lastUpdate >= activeThreshold;
-
       const isLive = stream?.is_live === true;
+
+      // Check actual Agora RTLS ingress status — this is the ground truth for whether
+      // OBS is actively pushing video into the Agora channel.
+      const rtlsStatus = await getRtlsStreamStatus(channel, streamKey);
 
       // OBS is considered connected ONLY if:
       // 1. The stream is explicitly live (is_live=true), OR
-      // 2. The heartbeat is fresh (updated_at within last 15s) — meaning OBS is actively sending data
-      // The heartbeat no longer sets status="connected", so we rely purely on timestamp freshness.
-      const obsConnected = isLive || (heartbeatFresh && stream?.status !== "ended" && stream?.status !== "error");
+      // 2. The Agora RTLS ingress reports the channel as actively streaming
+      const obsConnected = isLive || rtlsStatus.isActive;
 
-      // If the stream was previously marked connected/live but heartbeat is stale, mark as error
-      if (!heartbeatFresh && !isLive && (stream?.status === "connected" || stream?.status === "live")) {
+      // If the stream was previously marked connected/live but RTLS shows inactive, reset
+      if (!rtlsStatus.isActive && !isLive && (stream?.status === "connected" || stream?.status === "live")) {
         await supabase
           .from("streams")
           .update({
-            status: "error",
+            status: "waiting",
             is_live: false,
           })
           .eq("id", streamId);
@@ -173,9 +231,10 @@ serve(async (req) => {
           JSON.stringify({
             ok: false,
             status: "disconnected",
-            message: "OBS stream appears disconnected — no signal detected",
+            message: "OBS stream signal lost — Agora channel is not receiving data",
             keyStatus: "valid",
             obsConnected: false,
+            rtlsActive: rtlsStatus.isActive,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
@@ -188,9 +247,11 @@ serve(async (req) => {
           keyStatus: "valid",
           keyExpiresAt: keyStatus.expiresAt,
           obsConnected,
+          rtlsActive: rtlsStatus.isActive,
+          rtlsBitrateKbps: rtlsStatus.bitrateKbps,
+          rtlsFps: rtlsStatus.fps,
+          rtlsResolution: rtlsStatus.resolution,
           streamStatus: stream?.status ?? "unknown",
-          heartbeatFresh,
-          lastUpdateAge: Math.floor(Date.now() / 1000) - lastUpdate,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );

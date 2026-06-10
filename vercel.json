@@ -2,11 +2,12 @@
   "version": 2,
   "routes": [
     { "src": "/api/social/:id", "dest": "/api/social/:id" },
+    { "src": "/api/og/(.*)", "dest": "/api/og/$1" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/legal/(.*)", "dest": "/api/legal/$1" }
   ],
   "functions": {
-    "api/**/*.ts": {
+    "api/**/*.{ts,tsx}": {
       "memory": 1024,
       "maxDuration": 10
     }
