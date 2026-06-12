@@ -335,10 +335,58 @@ export default function HytroGamingViewer() {
   }, [channelName, isHost])
 
   // Handlers
-  const handleLike = useCallback(() => {
-    setLiked((prev) => !prev)
-    setLikeCount((prev) => (liked ? Math.max(0, prev - 1) : prev + 1))
-  }, [liked])
+  const handleLike = useCallback(async () => {
+    const newLiked = !liked
+    setLiked(newLiked)
+    setLikeCount((prev) => (newLiked ? prev + 1 : Math.max(0, prev - 1)))
+
+    if (!currentStream?.id) return
+    try {
+      if (newLiked) {
+        await supabase.rpc('like_stream', { p_stream_id: currentStream.id })
+      } else {
+        await supabase.from('stream_likes').delete().eq('stream_id', currentStream.id).eq('user_id', user?.id)
+      }
+    } catch (err) {
+      console.warn('[HytroGamingViewer] Like toggle failed:', err)
+    }
+
+    // Every 10 likes milestone — notify streamer via broadcast
+    const nextCount = newLiked ? likeCount + 1 : likeCount
+    if (newLiked && nextCount > 0 && nextCount % 10 === 0) {
+      try {
+        await supabase.functions.invoke('send-message', {
+          body: {
+            type: 'broadcast',
+            event: 'like_milestone',
+            channel: `stream:${currentStream.id}`,
+            payload: { like_count: nextCount, stream_id: currentStream.id },
+          },
+        })
+      } catch {
+        // non-critical
+      }
+    }
+  }, [liked, likeCount, currentStream?.id, user?.id])
+
+  const handleShare = useCallback(async () => {
+    const url = `${window.location.origin}/gaming/watch/${streamId}`
+    const shareText = `Watch ${currentStream?.broadcaster_name || 'this streamer'} live on HytroGaming! ${currentStream?.title || ''}`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: currentStream?.title || 'HytroGaming Stream', text: shareText, url })
+      } catch {
+        // User cancelled
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(url)
+        toast.success('Link copied to clipboard!')
+      } catch {
+        toast.error('Failed to copy link')
+      }
+    }
+  }, [streamId, currentStream])
 
   const handleTip = useCallback(async (item: TipItem) => {
     if (!user) {
@@ -754,30 +802,53 @@ export default function HytroGamingViewer() {
         </div>
       </header>
 
-      {/* Mobile Stream Player */}
-      <div className="relative flex-1 bg-black">
-        <StreamPlayer stream={currentStream} agora={agora} isHost={isHost} />
+      {/* Mobile Stream Player — battle-style: screenshare top 75%, camera overlay on screenshare, streamer info bottom */}
+      <div className="relative flex flex-col flex-1 min-h-0 bg-black">
+        {/* Screen share area — top 75% */}
+        <div className="relative flex-none" style={{ height: '75%' }}>
+          <StreamPlayer stream={currentStream} agora={agora} isHost={isHost} isMobile={true} />
+        </div>
 
-        {/* TikTok-style right action bar */}
-        <div className="absolute bottom-20 right-3 z-20 flex flex-col items-center gap-4">
-          <MobileAction
-            icon={<div className="relative">
-              {currentStream.broadcaster_avatar ? (
-                <img src={currentStream.broadcaster_avatar} alt="" className="h-11 w-11 rounded-full border-2 border-cyan-400 object-cover" />
-              ) : (
-                <div className="grid h-11 w-11 place-items-center rounded-full border-2 border-cyan-400 bg-purple-500/30 text-xs font-black">
-                  {(currentStream.broadcaster_name || 'H').slice(0, 2).toUpperCase()}
-                </div>
-              )}
-              <span className="absolute -bottom-1 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full bg-pink-500 text-[8px] font-black grid place-items-center">+</span>
-            </div>}
-            onClick={() => {}}
-          />
-          <MobileAction
-            icon={<Heart className={cn('h-7 w-7', liked && 'fill-pink-400 text-pink-400')} />}
-            label={formatCompactNumber(likeCount)}
-            onClick={handleLike}
-          />
+        {/* Bottom strip — remaining 25% streamer info */}
+        <div className="relative flex-none flex items-center gap-3 px-3 py-2" style={{ height: '25%' }}>
+          {currentStream.broadcaster_avatar ? (
+            <img src={currentStream.broadcaster_avatar} alt="" className="h-10 w-10 shrink-0 rounded-full border-2 border-cyan-400/50 object-cover" />
+          ) : (
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 border-cyan-400/50 bg-purple-500/20 text-xs font-black">
+              {(currentStream.broadcaster_name || 'H').slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-black text-white">{currentStream.broadcaster_name}</p>
+            {currentStream.game_title && (
+              <p className="truncate text-[10px] text-slate-400">{currentStream.game_title}</p>
+            )}
+          </div>
+          <button
+            onClick={handleFollow}
+            className="shrink-0 rounded-full bg-cyan-500/20 px-3 py-1.5 text-[10px] font-black text-cyan-300 border border-cyan-400/30 active:scale-95"
+          >
+            Follow
+          </button>
+        </div>
+
+        {/* TikTok-style right action bar — positioned at the split between video and bottom strip */}
+        <div className="absolute bottom-[25%] right-3 z-20 flex translate-y-1/2 flex-col items-center gap-3">
+          {/* Like button — big, animated, powerful */}
+          <button onClick={handleLike} className="flex flex-col items-center gap-1">
+            <div className={cn(
+              "grid h-12 w-12 place-items-center rounded-full backdrop-blur-sm transition-all active:scale-90",
+              liked
+                ? "bg-pink-500/40 shadow-[0_0_20px_rgba(236,72,153,0.5)]"
+                : "bg-black/40"
+            )}>
+              <Heart className={cn('h-7 w-7 transition-all', liked && 'fill-pink-400 text-pink-400 scale-110')} />
+            </div>
+            <span className={cn(
+              "text-[9px] font-black drop-shadow",
+              liked ? "text-pink-300" : "text-white/80"
+            )}>{formatCompactNumber(likeCount)}</span>
+          </button>
           <MobileAction
             icon={<Gift className="h-7 w-7 text-amber-400" />}
             label="Tips"
@@ -786,19 +857,14 @@ export default function HytroGamingViewer() {
           <MobileAction
             icon={<Share2 className="h-7 w-7" />}
             label="Share"
-            onClick={() => {}}
-          />
-          <MobileAction
-            icon={<MoreVertical className="h-7 w-7" />}
-            label="More"
-            onClick={() => {}}
+            onClick={handleShare}
           />
         </div>
 
         {/* Chat overlay toggle */}
         <button
           onClick={() => setShowMobileChat(true)}
-          className="absolute bottom-4 left-3 z-20 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs text-white/80 backdrop-blur-sm"
+          className="absolute bottom-[calc(25%+0.75rem)] left-3 z-20 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs text-white/80 backdrop-blur-sm"
         >
           <MessageCircle className="h-3.5 w-3.5" />
           Chat
@@ -888,10 +954,12 @@ function StreamPlayer({
   stream,
   agora,
   isHost,
+  isMobile,
 }: {
   stream: StreamData
   agora: ReturnType<typeof useAgoraGamingViewer>
   isHost: boolean
+  isMobile?: boolean
 }) {
   const videoRef = useRef<HTMLDivElement>(null)
   const cameraRef = useRef<HTMLDivElement>(null)
@@ -899,7 +967,7 @@ function StreamPlayer({
   const [fullscreen, setFullscreen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Play Agora video track
+  // Play Agora video track (screen share / main)
   useEffect(() => {
     const node = videoRef.current
     if (!node || !agora.remoteVideoTrack) return
@@ -1018,7 +1086,15 @@ function StreamPlayer({
       )}
 
       {/* Camera overlay */}
-      {agora.remoteCameraTrack && (
+      {agora.remoteCameraTrack && (isMobile ? (
+        <div className="absolute left-3 top-3 z-20 w-28 overflow-hidden rounded-lg border-2 border-cyan-400/40 bg-black/60 shadow-xl backdrop-blur-sm">
+          <div ref={cameraRef} className="h-20 w-full bg-slate-900" />
+          <div className="flex items-center gap-1 px-1.5 py-0.5">
+            <span className="h-1 w-1 animate-pulse rounded-full bg-red-400" />
+            <span className="text-[8px] font-bold text-white/70 truncate">{stream.broadcaster_name}</span>
+          </div>
+        </div>
+      ) : (
         <div className="absolute right-4 top-4 z-20 w-48 overflow-hidden rounded-xl border-2 border-white/15 bg-black/70 shadow-2xl backdrop-blur-sm">
           <div ref={cameraRef} className="h-24 w-full bg-slate-900" />
           <div className="flex items-center gap-1.5 px-2 py-1">
@@ -1026,7 +1102,7 @@ function StreamPlayer({
             <span className="text-[9px] font-bold text-white/70">{stream.broadcaster_name}</span>
           </div>
         </div>
-      )}
+      ))}
 
       {/* Video controls overlay */}
       <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 py-3 opacity-0 transition-opacity hover:opacity-100">
