@@ -10,6 +10,7 @@ import { useAgoraScreenShare } from '@/hooks/useAgoraScreenShare'
 import { useGamingHeartbeat } from '@/hooks/useGamingHeartbeat'
 import GamingChat from '@/components/broadcast/GamingChat'
 import { GamingStreamProvider, useSetGamingStreamId } from '@/contexts/GamingStreamContext'
+
 import {
   DEFAULT_SCENES,
   SceneConfig,
@@ -67,6 +68,7 @@ function GamingSetupPageInner() {
   // ── Scenes ──
   const [scenes, setScenes] = useState<SceneConfig[]>(DEFAULT_SCENES)
   const [activeSceneId, setActiveSceneId] = useState<string | null>(DEFAULT_SCENES[0]?.id || null)
+  const [inlineAgreementChecked, setInlineAgreementChecked] = useState(false)
 
   // ── Refs ──
   const isMountedRef = useRef(true)
@@ -245,10 +247,17 @@ function GamingSetupPageInner() {
   }, [streamData?.id, agora]);
 
   // Phase 2: Go live (join Agora + publish)
-  const handleGoLive = useCallback(async () => {
+  const doGoLive = async (agreementAcceptedAt: string) => {
     if (!streamData?.id || !channelName) { toast.error('Stream not ready'); return; }
     try {
-      await supabase.from('streams').update({ status: 'live', is_live: true, started_at: new Date().toISOString() }).eq('id', streamData.id);
+      await supabase.from('streams').update({
+        status: 'live',
+        is_live: true,
+        started_at: new Date().toISOString(),
+        broadcast_disclaimer_accepted: true,
+        broadcast_disclaimer_accepted_at: agreementAcceptedAt,
+        broadcast_disclaimer_user_id: user?.id,
+      }).eq('id', streamData.id);
       await agora.goLive(channelName, streamData.id);
       setIsLive(true);
       toast.success('You are now LIVE on HytroGaming!');
@@ -259,7 +268,41 @@ function GamingSetupPageInner() {
       console.error('[GamingSetupPage] Go live failed:', err);
       toast.error(err?.message || 'Failed to go live');
     }
-  }, [streamData?.id, channelName, user?.id, agora]);
+    // Create a system wall post so the stream appears on the Troll Wall feed
+    // This runs independently of the go-live flow above — if it fails, the stream is still live
+    try {
+      const broadcasterName = profile?.username || profile?.display_name || 'A Gamer'
+      const streamUrl = `/gaming/watch/${streamData.id}`
+      await supabase.from('troll_wall_posts').insert({
+        user_id: '00000000-0000-0000-0000-000000000001',
+        username: 'Troll City System',
+        post_type: 'stream_announce',
+        content: `🎮 ${broadcasterName} is now LIVE on HytroGaming!`,
+        is_system_generated: true,
+        metadata: {
+          stream_id: streamData.id,
+          stream_url: streamUrl,
+          category: 'gaming',
+          broadcaster_name: broadcasterName,
+          broadcaster_id: user?.id,
+          thumbnail_url: null,
+          live: true,
+        },
+      })
+    } catch (wallErr: any) {
+      console.warn('[GamingSetupPage] Wall post creation failed:', wallErr)
+    }
+  };
+
+  const handleGoLive = useCallback(() => {
+    if (!inlineAgreementChecked) {
+      toast.error('You must agree to the Broadcast Agreement before going live.');
+      return;
+    }
+    setInlineAgreementChecked(false);
+    const agreementAcceptedAt = new Date().toISOString();
+    void doGoLive(agreementAcceptedAt);
+  }, [inlineAgreementChecked, doGoLive]);
 
   // Phase 3: End stream (full disconnect)
   const handleEndStream = useCallback(async () => {
@@ -396,6 +439,10 @@ function GamingSetupPageInner() {
       screenStream={agora.screenStream}
       cameraStream={agora.cameraStream}
       micStream={agora.micStream}
+      screenAudioTrack={agora.screenAudioTrack}
+      hasScreenAudioTrack={Boolean(agora.screenAudioTrack)}
+      inlineAgreementChecked={inlineAgreementChecked}
+      onInlineAgreementChange={setInlineAgreementChecked}
     />
   );
 }

@@ -20,6 +20,7 @@ import { cn } from '../lib/utils';
 import StreamSwipeCard from '../components/broadcast/StreamSwipeCard';
 import BattleSwipeCard from '../components/broadcast/BattleSwipeCard';
 import StreamStackIndicator from '../components/broadcast/StreamStackIndicator';
+import useSEO from '@/hooks/useSEO';
 
 // Category types for the swipe interface
 export type SwipeCategory = 'battle' | 'top' | 'podcast' | 'gaming';
@@ -50,6 +51,16 @@ export default function StreamSwipePage({ initialCategory = 'top' }: StreamSwipe
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
   const [searchParams] = useSearchParams();
+
+  useSEO({
+    title: 'Live Streams | Troll City - Swipe & Watch Live Gaming & Podcasts',
+    description: 'Swipe through live streams on Troll City. Watch gaming battles, top streamers, podcasts, and more in a full-screen vertical feed. The TikTok-style streaming experience.',
+    keywords: [
+      'live streams', 'stream swipe', 'watch live', 'gaming streams',
+      'podcast streams', 'top streamers', 'vertical feed', 'live content',
+      'streaming app', 'TikTok alternative', 'live entertainment'
+    ]
+  });
   
   // State
   const [activeCategory, setActiveCategory] = useState<SwipeCategory>(initialCategory);

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import {
   BarChart3,
   ChevronDown,
@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SceneConfig } from '@/components/broadcast/GamingSceneManager'
+// LocalVideoPreview and DraggableCameraOverlay are not available; using inline video elements
 
 interface GamingSetupProps {
   streamTitle?: string
@@ -78,15 +79,11 @@ interface GamingSetupProps {
   micStream?: MediaStream | null
   // State
   isPreviewing?: boolean
-  isLive?: boolean
-  isConnecting?: boolean
   hasCameraTrack?: boolean
   isCameraEnabled?: boolean
   // Actions
   onStartPreview?: () => void
   onStopPreview?: () => void
-  onGoLive?: () => void
-  onEndStream?: () => void
   onToggleCamera?: () => void
 }
 
@@ -102,6 +99,9 @@ export function GamingSetup({
   isPreviewing = false,
   isLive = false,
   isConnecting = false,
+  isConnected = false,
+  isSharing = false,
+  isPaused = false,
   errorMessage,
   className,
   viewerCount = 0,
@@ -370,9 +370,9 @@ export function GamingSetup({
               {/* Screen share preview — shows during both preview and live phases */}
               {(isPreviewing || isLive) && screenStream ? (
                 <div className="h-full w-full bg-black">
-                  <LocalVideoPreview stream={screenStream} />
+                  <video autoPlay playsInline muted ref={el => { if (el) el.srcObject = screenStream; }} className="h-full w-full object-contain" />
                 </div>
-              ) : (
+              ) : (isPreviewing || isLive) ? (
                 <div className="h-full w-full flex flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_40%,rgba(251,191,36,0.08),transparent_30%),#02040a] px-6 text-center">
                   <Pause className="h-16 w-16 text-amber-300/40" />
                   <p className="mt-4 text-lg font-black text-white/70">Stream Paused</p>
@@ -405,7 +405,7 @@ export function GamingSetup({
 
               {/* Draggable camera overlay (like OBS) — shows during both preview and live */}
               {(isPreviewing || isLive) && isCameraEnabled && cameraStream && (
-                <DraggableCameraOverlay stream={cameraStream} />
+                <DraggableCameraOverlay track={cameraStream} />
               )}
 
               {/* Stream info overlay */}
@@ -634,7 +634,7 @@ function DraggableCameraOverlay({ track }: { track: any }) {
       <div className={cn(
         'relative overflow-hidden rounded-xl border-2 shadow-2xl transition',
         isDragging ? 'border-cyan-300 shadow-cyan-500/30' : 'border-white/20'
-      )} style={{ width: 200, height: 150 }}>
+      )} style={{ width: 320, height: 240 }}>
         <video
           ref={videoRef}
           autoPlay

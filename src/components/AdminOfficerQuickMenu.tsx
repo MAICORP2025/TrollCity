@@ -5,7 +5,7 @@ import { UserRole, supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 
 const AdminOfficerQuickMenu: React.FC = () => {
-  const { profile, showLegacySidebar, setShowLegacySidebar } = useAuthStore();
+  const { user, profile, showLegacySidebar, setShowLegacySidebar } = useAuthStore();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isOnDuty, setIsOnDuty] = useState(false);
@@ -48,7 +48,17 @@ const AdminOfficerQuickMenu: React.FC = () => {
       toast.success(newStatus ? 'You are now ON DUTY' : 'You are now OFF DUTY');
       
       // Force a heartbeat to update status immediately
-      await supabase.rpc('heartbeat_presence');
+      if (user?.id) {
+        await supabase.from('user_presence').upsert(
+          {
+            user_id: user.id,
+            last_seen_at: new Date().toISOString(),
+            is_online: newStatus,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' },
+        );
+      }
     } catch (error) {
       console.error('Error toggling duty:', error);
       toast.error('Failed to update duty status');

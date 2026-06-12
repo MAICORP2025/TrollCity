@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/store'
 import { useCoins } from '@/lib/hooks/useCoins'
 import { toast } from 'sonner'
 import { trollCityTheme } from '@/styles/trollCityTheme'
+import useSEO from '@/hooks/useSEO';
 import {
   Coins,
   Trophy,
@@ -71,6 +72,16 @@ export default function TrollWheel() {
   const [refreshing, setRefreshing] = useState(false)
   const [trollmondBalance, setTrollmondBalance] = useState(profileAny?.trollmonds ?? 0)
   const [showMobileInfo, setShowMobileInfo] = useState(true)
+
+  useSEO({
+    title: 'Troll Wheel | Spin & Win Rewards | Troll City',
+    description: 'Spin the Troll Wheel on Troll City for a chance to win rewards, Trollmonds, and special abilities. Play online games, earn prizes, and join the fun with our social gaming community.',
+    keywords: [
+      'online games', 'spin wheel game', 'social games', 'multiplayer games',
+      'chance games', 'rewards game', 'Troll Wheel', 'Troll City games',
+      'win prizes', 'virtual rewards', 'community games', 'spin to win'
+    ]
+  });
 
   const userBalance = trollmondBalance
 

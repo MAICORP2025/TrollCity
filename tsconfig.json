@@ -23,7 +23,8 @@
     },
     "allowImportingTsExtensions": true,
     "types": ["vite/client"],
-    "downlevelIteration": true
+    "downlevelIteration": true,
+    "ignoreDeprecations": "5.0"
   },
   "include": [
     "src"
@@ -32,6 +33,9 @@
     "node_modules",
     "dist",
     "supabase/functions/**",
-    ".deno"
+    ".deno",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

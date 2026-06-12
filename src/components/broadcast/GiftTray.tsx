@@ -196,14 +196,11 @@ export default function GiftTray({ recipientId, streamId, onClose, battleId, all
       return;
     }
 
-    const success = await sendGift(gift, { receiverId: recipientId, quantity: 1, battleId: battleId ?? null });
+    const success = await sendGift(gift, { receiverId: recipientId, quantity: 1, battleId: battleId ?? null, streamId: streamId });
     if (success) {
       setSelectedGift(gift);
-      void quietRefreshGiftProfile(user.id);
-
-      setTimeout(() => {
-        onClose();
-      }, 1000);
+      toast.success(`Sent ${gift.name}!`);
+      onClose();
     }
   };
 

@@ -57,8 +57,7 @@ BEGIN
   INSERT INTO public.user_perks (user_id, perk_id, purchased_at, expires_at, is_active, metadata)
   SELECT target_user, p.id, now(), now() + (days || ' days')::interval, true, jsonb_build_object('granted_by','ceo_frame')
   FROM public.perks p
-  WHERE p.is_active IS DISTINCT FROM false
-  ON CONFLICT DO NOTHING;
+  WHERE p.is_active IS DISTINCT FROM false;
 END;
 $$;
 

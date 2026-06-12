@@ -67,6 +67,29 @@
     <link rel="canonical" href="https://maitrollcity.com/" />
 
     <!-- ============================================================ -->
+    <!-- Structured Data: WebSite Schema with SearchAction              -->
+    <!-- Enables sitelinks search box in Google search results          -->
+    <!-- ============================================================ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Troll City",
+      "alternateName": "Mai Troll City",
+      "url": "https://maitrollcity.com/",
+      "description": "Troll City is a social streaming platform for creators, streamers, gamers, and online communities.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://maitrollcity.com/search?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <!-- ============================================================ -->
     <!-- Structured Data: SoftwareApplication Schema                    -->
     <!-- Establishes Troll City as a social streaming application,     -->
     <!-- NOT a physical location.                                      -->
@@ -194,9 +217,16 @@
         var hasProxy = typeof navigator.webkitGetUserMedia === 'function' ||
                        typeof navigator.webkitGetDisplayMedia === 'function';
 
-        /* Rebuild mediaDevices from webkit shims when missing */
-        function rebuildMediaDevices() {
-          var MD = {};
+         /* Rebuild mediaDevices from webkit shims when missing */
+         function rebuildMediaDevices() {
+           var origMD = navigator.mediaDevices;
+           var origAddEventListener = origMD && typeof origMD.addEventListener === 'function'
+             ? origMD.addEventListener.bind(origMD)
+             : null;
+           var origRemoveEventListener = origMD && typeof origMD.removeEventListener === 'function'
+             ? origMD.removeEventListener.bind(origMD)
+             : null;
+           var MD = {};
 
           /* getDisplayMedia */
           if (typeof navigator.webkitGetDisplayMedia === 'function') {
@@ -216,41 +246,37 @@
           }
 
           /* enumerateDevices — uses MediaDevices.prototype if available */
-          if (typeof navigator.mediaDevices !== 'undefined' &&
-              typeof navigator.mediaDevices.enumerateDevices === 'function') {
+          if (origMD && typeof origMD.enumerateDevices === 'function') {
+            var origEnumerateDevices = origMD.enumerateDevices.bind(origMD);
             MD.enumerateDevices = function () {
-              return navigator.mediaDevices.enumerateDevices();
+              return origEnumerateDevices();
             };
           }
 
           /* devicechange noop listener */
           var changeListeners = [];
-          Object.defineProperty(MD, 'ondevicechange', {
-            get: function () { return this._ondevicechange; },
-            set: function (fn) {
-              this._ondevicechange = fn;
-              // If the real mediaDevices fires this event, proxy it
-              if (typeof navigator.mediaDevices !== 'undefined' &&
-                  typeof navigator.mediaDevices.addEventListener === 'function') {
-                navigator.mediaDevices.addEventListener('devicechange', fn);
-              }
-            }
-          });
+           Object.defineProperty(MD, 'ondevicechange', {
+             get: function () { return this._ondevicechange; },
+             set: function (fn) {
+               this._ondevicechange = fn;
+               if (origAddEventListener) {
+                 origAddEventListener('devicechange', fn);
+               }
+             }
+           });
 
           MD.addEventListener = function (type, listener) {
             if (type === 'devicechange') changeListeners.push(listener);
-            if (typeof navigator.mediaDevices !== 'undefined' &&
-                typeof navigator.mediaDevices.addEventListener === 'function') {
-              navigator.mediaDevices.addEventListener(type, listener);
+            if (origAddEventListener) {
+              origAddEventListener(type, listener);
             }
           };
 
           MD.removeEventListener = function (type, listener) {
             var i = changeListeners.indexOf(listener);
             if (i > -1) changeListeners.splice(i, 1);
-            if (typeof navigator.mediaDevices !== 'undefined' &&
-                typeof navigator.mediaDevices.removeEventListener === 'function') {
-              navigator.mediaDevices.removeEventListener(type, listener);
+            if (origRemoveEventListener) {
+              origRemoveEventListener(type, listener);
             }
           };
 

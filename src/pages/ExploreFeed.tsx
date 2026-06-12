@@ -6,6 +6,8 @@ import { trollCityTheme } from '../styles/trollCityTheme';
 import UserNameWithAge from '../components/UserNameWithAge';
 import { toast } from 'sonner';
 import { VirtuosoGrid } from 'react-virtuoso';
+import useSEO from '@/hooks/useSEO';
+import { collectionPageSchema } from '@/utils/seoSchemas';
 
 interface Broadcast {
   id: string;
@@ -30,6 +32,21 @@ export default function ExploreFeed() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'gaming' | 'irl' | 'podcast'>('all');
+
+  useSEO({
+    title: 'Explore Live Streams | Troll City - Watch Trending Content',
+    description: 'Explore trending live streams on Troll City. Watch gaming, music, podcasts, and more from creators worldwide. Discover viral content and join the community.',
+    keywords: [
+      'explore live streams', 'trending streams', 'watch live', 'live streaming',
+      'gaming streams', 'podcast streams', 'music streams', 'viral content',
+      'content discovery', 'live broadcasts', 'streaming platform', 'Troll City explore'
+    ],
+    structuredData: collectionPageSchema({
+      name: 'Live Streams on Troll City',
+      description: 'Discover and watch trending live streams from creators worldwide',
+      url: 'https://maitrollcity.com/explore'
+    })
+  });
 
   // Auto-scroll to top on page load
   useEffect(() => {

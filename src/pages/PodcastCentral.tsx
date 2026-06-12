@@ -22,6 +22,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import useSEO from '@/hooks/useSEO';
 
 import { RTCAdminMonitor } from '@/components/admin'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -120,6 +121,16 @@ export default function PodcastCentral() {
   const navigate = useNavigate()
   const { user, profile } = useAuthStore()
   const { isMobileWidth } = useIsMobile()
+
+  useSEO({
+    title: 'Podcasts | Troll City - Live Podcast Streaming & Creator Podcasts',
+    description: 'Listen to live podcasts on Troll City. Discover trending podcasts, creator-hosted shows, and podcast streaming from a vibrant community of podcasters and listeners.',
+    keywords: [
+      'podcasts', 'live podcasts', 'podcast streaming', 'podcast community',
+      'creator podcasts', 'listen to podcasts', 'podcast platform',
+      'Troll City podcasts', 'audio content', 'podcast shows'
+    ]
+  });
 
   const [livePodcasts, setLivePodcasts] = useState<Podcast[]>([])
   const [trendingPodcasts, setTrendingPodcasts] = useState<Podcast[]>([])

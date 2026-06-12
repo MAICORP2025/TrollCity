@@ -27,6 +27,20 @@ import {
   CASHOUT_TIERS as TIERS,
 } from '../config/coinConfig'
 
+type CoinTx = {
+  id: string
+  user_id: string
+  coins: number
+  type: string
+  description: string | null
+  source: string | null
+  external_id: string | null
+  usd_amount: number | null
+  payment_status: string | null
+  created_at: string
+  metadata?: any
+}
+
 // Map the central config tiers to the format expected by this component
 const CASHOUT_TIERS = TIERS.map(tier => ({
   coins: tier.coins,

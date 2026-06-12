@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/store'
 import { supabase, UserRole } from '@/lib/supabase'
+import useSEO from '@/hooks/useSEO';
 import {
   Briefcase,
   Search,
@@ -215,6 +216,16 @@ const DEFAULT_MAX_APPLICATIONS = 10
 export default function OpenPositions() {
   const navigate = useNavigate()
   const { profile, user } = useAuthStore()
+
+  useSEO({
+    title: 'Careers | Troll City - Join Our Team & Make Money Online',
+    description: 'Explore career opportunities at Troll City. Join the creator economy, work from home, and earn competitive pay. Weekly payouts, remote positions, and growth opportunities.',
+    keywords: [
+      'careers', 'make money online', 'work from home', 'side income',
+      'online opportunities', 'creator economy', 'remote jobs', 'Troll City careers',
+      'weekly payouts', 'earn money online', 'online business', 'jobs'
+    ]
+  });
 
   const [query, setQuery] = useState('')
   const [department, setDepartment] = useState('All')

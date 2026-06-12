@@ -109,8 +109,8 @@ export default function CityStatusOrb({
         <span className="text-xs font-semibold text-white truncate max-w-[80px]">
           {data.username}
         </span>
-        <span className={`text-[10px] font-bold ${data.tLeagueTier.textColor} bg-gradient-to-r ${data.tLeagueTier.color} px-1.5 py-0.5 rounded-full`}>
-          {data.league_tier}
+        <span className={`text-[10px] font-bold ${data.tLeagueTier.textColor} bg-gradient-to-r ${data.subTierColor || data.tLeagueTier.color} px-1.5 py-0.5 rounded-full`}>
+          {data.league_tier}{data.league_sub_tier || ''}
         </span>
         <span className="text-[10px] text-gray-400">Lv.{data.level}</span>
       </button>
@@ -122,8 +122,8 @@ export default function CityStatusOrb({
       {/* Header with avatar and basic info */}
       <div className="relative p-4 bg-gradient-to-br from-slate-800 to-slate-900">
         {/* T League badge - top right */}
-        <div className={`absolute top-3 right-3 flex items-center gap-1 rounded-full px-2.5 py-1 bg-gradient-to-r ${data.tLeagueTier.color} shadow-lg`}>
-          <span className="text-sm font-black text-white">{data.league_tier}</span>
+        <div className={`absolute top-3 right-3 flex items-center gap-1 rounded-full px-2.5 py-1 bg-gradient-to-r ${data.subTierColor || data.tLeagueTier.color} shadow-lg`}>
+          <span className="text-sm font-black text-white">{data.league_tier}{data.league_sub_tier || ''}</span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -178,12 +178,12 @@ export default function CityStatusOrb({
       {/* T League Progress */}
       <div className="px-4 pt-2">
         <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
-          <span>League Score: {formatNumber(data.league_score)}</span>
+          <span>League: {data.league_tier}{data.league_sub_tier || ''} — {formatNumber(data.league_score)} pts</span>
           <span>{Math.round(data.leagueProgress)}%</span>
         </div>
         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
           <div
-            className={`h-full bg-gradient-to-r ${data.tLeagueTier.color} rounded-full transition-all duration-500`}
+            className={`h-full bg-gradient-to-r ${data.subTierColor || data.tLeagueTier.color} rounded-full transition-all duration-500`}
             style={{ width: `${data.leagueProgress}%` }}
           />
         </div>

@@ -131,6 +131,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET statement_timeout = '5s'
 AS $$
 DECLARE
   v_id uuid;
@@ -150,59 +151,78 @@ DECLARE
   v_error_details text := COALESCE(payload->>'error_details', payload->>'errorDetails');
   v_error_hint text := COALESCE(payload->>'error_hint', payload->>'errorHint');
   v_stack_trace text := COALESCE(payload->>'stack_trace', payload->>'stackTrace');
+  v_is_duplicate boolean := false;
 BEGIN
   IF v_severity NOT IN ('low', 'medium', 'high', 'critical') THEN
     v_severity := 'medium';
   END IF;
 
-  SELECT id INTO v_id
-  FROM public.app_bug_reports
-  WHERE source = v_source
-    AND COALESCE(route_path, '') = COALESCE(v_route_path, '')
-    AND error_message = v_error_message
-    AND status IN ('open', 'in_progress')
-    AND last_seen_at > v_now - interval '60 seconds'
-  ORDER BY last_seen_at DESC
-  LIMIT 1;
-
-  IF v_id IS NOT NULL THEN
-    UPDATE public.app_bug_reports
-    SET occurrence_count = COALESCE(occurrence_count, 1) + 1,
-        last_seen_at = v_now,
-        updated_at = v_now,
-        page_url = COALESCE(v_page_url, page_url),
-        error_code = COALESCE(v_error_code, error_code),
-        error_details = COALESCE(v_error_details, error_details),
-        error_hint = COALESCE(v_error_hint, error_hint),
-        stack_trace = COALESCE(v_stack_trace, stack_trace),
-        request_payload = COALESCE(payload->'request_payload', payload->'requestPayload', request_payload),
-        response_payload = COALESCE(payload->'response_payload', payload->'responsePayload', response_payload),
-        browser_info = COALESCE(payload->'browser_info', payload->'browserInfo', browser_info),
-        app_context = COALESCE(payload->'app_context', payload->'appContext', app_context)
-    WHERE id = v_id;
-
-    RETURN jsonb_build_object('success', true, 'id', v_id, 'duplicate', true);
-  END IF;
-
-  INSERT INTO public.app_bug_reports (
-    source, severity, page_url, route_path, user_id, user_email, user_role, stream_id,
-    function_name, table_name, error_code, error_message, error_details, error_hint,
-    stack_trace, request_payload, response_payload, browser_info, app_context,
-    created_at, updated_at, occurrence_count, last_seen_at
-  )
-  VALUES (
-    v_source, v_severity, v_page_url, v_route_path, v_user_id, v_user_email, v_user_role, v_stream_id,
-    v_function_name, v_table_name, v_error_code, v_error_message, v_error_details, v_error_hint,
-    v_stack_trace,
-    COALESCE(payload->'request_payload', payload->'requestPayload'),
-    COALESCE(payload->'response_payload', payload->'responsePayload'),
-    COALESCE(payload->'browser_info', payload->'browserInfo'),
-    COALESCE(payload->'app_context', payload->'appContext'),
-    v_now, v_now, 1, v_now
+  -- Try to update existing duplicate first (uses index, single row lock)
+  UPDATE public.app_bug_reports
+  SET occurrence_count = COALESCE(occurrence_count, 1) + 1,
+      last_seen_at = v_now,
+      updated_at = v_now,
+      page_url = COALESCE(v_page_url, page_url),
+      error_code = COALESCE(v_error_code, error_code),
+      error_details = COALESCE(v_error_details, error_details),
+      error_hint = COALESCE(v_error_hint, error_hint),
+      stack_trace = COALESCE(v_stack_trace, stack_trace),
+      request_payload = COALESCE(payload->'request_payload', payload->'requestPayload', request_payload),
+      response_payload = COALESCE(payload->'response_payload', payload->'responsePayload', response_payload),
+      browser_info = COALESCE(payload->'browser_info', payload->'browserInfo', browser_info),
+      app_context = COALESCE(payload->'app_context', payload->'appContext', app_context)
+  WHERE id = (
+    SELECT id
+    FROM public.app_bug_reports
+    WHERE source = v_source
+      AND route_path IS NOT DISTINCT FROM v_route_path
+      AND error_message = v_error_message
+      AND status IN ('open', 'in_progress')
+      AND last_seen_at > v_now - interval '60 seconds'
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED
   )
   RETURNING id INTO v_id;
 
-  RETURN jsonb_build_object('success', true, 'id', v_id, 'duplicate', false);
+  IF v_id IS NOT NULL THEN
+    v_is_duplicate := true;
+  ELSE
+    -- No duplicate found — insert new row
+    BEGIN
+      INSERT INTO public.app_bug_reports (
+        source, severity, page_url, route_path, user_id, user_email, user_role, stream_id,
+        function_name, table_name, error_code, error_message, error_details, error_hint,
+        stack_trace, request_payload, response_payload, browser_info, app_context,
+        created_at, updated_at, occurrence_count, last_seen_at
+      )
+      VALUES (
+        v_source, v_severity, v_page_url, v_route_path, v_user_id, v_user_email, v_user_role, v_stream_id,
+        v_function_name, v_table_name, v_error_code, v_error_message, v_error_details, v_error_hint,
+        v_stack_trace,
+        COALESCE(payload->'request_payload', payload->'requestPayload'),
+        COALESCE(payload->'response_payload', payload->'responsePayload'),
+        COALESCE(payload->'browser_info', payload->'browserInfo'),
+        COALESCE(payload->'app_context', payload->'appContext'),
+        v_now, v_now, 1, v_now
+      )
+      RETURNING id INTO v_id;
+    EXCEPTION
+      WHEN unique_violation THEN
+        -- Race condition: concurrent insert — fall back to update
+        UPDATE public.app_bug_reports
+        SET occurrence_count = COALESCE(occurrence_count, 1) + 1,
+            last_seen_at = v_now,
+            updated_at = v_now
+        WHERE source = v_source
+          AND route_path IS NOT DISTINCT FROM v_route_path
+          AND error_message = v_error_message
+          AND status IN ('open', 'in_progress')
+        RETURNING id INTO v_id;
+        v_is_duplicate := true;
+    END;
+  END IF;
+
+  RETURN jsonb_build_object('success', true, 'id', v_id, 'duplicate', v_is_duplicate);
 EXCEPTION WHEN OTHERS THEN
   RAISE LOG 'log_app_bug_report failed: %', SQLERRM;
   RETURN jsonb_build_object('success', false, 'error', SQLERRM);

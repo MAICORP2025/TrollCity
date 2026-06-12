@@ -20,6 +20,7 @@ import { useNeighborhood, useHouseRaids } from '../lib/hooks/useNeighborhood'
 import { useVehicleSystem } from '../lib/hooks/useVehicleSystem'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import useSEO from '@/hooks/useSEO';
 
 type PropertyStatus = 'owned' | 'available' | 'raided' | 'locked'
 type PropertySize = 'sm' | 'md' | 'lg'
@@ -97,10 +98,21 @@ const districtZones = [
 ]
 
 export default function NeighborhoodMapHub() {
-  const { neighborhood, members, house, loading } = useNeighborhood()
-  const profile = useAuthStore((s) => s.profile)
-  const { vehicles } = useVehicleSystem()
-  const { raids, isRaided } = useHouseRaids(house?.id || null)
+   const { neighborhood, members, house, loading } = useNeighborhood()
+   const profile = useAuthStore((s) => s.profile)
+   const { vehicles } = useVehicleSystem()
+   const { raids, isRaided } = useHouseRaids(house?.id || null)
+
+  useSEO({
+    title: 'Neighborhoods | Online Digital Communities & Social Groups | Troll City',
+    description: 'Explore Troll City neighborhoods. Join digital communities, own virtual property, participate in house raids, and connect with neighbors in our social metaverse.',
+    keywords: [
+      'online neighborhoods', 'digital communities', 'social groups',
+      'virtual property', 'Troll City neighborhoods', 'community map',
+      'house raids', 'virtual homes', 'social metaverse', 'digital society',
+      'neighborhood map', 'online community'
+    ]
+  });
 
   const [ownedHouses, setOwnedHouses] = useState<any[]>([])
   const [houseOwners, setHouseOwners] = useState<Map<string, any>>(new Map())
@@ -187,7 +199,7 @@ export default function NeighborhoodMapHub() {
           // Fetch any active participant seats for these owners (if they're seated in other streams)
           const { data: participants } = await supabase
             .from('stream_participants')
-            .select('id, stream_id, user_id, seat_index, is_active')
+            .select('id, stream_id, user_id, slot, is_active')
             .in('user_id', ownerIds)
             .eq('is_active', true)
 
@@ -397,7 +409,7 @@ export default function NeighborhoodMapHub() {
         isLive: !!ownerStream?.is_live,
         viewerCount: ownerStream?.current_viewers || ownerStream?.viewer_count || 0,
         inSeat: !!ownerSeat,
-        seatIndex: ownerSeat?.seat_index,
+        seatIndex: ownerSeat?.slot,
         status,
         label: isCurrentUser
           ? 'Your House'

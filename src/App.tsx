@@ -120,7 +120,7 @@ const CourtViewerPage = lazyWithRetry(() => import("./pages/CourtViewerPage"));
 const Call = lazyWithRetry(() => import("./pages/Call"));
 const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
 const HytroGaming = lazyWithRetry(() => import("./pages/gaming/HytroGaming"));
-const HytroViewerPage = lazyWithRetry(() => import("./pages/gaming/HytroViewerPage"));
+const HytroGamingViewer = lazyWithRetry(() => import("./pages/gaming/HytroGamingViewer"));
 const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
 const Trollifieds = lazyWithRetry(() => import("./pages/Trollifieds"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
@@ -1432,7 +1432,7 @@ const handleVisibilityChange = async () => {
                 <Route path="/hytrogaming" element={<HytroGaming />} />
                 <Route path="/hytrogaming/apply" element={<HytroGamingApply />} />
                 <Route path="/hytrogaming/contract/:id" element={<HytroGamingContract />} />
-                <Route path="/hytro/:id" element={<HytroViewerPage />} />
+                <Route path="/hytro/:id" element={<HytroGamingViewer />} />
                 <Route path="/dev/theme-preview" element={<ThemePreviewPage />} />
                 <Route path="/dev/homepage-preview" element={<HomepageBackgroundShowcase />} />
 
@@ -1548,7 +1548,7 @@ const handleVisibilityChange = async () => {
   <Route path="monetization" element={<GamingMonetization />} />
   <Route path="store" element={<GamingStore />} />
 </Route>
-                    <Route path="/gaming/watch/:streamId" element={<HytroViewerPage />} />
+                    <Route path="/gaming/watch/:streamId" element={<HytroGamingViewer />} />
                     <Route path="/broadcast/:id" element={<BroadcastRouter />} />
                     <Route path="/watch/:id" element={<BroadcastRouter />} />
                    <Route path="/kick-fee/:streamId" element={<KickFeePage />} />

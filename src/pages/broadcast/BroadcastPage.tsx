@@ -23,6 +23,7 @@ import {
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useUserLeagues } from '../../hooks/useUserLeagues'
 import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
+import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
 
 import { Stream } from '../../types/broadcast'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
@@ -612,31 +613,6 @@ export function BroadcastPage() {
    const [streamMods, setStreamMods] = useState<string[]>([]);
    // Accumulate gift amounts received while broadcasterProfile is still loading (null);
    // applied once the profile arrives via @see applyPendingGiftsEffect
-   const pendingBroadcasterGiftsRef = useRef(0);
-
-  const applyPendingGiftsEffect = useCallback((
-    loadedProfile: Record<string, any>,
-  ): Record<string, any> | null => {
-    const pending = pendingBroadcasterGiftsRef.current;
-    if (pending > 0) {
-      pendingBroadcasterGiftsRef.current = 0;
-      const currentCoins = Number(loadedProfile?.troll_coins ?? 0);
-      return { ...loadedProfile, troll_coins: currentCoins + pending };
-    }
-    return loadedProfile;
-  }, []);
-
-  // Apply any gifts that arrived while the profile was still loading
-  useEffect(() => {
-    if (broadcasterProfile && pendingBroadcasterGiftsRef.current > 0) {
-      setBroadcasterProfile((prev: any) => ({
-        ...prev,
-        troll_coins: Number(prev.troll_coins ?? 0) + pendingBroadcasterGiftsRef.current,
-      }));
-      pendingBroadcasterGiftsRef.current = 0;
-    }
-  }, [broadcasterProfile]);
-
    const isHost = stream?.user_id === user?.id
    const isBroadcaster = isHost;
 
@@ -1137,7 +1113,7 @@ useEffect(() => {
    const [seatModalPrices, setSeatModalPrices] = useState<number[]>([0])
    const [selectedSeatIndex, setSelectedSeatIndex] = useState(0)
    const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
-   const [chatTab, setChatTab] = useState<'chat' | 'league' | 'gifts' | 'top-fans' | 'settings'>('chat')
+    const [chatTab, setChatTab] = useState<'chat' | 'progress' | 'league' | 'gifts' | 'top-fans' | 'settings'>('chat')
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
    const [giftNameMap, setGiftNameMap] = useState<Record<string, string>>({})
@@ -1720,19 +1696,11 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
     }
 
 // Start animation via centralized store; all participants should see this.
-      // Update broadcaster profile optimistically
+      // Update stream's total_gifts_coins only
+      // Broadcaster balance is handled by realtime user_profiles subscription
       if (receiverId === streamRef.current?.user_id && resolvedGiftAmount > 0) {
        const giftAmount = Math.floor(resolvedGiftAmount);
-       
-       setBroadcasterProfile((prev: any) => {
-         if (!prev) {
-           pendingBroadcasterGiftsRef.current += giftAmount;
-           return prev;
-         }
-         return { ...prev, troll_coins: Number(prev.troll_coins || 0) + giftAmount };
-       });
 
-       // Also update the stream's total_gifts_coins
        setStream((prev) => prev ? {
          ...prev,
          total_gifts_coins: (prev.total_gifts_coins || 0) + giftAmount,
@@ -2990,35 +2958,8 @@ useStreamRealtime(streamId, {
       const broadcasterId = streamRef.current?.user_id;
       const currentUserId = user?.id;
 
-      // Update broadcaster profile if the receiver is the broadcaster
-      if (receiverId === broadcasterId && broadcasterId) {
-        setBroadcasterProfile((prev: any) => {
-          if (!prev) return prev;
-          return { ...prev, troll_coins: Number(prev.troll_coins ?? 0) + amount };
-        });
-      }
-
-      // Update auth store profile for sender if it's the current user
-      if (senderId === currentUserId && currentUserId) {
-        const currentProfile = useAuthStore.getState().profile;
-        if (currentProfile) {
-          useAuthStore.getState().setProfile({
-            ...currentProfile,
-            troll_coins: Number(currentProfile.troll_coins || 0) - amount
-          });
-        }
-      }
-
-      // Update auth store profile for receiver if it's the current user
-      if (receiverId === currentUserId && currentUserId) {
-        const currentProfile = useAuthStore.getState().profile;
-        if (currentProfile) {
-          useAuthStore.getState().setProfile({
-            ...currentProfile,
-            troll_coins: Number(currentProfile.troll_coins || 0) + amount
-          });
-        }
-      }
+      // Balance updates are handled by the realtime user_profiles subscription
+      // No need to manually update here - avoids double/triple crediting
     };
 
     window.addEventListener('broadcast-balance-update', handleBroadcastBalanceUpdate as EventListener);
@@ -5446,9 +5387,9 @@ const handleLike = useCallback(async () => {
     'flex min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
   )}>
                 {/* Chat tabs */}
-                <div className="grid grid-cols-5 border-b border-white/10 bg-black/10">
-                  {['Chat', 'League', 'Gifts', 'Top Fans', 'Settings'].map((tab) => {
-                    const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'league' | 'gifts' | 'top-fans' | 'settings'
+                <div className="grid grid-cols-6 border-b border-white/10 bg-black/10">
+                   {['Chat', 'Progress', 'League', 'Gifts', 'Top Fans', 'Settings'].map((tab) => {
+                     const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'progress' | 'league' | 'gifts' | 'top-fans' | 'settings'
                     const active = chatTab === tabKey
                     return (
                       <button
@@ -5471,8 +5412,12 @@ const handleLike = useCallback(async () => {
                 </div>
 
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  {chatTab === 'chat' ? (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
+                   {chatTab === 'progress' ? (
+                     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+                       <LeagueProgressPanel streamId={streamId} />
+                     </div>
+                   ) : chatTab === 'chat' ? (
+                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
                       {/* Floating messages area — newest on top, scrollable */}
 <div
   ref={floatingChatContainerRef}

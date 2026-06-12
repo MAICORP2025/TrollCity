@@ -65,6 +65,8 @@ interface GamingSetupProps {
   screenStream?: MediaStream | null
   cameraStream?: MediaStream | null
   micStream?: MediaStream | null
+  screenAudioTrack?: any | null
+  hasScreenAudioTrack?: boolean
   isPreviewing?: boolean
   isLive?: boolean
   isConnecting?: boolean
@@ -75,6 +77,8 @@ interface GamingSetupProps {
   onGoLive?: () => void
   onEndStream?: () => void
   onToggleCamera?: () => void
+  inlineAgreementChecked?: boolean
+  onInlineAgreementChange?: (checked: boolean) => void
 }
 
 export function GamingSetup({
@@ -114,9 +118,13 @@ export function GamingSetup({
   screenStream = null,
   cameraStream = null,
   micStream = null,
+  screenAudioTrack = null,
+  hasScreenAudioTrack = false,
   hasCameraTrack = false,
   isCameraEnabled = false,
   onToggleCamera,
+  inlineAgreementChecked = false,
+  onInlineAgreementChange,
 }: GamingSetupProps) {
   const [showGameSearch, setShowGameSearch] = React.useState(false)
   const [gameSearchQuery, setGameSearchQuery] = React.useState('')
@@ -219,7 +227,7 @@ export function GamingSetup({
                 {/* Phase 2: Previewing but not live → show "Go Live" + "Stop Preview" */}
                 {isPreviewing && !isLive && !isConnecting && (
                   <>
-                    <button type="button" onClick={onGoLive} className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300/30 bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_0_30px_rgba(52,211,153,0.35)] transition hover:scale-[1.01]">
+                    <button type="button" onClick={onGoLive} disabled={!inlineAgreementChecked} className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300/30 bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_0_30px_rgba(52,211,153,0.35)] transition hover:scale-[1.01] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100">
                       <Radio className="h-5 w-5" />
                       Go Live
                     </button>
@@ -258,6 +266,68 @@ export function GamingSetup({
                 <button type="button" onClick={onToggleCamera} disabled={!onToggleCamera} className={cn('grid h-9 w-9 place-items-center rounded-lg border transition', isCameraEnabled ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/15' : 'border-red-300/30 bg-red-500/10 text-red-200 hover:bg-red-500/15')}>
                   {isCameraEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
                 </button>
+              </div>
+
+              {/* Device Status Indicators */}
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-[10px] font-bold uppercase text-slate-500 mb-2">Device Status</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <div className={cn('h-2 w-2 rounded-full', isCameraEnabled ? 'bg-emerald-400' : 'bg-slate-600')} />
+                    <span className="text-[10px] text-slate-400">Camera</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className={cn('h-2 w-2 rounded-full', isMicEnabled ? 'bg-emerald-400' : 'bg-slate-600')} />
+                    <span className="text-[10px] text-slate-400">Microphone</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className={cn('h-2 w-2 rounded-full', isPreviewing || isLive ? 'bg-emerald-400' : 'bg-slate-600')} />
+                    <span className="text-[10px] text-slate-400">Screen Share</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className={cn('h-2 w-2 rounded-full', hasScreenAudioTrack ? 'bg-emerald-400' : 'bg-slate-600')} />
+                    <span className="text-[10px] text-slate-400">Game Audio</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Broadcast Agreement */}
+              <div className="mt-3 rounded-xl border border-amber-500/20 bg-black/20 p-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <ShieldCheck size={12} className="text-amber-400" />
+                  <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Broadcast Agreement</span>
+                </div>
+                <div className="max-h-28 overflow-y-auto rounded-lg bg-zinc-800/60 border border-zinc-700 p-2 mb-2 text-[10px] text-zinc-300 leading-relaxed space-y-1.5">
+                  <p>By starting a broadcast, I confirm that I am at least 18 years old and will comply with all applicable laws in my jurisdiction. I understand that I am solely responsible for the content I create, stream, share, or display on Troll City.</p>
+                  <p>I agree not to broadcast illegal activity, sell or promote controlled substances, threaten or harm others, share non-consensual content, or violate Troll City's Terms of Service or Community Guidelines.</p>
+                  <p>I further acknowledge that I am of legal age in my jurisdiction to consume any products, substances, beverages, or other items that may be displayed or consumed during my broadcast, and that any such activity is conducted at my own responsibility and in compliance with local laws.</p>
+                  <p>Troll City reserves the right to remove content, suspend broadcasts, restrict features, or terminate accounts that violate these rules.</p>
+                </div>
+                <label className="flex items-start gap-2 cursor-pointer group">
+                  <div className="relative mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={inlineAgreementChecked}
+                      onChange={(e) => onInlineAgreementChange?.(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className={cn(
+                      'w-4 h-4 rounded border-2 transition-all',
+                      inlineAgreementChecked
+                        ? 'bg-amber-500 border-amber-500'
+                        : 'bg-zinc-800 border-zinc-600 group-hover:border-zinc-500'
+                    )}>
+                      {inlineAgreementChecked && (
+                        <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-zinc-300 leading-snug">
+                    I am 18 years of age or older and agree to the Broadcast Agreement, Terms of Service, and Community Guidelines.
+                  </span>
+                </label>
               </div>
 
               {/* Heartbeat status */}

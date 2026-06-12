@@ -6,6 +6,7 @@ import api from '../lib/api'
 import { toast } from 'sonner'
 import { startFlow, completeFlow } from '../lib/telemetry'
 import { DollarSign, Banknote, Send, History } from 'lucide-react'
+import useSEO from '@/hooks/useSEO';
 
 type PayoutMethod = 'PayPal'
 
@@ -33,6 +34,16 @@ export default function EarningsPayout() {
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [recentRequests, setRecentRequests] = useState<any[]>([])
+
+  useSEO({
+    title: 'Creator Payouts | Cash Out Earnings | Troll City',
+    description: 'Request creator payouts on Troll City. Cash out your earnings from livestream gifts and tips. Weekly payouts available for verified creators.',
+    keywords: [
+      'creator payouts', 'weekly payouts', 'weekly payments', 'earn money online',
+      'cash out earnings', 'monetize content', 'creator earnings', 'Troll City payout',
+      'withdraw money', 'creator income', 'streaming payout'
+    ]
+  });
   const [hasActiveLoans, setHasActiveLoans] = useState(false)
 
   const earned_coins =

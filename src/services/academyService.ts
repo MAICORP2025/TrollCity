@@ -903,8 +903,8 @@ export const uploadLoanApplicationPdf = async (
       continue;
     }
 
-    const { data: urlData, error: urlError } = await supabase.storage.from(bucket).getPublicUrl(filePath);
-    if (!urlError && urlData?.publicUrl) {
+    const { data: urlData } = await supabase.storage.from(bucket).getPublicUrl(filePath);
+    if (urlData?.publicUrl) {
       return urlData.publicUrl;
     }
   }

@@ -18,6 +18,7 @@ import GiftTray from './GiftTray';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BattleSounds } from '../../lib/battleSounds';
 
 // --- Safe Helper Functions ---
 function safeValues<T>(mapLike: Map<any, T> | undefined | null): T[] {
@@ -693,8 +694,11 @@ const BattleParticipantTile = ({
       </div>
 
       {onTileClick && (
-        <div className="absolute bottom-2 left-2 z-20 pointer-events-none rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[10px] font-bold text-white/80 backdrop-blur-md">
-          Tap for actions
+        <div className={cn(
+          "absolute bottom-2 left-2 z-20 pointer-events-none rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[10px] font-bold text-white/80 backdrop-blur-md",
+          isHost && "bottom-2 right-2 left-auto border-purple-400/30 bg-purple-500/20 text-purple-200 px-3 py-1.5 text-xs"
+        )}>
+          {isHost ? "Tap to gift 🎁" : "Tap for actions"}
         </div>
       )}
     </div>
@@ -734,6 +738,8 @@ interface BattleArenaProps {
   trackRevision: number;
   currentUserId?: string | null;
   isBroadcaster?: boolean;
+  timeLeft?: number;
+  battleStatus?: string;
 }
 
 const BattleArena = ({
@@ -766,6 +772,8 @@ const BattleArena = ({
   onOpenStaffActions,
   currentUserId,
   isBroadcaster = false,
+  timeLeft,
+  battleStatus,
 }: BattleArenaProps) => {
   const { user } = useAuthStore();
   const lastKnownTrackRef = useRef<Record<string, { video?: RemoteVideoTrack; audio?: RemoteAudioTrack }>>({});
@@ -1399,7 +1407,6 @@ const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribe
     const resolvedStreamId =
       p.sourceStreamId ||
       (p.team === 'challenger' ? challengerStreamId : p.team === 'opponent' ? opponentStreamId : '');
-
     if (!resolvedStreamId || !p.identity) return;
     onGift(p.identity, resolvedStreamId);
   };
@@ -1571,21 +1578,24 @@ const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribe
   };
 
 return (
-    <div className="w-full h-full min-h-0 flex overflow-hidden p-2 md:p-4 gap-2 md:gap-4">
-      {/* Mobile Layout: Horizontal split (side-by-side) */}
+    <div className={cn(
+      "w-full h-full min-h-0 overflow-hidden p-2 md:p-4 gap-2 md:gap-4",
+      isMobileViewport && isSingleHostBattle ? "flex flex-col" : "flex"
+    )}>
+      {/* Mobile Layout: vertical split for single-host battles, horizontal for multi-host */}
       {(() => {
         if (isMobileViewport) {
           if (isSingleHostBattle) {
             return (
               <>
-          {/* Challenger Side - Left half */}
+          {/* Challenger Side - Top */}
           <div className={cn(
-            'flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden rounded-3xl p-1',
+            'flex-none w-full flex flex-col gap-1 overflow-hidden rounded-3xl p-1',
             challengerGlowClass
-          )}>
-            <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} w-full h-full`}>
+          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+            <div className="grid gap-1 grid-cols-1 w-full h-full">
               {challengerSlots.map((slot, idx) => (
-                <div key={`challenger-slot-${idx}`} className="min-h-0 aspect-square">
+                <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
                   {slot.type === 'host' ? (
                     <div
                       className={cn(
@@ -1602,44 +1612,13 @@ return (
                           canTroll={canTroll && currentUserTeam === 'opponent'}
                           onTroll={() => handleTrollClick('challenger')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={challengerIsSingleHost}
+                          isSingleHost={true}
                         />
                       ) : (
-                        false ? (
-                          <BattleParticipantTile
-                            identity={challengerHostId}
-                            name={challengerHostName || 'Challenger'}
-                            isLocal={false}
-                            isMicrophoneEnabled={true}
-                            isCameraEnabled={true}
-                            metadata={{ role: 'host' }}
-                            role="host"
-                            team="challenger"
-                            sourceStreamId={challengerStreamId}
-                            side="challenger"
-                            crownInfo={challengerCrownInfo}
-                            isSuddenDeath={isSuddenDeath}
-                            canTroll={canTroll && currentUserTeam === 'opponent'}
-                            onTroll={() => handleTrollClick('challenger')}
-                            isSingleHost={challengerIsSingleHost}
-                            onTileClick={() => handleParticipantBoxClick({
-                              identity: challengerHostId,
-                              name: challengerHostName || 'Challenger',
-                              isLocal: false,
-                              isMicrophoneEnabled: false,
-                              isCameraEnabled: true,
-                              metadata: { role: 'host' },
-                              role: 'host',
-                              team: 'challenger',
-                              sourceStreamId: challengerStreamId,
-                            })}
-                          />
-                        ) : (
-                          <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
-                            <User className="text-purple-500/50" size={48} />
-                            <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
-                          </div>
-                        )
+                        <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
+                          <User className="text-purple-500/50" size={48} />
+                          <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -1668,24 +1647,45 @@ return (
             </div>
           </div>
 
-          {/* VS Divider */}
-          <div className="flex items-center justify-center w-16">
-            <div className={cn(
-              'flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-black/40',
-              vsGlowClass
-            )}>
-              <span className="text-2xl font-black uppercase tracking-[0.35em]">VS</span>
+          {/* Center: VS + Score + Timer */}
+          <div className="flex-none flex items-center justify-center gap-3 h-16 px-2">
+            {/* Challenger score */}
+            <div className="flex-1 flex flex-col items-end">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 truncate max-w-full">{challengerHostName || 'Challenger'}</span>
+              <span className="font-mono text-lg font-black leading-none text-purple-400">{challengerScore.toLocaleString()}</span>
+            </div>
+
+            {/* Center VS + Timer */}
+            <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+              <div className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/60',
+                vsGlowClass
+              )}>
+                <span className="text-xs font-black uppercase tracking-wider">VS</span>
+              </div>
+              <div className={cn(
+                "font-mono text-xs font-bold leading-none",
+                isSuddenDeath ? "text-red-500" : "text-white"
+              )}>
+                {battleStatus === 'ended' ? "ENDED" : timeLeft !== undefined ? `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}` : "3:00"}
+              </div>
+            </div>
+
+            {/* Opponent score */}
+            <div className="flex-1 flex flex-col items-start">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 truncate max-w-full">{opponentHostName || 'Opponent'}</span>
+              <span className="font-mono text-lg font-black leading-none text-emerald-400">{opponentScore.toLocaleString()}</span>
             </div>
           </div>
 
-          {/* Opponent Side - Right half */}
+          {/* Opponent Side - Bottom */}
           <div className={cn(
-            'flex-[1] min-h-0 h-full flex flex-col gap-2 overflow-hidden rounded-3xl p-1',
+            'flex-none w-full flex flex-col gap-1 overflow-hidden rounded-3xl p-1',
             opponentGlowClass
-          )}>
-            <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} w-full h-full`}>
+          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+            <div className="grid gap-1 grid-cols-1 w-full h-full">
               {opponentSlots.map((slot, idx) => (
-                <div key={`opponent-slot-${idx}`} className="min-h-0 aspect-square">
+                <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
                   {slot.type === 'host' ? (
                     <div
                       className={cn(
@@ -1702,44 +1702,13 @@ return (
                           canTroll={canTroll && currentUserTeam === 'challenger'}
                           onTroll={() => handleTrollClick('opponent')}
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={opponentIsSingleHost}
+                          isSingleHost={true}
                         />
                       ) : (
-                        false ? (
-                          <BattleParticipantTile
-                            identity={opponentHostId}
-                            name={opponentHostName || 'Opponent'}
-                            isLocal={false}
-                            isMicrophoneEnabled={true}
-                            isCameraEnabled={true}
-                            metadata={{ role: 'host' }}
-                            role="host"
-                            team="opponent"
-                            sourceStreamId={opponentStreamId}
-                            side="opponent"
-                            crownInfo={opponentCrownInfo}
-                            isSuddenDeath={isSuddenDeath}
-                            canTroll={canTroll && currentUserTeam === 'challenger'}
-                            onTroll={() => handleTrollClick('opponent')}
-                            isSingleHost={opponentIsSingleHost}
-                            onTileClick={() => handleParticipantBoxClick({
-                              identity: opponentHostId,
-                              name: opponentHostName || 'Opponent',
-                              isLocal: false,
-                              isMicrophoneEnabled: false,
-                              isCameraEnabled: true,
-                              metadata: { role: 'host' },
-                              role: 'host',
-                              team: 'opponent',
-                              sourceStreamId: opponentStreamId,
-                            })}
-                          />
-                        ) : (
-                          <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
-                            <User className="text-emerald-500/50" size={48} />
-                            <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
-                          </div>
-                        )
+                        <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
+                          <User className="text-emerald-500/50" size={48} />
+                          <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -1771,12 +1740,13 @@ return (
             );
           }
           return (
-        <div className="relative flex-1 min-h-0 h-full flex flex-col gap-3 overflow-hidden">
+        <div className="relative flex-1 min-h-0 h-full flex flex-col gap-1 overflow-hidden">
+          {/* Challenger Side - top */}
           <div className={cn(
-            'flex-1 min-h-0 rounded-3xl border-2 p-1',
+            'flex-none rounded-3xl border-2 p-1',
             challengerGlowClass
-          )}>
-            <div className="grid gap-2 grid-cols-1 h-full">
+          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+            <div className="grid gap-1 grid-cols-1 h-full">
               {challengerSlots.map((slot, idx) => (
                 <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
                   {slot.type === 'host' ? (
@@ -1796,41 +1766,10 @@ return (
                           isSingleHost={challengerIsSingleHost}
                         />
                       ) : (
-                        false ? (
-                          <BattleParticipantTile
-                            identity={challengerHostId}
-                            name={challengerHostName || 'Challenger'}
-                            isLocal={false}
-                            isMicrophoneEnabled={true}
-                            isCameraEnabled={true}
-                            metadata={{ role: 'host' }}
-                            role="host"
-                            team="challenger"
-                            sourceStreamId={challengerStreamId}
-                            side="challenger"
-                            crownInfo={challengerCrownInfo}
-                            isSuddenDeath={isSuddenDeath}
-                            canTroll={canTroll && currentUserTeam === 'opponent'}
-                            onTroll={() => handleTrollClick('challenger')}
-                            isSingleHost={challengerIsSingleHost}
-                            onTileClick={() => handleParticipantBoxClick({
-                              identity: challengerHostId,
-                              name: challengerHostName || 'Challenger',
-                              isLocal: false,
-                              isMicrophoneEnabled: false,
-                              isCameraEnabled: true,
-                              metadata: { role: 'host' },
-                              role: 'host',
-                              team: 'challenger',
-                              sourceStreamId: challengerStreamId,
-                            })}
-                          />
-                        ) : (
-                          <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
-                            <User className="text-purple-500/50" size={48} />
-                            <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
-                          </div>
-                        )
+                        <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
+                          <User className="text-purple-500/50" size={48} />
+                          <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -1857,20 +1796,43 @@ return (
             </div>
           </div>
 
-          <div className="flex items-center justify-center py-1">
-            <div className={cn(
-              'flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-black/40',
-              vsGlowClass
-            )}>
-              <span className="text-2xl font-black uppercase tracking-[0.35em]">VS</span>
+          {/* Center: VS + Timer + Score */}
+          <div className="flex-none flex items-center justify-center gap-2 h-16 px-2">
+            {/* Challenger score */}
+            <div className="flex-1 flex flex-col items-end">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 truncate max-w-full">{challengerHostName || 'Challenger'}</span>
+              <span className="font-mono text-lg font-black leading-none text-purple-400">{challengerScore.toLocaleString()}</span>
+            </div>
+
+            {/* Center VS + Timer */}
+            <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+              <div className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/60',
+                vsGlowClass
+              )}>
+                <span className="text-xs font-black uppercase tracking-wider">VS</span>
+              </div>
+              <div className={cn(
+                "font-mono text-xs font-bold leading-none",
+                isSuddenDeath ? "text-red-500" : "text-white"
+              )}>
+                {battleStatus === 'ended' ? "ENDED" : timeLeft !== undefined ? `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}` : "3:00"}
+              </div>
+            </div>
+
+            {/* Opponent score */}
+            <div className="flex-1 flex flex-col items-start">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 truncate max-w-full">{opponentHostName || 'Opponent'}</span>
+              <span className="font-mono text-lg font-black leading-none text-emerald-400">{opponentScore.toLocaleString()}</span>
             </div>
           </div>
 
+          {/* Opponent Side - bottom */}
           <div className={cn(
-            'flex-1 min-h-0 rounded-3xl border-2 p-1',
+            'flex-none rounded-3xl border-2 p-1',
             opponentGlowClass
-          )}>
-            <div className="grid gap-2 grid-cols-1 h-full">
+          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+            <div className="grid gap-1 grid-cols-1 h-full">
               {opponentSlots.map((slot, idx) => (
                 <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
                   {slot.type === 'host' ? (
@@ -1890,41 +1852,10 @@ return (
                           isSingleHost={opponentIsSingleHost}
                         />
                       ) : (
-                        false ? (
-                          <BattleParticipantTile
-                            identity={opponentHostId}
-                            name={opponentHostName || 'Opponent'}
-                            isLocal={false}
-                            isMicrophoneEnabled={true}
-                            isCameraEnabled={true}
-                            metadata={{ role: 'host' }}
-                            role="host"
-                            team="opponent"
-                            sourceStreamId={opponentStreamId}
-                            side="opponent"
-                            crownInfo={opponentCrownInfo}
-                            isSuddenDeath={isSuddenDeath}
-                            canTroll={canTroll && currentUserTeam === 'challenger'}
-                            onTroll={() => handleTrollClick('opponent')}
-                            isSingleHost={opponentIsSingleHost}
-                            onTileClick={() => handleParticipantBoxClick({
-                              identity: opponentHostId,
-                              name: opponentHostName || 'Opponent',
-                              isLocal: false,
-                              isMicrophoneEnabled: false,
-                              isCameraEnabled: true,
-                              metadata: { role: 'host' },
-                              role: 'host',
-                              team: 'opponent',
-                              sourceStreamId: opponentStreamId,
-                            })}
-                          />
-                        ) : (
-                          <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
-                            <User className="text-emerald-500/50" size={48} />
-                            <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
-                          </div>
-                        )
+                        <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
+                          <User className="text-emerald-500/50" size={48} />
+                          <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -2052,8 +1983,34 @@ return (
             </div>
           </div>
 
-          {/* VS Divider */}
-          <div className="w-px bg-gradient-to-b from-transparent via-amber-500/50 to-transparent" />
+          {/* Center: VS + Score + Timer */}
+          <div className="flex-none w-24 flex flex-col items-center justify-center gap-1.5 px-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+              {isSuddenDeath ? "SUDDEN DEATH" : "1v1 BATTLE"}
+            </span>
+            <div className={cn(
+              'flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/60',
+              vsGlowClass
+            )}>
+              <span className="text-lg font-black uppercase tracking-[0.15em]">VS</span>
+            </div>
+            <div className={cn(
+              "font-mono text-sm font-black leading-none",
+              isSuddenDeath ? "text-red-500" : "text-white/70"
+            )}>
+              {battleStatus === 'ended' ? "ENDED" : timeLeft !== undefined ? `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}` : "3:00"}
+            </div>
+            <div className="flex items-center justify-between w-full">
+              <span className="font-mono text-base font-black text-purple-400">{challengerScore.toLocaleString()}</span>
+              <span className="text-[7px] font-bold text-white/30">·</span>
+              <span className="font-mono text-base font-black text-emerald-400">{opponentScore.toLocaleString()}</span>
+            </div>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-1 w-full">
+              <span className="text-right text-[8px] font-bold uppercase tracking-wider text-purple-400 truncate">{challengerHostName || 'A'}</span>
+              <span className="text-[7px] text-white/30">·</span>
+              <span className="text-left text-[8px] font-bold uppercase tracking-wider text-emerald-400 truncate">{opponentHostName || 'B'}</span>
+            </div>
+          </div>
 
           {/* Opponent Side */}
           <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pl-1 scrollbar-hide">
@@ -2152,7 +2109,157 @@ return (
         </>
           );
         }
-        return null;
+        return (
+        /* Desktop Layout: Random battle — side by side with score/timer/VS in center */
+        <>
+          {/* Challenger Side */}
+          <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pr-1 scrollbar-hide">
+            <button
+              onClick={() => handleSideGiftClick('challenger')}
+              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
+            >
+              Gift Side A
+            </button>
+            <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} h-full`}>
+              {challengerSlots.map((slot, idx) => (
+                <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
+                  {slot.type === 'host' ? (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="challenger"
+                          crownInfo={challengerCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'opponent'}
+                          onTroll={() => handleTrollClick('challenger')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={challengerIsSingleHost}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
+                          <User className="text-purple-500/50" size={48} />
+                          <span className="text-purple-500/50 text-sm mt-2">Waiting for challenger...</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="challenger"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-purple-500/30" size={24} />
+                          <span className="text-purple-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Center: VS + Score + Timer */}
+          <div className="flex-none w-28 flex flex-col items-center justify-center gap-2 px-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-white/40">
+              {isSuddenDeath ? "SUDDEN DEATH" : `${challengerSlots.length}v${opponentSlots.length} BATTLE`}
+            </span>
+            <div className={cn(
+              'flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-black/60',
+              vsGlowClass
+            )}>
+              <span className="text-2xl font-black uppercase tracking-[0.2em]">VS</span>
+            </div>
+            <div className={cn(
+              "font-mono text-lg font-black leading-none",
+              isSuddenDeath ? "text-red-500" : "text-white"
+            )}>
+              {battleStatus === 'ended' ? "ENDED" : timeLeft !== undefined ? `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}` : "3:00"}
+            </div>
+            <div className="flex flex-col items-center gap-1 w-full">
+              <div className="flex items-center justify-between w-full">
+                <span className="font-mono text-lg font-black text-purple-400">{challengerScore.toLocaleString()}</span>
+                <span className="text-[8px] font-bold text-white/30">SCORE</span>
+                <span className="font-mono text-lg font-black text-emerald-400">{opponentScore.toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-1 w-full">
+                <span className="text-right text-[9px] font-bold uppercase tracking-wider text-purple-400 truncate">{challengerHostName || 'Player A'}</span>
+                <span className="text-[8px] text-white/30">·</span>
+                <span className="text-left text-[9px] font-bold uppercase tracking-wider text-emerald-400 truncate">{opponentHostName || 'Player B'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Opponent Side */}
+          <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pl-1 scrollbar-hide">
+            <button
+              onClick={() => handleSideGiftClick('opponent')}
+              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
+            >
+              Gift Side B
+            </button>
+            <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} h-full`}>
+              {opponentSlots.map((slot, idx) => (
+                <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
+                  {slot.type === 'host' ? (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="opponent"
+                          crownInfo={opponentCrownInfo}
+                          isSuddenDeath={isSuddenDeath}
+                          canTroll={canTroll && currentUserTeam === 'challenger'}
+                          onTroll={() => handleTrollClick('opponent')}
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          isSingleHost={opponentIsSingleHost}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
+                          <User className="text-emerald-500/50" size={48} />
+                          <span className="text-emerald-500/50 text-sm mt-2">Waiting for opponent...</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      "transform transition-transform hover:scale-[1.02] h-full",
+                      !slot.participant && "opacity-50"
+                    )}>
+                      {slot.participant ? (
+                        <BattleParticipantTile
+                          {...slot.participant}
+                          side="opponent"
+                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                        />
+                      ) : (
+                        <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
+                          <User className="text-emerald-500/30" size={24} />
+                          <span className="text-emerald-500/30 text-xs mt-1">Empty</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+        );
       })()}
 
       {<BattleAudioRenderer entries={remoteAudioEntries} />}
@@ -2867,7 +2974,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     };
   }, [battleId, effectiveUserId, resolvedBattleRole, isBroadcaster, effectiveLocalTracksKey]);
 
-  const [showMobileChat, setShowMobileChat] = useState(false);
+  const [showMobileChat, setShowMobileChat] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
   const [showMobileGiftTray, setShowMobileGiftTray] = useState(false);
 
   // Gift recipient state for battle mode
@@ -2881,7 +2991,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   const handleGiftSelect = useCallback((uid: string, sourceStreamId: string) => {
     setGiftRecipientId(uid);
     setGiftStreamId(sourceStreamId);
-  }, []);
+    if (isMobileViewport) {
+      setShowMobileGiftTray(true);
+    }
+  }, [isMobileViewport]);
 
   const myStream = useMemo(() => {
     if (!participantInfo?.team) return null;
@@ -3280,7 +3393,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     };
   }, [challengerStream?.id, opponentStream?.id]);
 
-  // Fallback poll — 15s interval (widened from 10s since consolidated realtime is more reliable)
+  // Fallback poll — 3s during active battle, 10s otherwise
   useEffect(() => {
     if (!battleId) return;
     const interval = setInterval(async () => {
@@ -3306,9 +3419,9 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
           });
         }
       } catch {}
-    }, 15000);
+    }, battle?.status === 'active' ? 3000 : 10000);
     return () => clearInterval(interval);
-  }, [battleId]);
+  }, [battleId, battle?.status]);
 
 
   // Timer Logic - 3 minutes with 10 second sudden death
@@ -3993,51 +4106,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                 }}
                 currentUserId={effectiveUserId}
                 isBroadcaster={isBroadcaster}
+                timeLeft={timeLeft}
+                battleStatus={battle?.status}
               />
 
-              {/* Global Battle Score Overlay */}
-              <div className="pointer-events-none absolute left-1/2 bottom-2 md:bottom-3 z-50 -translate-x-1/2 bg-transparent w-fit h-fit max-w-[220px] md:max-w-[240px]">
-                <div className={cn(
-                  "w-fit max-w-[220px] md:max-w-[240px] flex flex-col items-center gap-1 rounded-xl border px-3 py-2 bg-neutral-950/80 backdrop-blur-md shadow-[0_8px_20px_rgba(0,0,0,0.28)]",
-                  isSuddenDeath
-                    ? "border-red-500/45"
-                    : "border-white/10"
-                )}>
-                  <span className={cn(
-                    "text-sm font-black uppercase tracking-[0.14em] leading-none",
-                    isSuddenDeath ? "text-red-400" : "text-amber-500"
-                  )}>
-                    {isSuddenDeath ? "SUDDEN DEATH" : `${challengerSlotCount}v${opponentSlotCount} BATTLE`}
-                  </span>
-
-                  <div className={cn(
-                    "font-mono text-lg md:text-xl font-black leading-none",
-                    isSuddenDeath ? "text-red-500" : "text-white"
-                  )}>
-                    {battle?.status === 'ended' ? "FINISHED" : battle?.started_at ? formatTime(timeLeft) : "SYNCING"}
-                  </div>
-
-                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2">
-                    <span className="text-right text-xs font-bold uppercase tracking-[0.1em] text-purple-400 truncate max-w-[82px] md:max-w-[96px]">
-                      {challengerStream.title || 'Player A'}
-                    </span>
-                    <span className="text-xs font-bold text-white/45">VS</span>
-                    <span className="text-left text-xs font-bold uppercase tracking-[0.1em] text-emerald-400 truncate max-w-[82px] md:max-w-[96px]">
-                      {opponentStream.title || 'Player B'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2">
-                    <span className="text-right font-mono text-lg md:text-xl font-black leading-none text-purple-400">
-                      {battle?.score_challenger?.toLocaleString() || 0}
-                    </span>
-                    <span className="text-[10px] font-semibold tracking-wide text-white/30">SCORE</span>
-                    <span className="text-left font-mono text-lg md:text-xl font-black leading-none text-emerald-400">
-                      {battle?.score_opponent?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -4206,6 +4278,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         {/* Gift Tray */}
         {giftRecipientId && !isMobileViewport && (
           <GiftTray 
+            key={giftRecipientId}
             onClose={() => {
               setGiftRecipientId(null);
               setGiftStreamId(null);
@@ -4219,15 +4292,6 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         {/* Mobile Bottom Action Bar */}
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-md border-t border-white/10" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <div className="flex items-center justify-around px-4 py-3">
-            {/* Gift Button */}
-            <button
-              onClick={() => setShowMobileGiftTray(true)}
-              className="flex flex-col items-center gap-1 text-white hover:text-purple-400 transition-colors"
-            >
-              <Gem size={20} />
-              <span className="text-xs font-medium">Gift</span>
-            </button>
-
             {/* Chat Button */}
             <button
               onClick={() => setShowMobileChat(true)}
@@ -4259,15 +4323,19 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
           </div>
         </div>
 
-        {/* Mobile Gift Tray Overlay */}
+        {/* Mobile Gift Tray Overlay - only shown when a broadcaster box is clicked */}
         <AnimatePresence>
-          {showMobileGiftTray && (
+          {showMobileGiftTray && giftRecipientId && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="md:hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md"
-              onClick={() => setShowMobileGiftTray(false)}
+              onClick={() => {
+                setShowMobileGiftTray(false);
+                setGiftRecipientId(null);
+                setGiftStreamId(null);
+              }}
             >
               <motion.div
                 initial={{ y: '100%' }}
@@ -4279,63 +4347,28 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-white">Send Gift</h3>
                   <button
-                    onClick={() => setShowMobileGiftTray(false)}
+                    onClick={() => {
+                      setShowMobileGiftTray(false);
+                      setGiftRecipientId(null);
+                      setGiftStreamId(null);
+                    }}
                     className="text-zinc-400 hover:text-white"
                   >
                     ✕
                   </button>
                 </div>
 
-                {/* Quick gift options for mobile */}
-                <div className="grid grid-cols-3 gap-3">
-                  {/* Challenger Side */}
-                  <button
-                    onClick={() => {
-                      handleGiftSelect(challengerStream.user_id, challengerStream.id);
-                      setShowMobileGiftTray(false);
-                    }}
-                    className="flex flex-col items-center gap-2 p-3 bg-purple-500/20 border border-purple-500/50 rounded-xl hover:bg-purple-500/30 transition-colors"
-                  >
-                    <User size={24} className="text-purple-400" />
-                    <span className="text-xs font-medium text-white text-center">{challengerStream.title}</span>
-                  </button>
-
-                  {/* Opponent Side */}
-                  <button
-                    onClick={() => {
-                      handleGiftSelect(opponentStream.user_id, opponentStream.id);
-                      setShowMobileGiftTray(false);
-                    }}
-                    className="flex flex-col items-center gap-2 p-3 bg-emerald-500/20 border border-emerald-500/50 rounded-xl hover:bg-emerald-500/30 transition-colors"
-                  >
-                    <User size={24} className="text-emerald-400" />
-                    <span className="text-xs font-medium text-white text-center">{opponentStream.title}</span>
-                  </button>
-
-                  {/* Close */}
-                  <button
-                    onClick={() => setShowMobileGiftTray(false)}
-                    className="flex flex-col items-center gap-2 p-3 bg-zinc-500/20 border border-zinc-500/50 rounded-xl hover:bg-zinc-500/30 transition-colors"
-                  >
-                    <X size={24} className="text-zinc-400" />
-                    <span className="text-xs font-medium text-white">Cancel</span>
-                  </button>
-                </div>
-
-                {/* Full GiftTray for selected recipient */}
-                {giftRecipientId && (
-                  <div className="mt-6">
-                    <GiftTray
-                      onClose={() => {
-                        setGiftRecipientId(null);
-                        setGiftStreamId(null);
-                      }}
-                      recipientId={giftRecipientId}
-                      streamId={giftStreamId || currentStreamId}
-                      battleId={battleId}
-                    />
-                  </div>
-                )}
+                <GiftTray
+                  key={giftRecipientId}
+                  onClose={() => {
+                    setGiftRecipientId(null);
+                    setGiftStreamId(null);
+                    setShowMobileGiftTray(false);
+                  }}
+                  recipientId={giftRecipientId}
+                  streamId={giftStreamId || currentStreamId}
+                  battleId={battleId}
+                />
               </motion.div>
             </motion.div>
           )}

@@ -17,3 +17,23 @@ Disallow: /live/command-center/
 Disallow: /live/overlay/
 Disallow: /broadcast/setup
 Disallow: /broadcast/summary/
+
+# Disallow admin pages
+Disallow: /admin/
+Disallow: /secretary/
+Disallow: /ceo-assistant-dashboard
+Disallow: /noah-assistant-dashboard
+
+# Disallow internal tools
+Disallow: /dev/
+Disallow: /debug/
+
+# Crawl-delay for aggressive bots
+User-agent: AhrefsBot
+Crawl-delay: 10
+
+User-agent: SemrushBot
+Crawl-delay: 10
+
+User-agent: MJ12bot
+Crawl-delay: 10

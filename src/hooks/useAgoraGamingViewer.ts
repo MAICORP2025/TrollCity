@@ -22,7 +22,8 @@ export interface AgoraGamingViewerState {
   hasAudio: boolean;
   remoteVideoTrack: IRemoteVideoTrack | null;
   remoteCameraTrack: IRemoteVideoTrack | null;
-  remoteAudioTrack: IRemoteAudioTrack | null;
+  remoteAudioTrack: IRemoteAudioTrack | null;          // Track C: Microphone audio
+  remoteScreenAudioTrack: IRemoteAudioTrack | null;  // Track D: Screen share / game audio
   error: string | null;
 }
 
@@ -39,6 +40,7 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
   const [remoteVideoTrack, setRemoteVideoTrack] = useState<IRemoteVideoTrack | null>(null);
   const [remoteCameraTrack, setRemoteCameraTrack] = useState<IRemoteVideoTrack | null>(null);
   const [remoteAudioTrack, setRemoteAudioTrack] = useState<IRemoteAudioTrack | null>(null);
+  const [remoteScreenAudioTrack, setRemoteScreenAudioTrack] = useState<IRemoteAudioTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const clientRef = useRef<IAgoraRTCClient | null>(null);
@@ -47,6 +49,9 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
   const mountedRef = useRef(true);
   const screenUidRef = useRef<UID | null>(null);
   const cameraUidRef = useRef<UID | null>(null);
+  const audioSubscribedRef = useRef(false);
+  const pendingFirstVideoTrack = useRef<{ uid: UID; track: IRemoteVideoTrack } | null>(null);
+  const firstVideoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getAgoraAppId = () => import.meta.env.VITE_AGORA_APP_ID;
 
@@ -106,6 +111,11 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       // Handle remote user publishing (broadcaster shares screen + camera)
       client.on('user-published', async (user, mediaType) => {
         debug('Remote user published:', user.uid, mediaType);
+        // Skip if we've already left or are leaving
+        if (!joinedRef.current) {
+          debug('Skipping subscribe — not joined');
+          return;
+        }
         try {
           await client.subscribe(user, mediaType);
           debug('Subscribed to', mediaType, 'from user', user.uid);
@@ -117,25 +127,67 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
               return;
             }
 
-            // First video track = broadcaster's screen share (primary client).
-            // Second video track = broadcaster's camera (secondary client with -camera UID).
-            if (!screenUidRef.current) {
+            // The broadcaster publishes screen share on the primary Agora client
+            // and camera on a secondary client (different UID). Due to network
+            // timing, either track can arrive first. We use a short delay to
+            // determine which is which: if a second track arrives within the
+            // window, the first is camera (overlay) and second is screen (main).
+            // If only one track arrives, it's the screen share (main).
+            if (!screenUidRef.current && !cameraUidRef.current) {
+              // First video track — hold it pending to see if a second arrives
+              pendingFirstVideoTrack.current = { uid: user.uid, track: videoTrack };
+              firstVideoTimerRef.current = setTimeout(() => {
+                if (!mountedRef.current) return;
+                // No second track arrived — this is the screen share (main)
+                if (pendingFirstVideoTrack.current) {
+                  screenUidRef.current = pendingFirstVideoTrack.current.uid;
+                  setRemoteVideoTrack(pendingFirstVideoTrack.current.track);
+                  setHasVideo(true);
+                  debug('Screen share video track set (sole track) from uid:', pendingFirstVideoTrack.current.uid);
+                  pendingFirstVideoTrack.current = null;
+                }
+              }, 800);
+              debug('First video track held pending from uid:', user.uid);
+            } else if (pendingFirstVideoTrack.current && !screenUidRef.current && !cameraUidRef.current) {
+              // Second video track arrived within the window
+              // First = camera (overlay), Second = screen share (main)
+              if (firstVideoTimerRef.current) {
+                clearTimeout(firstVideoTimerRef.current);
+                firstVideoTimerRef.current = null;
+              }
+              cameraUidRef.current = pendingFirstVideoTrack.current.uid;
+              setRemoteCameraTrack(pendingFirstVideoTrack.current.track);
+              debug('Camera video track set (first arrived) from uid:', pendingFirstVideoTrack.current.uid);
+
+              screenUidRef.current = user.uid;
+              setRemoteVideoTrack(videoTrack);
+              setHasVideo(true);
+              debug('Screen share video track set (second arrived) from uid:', user.uid);
+              pendingFirstVideoTrack.current = null;
+            } else if (screenUidRef.current && !cameraUidRef.current && user.uid !== screenUidRef.current) {
+              // Screen already assigned, this is the camera
+              cameraUidRef.current = user.uid;
+              setRemoteCameraTrack(videoTrack);
+              debug('Camera video track set from uid:', user.uid);
+            } else if (cameraUidRef.current && !screenUidRef.current && user.uid !== cameraUidRef.current) {
+              // Camera already assigned, this is the screen share
               screenUidRef.current = user.uid;
               setRemoteVideoTrack(videoTrack);
               setHasVideo(true);
               debug('Screen share video track set from uid:', user.uid);
-            } else if (!cameraUidRef.current) {
-              cameraUidRef.current = user.uid;
-              setRemoteCameraTrack(videoTrack);
-              debug('Camera video track set from uid:', user.uid);
             } else {
-              // If we already have both, replace whichever matches this uid
+              // Replace existing track by UID
               if (user.uid === screenUidRef.current) {
                 setRemoteVideoTrack(videoTrack);
                 debug('Screen share video track updated');
               } else if (user.uid === cameraUidRef.current) {
                 setRemoteCameraTrack(videoTrack);
                 debug('Camera video track updated');
+              } else {
+                // Third+ video track — treat as camera replacement
+                cameraUidRef.current = user.uid;
+                setRemoteCameraTrack(videoTrack);
+                debug('Additional video track set as camera from uid:', user.uid);
               }
             }
           }
@@ -143,10 +195,29 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
           if (mediaType === 'audio') {
             const audioTrack = user.audioTrack;
             if (audioTrack && mountedRef.current) {
-              setRemoteAudioTrack(audioTrack);
-              setHasAudio(true);
-              audioTrack.play().catch(e => debug('Audio play failed:', e));
-              debug('Audio track set');
+              // The broadcaster may publish TWO audio tracks on the same UID:
+              // 1. Microphone audio (Track C)
+              // 2. Screen share / game audio (Track D)
+              // First audio track = mic, second = screen audio
+              if (!audioSubscribedRef.current) {
+                // First audio track — microphone
+                audioSubscribedRef.current = true;
+                setRemoteAudioTrack(audioTrack);
+                setHasAudio(true);
+                try {
+                  const at = audioTrack as any;
+                  if (at.play) at.play();
+                } catch (e) { debug('Audio play failed:', e); }
+                debug('Mic audio track set from uid:', user.uid);
+              } else {
+                // Second audio track — screen share / game audio
+                setRemoteScreenAudioTrack(audioTrack);
+                try {
+                  const at = audioTrack as any;
+                  if (at.play) at.play();
+                } catch (e) { debug('Screen audio play failed:', e); }
+                debug('Screen share audio track set from uid:', user.uid);
+              }
             }
           }
         } catch (err) {
@@ -167,8 +238,11 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
           }
         }
         if (mediaType === 'audio' && mountedRef.current) {
+          // Clear both audio tracks — the broadcaster publishes mic + screen audio
           setRemoteAudioTrack(null);
+          setRemoteScreenAudioTrack(null);
           setHasAudio(false);
+          audioSubscribedRef.current = false;
         }
       });
 
@@ -188,11 +262,13 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
             setRemoteCameraTrack(null);
             cameraUidRef.current = null;
           }
-          // If all remote users left, clear audio too
+          // If all remote users left, clear all audio tracks too
           const hasOtherUsers = screenUidRef.current !== null || cameraUidRef.current !== null;
           if (!hasOtherUsers) {
             setRemoteAudioTrack(null);
+            setRemoteScreenAudioTrack(null);
             setHasAudio(false);
+            audioSubscribedRef.current = false;
           }
         }
       });
@@ -200,7 +276,7 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       client.on('connection-state-change', (current, previous) => {
         debug('Connection state change:', current, previous);
         if (!mountedRef.current) return;
-        if (current === 'FAILED' || current === 'DISCONNECTED') {
+        if (current === 'FAILED' as any || current === 'DISCONNECTED' as any) {
           setError('Agora connection failed');
           setIsConnecting(false);
           joiningRef.current = false;
@@ -242,6 +318,9 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
   const leave = useCallback(async () => {
     debug('Leaving Agora viewer channel...');
 
+    // Always reset joining ref so a future join can proceed
+    joiningRef.current = false;
+
     try {
       if (clientRef.current && joinedRef.current) {
         await clientRef.current.leave();
@@ -251,16 +330,26 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       console.warn('[AgoraGamingViewer] Leave error:', err);
     }
 
+    // Also reset joinedRef in case we were mid-join
+    joinedRef.current = false;
+
     if (mountedRef.current) {
       setIsConnected(false);
       setIsConnecting(false);
       setRemoteVideoTrack(null);
       setRemoteCameraTrack(null);
       setRemoteAudioTrack(null);
+      setRemoteScreenAudioTrack(null);
       setHasVideo(false);
       setHasAudio(false);
       screenUidRef.current = null;
       cameraUidRef.current = null;
+      audioSubscribedRef.current = false;
+      pendingFirstVideoTrack.current = null;
+      if (firstVideoTimerRef.current) {
+        clearTimeout(firstVideoTimerRef.current);
+        firstVideoTimerRef.current = null;
+      }
     }
   }, []);
 
@@ -268,6 +357,10 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (firstVideoTimerRef.current) {
+        clearTimeout(firstVideoTimerRef.current);
+        firstVideoTimerRef.current = null;
+      }
       if (clientRef.current && joinedRef.current) {
         clientRef.current.leave().catch(() => {});
       }
@@ -282,6 +375,7 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
     remoteVideoTrack,
     remoteCameraTrack,
     remoteAudioTrack,
+    remoteScreenAudioTrack,
     error,
     join,
     leave,

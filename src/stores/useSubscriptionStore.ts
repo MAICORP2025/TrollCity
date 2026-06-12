@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
-import { useAuthStore } from './store';
+import { useAuthStore } from '../lib/store';
 
 export interface SubscriptionTier {
   id: string;

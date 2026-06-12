@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import useSEO from '@/hooks/useSEO';
 import { startCourtSession } from '../lib/courtSessions'
 import { trollCityTheme } from '../styles/trollCityTheme'
 import FileLawsuitModal from '../components/FileLawsuitModal'
@@ -68,6 +69,16 @@ const CASE_TYPES = [
 export default function TrollCourt() {
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
+
+  useSEO({
+    title: 'Troll Court | Community Court & Social Justice | Troll City',
+    description: 'Troll City Court is a community-driven social justice system. File cases, vote on rulings, and participate in virtual court proceedings. A unique online voting and justice experience.',
+    keywords: [
+      'community court', 'social justice game', 'virtual court', 'online voting system',
+      'Troll Court', 'court system', 'community justice', 'vote on cases',
+      'online court', 'social court', 'Troll City court'
+    ]
+  });
 
   const [courtSession, setCourtSession] = useState<any>(null)
   const [isStartingSession, setIsStartingSession] = useState(false)

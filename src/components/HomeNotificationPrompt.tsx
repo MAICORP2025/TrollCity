@@ -3,16 +3,20 @@ import { Bell, X, Download, Share2 } from 'lucide-react';
 import { useAuthStore } from '../lib/store';
 import { doesUserProfileExist, supabase } from '../lib/supabase';
 import { isIos } from '../pwa/install';
+import { useInstallPrompt } from '../pwa/useInstallPrompt';
+import { getInstallStatus } from '../pwa/install';
 
 const HomeNotificationPrompt: React.FC = () => {
   const { user } = useAuthStore();
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
+  const { canPromptInstall, promptInstall, isInstalling } = useInstallPrompt();
 
   const isNotificationSupported = typeof Notification !== 'undefined' && typeof Notification.requestPermission === 'function';
   const isServiceWorkerSupported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+
+  const installStatus = getInstallStatus(canPromptInstall);
 
   const safeSessionStorageGet = (key: string) => {
     try {
@@ -44,16 +48,6 @@ const HomeNotificationPrompt: React.FC = () => {
     let timerId: number | undefined;
     let cancelled = false;
 
-    const handleBeforeInstallPrompt = (e: Event) => {
-      const event = e as any;
-      if (typeof event.preventDefault === 'function') {
-        event.preventDefault();
-      }
-      setDeferredPrompt(event);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
     const init = async () => {
       let subscribed = false;
       try {
@@ -74,7 +68,6 @@ const HomeNotificationPrompt: React.FC = () => {
     return () => {
       cancelled = true;
       if (timerId !== undefined) window.clearTimeout(timerId);
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, [user, isNotificationSupported]);
 
@@ -198,15 +191,25 @@ const HomeNotificationPrompt: React.FC = () => {
   };
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      alert('Install in progress! Add Troll City to your home screen for quick access.');
+    // Use the proper PWA install prompt system
+    if (canPromptInstall) {
+      const outcome = await promptInstall();
+      if (outcome === 'accepted') {
+        alert('Install in progress! Add Troll City to your home screen for quick access.');
+      }
+      setShow(false);
+      safeSessionStorageSet('homeNotificationPromptShown', 'true');
+    } else if (isIOS()) {
+      // iOS: show manual instructions
+      alert('On iOS, use Safari\'s Share button → "Add to Home Screen" to install Troll City.');
+      setShow(false);
+      safeSessionStorageSet('homeNotificationPromptShown', 'true');
+    } else {
+      // Desktop or unsupported — try browser menu
+      alert('Look for the install icon ⊡ in Chrome/Edge menu (three dots) to install Troll City.');
+      setShow(false);
+      safeSessionStorageSet('homeNotificationPromptShown', 'true');
     }
-    setDeferredPrompt(null);
-    setShow(false);
-    safeSessionStorageSet('homeNotificationPromptShown', 'true');
   };
 
   const handleDismiss = () => {
@@ -247,7 +250,26 @@ const HomeNotificationPrompt: React.FC = () => {
             {loading ? 'Enabling...' : 'Enable Notifications'}
           </button>
 
-          {isIOS ? (
+          {/* Android / Chrome: Show native install prompt button */}
+          {installStatus === 'prompt-available' ? (
+            <button
+              onClick={handleInstall}
+              disabled={isInstalling}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-semibold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-purple-500/20"
+            >
+              {isInstalling ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Installing...
+                </>
+              ) : (
+                <>
+                  <Download className="w-5 h-5" />
+                  Install Troll City App
+                </>
+              )}
+            </button>
+          ) : installStatus === 'ios-manual' || (isIOS && installStatus !== 'prompt-available') ? (
             <div className="bg-slate-800/50 border border-slate-600 rounded-xl p-4">
               <div className="flex items-center gap-3 mb-2">
                 <Share2 className="w-5 h-5 text-cyan-400" />
@@ -274,22 +296,14 @@ const HomeNotificationPrompt: React.FC = () => {
                 </div>
               </div>
               <button
-                onClick={() => alert('Use Safari share, then choose Add to Home Screen to save Troll City to your home screen.')}
+                onClick={handleInstall}
                 className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
               >
                 <Share2 className="w-5 h-5" />
                 Show iOS Install Instructions
               </button>
             </div>
-          ) : deferredPrompt && (
-            <button
-              onClick={handleInstall}
-              className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
-            >
-              <Download className="w-5 h-5" />
-              Install Troll City App
-            </button>
-          )}
+          ) : null}
         </div>
 
         <p className="text-xs text-slate-500 text-center mt-4">

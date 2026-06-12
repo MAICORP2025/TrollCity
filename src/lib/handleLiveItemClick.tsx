@@ -200,7 +200,6 @@ function TopPrideHero({
             <span className="ml-auto h-3 w-3 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)]" />
           </div>
           <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
-            <p className="text-sm font-bold text-slate-100">Featured Pride stream slot</p>
             <p className="mt-1 text-xs text-slate-300">Gaming • Battles • Creator moments</p>
           </div>
         </button>
@@ -296,7 +295,6 @@ function PrideChallengesCard({ onOpenChallenges }: { onOpenChallenges: () => voi
     { week: 1, title: 'Show Your Pride', description: 'Update your profile frame to a Pride theme', xp: '500 XP', color: 'pink' },
     { week: 1, title: 'Rainbow Greeting', description: 'Send 10 positive chat messages today', xp: '750 XP', color: 'red' },
     { week: 2, title: 'Ally Actions', description: 'Support 5 different users with gifts', xp: '1,000 XP', color: 'cyan' },
-    { week: 2, title: 'Pride Stream', description: 'Go live with a Pride-themed broadcast', xp: '1,500 XP', color: 'blue' },
     { week: 3, title: 'Pride Champion', description: 'Win a battle with a Pride theme equipped', xp: '1,200 XP', color: 'orange' },
     { week: 4, title: 'Pride Legend', description: 'Reach top 10 on any leaderboard', xp: '2,000 XP', color: 'purple' },
   ]

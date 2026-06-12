@@ -114,6 +114,13 @@ export const RARITY_GLOW: Record<GiftRarity, number> = {
 
 // Animation durations by type (ms)
 export const ANIMATION_DURATIONS: Record<AnimationType, number> = {
+  emoji: 2000,
+  particle: 3000,
+  video: 4500,
+  fullscreen_video: 6000,
+  screen_takeover: 7000,
+  shake: 2500,
+  portal: 4000,
   float: 3000,
   spin: 4000,
   burst: 5000,

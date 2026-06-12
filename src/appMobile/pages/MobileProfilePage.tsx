@@ -1,30 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { NavLink } from "react-router-dom";
 import {
   ArrowRight,
   BadgeCheck,
-  Bell,
   Coins,
   Crown,
   Edit3,
-  Flame,
   Gift,
-  Heart,
   MessageCircle,
-  Radio,
   Settings,
-  Share2,
-  Shield,
-  Sparkles,
-  Star,
-  UserPlus,
-  Users,
   Wallet,
   Zap,
 } from "lucide-react";
-import MobilePageShell from "../MobilePageShell";
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeMobileRole, type MobileUserRole } from "../mobileRoutes";
+import { normalizeMobileRole, type MobileUserRole } from "../mobileRoutes.tsx";
 
 type MobileProfile = {
   id: string | null;
@@ -67,72 +56,180 @@ const DEFAULT_PROFILE: MobileProfile = {
 };
 
 const badges = [
-  {
-    label: "City Member",
-    icon: BadgeCheck,
-  },
-  {
-    label: "Gift Ready",
-    icon: Gift,
-  },
-  {
-    label: "Hype Builder",
-    icon: Zap,
-  },
-  {
-    label: "Level Climber",
-    icon: Crown,
-  },
+  { label: "City Member", icon: BadgeCheck },
+  { label: "Gift Ready", icon: Gift },
+  { label: "Hype Builder", icon: Zap },
+  { label: "Level Climber", icon: Crown },
 ];
 
 const quickActions = [
-  {
-    label: "Edit Profile",
-    path: "/profile/edit",
-    icon: Edit3,
-  },
-  {
-    label: "Wallet",
-    path: "/wallet",
-    icon: Wallet,
-  },
-  {
-    label: "Messages",
-    path: "/messages",
-    icon: MessageCircle,
-  },
-  {
-    label: "Settings",
-    path: "/settings",
-    icon: Settings,
-  },
+  { label: "Edit Profile", path: "/profile/edit", icon: Edit3 },
+  { label: "Wallet", path: "/wallet", icon: Wallet },
+  { label: "Messages", path: "/messages", icon: MessageCircle },
+  { label: "Settings", path: "/settings", icon: Settings },
 ];
 
 function numberFormat(value: number): string {
   return new Intl.NumberFormat("en-US").format(Number(value || 0));
 }
 
-function getNumberValue(source: any, keys: string[], fallback = 0): number {
+function getNumberValue(source: unknown, keys: string[], fallback = 0): number {
   for (const key of keys) {
-    const value = source?.[key];
-
+    const value = (source as Record<string, unknown>)?.[key];
     if (value !== null && value !== undefined && value !== "") {
       const numeric = Number(value);
       if (!Number.isNaN(numeric)) return numeric;
     }
   }
-
   return fallback;
 }
 
-function getStringValue(source: any, keys: string[], fallback = ""): string {
+function getStringValue(source: unknown, keys: string[], fallback = ""): string {
   for (const key of keys) {
-    const value = source?.[key];
-
-    if (typeof value === "string && value.trim()) {
+    const value = (source as Record<string, unknown>)?.[key];
+    if (typeof value === "string" && value.trim()) {
       return value.trim();
     }
   }
-
   return fallback;
+}
+
+export default function MobileProfilePage() {
+  const [profile, setProfile] = useState<MobileProfile>(DEFAULT_PROFILE);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfile() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          if (!cancelled) {
+            setProfile(DEFAULT_PROFILE);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const { data } = await supabase
+          .from("user_profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (cancelled) return;
+
+        if (data) {
+          setProfile({
+            id: data.id,
+            username: getStringValue(data, ["username"], "Unknown"),
+            displayName: getStringValue(data, ["display_name", "displayName"], "Unknown"),
+            avatarUrl: getStringValue(data, ["avatar_url", "avatarUrl"], "") || null,
+            bannerUrl: getStringValue(data, ["banner_url", "bannerUrl"], "") || null,
+            role: normalizeMobileRole(data.role || data.troll_role),
+            bio: getStringValue(data, ["bio"], ""),
+            level: getNumberValue(data, ["level"], 1),
+            xp: getNumberValue(data, ["xp"], 0),
+            xpToNextLevel: getNumberValue(data, ["xp_to_next_level", "xpToNextLevel"], 100),
+            trollCoins: getNumberValue(data, ["troll_coins", "trollCoins"], 0),
+            hypeCoins: getNumberValue(data, ["hype_coins", "hypeCoins"], 0),
+            trollmonds: getNumberValue(data, ["trollmonds"], 0),
+            followers: getNumberValue(data, ["followers_count", "followers"], 0),
+            following: getNumberValue(data, ["following_count", "following"], 0),
+            likes: getNumberValue(data, ["likes_count", "likes"], 0),
+            broadcasts: getNumberValue(data, ["broadcasts_count", "broadcasts"], 0),
+          });
+        }
+      } catch {
+        if (!cancelled) setProfile(DEFAULT_PROFILE);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadProfile();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-sm text-white/50">
+        Loading profile...
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-lg space-y-5 px-4 pb-24 pt-4">
+      <div className="relative overflow-hidden rounded-2xl border border-white/10">
+        {profile.bannerUrl ? (
+          <div className="h-28 bg-cover bg-center" style={{ backgroundImage: `url(${profile.bannerUrl})` }} />
+        ) : (
+          <div className="h-28 bg-gradient-to-br from-purple-600/40 to-cyan-500/20" />
+        )}
+        <div className="absolute -bottom-8 left-4">
+          {profile.avatarUrl ? (
+            <img src={profile.avatarUrl} alt={profile.displayName} className="h-16 w-16 rounded-xl border-2 border-black/60 object-cover" />
+          ) : (
+            <div className="grid h-16 w-16 place-items-center rounded-xl border-2 border-black/60 bg-purple-500/20 text-lg font-black text-white">
+              {profile.displayName.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="pt-10">
+        <h1 className="text-lg font-black text-white">{profile.displayName}</h1>
+        <p className="text-xs text-white/40">@{profile.username}</p>
+        {profile.bio && <p className="mt-2 text-sm text-white/60">{profile.bio}</p>}
+      </div>
+
+      <div className="grid grid-cols-4 gap-2">
+        {[
+          { label: "Level", value: profile.level },
+          { label: "Coins", value: numberFormat(profile.trollCoins) },
+          { label: "Followers", value: numberFormat(profile.followers) },
+          { label: "Following", value: numberFormat(profile.following) },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-center">
+            <p className="text-sm font-bold text-white">{stat.value}</p>
+            <p className="text-[10px] text-white/40">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-xs font-bold uppercase text-white/40">Badges</h2>
+        <div className="flex flex-wrap gap-2">
+          {badges.map((badge) => {
+            const Icon = badge.icon;
+            return (
+              <span key={badge.label} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold text-white/70">
+                <Icon className="h-3.5 w-3.5" />
+                {badge.label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-xs font-bold uppercase text-white/40">Quick Actions</h2>
+        <div className="grid grid-cols-2 gap-2">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <NavLink key={action.label} to={action.path} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/80 hover:bg-white/[0.06]">
+                <Icon className="h-4 w-4 text-white/50" />
+                {action.label}
+                <ArrowRight className="ml-auto h-3.5 w-3.5 text-white/30" />
+              </NavLink>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }

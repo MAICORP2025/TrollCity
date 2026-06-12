@@ -1,5 +1,5 @@
 // Types for Enhanced Cashout System
-import { UserProfile } from './supabase';
+import { UserProfile } from '../lib/supabase';
 
 export type PayoutMethod = 'cash_app' | 'paypal' | 'venmo';
 
@@ -106,7 +106,7 @@ export interface CashoutDetails {
 
 export interface EligibleCoinsResult {
   total_eligible_coins: number;
-  gift_summary: JSONB;
+  gift_summary: JSON;
   breakdown: GiftBreakdown[];
 }
 

@@ -29,6 +29,21 @@ const APP_VERSION =
 const BUG_CENTER_DEDUPE_WINDOW_MS = 30_000
 const reportedBugHashes = new Map<string, number>()
 
+// Circuit breaker: when Supabase is down (522 errors), stop reporting bugs
+// to avoid infinite loops (failed report -> reportBug -> failed report -> ...)
+let bugReportCircuitBreakerTripped = false
+let bugReportCircuitBreakerResetAt = 0
+const CIRCUIT_BREAKER_COOLDOWN_MS = 120_000 // 2 minutes
+
+const isBugReportCircuitBreakerTripped = () => {
+  if (!bugReportCircuitBreakerTripped) return false
+  if (Date.now() > bugReportCircuitBreakerResetAt) {
+    bugReportCircuitBreakerTripped = false
+    return false
+  }
+  return true
+}
+
 const getBugCenterErrorKey = (errorLike: unknown) => {
   const message = String((errorLike as any)?.message || errorLike || '').trim()
   const stack = String((errorLike as any)?.stack || '').trim()
@@ -165,6 +180,7 @@ const isExpectedDevNoise = (errorLike: unknown) => {
        return
      }
      if (!shouldReportBugCenterError(error)) return
+     if (isBugReportCircuitBreakerTripped()) return
      reportBug(error, {
        source: 'frontend',
        severity: 'high',
@@ -180,6 +196,7 @@ const isExpectedDevNoise = (errorLike: unknown) => {
        return
      }
      if (!shouldReportBugCenterError(error)) return
+     if (isBugReportCircuitBreakerTripped()) return
      reportBug(error, {
        source: 'frontend',
        severity: 'high',
@@ -232,6 +249,14 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
           if (shouldIgnoreNetworkErrorForBugCenter(urlString)) {
             return response;
           }
+          // Detect Supabase/Cloudflare 522 (connection timeout) and trip circuit breaker
+          // to prevent infinite bug-report loops
+          if (response.status === 522) {
+            bugReportCircuitBreakerTripped = true
+            bugReportCircuitBreakerResetAt = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS
+            console.warn('[BugCenter] Circuit breaker tripped: Supabase returning 522. Bug reporting paused for 2 min.')
+            return response
+          }
           // Handle HTTP 0 (network/CORS/insecure context/aborted) - classify appropriately
           if (response.status === 0) {
             const errorKey = `http0_${urlString}`;
@@ -258,7 +283,7 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
                   isSecureContext: window.isSecureContext,
                   origin: window.location.origin,
                 });
-              } else {
+              } else if (!isBugReportCircuitBreakerTripped()) {
                 reportBug(new Error(`HTTP 0 - Network/CORS error: ${urlString}`), networkContext);
               }
               return response;
@@ -323,7 +348,10 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
           enhancedError.name = error.name;
           enhancedError.stack = error.stack;
           
-          reportBug(enhancedError, errorContext);
+          // Don't report if circuit breaker is tripped (Supabase is down)
+          if (!isBugReportCircuitBreakerTripped()) {
+            reportBug(enhancedError, errorContext);
+          }
         }
         throw error;
       }

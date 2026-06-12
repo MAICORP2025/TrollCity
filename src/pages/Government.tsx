@@ -26,6 +26,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useGovernmentSystem } from '@/hooks/useGovernmentSystem'
+import useSEO from '@/hooks/useSEO';
 
 import LawsTab from '@/components/government/LawsTab'
 import VotingTab from '@/components/government/VotingTab'
@@ -177,6 +178,17 @@ export default function GovernmentPage() {
    const [searchParams, setSearchParams] = useSearchParams()
    const [sidebarOpen, setSidebarOpen] = useState(false)
    const [votingLawId, setVotingLawId] = useState<string | null>(null)
+
+  useSEO({
+    title: 'Government | Troll City - Digital Democracy & Community Leadership',
+    description: 'Participate in Troll City government. Vote for leaders, run for office, debate policies, and shape the future of our virtual nation. Digital democracy at its finest.',
+    keywords: [
+      'online government', 'virtual government', 'community government',
+      'digital leadership', 'online elections', 'virtual president',
+      'community leadership', 'digital democracy', 'vote online',
+      'Troll City government', 'civic engagement', 'platform governance'
+    ]
+  });
 
   const {
     laws,

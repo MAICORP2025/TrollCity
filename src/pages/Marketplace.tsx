@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/utils'
 import { useAuthStore } from '../lib/store'
+import useSEO from '@/hooks/useSEO';
 import BuyerOrders from './BuyerOrders'
 import MarketplaceSellerOrders from './MarketplaceSellerOrders'
 
@@ -31,6 +32,16 @@ const secondary =
 export default function Marketplace() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
+
+  useSEO({
+    title: 'Marketplace | Troll City - Buy & Sell Online',
+    description: 'Browse the Troll City marketplace. Buy and sell virtual goods, items, and services from creators and community members. Social marketplace for the streaming community.',
+    keywords: [
+      'online marketplace', 'buy and sell online', 'community marketplace',
+      'social marketplace', 'virtual goods', 'marketplace', 'Troll City shop',
+      'sell online', 'buy online', 'creator marketplace'
+    ]
+  });
 
   const [shops, setShops] = useState<any[]>([])
   const [loading, setLoading] = useState(true)

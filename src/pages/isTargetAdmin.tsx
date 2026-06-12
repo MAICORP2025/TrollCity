@@ -5,15 +5,15 @@ import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { usePresenceStore } from '@/lib/presenceStore';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { useStaffWalkieTalkieContext } from '../StaffWalkieTalkieProvider';
+import { useStaffWalkieTalkieContext } from '@/components/StaffWalkieTalkieProvider';
 import { toast } from 'sonner';
 import {
   Activity, BarChart3, Bug, Clock, Coins, Mail, Monitor, MoreVertical,
   Radio, RefreshCw, Send, Pause, Search, Shield, ShieldAlert, TrendingUp,
   UserPlus, Users, Video, X, Stamp, FileText,
 } from 'lucide-react';
-import BugCenterPanel from './BugCenterPanel';
-import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton';
+import BugCenterPanel from '../components/admin/BugCenterPanel';
+import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton';
 
 interface LiveStream {
   id: string;
@@ -103,7 +103,7 @@ interface ModerationActionLog {
   status: string | null;
   created_at: string;
   target?: {
-    user_id: void; username?: string | null 
+    user_id: string; username?: string | null 
 } | null;
   actor?: { username?: string | null; role?: string | null; is_admin?: boolean | null } | null;
 }
@@ -2053,4 +2053,8 @@ function WalkieTalkieTab() {
       </div>
     </div>
   );
+}
+
+function renderNotaryTab() {
+  throw new Error('Function not implemented.');
 }

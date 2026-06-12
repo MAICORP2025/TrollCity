@@ -80,12 +80,20 @@ interface SpeechRecognitionEngine {
   destroy(): Promise<void>;
 }
 
+// Add type definitions for Web Speech API
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 /**
  * Web Speech API based recognition engine
  * Fallback for browsers that support it
  */
 class _WebSpeechEngine implements SpeechRecognitionEngine {
-  private recognition: SpeechRecognition | null = null;
+  private recognition: any = null;
   private isInitialized = false;
 
   async initialize(): Promise<void> {

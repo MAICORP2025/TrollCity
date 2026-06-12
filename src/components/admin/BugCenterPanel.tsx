@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clipboard, RefreshCw, Search, Trash2, FileDown, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clipboard, RefreshCw, Search, Trash2, FileDown, Loader2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
@@ -19,6 +19,7 @@ interface BugReportRow {
   user_id: string | null;
   user_email: string | null;
   user_role: string | null;
+  username: string | null;
   stream_id: string | null;
   function_name: string | null;
   table_name: string | null;
@@ -437,6 +438,7 @@ export default function BugCenterPanel() {
                 <span>{bug.severity}</span>
                 <span>{bug.source}</span>
                 <span className="truncate">{bug.route_path}</span>
+                <span className="ml-auto truncate text-cyan-300">{bug.username || bug.user_email || bug.user_id || 'unknown'}</span>
               </div>
             </button>
           ))}
@@ -457,11 +459,37 @@ export default function BugCenterPanel() {
                 )}
               </div>
 
+              {/* User Info Banner */}
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <User className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="font-bold text-cyan-100">
+                    {selectedBug.username || selectedBug.user_email || selectedBug.user_id || 'Unknown User'}
+                  </span>
+                  {selectedBug.user_role && (
+                    <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200">{selectedBug.user_role}</span>
+                  )}
+                  {selectedBug.user_email && selectedBug.username && (
+                    <span className="text-gray-400">&lt;{selectedBug.user_email}&gt;</span>
+                  )}
+                </div>
+                {selectedBug.page_url && (
+                  <div className="mt-1 flex items-center gap-1 text-[10px] text-gray-400">
+                    <span className="text-gray-500">Page:</span>
+                    <span className="truncate text-cyan-300">{selectedBug.page_url}</span>
+                  </div>
+                )}
+                {selectedBug.route_path && (
+                  <div className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-400">
+                    <span className="text-gray-500">Route:</span>
+                    <span className="text-gray-300">{selectedBug.route_path}</span>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-2 text-gray-300">
                 <div><span className="text-gray-500">Source:</span> {selectedBug.source}</div>
                 <div><span className="text-gray-500">Severity:</span> {selectedBug.severity}</div>
-                <div><span className="text-gray-500">Route:</span> {selectedBug.route_path || '-'}</div>
-                <div><span className="text-gray-500">User:</span> {selectedBug.user_email || selectedBug.user_id || '-'}</div>
                 <div><span className="text-gray-500">Stream:</span> {selectedBug.stream_id || '-'}</div>
                 <div><span className="text-gray-500">Table/Function:</span> {selectedBug.table_name || selectedBug.function_name || '-'}</div>
                 <div><span className="text-gray-500">Code:</span> {selectedBug.error_code || '-'}</div>

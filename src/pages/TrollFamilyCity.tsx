@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import useSEO from '@/hooks/useSEO';
 import {
   Users,
   Crown,
@@ -14,6 +15,16 @@ import { toast } from 'sonner'
 
 export default function TrollFamilyCity() {
   const { profile } = useAuthStore()
+
+  useSEO({
+    title: 'Families | Online Communities & Social Groups | Troll City',
+    description: 'Join a family on Troll City. Create or join social families, compete in family wars, complete weekly tasks, and build your community together.',
+    keywords: [
+      'online communities', 'groups', 'social families', 'community groups',
+      'Troll City families', 'family wars', 'social groups', 'join a family',
+      'community building', 'team up', 'Troll City community'
+    ]
+  });
   const [families, setFamilies] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 

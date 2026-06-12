@@ -80,10 +80,6 @@ function getSenderName(gift: BroadcastGift, nameMap: Record<string, string>) {
   return nameMap[gift.sender_id] || gift.sender_name || 'Someone'
 }
 
-function getReceiverName(gift: BroadcastGift, nameMap: Record<string, string>) {
-  return nameMap[gift.receiver_id] || gift.receiver_name || 'the host'
-}
-
 function cleanString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -106,7 +102,7 @@ function isLikelyVideoUrl(url?: string | null) {
 }
 
 function isLikelyImageUrl(url?: string | null) {
-  if (!url) return false
+  if (!url || typeof url !== 'string') return false
 
   const cleanUrl = url.split('?')[0].toLowerCase()
 
@@ -539,7 +535,6 @@ export default function GiftVideoOverlay({
         {displayGifts.map(({ gift, visual, label, resolved }) => {
           const displayCount = gift.quantity && gift.quantity > 1 ? `×${gift.quantity}` : ''
           const senderName = getSenderName(gift, nameMap)
-          const receiverName = getReceiverName(gift, nameMap)
 
           return (
             <motion.div
@@ -553,28 +548,24 @@ export default function GiftVideoOverlay({
               <div className="relative aspect-[16/9] bg-slate-950">
                 <GiftPreview gift={gift} visual={visual} label={label} />
 
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/90 sm:text-sm">
-                    <span className="flex items-center gap-2">
-                      <Gift className="h-4 w-4 text-pink-300" />
-                      <span>{label}</span>
-                    </span>
+                <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center gap-1 bg-gradient-to-t from-black/90 to-transparent px-4 py-3 text-center">
+                  <span className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/90 sm:text-sm">
+                    <Gift className="h-4 w-4 text-pink-300" />
+                    <span>{label}</span>
+                  </span>
 
-                    <div className="flex items-center gap-2">
-                      {import.meta.env.DEV && (
-                        <span className="rounded-full border border-white/10 bg-black/40 px-2 py-0.5 text-[9px] text-cyan-200">
-                          {resolved.source}
-                        </span>
-                      )}
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    {senderName && senderName !== 'Someone' && (
+                      <span>{senderName}</span>
+                    )}
 
-                      {displayCount && (
-                        <span className="text-cyan-200">{displayCount}</span>
-                      )}
-                    </div>
-                  </div>
+                    {gift.amount != null && gift.amount > 0 && (
+                      <span className="text-cyan-300">🪙 {gift.amount.toLocaleString()}</span>
+                    )}
 
-                  <div className="mt-1 text-sm text-slate-200">
-                    {senderName} sent {receiverName} a gift.
+                    {displayCount && (
+                      <span className="text-cyan-200">{displayCount}</span>
+                    )}
                   </div>
                 </div>
               </div>

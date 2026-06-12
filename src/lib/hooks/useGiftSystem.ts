@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { processGiftXp } from '../xp'
 import { useXPStore } from '@/stores/useXPStore'
 import { toast } from 'sonner'
+import { BattleSounds } from '../battleSounds';
 import { useAuthStore } from '../../lib/store'
 import { useTrollFamilyActivity } from '@/hooks/useTrollFamilyActivity'
 
@@ -57,6 +58,7 @@ export interface GiftSendOptions {
   receiverId?: string
   quantity?: number
   battleId?: string | null
+  streamId?: string | null
   metadata?: Record<string, any>
 }
 
@@ -100,6 +102,7 @@ export function GiftSystemProvider({
       const targetReceiverId = options.receiverId || defaultReceiverId || streamId
       const quantity = Math.max(1, Number(options.quantity) || 1)
       const battleId = options.battleId ?? null
+      const effectiveStreamId = options.streamId ?? streamId
 
       if (!user || !profile) {
         toast.error('You must be logged in to send gifts.')
@@ -141,7 +144,7 @@ export function GiftSystemProvider({
       const { data: result, error: rpcError } = await supabase.rpc('send_gift_in_stream', {
           p_sender_id: user.id,
           p_receiver_id: targetReceiverId,
-          p_stream_id: streamId,
+          p_stream_id: effectiveStreamId,
           p_gift_id: gift.id,
           p_quantity: quantity,
           p_metadata: giftMetadata,
@@ -151,53 +154,35 @@ export function GiftSystemProvider({
           throw rpcError
         }
 
-        if (!result?.success) {
+          if (!result?.success) {
           const message = result?.message || result?.error || 'Failed to send gift'
           toast.error(message)
+          BattleSounds.error();
           return false
         }
 
-        try {
-          await processGiftXp(user.id, Math.floor(gift.coinCost * quantity * 1.1))
-        } catch (xpError) {
-          console.error('[GiftDebugger] XP Award Error:', xpError)
-        }
+        // Play gift sent sound
+        BattleSounds.giftSent();
 
-        await quietRefreshGiftProfile(user.id)
-
-        const xpState = useXPStore.getState()
-        if (xpState.xpTotal > 0) {
-          await xpState.fetchXP(user?.id)
-        }
-
-        // Record family activity: gift sent and gift earned
-        const dedupKey = `gift_${streamId}_${gift.id}_${user.id}_${targetReceiverId}_${Date.now()}`
-        
-        try {
-          // Record for sender (gift_sent)
-          await recordGiftSent(totalCost, targetReceiverId, streamId, gift.id)
-          
-          // Record for receiver (gift_earned) - receiver_id parameter
-          // The RPC will record this for the receiver via the targetReceiverId
-          const { data: receiverData } = await supabase.rpc('record_troll_family_activity', {
-            p_user_id: targetReceiverId,
-            p_event_type: 'broadcast_gift_earned',
-            p_amount: totalCost,
-            p_metadata: {
-              stream_id: streamId,
-              gift_id: gift.id,
-              sender_id: user.id,
-              dedup_key: dedupKey,
-            },
-          })
-          
-          if (receiverData?.success === false) {
-            console.warn('[GiftSystem] Receiver activity not recorded:', receiverData?.message)
-          }
-        } catch (familyActivityError) {
-          console.warn('[GiftSystem] Family activity recording error:', familyActivityError)
-          // Don't fail the gift send if family activity recording fails
-        }
+        // Non-critical post-send operations — fire and forget for instant UI response
+        void (async () => {
+          try { await processGiftXp(user.id, Math.floor(gift.coinCost * quantity * 1.1)) } catch (e) { /* ignore */ }
+          try { await quietRefreshGiftProfile(user.id) } catch (e) { /* ignore */ }
+          try {
+            const xpState = useXPStore.getState()
+            if (xpState.xpTotal > 0) await xpState.fetchXP(user?.id)
+          } catch (e) { /* ignore */ }
+          try {
+            const dedupKey = `gift_${effectiveStreamId}_${gift.id}_${user.id}_${targetReceiverId}_${Date.now()}`
+            await recordGiftSent(totalCost, targetReceiverId, effectiveStreamId, gift.id)
+            await supabase.rpc('record_troll_family_activity', {
+              p_user_id: targetReceiverId,
+              p_event_type: 'broadcast_gift_earned',
+              p_amount: totalCost,
+              p_metadata: { stream_id: effectiveStreamId, gift_id: gift.id, sender_id: user.id, dedup_key: dedupKey },
+            })
+          } catch (e) { /* ignore */ }
+        })()
 
         return { success: true, bonus: result }
       } catch (error: any) {

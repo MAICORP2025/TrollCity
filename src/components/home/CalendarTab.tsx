@@ -143,12 +143,13 @@ export default function CalendarTab({ onCreateEvent, isAdmin, refreshKey }: Cale
   const formatEventTime = (time?: string): string => {
     if (!time) return '';
     try {
-      const cleaned = time.replace(/[+-]\d{2}:\d{2}$/, '').replace('Z', '');
-      const [hours, minutes] = cleaned.split(':');
-      const h = parseInt(hours);
+      const d = new Date(time);
+      if (isNaN(d.getTime())) return time;
+      const h = d.getHours();
+      const m = d.getMinutes().toString().padStart(2, '0');
       const ampm = h >= 12 ? 'PM' : 'AM';
       const hour = h % 12 || 12;
-      return `${hour}:${minutes} ${ampm}`;
+      return `${hour}:${m} ${ampm}`;
     } catch {
       return time;
     }
@@ -158,9 +159,10 @@ export default function CalendarTab({ onCreateEvent, isAdmin, refreshKey }: Cale
     const now = new Date();
     const eventTime = new Date(eventDate);
     if (startTime) {
-      const cleaned = startTime.replace(/[+-]\d{2}:\d{2}$/, '').replace('Z', '');
-      const [hours, minutes] = cleaned.split(':');
-      eventTime.setHours(parseInt(hours), parseInt(minutes));
+      const st = new Date(startTime);
+      if (!isNaN(st.getTime())) {
+        eventTime.setHours(st.getHours(), st.getMinutes(), st.getSeconds());
+      }
     }
     const diff = eventTime.getTime() - now.getTime();
     if (diff < 0) return 'Now';

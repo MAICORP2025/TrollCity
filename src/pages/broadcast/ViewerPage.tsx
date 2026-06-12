@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -7,6 +7,8 @@ import {
   Gift,
   Heart,
   LogOut,
+  Mic,
+  MicOff,
   MessageSquare,
   Plus,
   Share2,
@@ -15,6 +17,7 @@ import {
   Skull,
   Users,
   Video,
+  VideoOff,
 } from 'lucide-react'
 import type { LocalAudioTrack, LocalVideoTrack, RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from 'livekit-client'
 import { RoomEvent, Track } from 'livekit-client'
@@ -49,6 +52,7 @@ import { useBoxCount } from '../../hooks/useBoxCount'
 import { useHypeCoins } from '../../lib/hooks/useHypeCoins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useUserLeagues } from '../../hooks/useUserLeagues'
+import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
 import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
@@ -275,7 +279,7 @@ function RemoteVideoSurface({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Track version tick â€” incremented on room events only.
+  // Track version tick — incremented on room events only.
   // LiveKit mutates RemoteParticipant objects in place, so the videoTrack
   // dependency alone won't trigger re-attach when a track is subscribed.
   const [trackTick, setTrackTick] = useState(0)
@@ -297,7 +301,7 @@ function RemoteVideoSurface({
   }, [room])
 
   // Recompute tracks on every render + tick change.
-  // Do NOT memoize by participant reference â€” LiveKit mutates in place.
+  // Do NOT memoize by participant reference — LiveKit mutates in place.
   const videoTrack = getVideoTrackFromParticipant(participant)
   const audioTrack = getAudioTrackFromParticipant(participant)
 
@@ -558,7 +562,7 @@ function ViewerPage() {
      setLocalTracksVersion((version) => version + 1)
    }, [])
    const [isChatOpen, setIsChatOpen] = useState(true)
-   const [chatTab, setChatTab] = useState<'chat' | 'league' | 'gifts' | 'top-fans'>('chat')
+    const [chatTab, setChatTab] = useState<'chat' | 'progress' | 'league' | 'gifts' | 'top-fans'>('chat')
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const { myLeagues, myMemberships, leagueMissions, isLoading: isUserLeaguesLoading } = useUserLeagues()
@@ -781,7 +785,7 @@ function ViewerPage() {
     const receiverId = enrichedGiftData.receiver_id || enrichedGiftData.recipient_id || enrichedGiftData.receiverId || enrichedGiftData.recipientId || enrichedGiftData.metadata?.receiver_id || enrichedGiftData.metadata?.recipient_id
 
     if (incomingStreamId && incomingStreamId !== streamId) {
-      if (import.meta.env.DEV) console.log('[ViewerPage] âš ï¸ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId })
+      if (import.meta.env.DEV) console.log('[ViewerPage] ⚠️ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId })
       return
     }
 
@@ -792,7 +796,7 @@ function ViewerPage() {
       id: giftId,
       gift_id: enrichedGiftData.gift_id,
       gift_name: resolvedGiftName,
-      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || 'ðŸŽ',
+      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || '🎁',
       gift_slug: enrichedGiftData.gift_slug || enrichedGiftData.metadata?.gift_slug,
       animation_key: enrichedGiftData.animation_key || enrichedGiftData.metadata?.animation_key,
       animation_type: enrichedGiftData.animation_type || enrichedGiftData.metadata?.animation_type,
@@ -889,7 +893,7 @@ function ViewerPage() {
    // This ensures immediate UI update when a user is kicked from a seat
    useEffect(() => {
      if (!streamId) return
-     const channel = supabase.channel(`stream-seat-events:${streamId}-viewer`)
+      const channel = supabase.channel(`stream-seat-events:${streamId}`)
      channel
        .on('broadcast', { event: 'seat_left' }, (payload) => {
          const seatIndex = payload?.payload?.seat_index
@@ -923,6 +927,9 @@ function ViewerPage() {
    )
 
   const [isBattleButtonBusy, setIsBattleButtonBusy] = useState(false)
+
+  const [seatMicOn, setSeatMicOn] = useState(true)
+  const [seatCamOn, setSeatCamOn] = useState(true)
 
   const handleStartSeatBattle = useCallback(async () => {
     if (!stream?.id || !user?.id || !isUserOnStage) return
@@ -1029,7 +1036,7 @@ const isActive = isStreamActive(stream)
      return String(getLiveKitRoomName(stream as Stream | null, streamId) || '')
    }, [stream?.livekit_room_name, stream?.id, streamId])
 
-    // Stable anonymous viewer identity â€” never use "undefined" in identity.
+    // Stable anonymous viewer identity — never use "undefined" in identity.
     // Uses sessionStorage so the same guest gets the same identity for the
     // browser session and stream. Format: guest-viewer:<streamId>:<uuid>
     const stableAnonId = useMemo(() => {
@@ -1096,6 +1103,7 @@ const isActive = isStreamActive(stream)
       publishLocalTracks,
       unpublishLocalTracks,
       setMicEnabled,
+      setCameraEnabled,
       getMicEnabled,
       room: liveKitRoom,
       lastJoinDebug,
@@ -1120,17 +1128,17 @@ const isActive = isStreamActive(stream)
   }, [remoteUsers])
 
   // Mic mute callbacks for walkie-talkie integration (for users on stage)
-  const onLiveKitMicMute = useCallback(async () => {
+  const handleToggleMic = useCallback(async () => {
     if (!isUserOnStage) return
     await setMicEnabled(false)
-    console.log('[ViewerPage] LiveKit mic muted for walkie-talkie')
+    console.log('[ViewerPage] seat mic muted')
   }, [isUserOnStage, setMicEnabled])
 
-  const onLiveKitMicUnmute = useCallback(async () => {
+  const handleToggleCamera = useCallback(async () => {
     if (!isUserOnStage) return
-    await setMicEnabled(true)
-    console.log('[ViewerPage] LiveKit mic unmuted after walkie-talkie')
-  }, [isUserOnStage, setMicEnabled])
+    await setCameraEnabled(false)
+    console.log('[ViewerPage] seat camera disabled')
+  }, [isUserOnStage, setCameraEnabled])
 
   
   const hostParticipant = useMemo(() => {
@@ -1162,7 +1170,7 @@ const isActive = isStreamActive(stream)
   const isOfficer = Boolean(
     profile?.role === 'admin' ||
       (profile as any)?.is_admin ||
-      profile?.role === 'officer' ||
+      (profile?.role as string) === 'officer' ||
       (profile as any)?.is_troll_officer ||
       (profile as any)?.is_lead_officer,
   )
@@ -1346,7 +1354,7 @@ const isActive = isStreamActive(stream)
 
     if (!data) return
 
-    if (isStreamEnded(data as Stream)) {
+    if (isStreamEnded(data as unknown as Stream)) {
       // Hard disconnect from LiveKit before navigating
       leaveLiveKitRoom().catch(() => {})
       hasJoinedAudienceRef.current = false
@@ -1607,12 +1615,12 @@ const handleLeaveSeat = useCallback(async () => {
         return
       }
 
-      if (isStreamEnded(data as Stream)) {
+      if (isStreamEnded(data as unknown as Stream)) {
         navigate(`/broadcast/summary/${streamId}`, { replace: true })
         return
       }
 
-      setStream(data as Stream)
+      setStream(data as unknown as Stream)
       setViewerCount(Number((data as any).current_viewers || 0))
 
       if ((data as any).user_id) {
@@ -1648,8 +1656,8 @@ const handleLeaveSeat = useCallback(async () => {
   }, [streamId, refreshStream])
 
   // Canonical gift-animation source: stream_gifts postgres_changes received
-  // via useStreamRealtime. event.new.id is the stream_gifts row UUID â€” the
-  // same value that useGiftSystem uses as broadcast payload.id â€” so both
+  // via useStreamRealtime. event.new.id is the stream_gifts row UUID — the
+  // same value that useGiftSystem uses as broadcast payload.id — so both
   // postgres and broadcast paths resolve to the same animationId and the
   // seenGiftAnimationIdsRef Set catches the second arrival without double-
   // playing the <video>.
@@ -1745,7 +1753,7 @@ useStreamRealtime(
 
   const floatingChatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // â”€â”€ Floating Chat: receive broadcasts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Floating Chat: receive broadcasts ────────────────────────────────────
   useEffect(() => {
     if (!streamId) return
 
@@ -1882,7 +1890,7 @@ useStreamRealtime(
     joiningAudienceRef.current = false
   }, [streamId])
 
-  // Focused effect for audience join â€” keep dependencies primitive to avoid
+  // Focused effect for audience join — keep dependencies primitive to avoid
   // re-running due to object identity changes.
   useEffect(() => {
     if (!streamId) return
@@ -2005,7 +2013,7 @@ useStreamRealtime(
     return `calc(100dvh - ${reserved}px - env(safe-area-inset-bottom))`
   }, [isMobileViewer])
 
-  // â”€â”€ Channel diagnostics (dev only) â”€â”€
+  // ── Channel diagnostics (dev only) ──
   useEffect(() => {
     logActiveChannels(`ViewerPage:mount:${streamId}`);
     return () => logActiveChannels(`ViewerPage:unmount:${streamId}`);
@@ -2033,7 +2041,7 @@ useStreamRealtime(
     return (
       <div className={cn('flex h-dvh items-center justify-center text-white', theme.pageBg)}>
         <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.035] px-8 py-6 text-center shadow-[0_0_35px_rgba(45,212,191,0.2)] backdrop-blur-2xl">
-          <div className="text-lg font-black">Loading broadcastâ€¦</div>
+          <div className="text-lg font-black">Loading broadcast…</div>
           <div className="mt-2 text-sm text-cyan-100/60">Connecting to Troll City LiveKit.</div>
         </div>
       </div>
@@ -2046,7 +2054,7 @@ useStreamRealtime(
     stream?.is_battle === true &&
     (stream?.battle_status === 'ready' || stream?.battle_status === 'starting' || stream?.battle_status === 'active');
 
-  // PHASE 2: Derive stable battleId for BattleView key â€” prevents remount on stream state updates
+  // PHASE 2: Derive stable battleId for BattleView key — prevents remount on stream state updates
   const activeBattleId = shouldShowRandomBattleArena ? stream?.battle_id ?? null : null;
 
   if (shouldShowRandomBattleArena) {
@@ -2069,12 +2077,20 @@ useStreamRealtime(
     );
   }
 
+  function onLiveKitMicMute(): void {
+    throw new Error('Function not implemented.')
+  }
+
+  function onLiveKitMicUnmute(): void {
+    throw new Error('Function not implemented.')
+  }
+
   return (
     <GiftSystemProvider streamId={streamId} defaultReceiverId={hostId}>
       <ErrorBoundary>
         <div className={cn('relative flex h-dvh w-full flex-col overflow-hidden', theme.pageShell)}>
 
-          {/* Background layers â€” identical to Sidebar ShellBackdrop */}
+          {/* Background layers — identical to Sidebar ShellBackdrop */}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
@@ -2128,12 +2144,12 @@ useStreamRealtime(
                     <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-3xl border border-cyan-500/10 bg-slate-950/90 p-4 text-sm text-slate-200 shadow-[0_0_30px_rgba(45,212,191,0.08)] sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
-                          {myLeagues[0].icon_emoji || 'ðŸ†'}
+                          {myLeagues[0].icon_emoji || '🏆'}
                         </div>
                         <div>
                           <p className="text-sm font-black text-white">League: {myLeagues[0].name}</p>
                           <p className="text-xs text-slate-400">
-                            {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} â€¢ {myLeagues[0].member_count}/{myLeagues[0].max_members} members
+                            {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} • {myLeagues[0].member_count}/{myLeagues[0].max_members} members
                           </p>
                         </div>
                       </div>
@@ -2146,7 +2162,7 @@ useStreamRealtime(
              </>
            )}
 
-           {/* Random Battle Banner â€” prominent notice for queue/active battle */}
+           {/* Random Battle Banner — prominent notice for queue/active battle */}
            {stream && (
              <RandomBattleBanner
                phase={randomBattlePhase}
@@ -2177,7 +2193,7 @@ useStreamRealtime(
                   }
             }
           >
-            {/* â”€â”€ LEFT: Host Video Card / Mobile Watch Surface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+            {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
             <section
               className={cn(
                 'relative min-h-0 overflow-hidden',
@@ -2215,7 +2231,7 @@ useStreamRealtime(
                       )}
                       <div className="mt-4 text-lg font-black">{hostName}</div>
                       <div className="mt-2 text-sm text-slate-300">
-                        {isActive ? 'Camera Off' : 'Waiting for broadcastâ€¦'}
+                        {isActive ? 'Camera Off' : 'Waiting for broadcast…'}
                       </div>
                     </div>
                   </div>
@@ -2232,7 +2248,7 @@ useStreamRealtime(
                       <Crown className="h-4 w-4" />
                       Host
                     </div>
-                    {/* City Status Orb â€” compact inline (clickable) */}
+                    {/* City Status Orb — compact inline (clickable) */}
                     {broadcasterCityStatus.data && (
                       <div className="pointer-events-auto">
                         <CityStatusOrb
@@ -2306,7 +2322,7 @@ useStreamRealtime(
                 </div>
               )}
 
-              {/* â”€â”€ Mobile PWA floating chat: messages float up from chat input to top of video â”€â”€ */}
+              {/* ── Mobile PWA floating chat: messages float up from chat input to top of video ── */}
               {isMobileViewer && (
                 <div
                   className="pointer-events-none fixed inset-x-0 z-30 overflow-hidden"
@@ -2346,7 +2362,7 @@ useStreamRealtime(
               )}
             </section>
 
-            {/* â”€â”€ CENTER: Seats belong beside the broadcaster, never over it â”€â”€ */}
+            {/* ── CENTER: Seats belong beside the broadcaster, never over it ── */}
             {hasMounted && !isMobileViewer && seatCards.length > 0 && (
               <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/25 bg-black/20 p-4 shadow-[0_0_28px_rgba(45,212,191,0.18)] backdrop-blur-xl">
                 <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
@@ -2511,7 +2527,7 @@ useStreamRealtime(
               </aside>
             )}
 
-          {/* â”€â”€ MOBILE PWA: Seats overlay on broadcaster video â”€â”€ */}
+          {/* ── MOBILE PWA: Seats overlay on broadcaster video ── */}
           {hasMounted && isMobileViewer && seatCards.length > 0 && (
             <div
               className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col"
@@ -2598,7 +2614,7 @@ useStreamRealtime(
                             </div>
                             <div className="text-[11px] font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">Seat {seat.seatIndex}</div>
                             <div className="text-[10px] font-bold text-white/60 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
-                              {seat.isLocked ? 'Locked' : seat.seatPrice === 0 ? 'Free' : `${seat.seatPrice} â—ˆ`}
+                              {seat.isLocked ? 'Locked' : seat.seatPrice === 0 ? 'Free' : `${seat.seatPrice} ◈`}
                             </div>
                           </button>
                         )}
@@ -2617,7 +2633,7 @@ useStreamRealtime(
             </div>
           )}
 
-          {/* â”€â”€ RIGHT: Desktop Chat Panel â€” same flow layout style as BroadcastPage â”€â”€ */}
+          {/* ── RIGHT: Desktop Chat Panel — same flow layout style as BroadcastPage ── */}
           {!isMobileViewer && (
             <aside
               className={cn(
@@ -2625,9 +2641,9 @@ useStreamRealtime(
                 'flex h-full min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
               )}
             >
-              <div className="grid shrink-0 grid-cols-4 border-b border-white/10 bg-black/10">
-                {['Chat', 'League', 'Gifts', 'Top Fans'].map((tab) => {
-                  const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'league' | 'gifts' | 'top-fans'
+              <div className="grid shrink-0 grid-cols-5 border-b border-white/10 bg-black/10">
+                 {['Chat', 'Progress', 'League', 'Gifts', 'Top Fans'].map((tab) => {
+                   const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'progress' | 'league' | 'gifts' | 'top-fans'
                   const active = chatTab === tabKey
                   return (
                     <button
@@ -2650,7 +2666,11 @@ useStreamRealtime(
               </div>
 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {chatTab === 'chat' ? (
+                {chatTab === 'progress' ? (
+                  <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+                    <LeagueProgressPanel streamId={streamId} />
+                  </div>
+                ) : chatTab === 'chat' ? (
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
                     <div
                       ref={floatingChatContainerRef}
@@ -2699,7 +2719,7 @@ useStreamRealtime(
                         if (!text) return
 
                         if (!user && !reserveAnonymousChatSlot()) {
-                          toast.error('Youâ€™ve used your 5 anonymous chats. Sign in to keep chatting.')
+                          toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
                           navigate('/auth?mode=login')
                           return
                         }
@@ -2748,7 +2768,7 @@ useStreamRealtime(
                         type="text"
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Say something¦"
+                        placeholder="Say something�"
                         className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                         maxLength={280} />
                     </form>
@@ -2771,7 +2791,7 @@ useStreamRealtime(
                             <div key={league.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                               <div className="flex items-center gap-3">
                                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
-                                  {league.icon_emoji || 'ðŸ†'}
+                                  {league.icon_emoji || '🏆'}
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-sm font-black text-white truncate">{league.name}</p>
@@ -2849,7 +2869,7 @@ useStreamRealtime(
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-bold text-white">{fan.sender_username || 'Troll Citizen'}</div>
                                 <div className="truncate text-xs text-slate-400">
-                                  Last gift: {fan.last_gift_at ? new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'â€”'}
+                                  Last gift: {fan.last_gift_at ? new Date(fan.last_gift_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
                                 </div>
                               </div>
                               <div className="whitespace-nowrap text-xs font-semibold text-cyan-300">{fan.total_gift_coins.toLocaleString()} coins</div>
@@ -2865,7 +2885,7 @@ useStreamRealtime(
           )}
         </main>
 
-        {/* â”€â”€ MOBILE CHAT INPUT AT BOTTOM â€” fixed overlay, not document flow â”€â”€ */}
+        {/* ── MOBILE CHAT INPUT AT BOTTOM — fixed overlay, not document flow ── */}
         {isMobileViewer && (
           <div
             className="fixed inset-x-3 z-40 pointer-events-auto"
@@ -2878,7 +2898,7 @@ useStreamRealtime(
                 if (!text) return
 
                 if (!user && !reserveAnonymousChatSlot()) {
-                  toast.error('Youâ€™ve used your 5 anonymous chats. Sign in to keep chatting.')
+                  toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
                   navigate('/auth?mode=login')
                   return
                 }
@@ -2927,7 +2947,7 @@ useStreamRealtime(
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Say something¦"
+                placeholder="Say something�"
                 className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                 maxLength={280} />
               <button
@@ -2946,7 +2966,7 @@ useStreamRealtime(
           </div>
         )}
 
-        {/* â”€â”€ BOTTOM CONTROL BAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
 
         <div
   className={cn(
@@ -2995,6 +3015,30 @@ useStreamRealtime(
                 <Share2 className="h-4 w-4" />
                 Share
               </button>
+              {isUserOnStage && (
+                <>
+                  <button
+                    onClick={handleToggleMic}
+                    className={cn(
+                      'inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black',
+                      seatMicOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                    )}
+                  >
+                    {seatMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                    {seatMicOn ? 'Mic On' : 'Muted'}
+                  </button>
+                  <button
+                    onClick={handleToggleCamera}
+                    className={cn(
+                      'inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black',
+                      seatCamOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                    )}
+                  >
+                    {seatCamOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                    {seatCamOn ? 'Cam On' : 'Cam Off'}
+                  </button>
+                </>
+              )}
               <button
                 onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
                 className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.danger)}

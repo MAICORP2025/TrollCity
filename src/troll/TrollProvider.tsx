@@ -30,6 +30,7 @@ const EVENT_TROLL_CONTEXTS: Record<TrollEventType, string> = {
   'pod_started': 'pod',
   'pod_listened': 'pod',
   'tcps_message_sent': 'chat',
+  badge_progress: ''
 };
 
 const ACTION_COUNT_RESET_MS = 5 * 60 * 1000; // reset counts after 5 minutes of inactivity

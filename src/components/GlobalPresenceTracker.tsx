@@ -76,7 +76,16 @@ export default function GlobalPresenceTracker() {
         const now = Date.now();
         if (now - heartbeatRef.current >= 60000) {
           heartbeatRef.current = now;
-          await supabase.rpc('heartbeat_presence');
+          // Upsert directly to user_presence table (RPC doesn't exist)
+          await supabase.from('user_presence').upsert(
+            {
+              user_id: user.id,
+              last_seen_at: new Date().toISOString(),
+              is_online: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' },
+          );
         }
 
         // 2. Fetch total online count - debounce to max once per 45 seconds

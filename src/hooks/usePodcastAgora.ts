@@ -1,4 +1,4 @@
-ï»¿import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import AgoraRTC, {
   IAgoraRTCClient,
   IAgoraRTCRemoteUser,
@@ -320,7 +320,7 @@ export function usePodcastAgora({
     }
   }, [])
 
-  // Toggle mute â€” uses refs to avoid stale closures
+  // Toggle mute — uses refs to avoid stale closures
   const toggleMute = useCallback(async () => {
     const nextMuted = !isMutedRef.current
     setIsMuted(nextMuted)
@@ -370,7 +370,7 @@ export function usePodcastAgora({
     })
   }, [user, profile, podcastId])
 
-  // Toggle play/pause â€” actually controls audio playback
+  // Toggle play/pause — actually controls audio playback
   const togglePlay = useCallback(() => {
     const nextPlaying = !isPlayingRef.current
     setIsPlaying(nextPlaying)
@@ -397,7 +397,7 @@ export function usePodcastAgora({
     }
   }, [])
 
-  // Set volume â€” applies to all remote tracks immediately
+  // Set volume — applies to all remote tracks immediately
   const handleSetVolume = useCallback((newVolume: number) => {
     setVolume(newVolume)
     volumeRef.current = newVolume

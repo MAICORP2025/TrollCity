@@ -1,7 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabase';
 import { useAuthStore } from '../store';
-import { getTLeagueTier, calculateLeagueScore, getTLeagueProgress, getNextTLeagueTier } from '../../config/T_LEAGUE_CONFIG';
+import {
+  getTLeagueTier,
+  calculateLeagueScore,
+  getTLeagueProgress,
+  getNextTLeagueTier,
+  getSubTierFromScore,
+  getSubTierProgress,
+  getNextSubTier,
+  getScoreForNextSubTier,
+  getLeagueLevel,
+  getNextLeagueLevel,
+  getLeagueLevelProgress,
+  getSubTierColor,
+} from '../../config/T_LEAGUE_CONFIG';
 
 export interface CityStatusOrbData {
   // User profile data
@@ -25,16 +38,20 @@ export interface CityStatusOrbData {
 
   // T League data
   league_tier: string;
+  league_sub_tier: string;
   league_score: number;
   gift_coins_received: number;
   total_live_minutes: number;
   season_key: string;
+  league_level: number;
+  total_gifts_sent: number;
 
   // Computed
   tLeagueTier: ReturnType<typeof getTLeagueTier>;
   leagueProgress: number;
   nextTier: ReturnType<typeof getTLeagueTier> | null;
   coinsToNextLeague: number;
+  subTierColor: string;
   activeMissions: Array<{ id: string; title: string; progress: number; goal: number; reward: number }>;
 }
 
@@ -104,7 +121,7 @@ export function useCityStatusOrb(options: CityStatusOrbOptions) {
       const seasonKey = new Date().toISOString().slice(0, 7); // YYYY-MM
       const { data: leagueData } = await supabase
         .from('broadcast_league_stats')
-        .select('league_tier, league_score, gift_coins_received, total_live_minutes, season_key')
+        .select('league_tier, sub_tier, league_score, gift_coins_received, total_live_minutes, season_key, league_level, total_gifts_sent')
         .eq('broadcaster_id', options.userId)
         .eq('season_key', seasonKey)
         .maybeSingle();
@@ -116,7 +133,9 @@ export function useCityStatusOrb(options: CityStatusOrbOptions) {
           )
         : 0;
 
-      const tLeagueTier = getTLeagueTier(leagueScore);
+      const subInfo = getSubTierFromScore(leagueScore);
+      const tLeagueTier = subInfo.tier;
+      const leagueLevelInfo = getLeagueLevel(Number(leagueData?.total_gifts_sent) || 0);
 
       const orbData: CityStatusOrbData = {
         id: profileData?.id || options.userId,
@@ -138,18 +157,31 @@ export function useCityStatusOrb(options: CityStatusOrbOptions) {
         is_troll_officer: profileData?.is_troll_officer || null,
 
         league_tier: leagueData?.league_tier || tLeagueTier.tier,
+        league_sub_tier: leagueData?.sub_tier || subInfo.sub,
         league_score: leagueScore,
         gift_coins_received: Number(leagueData?.gift_coins_received) || 0,
         total_live_minutes: Number(leagueData?.total_live_minutes) || 0,
         season_key: leagueData?.season_key || seasonKey,
+        league_level: Number(leagueData?.league_level) || leagueLevelInfo.level,
+        total_gifts_sent: Number(leagueData?.total_gifts_sent) || 0,
 
         tLeagueTier,
-        leagueProgress: 0,
+        leagueProgress: getSubTierProgress(leagueScore),
+        subTierColor: getSubTierColor(tLeagueTier.tier, subInfo.sub),
       };
 
-      // Calculate progress within tier
-      orbData.leagueProgress = getTLeagueProgress(leagueScore);
-      orbData.nextTier = getNextTLeagueTier(leagueScore);
+      // Calculate progress within sub-tier
+      const nextSub = getNextSubTier(tLeagueTier, subInfo.sub);
+      orbData.nextTier = nextSub ? {
+        tier: nextSub.tier.tier,
+        minScore: nextSub.tier.minScore,
+        label: nextSub.tier.label,
+        color: nextSub.tier.color,
+        badgeColor: nextSub.tier.badgeColor,
+        textColor: nextSub.tier.textColor,
+        icon: nextSub.tier.icon,
+        subTiers: nextSub.tier.subTiers,
+      } : null;
       orbData.coinsToNextLeague = orbData.nextTier
         ? Math.max(0, orbData.nextTier.minScore - leagueScore)
         : 0;

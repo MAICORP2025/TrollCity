@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { BattleSounds } from '@/lib/battleSounds';
 
 /**
  * Consolidated battle realtime hook.
@@ -51,6 +52,7 @@ const INITIAL: BattleRealtimeState = {
 export function useBattleRealtime(battleId: string | null | undefined) {
   const [state, setState] = useState<BattleRealtimeState>(INITIAL);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const scorePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -137,6 +139,7 @@ export function useBattleRealtime(battleId: string | null | undefined) {
       if (!mountedRef.current) return;
       const data = payload?.payload;
       if (!data) return;
+      BattleSounds.scoreUpdate();
       // Full battle refetch for score accuracy
       supabase
         .from('battles')
@@ -162,6 +165,14 @@ export function useBattleRealtime(battleId: string | null | undefined) {
       if (!mountedRef.current) return;
       const data = payload?.payload;
       if (!data || data.timeLeft === undefined) return;
+      // Tick sound for last 10 seconds
+      if (data.timeLeft <= 10 && data.timeLeft > 0) {
+        BattleSounds.timerTick();
+      }
+      // Sudden death transition sound
+      if (data.timeLeft === 15) {
+        BattleSounds.suddenDeath();
+      }
       setState(prev => ({
         ...prev,
         timerSeconds: data.timeLeft,
@@ -174,6 +185,7 @@ export function useBattleRealtime(battleId: string | null | undefined) {
       if (!mountedRef.current) return;
       const data = payload?.payload;
       if (!data) return;
+      BattleSounds.scoreUpdate();
       setState(prev => ({
         ...prev,
         battle: prev.battle ? {
@@ -211,6 +223,7 @@ export function useBattleRealtime(battleId: string | null | undefined) {
     channel.on('broadcast', { event: 'battle_ended' }, (payload) => {
       if (!mountedRef.current) return;
       const data = payload?.payload;
+      BattleSounds.battleEnd();
       setState(prev => ({
         ...prev,
         phase: 'ended',
@@ -256,10 +269,53 @@ export function useBattleRealtime(battleId: string | null | undefined) {
     };
     fetchInitial();
 
+    // ── Fast score sync ──────────────────────────────────────────────────
+    // During active battles, poll the score every 2s as a safety net.
+    // The postgres_changes handler above handles most updates, but rapid
+    // RPC-driven score changes (e.g. from gifts) can occasionally be missed
+    // by realtime. This ensures the score overlay never lags more than 2s.
+    if (scorePollRef.current) {
+      clearInterval(scorePollRef.current);
+      scorePollRef.current = null;
+    }
+    scorePollRef.current = setInterval(async () => {
+      if (!mountedRef.current) return;
+      try {
+        const { data } = await supabase
+          .from('battles')
+          .select('score_challenger, score_opponent, status')
+          .eq('id', battleId)
+          .maybeSingle();
+        if (data && mountedRef.current) {
+          setState(prev => {
+            if (!prev.battle) return prev;
+            if (
+              prev.battle.score_challenger !== data.score_challenger ||
+              prev.battle.score_opponent !== data.score_opponent ||
+              prev.battle.status !== data.status
+            ) {
+              return {
+                ...prev,
+                battle: { ...prev.battle, ...data },
+                phase: data.status === 'ended' ? 'ended' as const
+                  : data.status === 'active' ? 'active' as const
+                  : prev.phase,
+              };
+            }
+            return prev;
+          });
+        }
+      } catch {}
+    }, 2000);
+
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
+      }
+      if (scorePollRef.current) {
+        clearInterval(scorePollRef.current);
+        scorePollRef.current = null;
       }
     };
   }, [battleId]);

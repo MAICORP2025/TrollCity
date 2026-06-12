@@ -1293,6 +1293,25 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
     }
   }, []);
 
+  // Set camera enabled/disabled for seat users
+  const setCameraEnabled = useCallback(async (enabled: boolean) => {
+    const track = localVideoTrackRef.current;
+    if (!track) return false;
+    
+    try {
+      if (enabled) {
+        await track.unmute();
+      } else {
+        await track.mute();
+      }
+      setLocalVideoTrack(track);
+      return true;
+    } catch (err) {
+      console.error(`[useLiveKitRoom] Error setting camera enabled: ${safeStringify(err)}`);
+      return false;
+    }
+  }, []);
+
   // Get current mic state
   const getMicEnabled = useCallback(() => {
     const track = localAudioTrackRef.current;
@@ -1348,6 +1367,7 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
     toggleCamera,
     toggleMicrophone,
     setMicEnabled,
+    setCameraEnabled,
     getMicEnabled,
     prewarmPublisherTracks,
     stopUnusedPrewarmedTracks,

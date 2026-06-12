@@ -486,9 +486,9 @@ export default function LiveKitGameViewer() {
 
       const { data: topGifters } = await supabase
         .from('stream_gifts')
-        .select('sender_id, total_amount')
+        .select('sender_id, amount')
         .eq('stream_id', channelName)
-        .order('total_amount', { ascending: false })
+        .order('amount', { ascending: false })
         .limit(3)
 
       if (topGifters && topGifters.length > 0) {
@@ -502,7 +502,7 @@ export default function LiveKitGameViewer() {
           topGifters.map((g: any, index: number) => ({
             rank: index + 1,
             name: profileMap.get(g.sender_id) || 'Viewer',
-            score: g.total_amount || 0,
+            score: g.amount || 0,
           }))
         )
       } else {

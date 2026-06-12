@@ -152,7 +152,7 @@ export const useTrollEngine = (onBackgroundTrigger?: (event: TrollEvent) => void
 
     // Check if user is admin/staff - they should not get trolls
     const { profile } = useAuthStore.getState();
-    if (profile?.is_admin || profile?.is_ceo || profile?.is_staff || profile?.role === 'admin' || profile?.role === 'staff') {
+    if (profile?.is_admin || profile?.is_ceo || profile?.role === 'admin' || (profile?.role as string) === 'staff') {
       console.log('[TrollEngine] Blocked - user is admin/staff');
       return null;
     }

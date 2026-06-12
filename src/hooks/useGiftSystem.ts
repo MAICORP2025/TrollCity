@@ -353,7 +353,12 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
          finalGiftCoinAmount: totalGiftAmount
        });
 
-       // Always use send_gift_in_stream — the RPC now handles coin spending +
+        console.log('[GiftSystem] RPC call:', {
+          p_sender_id: user.id,
+          p_receiver_id: finalRecipientId,
+          p_stream_id: streamId || null,
+          p_battle_id: effectiveBattleId || undefined,
+        });
        // conditional trollmond deduction (>= 100 coin gifts deduct 100 trollmonds per gift)
        const result = await supabase.rpc('send_gift_in_stream', {
          p_sender_id: user.id,
@@ -385,7 +390,45 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
           console.warn('[GiftSystem] Failed to record family activity:', recordErr);
           // Don't fail the gift transaction if recording fails
         }
-        
+
+        // ── Battle score realtime broadcast ────────────────────────────────
+        // When a gift is sent during a battle, the RPC updates the battle score
+        // in the database, but viewers won't see it until the next poll cycle.
+        // Broadcast a score_update on the battle channel so all participants
+        // get the new score immediately.
+        if (effectiveBattleId && data?.success) {
+          try {
+            // Fetch the updated battle scores from the DB
+            const { data: battleData } = await supabase
+              .from('battles')
+              .select('score_challenger, score_opponent')
+              .eq('id', effectiveBattleId)
+              .maybeSingle();
+
+            if (battleData) {
+              const battleCh = supabase.channel(`battle-all:${effectiveBattleId}`);
+              await battleCh.subscribe();
+              await battleCh.send({
+                type: 'broadcast',
+                event: 'score_update',
+                payload: {
+                  score_challenger: battleData.score_challenger ?? 0,
+                  score_opponent: battleData.score_opponent ?? 0,
+                  lastGift: {
+                    username: user?.user_metadata?.username || user?.email?.split('@')[0] || 'Someone',
+                    amount: totalGiftAmount,
+                    team: streamId || '',
+                  },
+                },
+              });
+              // Clean up the short-lived channel after sending
+              setTimeout(() => supabase.removeChannel(battleCh), 1000);
+            }
+          } catch (battleBroadcastErr) {
+            console.warn('[GiftSystem] Failed to broadcast battle score update:', battleBroadcastErr);
+          }
+        }
+
         // Get sender's profile for username
         let senderName = 'Someone';
         try {

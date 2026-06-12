@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
+import useSEO from '@/hooks/useSEO';
 import { Store, ShoppingCart, ShoppingBag, Car, Coins, DollarSign, Truck, FileText, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Plus, Edit, Trash, Package, Wrench, Eye, EyeOff } from 'lucide-react'
 import VehicleListingForm from '../components/sell/VehicleListingForm'
 import BusinessProfileForm from '../components/sell/BusinessProfileForm'
@@ -11,6 +12,16 @@ export default function SellOnTrollCity() {
   console.log('🛍️ SellOnTrollCity component rendering');
   const { user } = useAuthStore()
   const navigate = useNavigate()
+
+  useSEO({
+    title: 'Sell on Troll City | Become a Seller & Start Your Online Business',
+    description: 'Start selling on Troll City. Become a marketplace seller, list products, and earn money online. Join thousands of creators building their online business on Troll City.',
+    keywords: [
+      'sell online', 'become a seller', 'online business', 'sell products online',
+      'marketplace seller', 'Troll City seller', 'start selling', 'ecommerce',
+      'online store', 'sell goods', 'creator marketplace', 'make money selling'
+    ]
+  });
   const [shop, setShop] = useState<any>(null)
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(true)

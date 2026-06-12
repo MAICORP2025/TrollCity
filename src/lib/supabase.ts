@@ -138,6 +138,8 @@ export const PLATFORM_OPTIONS = [
 export type Platform = typeof PLATFORM_OPTIONS[number]['value'];
 
 export interface UserProfile {
+  verification_expires_at: boolean
+  verified_since: any
   trollmonds: number
     display_name: string
   name: string

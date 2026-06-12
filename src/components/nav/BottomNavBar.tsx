@@ -63,6 +63,7 @@ import { useXPStore } from '@/stores/useXPStore';
 import { supabase, UserRole } from '@/lib/supabase';
 import { isPrideMonth } from '@/lib/prideMonth';
 import { toast } from 'sonner';
+import { useNavBadges } from '@/hooks/useNavBadges';
 
 /* ─── Role helpers (mirrored from Sidebar/BottomNav) ─── */
 function useRoleChecks(profile: any) {
@@ -218,11 +219,20 @@ interface NavButtonProps {
   onClick?: () => void;
   size?: 'normal' | 'large';
   badge?: number;
+  badgeKey?: keyof import('@/hooks/useNavBadges').NavBadges;
+  onBadgeDismiss?: (key: keyof import('@/hooks/useNavBadges').NavBadges) => void;
 }
 
-function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = 'normal', badge }: NavButtonProps) {
+function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = 'normal', badge, badgeKey, onBadgeDismiss }: NavButtonProps) {
   const prideActive = isPrideMonth();
   const isLarge = size === 'large';
+
+  const handleClick = () => {
+    if (badgeKey && onBadgeDismiss && badge && badge > 0) {
+      onBadgeDismiss(badgeKey);
+    }
+    if (onClick) onClick();
+  };
 
   const baseClasses = `
     group relative flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all duration-200
@@ -256,14 +266,14 @@ function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = '
 
   if (to) {
     return (
-      <Link to={to} className={baseClasses} onClick={onClick}>
+      <Link to={to} className={baseClasses} onClick={handleClick}>
         {content}
       </Link>
     );
   }
 
   return (
-    <button type="button" className={baseClasses} onClick={onClick}>
+    <button type="button" className={baseClasses} onClick={handleClick}>
       {content}
     </button>
   );
@@ -562,6 +572,7 @@ export default function BottomNavBar() {
   const [morePagesOpen, setMorePagesOpen] = useState(false);
   const prideActive = isPrideMonth();
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const badges = useNavBadges();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -627,10 +638,10 @@ export default function BottomNavBar() {
             {isMobile ? (
               /* MOBILE: 5 tiles — Home, Go Live, Coins, Chats, More */
               <nav className="flex flex-1 items-center justify-around">
-                <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" />
+                <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
-                <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" />
-                <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" />
+                <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
                 <NavButton
                   icon={LayoutGrid}
                   label="More"
@@ -642,22 +653,22 @@ export default function BottomNavBar() {
             ) : (
               /* DESKTOP: Full nav row */
               <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide md:gap-1.5 lg:gap-2">
-                <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} />
-                <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} />
-                <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} />
-                <NavButton icon={Gavel} label="Auctions" to="/auctions" active={isActive('/auctions')} />
-                <NavButton icon={Scale} label="Court" to="/troll-court" active={isActive('/troll-court')} />
-                <NavButton icon={Map} label="Neighborhood" to="/neighborhood-map" active={isActive('/neighborhood-map')} />
+                <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Gavel} label="Auctions" to="/auctions" active={isActive('/auctions')} badge={badges.auctions} badgeKey="auctions" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Scale} label="Court" to="/troll-court" active={isActive('/troll-court')} badge={badges.court} badgeKey="court" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Map} label="Neighborhood" to="/neighborhood-map" active={isActive('/neighborhood-map')} badge={badges.neighborhood} badgeKey="neighborhood" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Gamepad2} label="HydroGaming" to="/hytrogaming" active={isActive('/hytrogaming') || isActive('/gaming')} />
-                <NavButton icon={GraduationCap} label="Academy" to="/academy" active={isActive('/academy')} />
-                <NavButton icon={Wallet} label="Wallet" to="/wallet" active={isActive('/wallet')} />
+                <NavButton icon={GraduationCap} label="Academy" to="/academy" active={isActive('/academy')} badge={badges.academy} badgeKey="academy" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Wallet} label="Wallet" to="/wallet" active={isActive('/wallet')} badge={badges.wallet} badgeKey="wallet" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} />
-                <NavButton icon={Bell} label="Alerts" to="/notifications" active={isActive('/notifications')} />
+                <NavButton icon={Bell} label="Alerts" to="/notifications" active={isActive('/notifications')} badge={badges.alerts} badgeKey="alerts" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Search} label="Search" to="/search" active={isActive('/search')} />
                 <NavButton icon={User} label="Profile" to={profile?.username ? `/profile/${profile.username}` : '/profile'} active={isActive('/profile')} />
-                <NavButton icon={Users} label="Family" to="/family/home" active={isActive('/family')} />
-                <NavButton icon={Store} label="Shop" to="/marketplace" active={isActive('/marketplace')} />
-                <NavButton icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} />
+                <NavButton icon={Users} label="Family" to="/family/home" active={isActive('/family')} badge={badges.family} badgeKey="family" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Store} label="Shop" to="/marketplace" active={isActive('/marketplace')} badge={badges.shop} badgeKey="shop" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} badge={badges.inventory} badgeKey="inventory" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={BookOpen} label="Church" to="/church" active={isActive('/church')} />
                 <NavButton icon={Compass} label="Explore" to="/explore" active={isActive('/explore') || isActive('/live')} />
                 <NavButton icon={Receipt} label="Transactions" to="/transactions" active={isActive('/transactions')} />

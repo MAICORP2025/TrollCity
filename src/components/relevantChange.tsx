@@ -202,7 +202,6 @@ function TopPrideHero({
             <span className="ml-auto h-2 w-2 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]" />
           </div>
           <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
-            <p className="text-xs font-bold text-slate-100">Featured Pride stream slot</p>
             <p className="mt-1 text-[11px] text-slate-300">Promote gaming, battles, and creator moments.</p>
           </div>
         </button>
@@ -321,7 +320,6 @@ function PrideChallengesCard({ onOpenChallenges }: { onOpenChallenges: () => voi
     { week: 1, title: 'Community Spirit', description: 'Reply to 5 different wall posts', xp: '600 XP', color: 'green' },
     // Week 2
     { week: 2, title: 'Ally Actions', description: 'Support 5 different users with gifts', xp: '1,000 XP', color: 'cyan' },
-    { week: 2, title: 'Pride Stream', description: 'Go live with a Pride-themed broadcast', xp: '1,500 XP', color: 'blue' },
     { week: 2, title: 'Wall Storyteller', description: 'Post 3 Pride-themed messages on the wall', xp: '800 XP', color: 'purple' },
     { week: 2, title: 'Gift of Pride', description: 'Send a Pride gift to 3 friends', xp: '900 XP', color: 'pink' },
     { week: 2, title: 'Pride Explorer', description: 'Visit 5 different neighborhoods', xp: '600 XP', color: 'red' },
@@ -1088,8 +1086,8 @@ export default function Home() {
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
       try {
         // Only refresh when live status or viewer counts or featured flags change
-        const oldRow = payload.old || null
-        const newRow = payload.new || null
+        const oldRow = payload.old as any || null
+        const newRow = payload.new as any || null
         const relevantChange = (() => {
           if (!oldRow && newRow) return newRow.is_live === true
           if (oldRow && !newRow) return oldRow.is_live === true
@@ -1260,7 +1258,7 @@ export default function Home() {
         {activeTab === 'wall' && (
           <section className="grid gap-3 lg:grid-cols-[160px_minmax(0,1fr)_280px] xl:grid-cols-[200px_minmax(0,1fr)_320px]">
             {/* Left Sidebar */}
-            <LeftSidebar liveItems={allLiveItems} />
+            <LeftSidebar liveItems={allLiveItems as LiveItem[]} user={user} />
 
             {/* Center Content - Troll Wall Feed */}
             <div className="min-w-0 space-y-3">
@@ -1373,8 +1371,7 @@ export default function Home() {
               liveAuctions={liveAuctions}
               isPride={isPrideMonth()}
               onOpenStore={openStore}
-              onOpenChallenges={openChallenges}
-            />
+              onOpenChallenges={openChallenges} liveItems={[]}            />
           </section>
         )}
 

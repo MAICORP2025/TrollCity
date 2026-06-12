@@ -9,6 +9,8 @@
  * - TCNN articles (/tcnn/article/:id)
  * - Court sessions (/troll-court/watch/:sessionId)
  * - Wall posts (/post/:id)
+ * - Families (/family/profile/:id)
+ * - Organizations (/organizations/:orgId)
  * 
  * Run: node scripts/generate-sitemap.mjs
  * 
@@ -287,6 +289,111 @@ try {
   console.log(`  ✅ ${battles?.length || 0} troll battles`)
 } catch (err) {
   console.warn(`  ⚠️ Skipping troll battles: ${err.message}`)
+}
+
+// ============================================================
+// 9. Families (public)
+// ============================================================
+console.log('📊 Fetching families...')
+try {
+  const { data: families, error } = await supabase
+    .from('families')
+    .select('id, updated_at, created_at')
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+
+  for (const family of (families || [])) {
+    urls.push(urlEntry(
+      `${BASE_URL}/family/profile/${family.id}`,
+      (family.updated_at || family.created_at || today).split('T')[0],
+      'weekly',
+      '0.6'
+    ))
+  }
+  console.log(`  ✅ ${families?.length || 0} families`)
+} catch (err) {
+  console.warn(`  ⚠️ Skipping families: ${err.message}`)
+}
+
+// ============================================================
+// 10. Organizations (public)
+// ============================================================
+console.log('📊 Fetching organizations...')
+try {
+  const { data: orgs, error } = await supabase
+    .from('organizations')
+    .select('id, updated_at, created_at')
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+
+  for (const org of (orgs || [])) {
+    urls.push(urlEntry(
+      `${BASE_URL}/organizations/${org.id}`,
+      (org.updated_at || org.created_at || today).split('T')[0],
+      'weekly',
+      '0.6'
+    ))
+  }
+  console.log(`  ✅ ${orgs?.length || 0} organizations`)
+} catch (err) {
+  console.warn(`  ⚠️ Skipping organizations: ${err.message}`)
+}
+
+// ============================================================
+// 11. Podcasts (public)
+// ============================================================
+console.log('📊 Fetching podcasts...')
+try {
+  const { data: podcasts, error } = await supabase
+    .from('podcasts')
+    .select('id, updated_at, created_at')
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+
+  for (const podcast of (podcasts || [])) {
+    urls.push(urlEntry(
+      `${BASE_URL}/podcast/${podcast.id}`,
+      (podcast.updated_at || podcast.created_at || today).split('T')[0],
+      'weekly',
+      '0.6'
+    ))
+  }
+  console.log(`  ✅ ${podcasts?.length || 0} podcasts`)
+} catch (err) {
+  console.warn(`  ⚠️ Skipping podcasts: ${err.message}`)
+}
+
+// ============================================================
+// 12. Marketplace Listings (public)
+// ============================================================
+console.log('📊 Fetching marketplace listings...')
+try {
+  const { data: listings, error } = await supabase
+    .from('marketplace_listings')
+    .select('id, updated_at, created_at')
+    .eq('is_public', true)
+    .eq('is_sold', false)
+    .order('created_at', { ascending: false })
+    .limit(5000)
+  if (error) throw error
+
+  for (const listing of (listings || [])) {
+    urls.push(urlEntry(
+      `${BASE_URL}/marketplace/listing/${listing.id}`,
+      (listing.updated_at || listing.created_at || today).split('T')[0],
+      'daily',
+      '0.5'
+    ))
+  }
+  console.log(`  ✅ ${listings?.length || 0} marketplace listings`)
+} catch (err) {
+  console.warn(`  ⚠️ Skipping marketplace listings: ${err.message}`)
 }
 
 // ============================================================

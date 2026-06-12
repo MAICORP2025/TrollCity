@@ -43,6 +43,7 @@ export interface BugReport {
   userId?: string;
   userEmail?: string;
   userRole?: string;
+  username?: string | null;
   streamId?: string;
   functionName?: string;
   tableName?: string;
@@ -246,6 +247,7 @@ export async function reportBug(
       userId: user?.id,
       userEmail: user?.email || profile?.email,
       userRole: profile?.role || profile?.troll_role,
+      username: profile?.username || profile?.display_name || user?.email?.split('@')[0] || null,
       streamId: context.streamId,
       functionName: context.functionName,
       tableName: context.table,
@@ -276,6 +278,7 @@ function toDbPayload(report: BugReport): Record<string, any> {
     user_id: report.userId,
     user_email: report.userEmail,
     user_role: report.userRole,
+    username: report.username,
     stream_id: report.streamId,
     function_name: report.functionName,
     table_name: report.tableName,
@@ -293,8 +296,20 @@ function toDbPayload(report: BugReport): Record<string, any> {
 
 async function sendBugReport(report: BugReport): Promise<void> {
   try {
-    await supabase.rpc('log_app_bug_report', {
-      payload: maskSensitiveData(toDbPayload(report))
+    // Use direct fetch instead of supabase.rpc() to avoid infinite loop:
+    // supabase.rpc() failures get caught by the global fetch wrapper which
+    // calls reportBug() -> sendBugReport() again. Direct fetch lets the
+    // global wrapper's isBugReporterRequest() check skip it.
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://yjxpwfalenorzrqxwmtr.supabase.co';
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    await fetch(`${supabaseUrl}/rest/v1/rpc/log_app_bug_report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ payload: maskSensitiveData(toDbPayload(report)) }),
     });
   } catch {
     // Silently fail — bug reporting is non-critical and must not cause recursion

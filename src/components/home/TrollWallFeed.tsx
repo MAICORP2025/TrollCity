@@ -29,6 +29,7 @@ import UserNameWithAge from '@/components/UserNameWithAge'
 import NeonGlowUsername from '@/components/NeonGlowUsername'
 import CreatePostComposer from './CreatePostComposer'
 import { parseTextWithLinks, cn } from '@/lib/utils'
+import { Link } from 'react-router-dom'
 import WallShareModal from '@/components/trollWall/WallShareModal'
 import { useIsPwa } from '@/lib/hooks/useIsPwa'
 import '@/styles/rainbow-scroller.css'
@@ -310,7 +311,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         'postgres_changes',
         { event: '*', schema: 'public', table: 'troll_wall_posts' },
         (payload) => {
-          const incoming = payload.event === 'DELETE' ? payload.old : payload.new
+          const incoming = (payload.event === 'DELETE' ? payload.old : payload.new) as any
           if (!incoming || !incoming.id) return
           postBufferRef.current.push({ ...incoming, _event: payload.event } as any)
         }
@@ -543,7 +544,10 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           post.username || 'TC'
         )}`
 
-      return (
+      const streamUrl = post.metadata?.stream_url as string | undefined
+      const isStreamAnnounce = post.post_type === 'stream_announce' && streamUrl
+
+      const cardJsx = (
         <div className="pb-4">
           <div className="group relative overflow-hidden rounded-3xl border border-cyan-400/10 bg-[#050816]/90 p-4 shadow-[0_0_25px_rgba(34,211,238,0.08)] transition-all duration-300 hover:border-cyan-300/25 hover:shadow-[0_0_45px_rgba(34,211,238,0.18)]">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.08),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent)]" />
@@ -879,6 +883,16 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
           </div>
         </div>
       )
+
+      if (isStreamAnnounce && streamUrl) {
+        return (
+          <Link key={post.id} to={streamUrl} className="block pb-4">
+            {cardJsx}
+          </Link>
+        )
+      }
+
+      return cardJsx
     },
     [
       user,

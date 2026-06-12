@@ -43,7 +43,7 @@ function livekitHttpUrl(): string {
   return LIVEKIT_URL.replace(/^wss?:\/\//, "https://");
 }
 
-async function createLiveKitIngest(roomName: Promise<{ rtmpUrl: string; streamKey: string }> {
+async function createLiveKitIngest(roomName: string): Promise<{ rtmpUrl: string; streamKey: string }> {
   const url = `${livekitHttpUrl()}/api/ingress/rtmp`;
   console.log(`[livekit-gaming] createLiveKitIngest: room=${roomName}`);
 

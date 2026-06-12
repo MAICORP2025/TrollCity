@@ -44,9 +44,10 @@ export interface AgoraScreenShareState {
   channelName: string | null;
 
   // Agora tracks (for publishing)
-  screenTrack: ILocalVideoTrack | null;
-  micTrack: ILocalAudioTrack | null;
-  cameraTrack: ILocalVideoTrack | null;
+  screenTrack: ILocalVideoTrack | null;       // Track A: Screen share video
+  screenAudioTrack: ILocalAudioTrack | null;  // Track D: Screen share / game / system audio
+  micTrack: ILocalAudioTrack | null;          // Track C: Microphone audio
+  cameraTrack: ILocalVideoTrack | null;       // Track B: Camera video
 }
 
 export interface AgoraScreenShareActions {
@@ -81,6 +82,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
 
   // Agora tracks
   const [screenTrack, setScreenTrack] = useState<ILocalVideoTrack | null>(null);
+  const [screenAudioTrack, setScreenAudioTrack] = useState<ILocalAudioTrack | null>(null);
   const [micTrack, setMicTrack] = useState<ILocalAudioTrack | null>(null);
   const [cameraTrack, setCameraTrack] = useState<ILocalVideoTrack | null>(null);
 
@@ -90,6 +92,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
   const joinedRef = useRef(false);
   const cameraJoinedRef = useRef(false);
   const screenTrackRef = useRef<ILocalVideoTrack | null>(null);
+  const screenAudioTrackRef = useRef<ILocalAudioTrack | null>(null);
   const micTrackRef = useRef<ILocalAudioTrack | null>(null);
   const cameraTrackRef = useRef<ILocalVideoTrack | null>(null);
   const displayStreamRef = useRef<MediaStream | null>(null);
@@ -122,10 +125,11 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
     debug('Starting preview...');
     setError(null);
     try {
-      // Get display media for preview
+      // Get display media for preview — request BOTH video and audio
+      // audio: true captures game/system audio from the selected display source
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: { displaySurface: 'monitor' } as MediaTrackConstraints,
-        audio: false,
+        audio: true,
       });
       if (!isMountedRef.current) { displayStream.getTracks().forEach(t => t.stop()); return; }
 
@@ -179,7 +183,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
       await client.join(appId, chName, token, uid);
       joinedRef.current = true;
 
-      // Create Agora screen track from the existing display stream
+      // Track A: Screen share VIDEO from display stream
       const displayVideoTrack = displayStreamRef.current?.getVideoTracks()[0];
       if (displayVideoTrack) {
         const st = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: displayVideoTrack });
@@ -187,7 +191,17 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
         setScreenTrack(st);
       }
 
-      // Create Agora mic track from existing mic stream
+      // Track D: Screen share AUDIO (game/system audio) from display stream
+      let screenAudioTrack: ILocalAudioTrack | null = null;
+      const displayAudioMediaTrack = displayStreamRef.current?.getAudioTracks()[0];
+      if (displayAudioMediaTrack) {
+        screenAudioTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: displayAudioMediaTrack });
+        debug('Screen share audio track created from display media');
+      } else {
+        debug('No audio track available from display media — browser may not support it or user denied');
+      }
+
+      // Track C: Microphone AUDIO from mic stream
       let micAgoraTrack: ILocalAudioTrack | null = null;
       const micMediaTrack = micStreamRef.current?.getAudioTracks()[0];
       if (micMediaTrack) {
@@ -196,7 +210,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
         setMicTrack(micAgoraTrack);
       }
 
-      // Create Agora camera track from existing camera stream.
+      // Track B: Camera VIDEO from camera stream
       let camAgoraTrack: ILocalVideoTrack | null = null;
       const camMediaTrack = cameraStreamRef.current?.getVideoTracks()[0];
       if (camMediaTrack) {
@@ -205,14 +219,16 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
         setCameraTrack(camAgoraTrack);
       }
 
-      // Publish main stream tracks (screen + mic) on the primary client.
+      // Publish main stream tracks on the primary client:
+      // Screen video (A), Screen audio (D), Mic audio (C)
       const toPublish: (ILocalVideoTrack | ILocalAudioTrack)[] = [];
       if (screenTrackRef.current) toPublish.push(screenTrackRef.current);
+      if (screenAudioTrack) toPublish.push(screenAudioTrack);
       if (micAgoraTrack) toPublish.push(micAgoraTrack);
       if (toPublish.length > 0) {
         await client.publish(toPublish);
       }
-      debug('Published primary client tracks', toPublish.length);
+      debug('Published primary client tracks', toPublish.length, '(screen video, screen audio, mic audio)');
 
       // If camera is enabled, create a secondary Agora client to publish it separately.
       if (camAgoraTrack) {
@@ -249,6 +265,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
       if (clientRef.current && joinedRef.current) {
         const toUnpublish: (ILocalVideoTrack | ILocalAudioTrack)[] = [];
         if (screenTrackRef.current) toUnpublish.push(screenTrackRef.current);
+        if (screenAudioTrackRef.current) toUnpublish.push(screenAudioTrackRef.current);
         if (micTrackRef.current) toUnpublish.push(micTrackRef.current);
         if (toUnpublish.length > 0) {
           try { await clientRef.current.unpublish(toUnpublish); } catch { /* ignore */ }
@@ -269,8 +286,9 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
         debug('Left Agora camera channel');
       }
 
-      // 3. Stop all Agora tracks
+      // 3. Stop all Agora tracks (A=screen video, B=camera video, C=mic audio, D=screen audio)
       if (screenTrackRef.current) { screenTrackRef.current.stop(); screenTrackRef.current.close(); screenTrackRef.current = null; }
+      if (screenAudioTrackRef.current) { screenAudioTrackRef.current.stop(); screenAudioTrackRef.current.close(); screenAudioTrackRef.current = null; }
       if (micTrackRef.current) { micTrackRef.current.stop(); micTrackRef.current.close(); micTrackRef.current = null; }
       if (cameraTrackRef.current) { cameraTrackRef.current.stop(); cameraTrackRef.current.close(); cameraTrackRef.current = null; }
       if (cameraClientRef.current) { cameraClientRef.current = null; }
@@ -309,6 +327,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
       setCameraStream(null);
       setMicStream(null);
       setScreenTrack(null);
+      setScreenAudioTrack(null);
       setMicTrack(null);
       setCameraTrack(null);
       setChannelName(null);
@@ -351,12 +370,20 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
         setHasMicTrack(true);
         setMicEnabled(true);
 
-        // If already live, publish mic track
+        // If already live, replace the mic track on the peer connection
         if (clientRef.current && joinedRef.current) {
+          // Unpublish old mic track first to avoid duplicate audio
+          if (micTrackRef.current) {
+            try { await clientRef.current.unpublish([micTrackRef.current]); } catch { /* ignore */ }
+            micTrackRef.current.stop();
+            micTrackRef.current.close();
+            micTrackRef.current = null;
+          }
           const mt = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: ms.getAudioTracks()[0] });
           micTrackRef.current = mt;
           setMicTrack(mt);
           await clientRef.current.publish([mt]);
+          debug('Mic track replaced on live stream');
         }
         toast.success('Microphone enabled');
       } catch { toast.error('Could not access microphone'); }
@@ -467,6 +494,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
     return () => {
       isMountedRef.current = false;
       screenTrackRef.current?.stop(); screenTrackRef.current?.close();
+      screenAudioTrackRef.current?.stop(); screenAudioTrackRef.current?.close();
       micTrackRef.current?.stop(); micTrackRef.current?.close();
       cameraTrackRef.current?.stop(); cameraTrackRef.current?.close();
       cameraStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -482,7 +510,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
     hasScreenTrack, hasMicTrack, hasCameraTrack,
     micEnabled, cameraEnabled,
     isLive, isConnecting, isConnected, isPaused, error, channelName,
-    screenTrack, micTrack, cameraTrack,
+    screenTrack, screenAudioTrack, micTrack, cameraTrack,
     startPreview, goLive, endStream, stopPreview, toggleMic, toggleCamera,
   };
 }

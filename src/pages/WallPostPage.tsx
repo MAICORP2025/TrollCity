@@ -102,7 +102,6 @@ export default function WallPostPage() {
         .then(({ error }) => {
           if (error) console.warn('Failed to record share:', error)
         })
-        .catch((err) => console.warn('Failed to record share:', err))
     }
   }
 

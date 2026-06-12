@@ -6,7 +6,7 @@ import { PreflightStore } from '@/lib/preflightStore';
 import requestBroadcastMediaAccess from '@/lib/media/requestBroadcastMediaAccess';
 import { useStreamStore } from '@/lib/streamStore';
 import { LocalAudioTrack, LocalVideoTrack, AudioPresets, VideoPresets, Room } from 'livekit-client';
-import { Video, VideoOff, Mic, MicOff, RefreshCw, Swords, Gamepad2, Monitor, Lock, Eye, EyeOff, Radio, Bookmark } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, RefreshCw, Swords, Gamepad2, Monitor, Lock, Eye, EyeOff, Radio, Bookmark, ShieldCheck } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScreenShare, StreamMode, canScreenShare } from '../../hooks/useScreenShare';
 import { DraggableCameraOverlay } from '../../components/broadcast/DraggableCameraOverlay';
@@ -32,6 +32,7 @@ import {
   AVAILABLE_RELIGIONS,
   BroadcastCategoryId
 } from '../../config/broadcastCategories';
+
 
 /* ============================================================================
  * 🛡️  LIVEKIT STREAMING INFRASTRUCTURE
@@ -474,6 +475,7 @@ export default function SetupPage() {
   const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
   const showPermissionPrompt = permissionStatus === 'prompt' || permissionStatus === 'unknown';
   const [showDriverTestModal, setShowDriverTestModal] = useState(false);
+  const [inlineAgreementChecked, setInlineAgreementChecked] = useState(false);
 
 
 
@@ -837,7 +839,7 @@ export default function SetupPage() {
       mediaElement.setAttribute('playsinline', '');
       mediaElement.autoplay = true;
       mediaElement.muted = true;
-      mediaElement.playsInline = true;
+      (mediaElement as any).playsInline = true;
       mediaElement.style.display = 'block';
       mediaElement.style.backgroundColor = 'black';
       mediaElement.style.width = '100%';
@@ -864,7 +866,7 @@ export default function SetupPage() {
       });
     } catch (err) {
       console.warn('[SetupPage] LiveKit attach failed, falling back to native preview:', err);
-      const stream = new MediaStream([videoTrack.getMediaStreamTrack()]);
+      const stream = new MediaStream([(videoTrack as any).getMediaStreamTrack()]);
       attachNativePreview(stream, facing);
     }
   };
@@ -1299,7 +1301,7 @@ export default function SetupPage() {
         // Detach and close current video track
         detachVideoTrack(livekitTracks[1]);
         livekitTracks[1].stop();
-        livekitTracks[1].close();
+        (livekitTracks[1] as any).close();
         
         // Get new video track using native browser API
         let newNativeStream: MediaStream;
@@ -1337,9 +1339,9 @@ export default function SetupPage() {
         // Update preview stream for state management
         const newStream = new MediaStream();
         if (livekitTracks[0]) {
-          newStream.addTrack(livekitTracks[0].getMediaStreamTrack());
+          newStream.addTrack((livekitTracks[0] as any).getMediaStreamTrack());
         }
-        newStream.addTrack(newVideoTrack.getMediaStreamTrack());
+        newStream.addTrack((newVideoTrack as any).getMediaStreamTrack());
         setStream(newStream);
         
         // Attach preview using native browser video element
@@ -1452,14 +1454,14 @@ export default function SetupPage() {
       
       const videoTrack = new LocalVideoTrack(displayVideoTrack, {
         name: 'screen-share'
-      });
+      } as any);
 
       // Also create audio track for system audio
       let audioTrack: LocalAudioTrack | null = null;
       if (displayAudioTrack) {
         audioTrack = new LocalAudioTrack(displayAudioTrack, {
           name: 'screen-share-audio'
-        });
+        } as any);
         console.log('[toggleScreenShare] Created audio track from display stream');
       }
 
@@ -1478,7 +1480,7 @@ export default function SetupPage() {
         mediaElement.style.top = '0';
         mediaElement.style.left = '0';
         mediaElement.autoplay = true;
-        mediaElement.playsInline = true;
+        (mediaElement as any).playsInline = true;
         mediaElement.muted = true;
         videoContainerRef.current.appendChild(mediaElement);
         // Ensure playback starts - some browsers require explicit play()
@@ -1511,11 +1513,11 @@ export default function SetupPage() {
   // Helper functions to check category access
   const canAccessTCNN = () => {
     const p: any = profile
-    const isNewsCaster = p?.is_news_caster || p?.is_chief_news_caster;
+    const isNewsCaster = (p as any)?.is_news_caster || (p as any)?.is_chief_news_caster;
     const isAdmin = p?.role === 'admin' || p?.is_admin ||
       p?.role === 'superadmin' || p?.is_superadmin;
     // Check if they have restricted roles
-    const isRestrictedRole = p?.is_troll_officer || p?.is_lead_troll_officer ||
+    const isRestrictedRole = p?.is_troll_officer || (p as any)?.is_lead_troll_officer ||
       p?.role === 'troll_officer' || p?.role === 'lead_troll_officer';
 
     return (isNewsCaster || isAdmin) && !isRestrictedRole;
@@ -1526,32 +1528,23 @@ export default function SetupPage() {
     return profile?.role && allowedRoles.includes(profile.role);
   };
 
-  const handleStartStream = async () => {
-    // Check if broadcasting is locked and user is not admin
+const handleStartStream = async () => {
     if (isBroadcastLocked && !canBroadcast()) {
       toast.error('Broadcasting is currently disabled by admin. No one can go live while lockdown is active.');
       return;
     }
-
-    // Check if user's driver license is suspended
     if (profile?.drivers_license_status === 'suspended') {
       toast.error('Your driver license is currently suspended. You cannot go live.');
       return;
     }
-
-    // Perform all validations first BEFORE setting isStartingStream
     if (!title.trim()) {
       toast.error('Please enter a stream title');
       return;
     }
-
-     // Check religion requirement for spiritual category
-     if (categoryRequiresReligion && !selectedReligion) {
-       toast.error('Please select your religion');
-       return;
-     }
- 
-    // Check President Elections requirements - only admin, secretary, lead_troll_officer, troll_officer
+    if (categoryRequiresReligion && !selectedReligion) {
+      toast.error('Please select your religion');
+      return;
+    }
     if (category === 'election') {
       const allowedRoles = ['admin', 'secretary', 'lead_troll_officer', 'troll_officer'];
       if (!profile?.role || !allowedRoles.includes(profile.role)) {
@@ -1559,63 +1552,49 @@ export default function SetupPage() {
         return;
       }
     }
-
-    // Check if user has active driver license (required to go live)
-    // NOTE: SetupPage no longer consumes `license` from useAuthStore because the AuthState type doesn't expose it.
-    // Driver-test gating is handled by DriverTestRequiredModal + other parts of the flow.
-
-
-
-
-    // Validate password if protected
     if (isProtected && broadcastPassword.length < 4) {
       toast.error('Password must be at least 4 characters');
       return;
     }
-
-    // Check TCNN requirements - only News Casters, Chief News Casters, and Admins
-    // Regular users, Troll Officers, and Lead Troll Officers CANNOT start TCNN broadcasts
     if (category === 'tcnn') {
-      const isNewsCaster = profile?.is_news_caster || profile?.is_chief_news_caster;
-      const isAdmin = profile?.role === 'admin' || profile?.is_admin || 
+      const isNewsCaster = (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster;
+      const isAdmin = profile?.role === 'admin' || profile?.is_admin ||
                       profile?.role === 'superadmin' || profile?.is_superadmin;
-      
-      // Explicitly check for roles that should NOT be allowed
-      const isRestrictedRole = profile?.is_troll_officer || profile?.is_lead_troll_officer || 
+      const isRestrictedRole = profile?.is_troll_officer || (profile as any)?.is_lead_troll_officer ||
                                profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer';
-      
       if (!isNewsCaster && !isAdmin) {
         toast.error('TCNN category is only available to News Casters, Chief News Casters, and Admins');
         return;
       }
-      
-      // Extra safety check - if they have restricted roles, block them even if they have news caster flag
       if (isRestrictedRole && !isAdmin) {
         toast.error('Troll Officers cannot start TCNN broadcasts. Apply for News Caster role.');
         return;
       }
     }
-
-    // Check camera requirement for categories that need it, unless screen sharing is active
     if (categoryConfig.requiresCamera && !isVideoEnabled) {
       toast.error(`Camera is required for ${categoryConfig.name}`);
       return;
     }
-
     if (!user) return;
-
-    // Check weekly broadcaster limit before starting
     if (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) {
       toast.error(`Weekly broadcaster limit reached (${broadcasterLimitInfo.current}/${broadcasterLimitInfo.max}). You are not in the first 10. Please try again next week.`);
       return;
     }
+    if (!inlineAgreementChecked) {
+      toast.error('You must agree to the Broadcast Agreement before starting.');
+      return;
+    }
+    setInlineAgreementChecked(false);
+    await handleConfirmedStreamStart();
+  };
 
-    // All validations passed - call iOS-safe media permission helper directly
-    // This must run in the user gesture handler to satisfy iOS PWA/Safari requirements.
+  const handleConfirmedStreamStart = async () => {
+    if (!user) return;
+    const agreementAcceptedAt = new Date().toISOString();
+
     try {
       const result = await requestBroadcastMediaAccess();
       if (result.status !== 'success') {
-        // Map helper errors to user-facing messages
         if (result.status === 'insecure_context') {
           toast.error('Camera and microphone require HTTPS. Open Troll City from the secure website link.');
         } else if (result.status === 'unsupported_browser') {
@@ -1637,7 +1616,7 @@ export default function SetupPage() {
       }
 
       // Success - we have a MediaStream. Wrap into LiveKit tracks and preserve in PreflightStore.
-      const mediaStream = result.stream;
+      const mediaStream = (result as any).stream;
       // Stop any existing preflight tracks to avoid duplicates
       try { if (livekitTracksRef.current[0]) livekitTracksRef.current[0]?.stop(); } catch(e) {}
       try { if (livekitTracksRef.current[1]) livekitTracksRef.current[1]?.stop(); } catch(e) {}
@@ -1742,10 +1721,11 @@ export default function SetupPage() {
            broadcast_theme_slug: normalizedSelectedTheme,
            random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' ? randomBattleQueueEnabled : false,
            random_battle_queued_at: null,
-           // Store LiveKit room name in both columns for compatibility
            livekit_room_name: roomName,
            agora_channel: roomName,
-           // Store category-specific data
+           broadcast_disclaimer_accepted: true,
+           broadcast_disclaimer_accepted_at: agreementAcceptedAt,
+           broadcast_disclaimer_user_id: user.id,
            ...(category === 'spiritual' && { selected_religion: selectedReligion }),
            ...(category === 'battle' && { 
              battle_format: universeBattleMode === 'multi' ? selectedMultiBattleFormat : '4v4',
@@ -1850,6 +1830,31 @@ export default function SetupPage() {
 
         console.log('[SetupPage] Stream marked as live in database');
         broadcastStartLog('stream live verification', { streamId: data.id, status: 'live' });
+
+        // Create a system wall post so the stream appears on the Troll Wall feed
+        // Runs independently — if it fails, the stream is still live
+        try {
+          const bcName = profile?.username || profile?.display_name || 'A Broadcaster'
+          const bcStreamUrl = `/watch/${data.id}`
+          await supabase.from('troll_wall_posts').insert({
+            user_id: '00000000-0000-0000-0000-000000000001',
+            username: 'Troll City System',
+            post_type: 'stream_announce',
+            content: `📺 ${bcName} is now LIVE on Troll City!`,
+            is_system_generated: true,
+            metadata: {
+              stream_id: data.id,
+              stream_url: bcStreamUrl,
+              category: data.category || 'general',
+              broadcaster_name: bcName,
+              broadcaster_id: user?.id,
+              thumbnail_url: null,
+              live: true,
+            },
+          })
+        } catch (wallErr: any) {
+          console.warn('[SetupPage] Wall post creation failed:', wallErr)
+        }
 
         // Stream is now created, LiveKit is connected, tracks are published, and DB is updated.
         // Proceed to broadcast room.
@@ -1987,7 +1992,7 @@ export default function SetupPage() {
 
       supabase.from('global_events').insert([
         { title: `${profile.username} just went live!`, icon: 'live', priority: 2 },
-      ]).then();
+      ]).then(() => {}, () => {});
     } catch (err: any) {
       broadcastStartError(failureStage, {
         streamId: createdStreamId,
@@ -2160,7 +2165,7 @@ export default function SetupPage() {
                 <p className="text-[10px] text-gray-400 mb-3 max-w-xs">
                   We need permission to access your camera and microphone for streaming.
                 </p>
-                {permissionStatus === 'denied' ? (
+                {(permissionStatus as any) === 'denied' ? (
                   <div className="space-y-2">
                     <p className="text-[10px] text-red-400">
                       Permission denied. Enable access in browser settings.
@@ -2426,6 +2431,53 @@ export default function SetupPage() {
           </div>
         )}
 
+        {/* Broadcast Agreement */}
+        <div className="bg-zinc-900/80 rounded-2xl border border-amber-500/20 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldCheck size={16} className="text-amber-400" />
+            <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">Broadcast Agreement</span>
+          </div>
+          <div className="max-h-40 overflow-y-auto rounded-xl bg-zinc-800/60 border border-zinc-700 p-3 mb-3 text-xs text-zinc-300 leading-relaxed space-y-2">
+            <p>
+              By starting a broadcast, I confirm that I am at least 18 years old and will comply with all applicable laws in my jurisdiction. I understand that I am solely responsible for the content I create, stream, share, or display on Troll City.
+            </p>
+            <p>
+              I agree not to broadcast illegal activity, sell or promote controlled substances, threaten or harm others, share non-consensual content, or violate Troll City's Terms of Service or Community Guidelines.
+            </p>
+            <p>
+              I further acknowledge that I am of legal age in my jurisdiction to consume any products, substances, beverages, or other items that may be displayed or consumed during my broadcast, and that any such activity is conducted at my own responsibility and in compliance with local laws.
+            </p>
+            <p>
+              Troll City reserves the right to remove content, suspend broadcasts, restrict features, or terminate accounts that violate these rules.
+            </p>
+          </div>
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <div className="relative mt-0.5">
+              <input
+                type="checkbox"
+                checked={inlineAgreementChecked}
+                onChange={(e) => setInlineAgreementChecked(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className={cn(
+                'w-5 h-5 rounded border-2 transition-all',
+                inlineAgreementChecked
+                  ? 'bg-amber-500 border-amber-500'
+                  : 'bg-zinc-800 border-zinc-600 group-hover:border-zinc-500'
+              )}>
+                {inlineAgreementChecked && (
+                  <svg className="w-4 h-4 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+            </div>
+            <span className="text-xs text-zinc-300 leading-snug">
+              I am 18 years of age or older and agree to the Broadcast Agreement, Terms of Service, and Community Guidelines.
+            </span>
+          </label>
+        </div>
+
         {/* Bottom Row: Title + Category + Go Live */}
         <div className="bg-zinc-900/80 rounded-2xl border border-white/10 p-4 flex flex-col md:flex-row items-stretch md:items-end gap-3">
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2462,8 +2514,8 @@ export default function SetupPage() {
                      // Hide TCNN and President Elections from regular users
                      if (cat.id === 'tcnn' || cat.id === 'election') {
                        return isUserAdmin || profile?.role === 'secretary' ||
-                              profile?.is_lead_troll_officer || profile?.is_troll_officer ||
-                              profile?.is_news_caster || profile?.is_chief_news_caster;
+                              (profile as any)?.is_lead_troll_officer || profile?.is_troll_officer ||
+                              (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster;
                      }
                      return true;
                    })

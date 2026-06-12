@@ -17,7 +17,7 @@ import {
   normalizeMobileRole,
   type MobileRouteItem,
   type MobileUserRole,
-} from "../mobileRoutes";
+} from "../mobileRoutes.tsx";
 
 type MobileUserCard = {
   id: string | null;

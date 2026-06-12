@@ -21,7 +21,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-import MobileHomePage from "./pages/MobileHomePage";
+import MobileHomePage from "./pages/MobileHomepage";
 import MobileSetupPage from "./pages/MobileSetupPage";
 import MobileViewerPage from "./pages/MobileViewerPage";
 import MobileBroadcastPage from "./pages/MobileBroadcastPage";

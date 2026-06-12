@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
   Link,
   useParams,
@@ -516,7 +516,7 @@ if (typeof window !== 'undefined') {
 }
 
 /* ============================================================================
- * 🛡️  CRITICAL STREAMING INFRASTRUCTURE - PROTECTED
+ * ???  CRITICAL STREAMING INFRASTRUCTURE - PROTECTED
  *
  * This file stops broadcast egress and MUST call /api/broadcasts/stop-streaming.
  * DO NOT change the API endpoint without updating:
@@ -600,7 +600,7 @@ export function BroadcastPage() {
 
     const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
 
-   // ── Channel diagnostics (dev only) ──
+   // -- Channel diagnostics (dev only) --
   useEffect(() => {
     if (stream?.is_battle && stream?.battle_id) {
       logActiveChannels(`BroadcastPage:battle:${stream.battle_id}`)
@@ -835,10 +835,10 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   useEffect(() => {
     return () => {
       if (!isGoingLiveRef.current) {
-        console.log('[BroadcastPage] ✅ Real unmount, clearing tracks');
+        console.log('[BroadcastPage] ? Real unmount, clearing tracks');
         clearTracks();
       } else {
-        console.log('[BroadcastPage] ⏭️ Skipping clearTracks on unmount during live transition');
+        console.log('[BroadcastPage] ?? Skipping clearTracks on unmount during live transition');
       }
     };
   }, [clearTracks]);
@@ -861,7 +861,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
           const releaseTime = new Date(data.release_time);
           if (releaseTime > new Date()) {
             console.log('[BroadcastPage] User is jailed - redirecting to /jail');
-            toast.error('🚔 You are in jail and cannot broadcast');
+            toast.error('?? You are in jail and cannot broadcast');
             navigate('/jail', { replace: true });
             return;
           }
@@ -1079,7 +1079,7 @@ useEffect(() => {
 
   // Seat events: useStreamSeats hook already subscribes to stream-seat-events:${streamId}
   // and handles seat refresh scheduling. We only update local seatJoinTimes here
-  // by deriving from seat state changes — no duplicate channel needed.
+  // by deriving from seat state changes � no duplicate channel needed.
   useEffect(() => {
     if (!streamId) return;
     // Track seat join times from current seats state
@@ -1206,7 +1206,7 @@ const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{
     }, [recentGifts])
     const { subscriberUsernames } = useSubscriberUsernames(stream?.user_id)
 
-    // ── Floating Chat ─────────────────────────────────────────────────────────
+    // -- Floating Chat ---------------------------------------------------------
    interface FloatingMessage {
      id: string
      username: string
@@ -1594,11 +1594,11 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
 
    const processGiftEvent = useCallback(async (giftData: any) => {
      if (!giftData) {
-       if (import.meta.env.DEV) console.log('[BroadcastPage] ⚠️ processGiftEvent: giftData is null/undefined');
+       if (import.meta.env.DEV) console.log('[BroadcastPage] ?? processGiftEvent: giftData is null/undefined');
        return;
      }
 
-     // ── Stable animation-id ─────────────────────────────────────────────────
+     // -- Stable animation-id -------------------------------------------------
      const animationId = String(giftData.id || giftData.stream_gift_id || giftData.gift_transaction_id || '');
      if (!animationId) return // noise: skip entirely
      const giftId = animationId;
@@ -1609,27 +1609,27 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
      }
      seenGiftAnimationIdsRef.current.add(animationId);
 
-     // ── Enrich / validate ───────────────────────────────────────────────────
+     // -- Enrich / validate ---------------------------------------------------
      const enrichedGiftData = await enrichGiftForOverlay(giftData);
 
      const incomingStreamId = enrichedGiftData.streamId || enrichedGiftData.stream_id || enrichedGiftData.metadata?.streamId || enrichedGiftData.metadata?.stream_id;
      const receiverId = enrichedGiftData.receiver_id || enrichedGiftData.recipient_id || enrichedGiftData.receiverId || enrichedGiftData.recipientId || enrichedGiftData.metadata?.receiver_id || enrichedGiftData.metadata?.recipient_id;
-     console.log('[BroadcastPage] ✅ Processing gift', { animationId, incomingStreamId, currentStreamId: streamId, receiverId });
+     console.log('[BroadcastPage] ? Processing gift', { animationId, incomingStreamId, currentStreamId: streamId, receiverId });
 
      if (incomingStreamId && incomingStreamId !== streamId) {
-       console.log('[BroadcastPage] ⚠️ Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId });
+       console.log('[BroadcastPage] ?? Stream ID mismatch, skipping gift:', { incomingStreamId, currentStreamId: streamId });
        return;
      }
 
      const resolvedGiftAmount = resolveGiftAmount(enrichedGiftData);
      const resolvedGiftName = resolveGiftName(enrichedGiftData);
 
-     // ── Build state entry ──────────────────────────────────────────────────
+     // -- Build state entry --------------------------------------------------
      const newGift = {
       id: giftId,
       gift_id: enrichedGiftData.gift_id,
       gift_name: resolvedGiftName,
-      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || '🎁',
+      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || '??',
       gift_slug: enrichedGiftData.gift_slug || enrichedGiftData.metadata?.gift_slug,
       animation_key: enrichedGiftData.animation_key || enrichedGiftData.metadata?.animation_key,
       animation_type: enrichedGiftData.animation_type || enrichedGiftData.metadata?.animation_type,
@@ -1663,11 +1663,11 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
     // Show gift banner for ALL gifts to broadcaster
     setRecentGifts((prev) => {
       if (prev.some((g) => g.id === giftId)) {
-        console.log('[BroadcastPage] 📌 Gift already in queue (dedupe), skipping:', giftId);
+        console.log('[BroadcastPage] ?? Gift already in queue (dedupe), skipping:', giftId);
         return prev;
       }
       const updated = [...prev, newGift].slice(-20);
-      console.log('[BroadcastPage] ✅ Added gift to queue, now:', updated.length, 'gifts');
+      console.log('[BroadcastPage] ? Added gift to queue, now:', updated.length, 'gifts');
       return updated;
     });
 
@@ -1794,10 +1794,10 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
 
     // Only clear tracks if we're actually exiting, not going live
     if (!isGoingLiveRef.current) {
-      console.log('[BroadcastPage] ✅ Real exit in stopLocalTracks, clearing tracks')
+      console.log('[BroadcastPage] ? Real exit in stopLocalTracks, clearing tracks')
       clearTracks()
     } else {
-      console.log('[BroadcastPage] ⏭️ Skipping clearTracks in stopLocalTracks during live transition')
+      console.log('[BroadcastPage] ?? Skipping clearTracks in stopLocalTracks during live transition')
     }
   }, [localTracks, clearTracks])
 
@@ -2044,10 +2044,10 @@ useEffect(() => {
 
     // Only clear tracks if we're actually exiting, not going live
     if (!isGoingLiveRef.current) {
-      console.log('[BroadcastPage] ✅ Real exit, clearing tracks')
+      console.log('[BroadcastPage] ? Real exit, clearing tracks')
       clearTracks()
     } else {
-      console.log('[BroadcastPage] ⏭️ Skipping clearTracks during live transition')
+      console.log('[BroadcastPage] ?? Skipping clearTracks during live transition')
    }
   };
 
@@ -2901,7 +2901,7 @@ useStreamRealtime(streamId, {
 
   const floatingChatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-   // ── Floating Chat: receive broadcasts ────────────────────────────────────
+   // -- Floating Chat: receive broadcasts ------------------------------------
  useEffect(() => {
    if (!streamId) return;
 
@@ -2950,11 +2950,11 @@ useStreamRealtime(streamId, {
    };
  }, [streamId, supabase]);
 
-  // ★ Gift animations are now driven exclusively by useStreamRealtime.onGift
+  // ? Gift animations are now driven exclusively by useStreamRealtime.onGift
   // (stream_gifts postgres_changes).  The broadcast gift_sent channel is no
-  // longer subscribed here — the postgres event fires once per INSERT and
+  // longer subscribed here � the postgres event fires once per INSERT and
   // both channels resolved to the same animationId (stream_gifts row UUID).
-  // ★ If you are building a minimal overlay or chat overlay that only shows
+  // ? If you are building a minimal overlay or chat overlay that only shows
   // the in-chat gift line, re-subscribe to `giftChannel` here instead.
 
   useEffect(() => {
@@ -2990,35 +2990,8 @@ useStreamRealtime(streamId, {
       const broadcasterId = streamRef.current?.user_id;
       const currentUserId = user?.id;
 
-      // Update broadcaster profile if the receiver is the broadcaster
-      if (receiverId === broadcasterId && broadcasterId) {
-        setBroadcasterProfile((prev: any) => {
-          if (!prev) return prev;
-          return { ...prev, troll_coins: Number(prev.troll_coins ?? 0) + amount };
-        });
-      }
-
-      // Update auth store profile for sender if it's the current user
-      if (senderId === currentUserId && currentUserId) {
-        const currentProfile = useAuthStore.getState().profile;
-        if (currentProfile) {
-          useAuthStore.getState().setProfile({
-            ...currentProfile,
-            troll_coins: Number(currentProfile.troll_coins || 0) - amount
-          });
-        }
-      }
-
-      // Update auth store profile for receiver if it's the current user
-      if (receiverId === currentUserId && currentUserId) {
-        const currentProfile = useAuthStore.getState().profile;
-        if (currentProfile) {
-          useAuthStore.getState().setProfile({
-            ...currentProfile,
-            troll_coins: Number(currentProfile.troll_coins || 0) + amount
-          });
-        }
-      }
+      // Balance updates are handled by the realtime user_profiles subscription
+      // No need to manually update here - avoids double/triple crediting
     };
 
     window.addEventListener('broadcast-balance-update', handleBroadcastBalanceUpdate as EventListener);
@@ -3199,7 +3172,7 @@ useStreamRealtime(streamId, {
         try {
           const viewerIdentity = userIdentity
           // OPTIMIZED: Use parallel fetch for faster token get
-          console.log('[BroadcastPage] 📡 Fetching LiveKit token from Supabase Edge Function...', {
+          console.log('[BroadcastPage] ?? Fetching LiveKit token from Supabase Edge Function...', {
             streamId: stream.id,
             viewerIdentity,
             role: 'audience',
@@ -3218,16 +3191,16 @@ useStreamRealtime(streamId, {
           })
 
           if (error) {
-            console.error('[BroadcastPage] ❌ LiveKit token fetch error:', error);
+            console.error('[BroadcastPage] ? LiveKit token fetch error:', error);
             throw error
           }
 
           if (!data?.token) {
-            console.error('[BroadcastPage] ❌ LiveKit token response missing token:', data);
+            console.error('[BroadcastPage] ? LiveKit token response missing token:', data);
             throw new Error('LiveKit token response missing token')
           }
 
-          console.log('[BroadcastPage] ✅ LiveKit token received:', {
+          console.log('[BroadcastPage] ? LiveKit token received:', {
             hasToken: !!data?.token,
             tokenLength: data?.token?.length || 0,
             room: data?.room,
@@ -3275,7 +3248,7 @@ useStreamRealtime(streamId, {
       try {
         const hostIdentity = userIdentity
         // OPTIMIZED: Fetch token without waiting for UI
-        console.log('[BroadcastPage] 📡 Fetching LiveKit token for publisher from Supabase Edge Function...', {
+        console.log('[BroadcastPage] ?? Fetching LiveKit token for publisher from Supabase Edge Function...', {
           streamId: stream.id,
           hostIdentity,
           room: stream.livekit_room_name || stream.id,
@@ -3294,16 +3267,16 @@ useStreamRealtime(streamId, {
         })
 
         if (error) {
-          console.error('[BroadcastPage] ❌ LiveKit token fetch error:', error);
+          console.error('[BroadcastPage] ? LiveKit token fetch error:', error);
           throw error
         }
 
         if (!data?.token) {
-          console.error('[BroadcastPage] ❌ LiveKit token response missing token:', data);
+          console.error('[BroadcastPage] ? LiveKit token response missing token:', data);
           throw new Error('LiveKit token response missing token')
         }
 
-        console.log('[BroadcastPage] ✅ LiveKit token received for publisher:', {
+        console.log('[BroadcastPage] ? LiveKit token received for publisher:', {
           hasToken: !!data?.token,
           tokenLength: data?.token?.length || 0,
           room: data?.room,
@@ -3319,7 +3292,7 @@ useStreamRealtime(streamId, {
         const isScreenShareExisting = PreflightStore.getScreenShareMode()
         const screenTrackExisting = PreflightStore.getScreenTrack() || screenTrack
         
-        console.log('[BroadcastPage] 🔍 PreflightStore state:', {
+        console.log('[BroadcastPage] ?? PreflightStore state:', {
           hasExistingRoom: !!existingRoom,
           hasPreflightTracks: !!(preflightTracks?.videoTrack || preflightTracks?.audioTrack),
           isScreenShareExisting,
@@ -3331,14 +3304,14 @@ useStreamRealtime(streamId, {
         let activeVideoTrack: LocalVideoTrack | null = null
 
         if (existingRoom) {
-          // ✅ Use existing room from SetupPage - DO NOT create new room
-          console.log('[BroadcastPage] 🔥 Using EXISTING LiveKit room from SetupPage')
+          // ? Use existing room from SetupPage - DO NOT create new room
+          console.log('[BroadcastPage] ?? Using EXISTING LiveKit room from SetupPage')
           roomToUse = existingRoom
           roomRef.current = existingRoom
           attachLiveKitHandlers(existingRoom)
         } else {
           // Create new room if no existing room
-          console.log('[BroadcastPage] 🔧 Creating NEW LiveKit room')
+          console.log('[BroadcastPage] ?? Creating NEW LiveKit room')
           const room = new Room({
             adaptiveStream: true,
             dynacast: true,
@@ -3403,7 +3376,7 @@ useStreamRealtime(streamId, {
         )
 
         if (!hasUsableVideo || !hasUsableAudio) {
-          console.log('[BroadcastPage] 🔄 Recreating host tracks after refresh', {
+          console.log('[BroadcastPage] ?? Recreating host tracks after refresh', {
             hasUsableVideo,
             hasUsableAudio,
             currentVideoReadyState: videoTrackRef.current?.mediaStreamTrack?.readyState,
@@ -3465,13 +3438,13 @@ useStreamRealtime(streamId, {
           activeAudioTrack = freshTracks.find((track) => track.kind === Track.Kind.Audio) as LocalAudioTrack | undefined || null
           activeVideoTrack = freshTracks.find((track) => track.kind === Track.Kind.Video) as LocalVideoTrack | undefined || null
         } else if (preflightTracks?.videoTrack || preflightTracks?.audioTrack) {
-          // ✅ Use preflight tracks from SetupPage
-          console.log('[BroadcastPage] ✅ Using preflight tracks from SetupPage')
+          // ? Use preflight tracks from SetupPage
+          console.log('[BroadcastPage] ? Using preflight tracks from SetupPage')
           activeAudioTrack = (existingMicPublication?.track as LocalAudioTrack | null) || preflightTracks.audioTrack
           activeVideoTrack = (existingCameraPublication?.track as LocalVideoTrack | null) || preflightTracks.videoTrack
         } else {
           // Create new tracks only if no preflight tracks
-          console.log('[BroadcastPage] ⚠️ No preflight tracks - creating new tracks')
+          console.log('[BroadcastPage] ?? No preflight tracks - creating new tracks')
           const tracks = await createLocalTracks({
             audio: true,
             video: {
@@ -3495,12 +3468,12 @@ useStreamRealtime(streamId, {
         }
 
         if (!activeVideoTrack) {
-          console.error('[BroadcastPage] ❌ NO VIDEO TRACK AVAILABLE')
+          console.error('[BroadcastPage] ? NO VIDEO TRACK AVAILABLE')
           return
         }
 
-        // 🔥 PUBLISH TRACKS TO ROOM
-        console.log('[BroadcastPage] 📡 Publishing tracks to room...')
+        // ?? PUBLISH TRACKS TO ROOM
+        console.log('[BroadcastPage] ?? Publishing tracks to room...')
         
         if (activeVideoTrack) {
           // Check if already published to avoid duplicate
@@ -3516,9 +3489,9 @@ useStreamRealtime(streamId, {
             await roomToUse.localParticipant.publishTrack(activeVideoTrack)
             localTrackPublishedCountRef.current += 1
             DEBUG_COUNTERS.hostAudioVideoPublishedCount += 1
-            console.log('[BroadcastPage] ✅ Video track published')
+            console.log('[BroadcastPage] ? Video track published')
           } else {
-            console.log('[BroadcastPage] ℹ️ Video track already published')
+            console.log('[BroadcastPage] ?? Video track already published')
           }
         }
 
@@ -3537,13 +3510,13 @@ useStreamRealtime(streamId, {
             await roomToUse.localParticipant.publishTrack(activeAudioTrack)
             localTrackPublishedCountRef.current += 1
             DEBUG_COUNTERS.hostAudioVideoPublishedCount += 1
-            console.log('[BroadcastPage] ✅ Audio track published')
+            console.log('[BroadcastPage] ? Audio track published')
           } else {
-            console.log('[BroadcastPage] ℹ️ Audio track already published')
+            console.log('[BroadcastPage] ?? Audio track already published')
           }
         }
 
-        // 🔥 CRITICAL: SYNC TO STATE IMMEDIATELY
+        // ?? CRITICAL: SYNC TO STATE IMMEDIATELY
         setLocalTracks([
           activeAudioTrack || null,
           activeVideoTrack || null,
@@ -3551,7 +3524,7 @@ useStreamRealtime(streamId, {
         setCameraEnabled(Boolean(activeVideoTrack?.mediaStreamTrack?.enabled ?? activeVideoTrack))
         setMicEnabled(Boolean(activeAudioTrack?.mediaStreamTrack?.enabled ?? activeAudioTrack))
 
-        console.log('[BroadcastPage] 🔥 Tracks synced to state:', {
+        console.log('[BroadcastPage] ?? Tracks synced to state:', {
           hasVideo: !!activeVideoTrack,
           hasAudio: !!activeAudioTrack,
         })
@@ -3860,13 +3833,13 @@ const toggleMicrophone = useCallback(async () => {
       }>;
       
       const { senderId, receiverId } = customEvent.detail || {};
-      console.log('[BroadcastPage] 💰 Balance update received:', { senderId, receiverId });
+      console.log('[BroadcastPage] ?? Balance update received:', { senderId, receiverId });
       
       // Only update broadcaster profile if broadcaster is involved - no refreshProfile calls
       // to avoid unnecessary state updates that could cause page refresh appearance
       const isBroadcasterInvolved = receiverId === stream?.user_id || senderId === stream?.user_id;
       if (isBroadcasterInvolved && stream?.user_id) {
-        console.log('[BroadcastPage] 🔄 Broadcaster involved - updating profile');
+        console.log('[BroadcastPage] ?? Broadcaster involved - updating profile');
         const { data: updatedProfile } = await supabase
           .from('user_profiles')
           .select('*')
@@ -3970,7 +3943,7 @@ const toggleMicrophone = useCallback(async () => {
       // No-op
     }, [])
 
-   // ── Troll Button ───────────────────────────────────────────────────────
+   // -- Troll Button -------------------------------------------------------
    // Viewers (non-host) can click once per broadcast to trigger a random
    // temporary prank effect.  The host can never be targeted by their own
    // broadcast's troll button.
@@ -4012,8 +3985,8 @@ const toggleMicrophone = useCallback(async () => {
      }
    }, [streamId, user?.id, isHost, supabase])
 
-   // ── Troll Prank Definitions ─────────────────────────────────────────────
-   // Each prank is a temporary effect (±10 s) expressed as a broadcast_active_effects
+   // -- Troll Prank Definitions ---------------------------------------------
+   // Each prank is a temporary effect (�10 s) expressed as a broadcast_active_effects
    // entry so the existing BroadcastAbilityEffects overlay can render it.
    type TrollPrank = {
      name: string
@@ -4027,7 +4000,7 @@ const toggleMicrophone = useCallback(async () => {
    const TROLL_PRANKS: TrollPrank[] = [
      {
        name:      'Coin Vanish',
-       icon:      '💸',
+       icon:      '??',
        description: 'Broadcaster Troll Coins drained for 10 seconds!',
        ability_id: 'troll_coin_drain',
        targetUserLabel: 'broadcaster_coins',
@@ -4035,7 +4008,7 @@ const toggleMicrophone = useCallback(async () => {
      },
      {
        name:      'Gift Lock',
-       icon:      '🎁',
+       icon:      '??',
        description: 'Gifts disabled in battle mode for 10 seconds!',
        ability_id: 'troll_gift_lock',
        targetUserLabel: 'battle_gifts',
@@ -4043,7 +4016,7 @@ const toggleMicrophone = useCallback(async () => {
      },
      {
        name:      'Worthless Gifts',
-       icon:      '😂',
+       icon:      '??',
        description: 'All gifts worth 1 coin for the next 10 seconds!',
        ability_id: 'troll_worthless_gifts',
        targetUserLabel: 'worthless_gifts',
@@ -4051,7 +4024,7 @@ const toggleMicrophone = useCallback(async () => {
      },
      {
        name:      'Troll Flash',
-       icon:      '⚡',
+       icon:      '?',
        description: 'Broadcaster screen flashed for everyone to see!',
        ability_id: 'troll_flash',
        targetUserLabel: 'flash',
@@ -4059,7 +4032,7 @@ const toggleMicrophone = useCallback(async () => {
      },
      {
        name:      'Chaos Audio',
-       icon:      '🔊',
+       icon:      '??',
        description: "Can't hear the broadcaster for 10 seconds!",
        ability_id: 'troll_audio_gag',
        targetUserLabel: 'audio_gag',
@@ -4067,7 +4040,7 @@ const toggleMicrophone = useCallback(async () => {
      },
      {
        name:      'Liar Liar',
-       icon:      '🪞',
+       icon:      '??',
        description: 'Broadcaster video gets a funhouse mirror effect!',
        ability_id: 'troll_mirror',
        targetUserLabel: 'mirror',
@@ -4145,7 +4118,7 @@ const toggleMicrophone = useCallback(async () => {
        }
 
        toast.success(
-         `😈 Troll used: ${prank.icon} ${prank.name}\n${prank.description}`,
+         `?? Troll used: ${prank.icon} ${prank.name}\n${prank.description}`,
          { duration: 5000 },
        )
 
@@ -4275,7 +4248,7 @@ const handleLike = useCallback(async () => {
 
         if (result.coins_awarded > 0) {
             toast.success(
-                `🎉 You earned ${result.coins_awarded} Troll Coin${result.coins_awarded !== 1 ? 's' : ''}! ` +
+                `?? You earned ${result.coins_awarded} Troll Coin${result.coins_awarded !== 1 ? 's' : ''}! ` +
                 `(${result.user_like_count.toLocaleString()})`,
                 { duration: 5000 }
             );
@@ -4707,7 +4680,7 @@ const handleLike = useCallback(async () => {
     stream?.is_battle === true &&
     (stream?.battle_status === 'ready' || stream?.battle_status === 'starting' || stream?.battle_status === 'active');
 
-  // PHASE 2: Derive stable battleId for BattleView key — prevents remount on stream state updates
+  // PHASE 2: Derive stable battleId for BattleView key � prevents remount on stream state updates
   const activeBattleId = shouldShowRandomBattleArena ? stream?.battle_id ?? null : null;
 
    function handleMute(userId: string, reason?: string) {
@@ -4959,15 +4932,15 @@ const handleLike = useCallback(async () => {
     );
   }
 
-  console.log('[THEME DEBUG] RENDER — broadcastTheme?.shellClassName:', broadcastTheme?.shellClassName);
-  console.log('[THEME DEBUG] RENDER — final className:', cn(broadcastTheme?.shellClassName || theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden'));
-  console.log('[THEME DEBUG] RENDER — isPresidentTheme:', broadcastTheme?.id === 'president_mansion');
+  console.log('[THEME DEBUG] RENDER � broadcastTheme?.shellClassName:', broadcastTheme?.shellClassName);
+  console.log('[THEME DEBUG] RENDER � final className:', cn(broadcastTheme?.shellClassName || theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden'));
+  console.log('[THEME DEBUG] RENDER � isPresidentTheme:', broadcastTheme?.id === 'president_mansion');
 
   return (
       <GiftSystemProvider streamId={streamId} defaultReceiverId={stream?.user_id}>
           <ErrorBoundary>
 
-          {/* ── Outer layout: header + 3-column grid + bottom bar + footer ── */}
+          {/* -- Outer layout: header + 3-column grid + bottom bar + footer -- */}
           <div
             className={cn(broadcastTheme?.shellClassName || theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden')}
             data-theme={broadcastTheme?.id || 'default'}
@@ -4980,7 +4953,7 @@ const handleLike = useCallback(async () => {
               />
             )}
 
-            {/* Background layers — identical to Sidebar ShellBackdrop */}
+            {/* Background layers � identical to Sidebar ShellBackdrop */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
@@ -5009,7 +4982,7 @@ const handleLike = useCallback(async () => {
                />
              )}
 
-             {/* Random Battle Banner — prominent notice for queue/active battle */}
+             {/* Random Battle Banner � prominent notice for queue/active battle */}
              {stream && (
                <RandomBattleBanner
                  phase={randomBattleQueue.phase}
@@ -5042,12 +5015,12 @@ const handleLike = useCallback(async () => {
                  <div className="mx-auto flex max-w-7xl flex-col gap-3 rounded-3xl border border-cyan-500/10 bg-slate-950/90 p-4 text-sm text-slate-200 shadow-[0_0_30px_rgba(45,212,191,0.08)] sm:flex-row sm:items-center sm:justify-between">
                    <div className="flex items-center gap-3">
                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
-                       {myLeagues[0].icon_emoji || '🏆'}
+                       {myLeagues[0].icon_emoji || '??'}
                      </div>
                      <div>
                        <p className="text-sm font-black text-white">League: {myLeagues[0].name}</p>
                        <p className="text-xs text-slate-400">
-                         {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} • {myLeagues[0].member_count}/{myLeagues[0].max_members} members
+                         {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} � {myLeagues[0].member_count}/{myLeagues[0].max_members} members
                        </p>
                      </div>
                    </div>
@@ -5058,15 +5031,15 @@ const handleLike = useCallback(async () => {
                </div>
              )}
 
-            {/* ── MAIN CONTENT GRID (3-column) ── */}
+            {/* -- MAIN CONTENT GRID (3-column) -- */}
             <main
               className="grid flex-1 min-h-0 gap-4 px-5 py-4"
               style={{ gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }}
             >
-              {/* ── LEFT: Host Video Card ── */}
+              {/* -- LEFT: Host Video Card -- */}
               <section className={cn('relative h-full min-h-0 overflow-hidden', theme.hostVideoPanel)}>
 
-                {/* Camera starting fallback — shows when no video track is available */}
+                {/* Camera starting fallback � shows when no video track is available */}
                 {(() => {
                   const hostCamTrack = isHost
                     ? (localTracks?.[1] ?? null)
@@ -5100,12 +5073,12 @@ const handleLike = useCallback(async () => {
                         <Crown className="h-14 w-14 text-cyan-200/60" />
                       )}
                       <p className="mt-4 text-base font-black text-white">{broadcasterProfile?.username || 'Broadcaster'}</p>
-                      <p className="mt-1 text-sm text-cyan-200/60">Camera starting…</p>
+                      <p className="mt-1 text-sm text-cyan-200/60">Camera starting�</p>
                     </div>
                   );
                 })()}
 
-                {/* Host video element — mounted via TrackAttach, covers card when track available */}
+                {/* Host video element � mounted via TrackAttach, covers card when track available */}
                 <TrackAttach
                   track={isHost ? (localTracks?.[1] ?? null) : (() => {
                     const broadcasterUserId = stream?.user_id;
@@ -5125,16 +5098,16 @@ const handleLike = useCallback(async () => {
                   })()}
                   />
 
-                {/* Gradient overlay — sits above video/fallback */}
+                {/* Gradient overlay � sits above video/fallback */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
-                {/* Host badge — top-left */}
+                {/* Host badge � top-left */}
                 <div className="absolute left-5 top-5 z-10 flex flex-col gap-2">
                   <div className="flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/18 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(45,212,191,0.25)] backdrop-blur-xl">
                     <Crown className="h-4 w-4" />
                     Host
                   </div>
-                  {/* City Status Orb — compact inline (clickable for broadcaster) */}
+                  {/* City Status Orb � compact inline (clickable for broadcaster) */}
                   {broadcasterCityStatus.data && (
                     <div className="pointer-events-auto">
                       <CityStatusOrb
@@ -5155,7 +5128,7 @@ const handleLike = useCallback(async () => {
                   )}
                 </div>
 
-                {/* Mic / Camera media pills — top-right */}
+                {/* Mic / Camera media pills � top-right */}
                 <div className="absolute right-5 top-5 z-10 flex items-center gap-2">
                   <span className={cn(
                     theme.badge,
@@ -5440,7 +5413,7 @@ const handleLike = useCallback(async () => {
                 </div>
               </aside>
 
-              {/* ── RIGHT: Chat Panel ── */}
+              {/* -- RIGHT: Chat Panel -- */}
               <aside className={cn(
     theme.chatPanel,
     'flex min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
@@ -5473,14 +5446,14 @@ const handleLike = useCallback(async () => {
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   {chatTab === 'chat' ? (
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
-                      {/* Floating messages area — newest on top, scrollable */}
+                      {/* Floating messages area � newest on top, scrollable */}
 <div
   ref={floatingChatContainerRef}
   className="min-h-0 flex-1 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide overscroll-contain"
 >
                         {floatingMessages.length === 0 && (
                           <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
-                            No messages yet – say something!
+                            No messages yet � say something!
                           </div>
                         )}
 {floatingMessages.map((msg) => (
@@ -5513,7 +5486,7 @@ const handleLike = useCallback(async () => {
                           if (!text) return
 
                           if (!user && !reserveAnonymousChatSlot()) {
-                            toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                            toast.error('You�ve used your 5 anonymous chats. Sign in to keep chatting.')
                             navigate('/auth?mode=login')
                             return
                           }
@@ -5565,7 +5538,7 @@ const handleLike = useCallback(async () => {
                           type="text"
                           value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Say something…"
+                          placeholder="Say something�"
                           className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                           maxLength={280}
                         />
@@ -5589,7 +5562,7 @@ const handleLike = useCallback(async () => {
                               <div key={league.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                                 <div className="flex items-center gap-3">
                                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
-                                    {league.icon_emoji || '🏆'}
+                                    {league.icon_emoji || '??'}
                                   </div>
                                   <div className="min-w-0">
                                     <p className="text-sm font-black text-white truncate">{league.name}</p>
@@ -5703,7 +5676,7 @@ const handleLike = useCallback(async () => {
               </aside>
             </main>
 
-              {/* ── BOTTOM CONTROL BAR ── */}
+              {/* -- BOTTOM CONTROL BAR -- */}
               <BroadcastBottomBar
                 openPassCount={currentViewerSeatCount}
                 isMicOn={micEnabled}
@@ -5728,7 +5701,7 @@ const handleLike = useCallback(async () => {
 
           
 
-            {/* View mode toggle — desktop */}
+            {/* View mode toggle � desktop */}
             {!isMobileViewer && (
               <div className="absolute top-3 right-3 z-50">
                 <button
@@ -5743,7 +5716,7 @@ const handleLike = useCallback(async () => {
               </div>
             )}
 
-            {/* View mode toggle — mobile */}
+            {/* View mode toggle � mobile */}
             {isMobileViewer && (
               <div className="absolute bottom-3 left-3 z-50">
                 <button
@@ -5759,7 +5732,7 @@ const handleLike = useCallback(async () => {
             )}
           </div>
 
-            {/* OVERLAYS — absolutely positioned, renders above all grid content */}
+            {/* OVERLAYS � absolutely positioned, renders above all grid content */}
             <div className="absolute inset-0 pointer-events-none">
               {isGiftModalOpen && (
                 <div className="pointer-events-auto">

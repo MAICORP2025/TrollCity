@@ -20,11 +20,22 @@ import {
 import { formatCompactNumber } from '../lib/utils';
 import type { UserVehicleAsset } from '../types/vehicleAssets';
 import { TIER_COLORS, TIER_BG_COLORS } from '../types/vehicleAssets';
+import useSEO from '@/hooks/useSEO';
 
 export default function GaragePage() {
   const navigate = useNavigate();
   const { userAssets, sellVehicle, isSelling, refresh } = useVehicleAssets();
   const { refreshCoins } = useCoins();
+
+  useSEO({
+    title: 'Garage | Virtual Vehicle Community | Troll City',
+    description: 'Manage your virtual garage on Troll City. Buy, sell, and trade digital vehicles. View your collection, list vehicles for sale, and join the vehicle community.',
+    keywords: [
+      'virtual garage', 'online garage', 'vehicle community', 'digital vehicles',
+      'Troll City garage', 'buy sell vehicles', 'car collection', 'virtual cars',
+      'vehicle trading', 'automobile community', 'Troll City vehicles'
+    ]
+  });
 
   const [selectedAsset, setSelectedAsset] = useState<UserVehicleAsset | null>(null);
   const [showSellConfirm, setShowSellConfirm] = useState(false);

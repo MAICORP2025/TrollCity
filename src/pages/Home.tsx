@@ -25,6 +25,8 @@ import {
 } from 'lucide-react'
 
 import { useAuthStore } from '@/lib/store'
+import useSEO from '@/hooks/useSEO'
+import { websiteSchema, organizationSchema } from '@/utils/seoSchemas'
 import { isPrideMonth } from '@/lib/prideMonth'
 import { useIsPwa } from '@/lib/hooks/useIsPwa'
 import { usePrideWeeklyChallenges } from '@/hooks/usePrideWeeklyChallenges'
@@ -104,6 +106,18 @@ const PrideBackground = React.memo(() => {
 })
 PrideBackground.displayName = 'PrideBackground'
 
+const PRIDE_BANNER_DISMISSED_KEY = 'pride_banner_dismissed_until'
+
+function isPrideBannerDismissed(): boolean {
+  try {
+    const until = localStorage.getItem(PRIDE_BANNER_DISMISSED_KEY)
+    if (!until) return false
+    return Date.now() < parseInt(until, 10)
+  } catch {
+    return false
+  }
+}
+
 const TopPrideHero = React.memo(function TopPrideHero({
   onGoLive,
   onCelebrate,
@@ -111,8 +125,30 @@ const TopPrideHero = React.memo(function TopPrideHero({
   onGoLive: () => void
   onCelebrate: () => void
 }) {
+  const [dismissed, setDismissed] = useState(() => isPrideBannerDismissed())
+
+  const handleDismiss = useCallback(() => {
+    setDismissed(true)
+    try {
+      // Dismiss for the rest of the current Pride Month (or 30 days, whichever is less)
+      const now = new Date()
+      const endOfJune = new Date(now.getFullYear(), 5, 30, 23, 59, 59) // June 30
+      const dismissUntil = Math.min(endOfJune.getTime(), Date.now() + 30 * 24 * 60 * 60 * 1000)
+      localStorage.setItem(PRIDE_BANNER_DISMISSED_KEY, dismissUntil.toString())
+    } catch { /* ignore */ }
+  }, [])
+
+  if (dismissed) return null
+
   return (
     <section className={`${glass} ${rainbowBorder} rounded-2xl p-2 md:p-3`}>
+      <button
+        onClick={handleDismiss}
+        className="absolute top-3 right-3 z-20 p-1 rounded-full bg-black/40 hover:bg-black/70 text-white/60 hover:text-white transition-all"
+        aria-label="Close Pride banner"
+      >
+        <X size={16} />
+      </button>
       <div className="relative z-10 grid gap-2 lg:grid-cols-[1fr_140px]">
         <div className="relative min-h-[80px] overflow-hidden rounded-2xl border border-pink-400/25 bg-[#0b0d1f]/80 p-3">
           <div className="absolute inset-0 opacity-40 [background:radial-gradient(circle_at_8%_35%,rgba(236,72,153,0.45),transparent_30%),radial-gradient(circle_at_80%_20%,rgba(34,211,238,0.35),transparent_35%),linear-gradient(120deg,rgba(255,42,109,0.25),rgba(255,183,3,0.14),rgba(56,255,125,0.14),rgba(0,212,255,0.18),rgba(168,85,247,0.25))]" />
@@ -860,6 +896,19 @@ export default function Home() {
   const user = useAuthStore((state) => state.user)
   const isLoading = useAuthStore((state) => state.isLoading)
   const isPwa = useIsPwa()
+
+  useSEO({
+    title: 'Troll City | Social Streaming Platform - Livestream, Create, Connect',
+    description: 'Troll City (Mai Troll City) is a social streaming platform for creators, streamers, gamers, and online communities. Watch live streams, go live, join creator battles, spin the Troll Wheel, and connect with a global community.',
+    keywords: [
+      'Troll City', 'Mai Troll City', 'social streaming platform', 'live streaming',
+      'go live', 'content creator', 'stream games online', 'watch live streams',
+      'creator economy', 'livestream', 'gaming community', 'online entertainment',
+      'social platform', 'streaming app', 'live broadcast', 'creator battles',
+      'online games', 'virtual community', 'trending streams', 'FYP'
+    ],
+    structuredData: [websiteSchema(), organizationSchema()]
+  })
 
   const [activeTab, setActiveTab] = useState<TabType>('wall')
   const [showLiveGrid, setShowLiveGrid] = useState<boolean | null>(null)

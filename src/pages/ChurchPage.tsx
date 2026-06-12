@@ -19,6 +19,7 @@ import {
 
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
+import useSEO from '@/hooks/useSEO';
 import DailyPassage from '@/components/church/DailyPassage';
 import PrayerFeed from '@/components/church/PrayerFeed';
 
@@ -52,6 +53,16 @@ const goldButton =
 export default function ChurchPage() {
   const { profile } = useAuthStore();
   const navigate = useNavigate();
+
+  useSEO({
+    title: 'Troll Church | Online Faith Community & Gatherings | Troll City',
+    description: 'Join Troll Church on Troll City for virtual faith community gatherings, live services, and spiritual connection. An inclusive online church experience for all.',
+    keywords: [
+      'online church', 'virtual church', 'faith community', 'community gatherings',
+      'Troll Church', 'online ministry', 'virtual services', 'spiritual community',
+      'faith platform', 'digital church', 'Troll City church'
+    ]
+  });
 
   const [isOpen, setIsOpen] = useState(false);
   const [isSunday, setIsSunday] = useState(false);

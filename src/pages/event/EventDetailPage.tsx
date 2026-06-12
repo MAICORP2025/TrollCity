@@ -151,8 +151,8 @@ export default function EventPage() {
     const now = new Date();
     const eventTime = new Date(event.event_date);
     if (event.start_time) {
-      const [hours, minutes] = event.start_time.split(':');
-      eventTime.setHours(parseInt(hours), parseInt(minutes));
+      const startTime = new Date(event.start_time);
+      eventTime.setHours(startTime.getHours(), startTime.getMinutes(), startTime.getSeconds());
     }
 
     const diff = eventTime.getTime() - now.getTime();

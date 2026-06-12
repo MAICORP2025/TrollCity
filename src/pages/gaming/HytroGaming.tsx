@@ -45,6 +45,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { cn, formatCompactNumber } from '@/lib/utils';
+import useSEO from '@/hooks/useSEO';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -323,6 +324,17 @@ function GamingStreamCard({
 export default function HytroGaming() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+
+  useSEO({
+    title: 'HydroGaming | Live Game Streaming & Screen Sharing | Troll City',
+    description: 'Watch live gaming streams on HydroGaming by Troll City. Stream games online, share your screen, and join the ultimate gaming community. Live game broadcasts and esports.',
+    keywords: [
+      'game streaming', 'screen sharing', 'live gaming', 'game broadcasts',
+      'gaming community', 'stream games online', 'watch gamers live',
+      'HydroGaming', 'esports streaming', 'video game streaming',
+      'gaming platform', 'live game streaming', 'broadcast gaming'
+    ]
+  });
 
   const [streams, setStreams] = useState<GamingStream[]>([]);
   const [loading, setLoading] = useState(true);

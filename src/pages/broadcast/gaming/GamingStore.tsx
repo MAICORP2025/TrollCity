@@ -6,10 +6,7 @@ import { cn } from '@/lib/utils'
 const STORE_ITEMS = [
   { name: 'GG Pack', icon: '👋', coins: 100, price: '$0.99', desc: '10 GG gifts' },
   { name: 'Headshot Pack', icon: '🎯', coins: 250, price: '$2.49', desc: '10 Headshot gifts' },
-  { name: 'Clutch Pack', icon: '🔥', coins: 500, price: '$4.99', desc: '10 Clutch gifts' },
   { name: 'MVP Pack', icon: '🏆', coins: 1000, price: '$9.99', desc: '10 MVP gifts' },
-  { name: 'Penta Kill Pack', icon: '⚡', coins: 2500, price: '$24.99', desc: '10 Penta Kill gifts' },
-  { name: 'Raid Boss Pack', icon: '🐉', coins: 5000, price: '$49.99', desc: '10 Raid Boss gifts' },
 ]
 
 const COIN_PACKS = [

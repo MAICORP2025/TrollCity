@@ -4,6 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import {
+  getAnonymousDisplayName,
+  reserveAnonymousChatSlot,
+} from '@/lib/anonymousIdentity'
 
 interface ChatMessage {
   id: string
@@ -16,17 +20,20 @@ interface ChatMessage {
 interface GamingChatProps {
   streamId: string
   className?: string
+  guestChatLimit?: number // if set, allows guest users to chat up to this limit
 }
 
+const MAX_GUEST_CHAT_DEFAULT = 5
 const MAX_MESSAGES = 100
 
-export function GamingChat({ streamId, className }: GamingChatProps) {
+export function GamingChat({ streamId, className, guestChatLimit }: GamingChatProps) {
   const { user, profile } = useAuthStore()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isVisible, setIsVisible] = useState(true)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const guestLimit = guestChatLimit ?? (user ? 0 : MAX_GUEST_CHAT_DEFAULT)
 
   useEffect(() => {
     const channel = supabase.channel(`floating-chat:${streamId}`)
@@ -68,19 +75,33 @@ export function GamingChat({ streamId, className }: GamingChatProps) {
     const text = input.trim()
     if (!text) return
 
+    // Guest chat limit check
     if (!user) {
-      toast.error('Sign in to chat')
-      return
+      if (guestLimit > 0) {
+        if (!reserveAnonymousChatSlot()) {
+          toast.error("You've used your 5 anonymous chats. Sign in to keep chatting.")
+          return
+        }
+      } else {
+        toast.error('Sign in to chat')
+        return
+      }
     }
 
     setInput('')
 
+    const displayName = user
+      ? (profile?.username || 'You')
+      : getAnonymousDisplayName()
+
+    const avatar = user ? (profile?.avatar_url || null) : null
+
     const optimisticMsg: ChatMessage = {
       id: `local-${Date.now()}`,
-      username: profile?.username || 'You',
+      username: displayName,
       content: text,
       createdAt: Date.now(),
-      avatarUrl: profile?.avatar_url || null,
+      avatarUrl: avatar,
     }
 
     setMessages((prev) => [...prev, optimisticMsg])
@@ -93,10 +114,11 @@ export function GamingChat({ streamId, className }: GamingChatProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             streamId,
-            userId: user.id,
-            username: profile?.username || 'Anonymous',
+            userId: user?.id || null,
+            username: displayName,
             content: text,
             type: 'chat',
+            isGuest: !user,
           }),
         })
       }
@@ -108,15 +130,16 @@ export function GamingChat({ streamId, className }: GamingChatProps) {
           event: 'floating_chat',
           payload: {
             id: optimisticMsg.id,
-            username: profile?.username || 'Anonymous',
+            username: displayName,
             content: text,
             createdAt: Date.now(),
-            avatarUrl: profile?.avatar_url || null,
+            avatarUrl: avatar,
           },
         })
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[GamingChat] Send failed:', err)
+      toast.error('Failed to send message')
     }
   }, [input, user, profile, streamId])
 

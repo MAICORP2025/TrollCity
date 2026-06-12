@@ -68,6 +68,10 @@ export interface Stream {
   recording_storage_path?: string | null;
   saved_to_admin_archive?: boolean;
   saved_at?: string | null;
+  // Broadcast agreement acceptance (per-session)
+  broadcast_disclaimer_accepted?: boolean;
+  broadcast_disclaimer_accepted_at?: string | null;
+  broadcast_disclaimer_user_id?: string;
 }
 
 export interface StreamGuest {

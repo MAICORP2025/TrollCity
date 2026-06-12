@@ -282,7 +282,6 @@ const ALL_PRIDE_CHALLENGES: Array<{ week: number; title: string; description: st
   { week: 1, title: 'Community Spirit', description: 'Reply to 5 different wall posts', xp: '600 XP', color: 'green' },
   // Week 2
   { week: 2, title: 'Ally Actions', description: 'Support 5 different users with gifts', xp: '1,000 XP', color: 'cyan' },
-  { week: 2, title: 'Pride Stream', description: 'Go live with a Pride-themed broadcast', xp: '1,500 XP', color: 'blue' },
   { week: 2, title: 'Wall Storyteller', description: 'Post 3 Pride-themed messages on the wall', xp: '800 XP', color: 'purple' },
   { week: 2, title: 'Gift of Pride', description: 'Send a Pride gift to 3 friends', xp: '900 XP', color: 'pink' },
   { week: 2, title: 'Pride Explorer', description: 'Visit 5 different neighborhoods', xp: '600 XP', color: 'red' },
@@ -853,7 +852,6 @@ export default function Home() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const isLoading = useAuthStore((state) => state.isLoading)
-  const grid = useGridEdit()
 
   const [activeTab, setActiveTab] = useState<TabType>('wall')
   const [showLiveGrid, setShowLiveGrid] = useState<boolean | null>(null)
@@ -940,15 +938,6 @@ export default function Home() {
 
   return (
     <div className="relative min-h-full w-full overflow-hidden text-white">
-      <GridEditToolbar
-        editMode={grid.editMode}
-        setEditMode={grid.setEditMode}
-        saveLayout={grid.saveLayout}
-        resetLayout={grid.resetLayout}
-        copyToClipboard={grid.copyToClipboard}
-        copied={grid.copied}
-        layout={grid.layout}
-      />
       {isPrideMonth() ? <PrideBackground /> : <OriginalBackground />}
 
       {isLoading && (
@@ -1019,7 +1008,7 @@ export default function Home() {
           </div>
         </Suspense>
 
-        {activeTab === 'wall' && !grid.editMode && (
+        {activeTab === 'wall' && (
           <section className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_280px] lg:grid-cols-[1fr_240px_240px] xl:grid-cols-[140px_minmax(0,1fr)_240px_240px]">
             <div className="hidden xl:block">
               {isPrideMonth() && <PrideAdRail />}
@@ -1053,118 +1042,6 @@ export default function Home() {
                 </>
               )}
             </div>
-          </section>
-        )}
-
-        {activeTab === 'wall' && grid.editMode && (
-          <section className="homepage-grid-edit">
-            <ResponsiveGrid
-              className="layout"
-              layouts={{ lg: grid.layout }}
-              breakpoints={{ lg: 996 }}
-              cols={{ lg: 12 }}
-              rowHeight={60}
-              isDraggable={true}
-              isResizable={true}
-              onLayoutChange={grid.onLayoutChange}
-              margin={[8, 8]}
-              containerPadding={[0, 0]}
-              useCSSTransforms={true}
-              compactType="vertical"
-              draggableHandle=".grid-drag-handle"
-            >
-              <div key="hero" className="group">
-                <GridWidgetControls widgetId="hero" onDuplicate={() => grid.duplicateWidget('hero')} onDelete={() => grid.removeWidget('hero')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                <div className="pointer-events-none"><TopPrideHero onGoLive={goLive} onCelebrate={openChallenges} /></div>
-              </div>
-              <div key="categories" className="group">
-                <GridWidgetControls widgetId="categories" onDuplicate={() => grid.duplicateWidget('categories')} onDelete={() => grid.removeWidget('categories')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                <div className="pointer-events-none">
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-                    {[
-                      { slug: 'gaming', label: 'Gaming', subtitle: 'HytroGaming', icon: Gamepad2, active: 'from-green-600 to-emerald-600', href: '/hytrogaming' },
-                      { slug: 'just-chatting', label: 'Chat', subtitle: 'UtroMail', icon: MessageCircle, active: 'from-purple-600 to-pink-600' },
-                      { slug: 'education', label: 'Learn', subtitle: 'Academy', icon: BookOpen, active: 'from-slate-600 to-zinc-600' },
-                      { slug: 'entertainment', label: 'Fun', subtitle: 'Troll Wheel', icon: Sparkles, active: 'from-rose-600 to-pink-600' },
-                      { slug: 'politics', label: 'Politics', subtitle: 'Government', icon: Vote, active: 'from-indigo-600 to-blue-600' },
-                      { slug: 'news', label: 'News', subtitle: 'TCNN', icon: Radio, active: 'from-red-600 to-orange-600' },
-                    ].map((cat) => {
-                      const Icon = cat.icon
-                      const to = cat.href || `/categories/${cat.slug}`
-                      return (
-                        <Link key={cat.slug} to={to} className="group/cat relative overflow-hidden rounded-2xl px-3 py-3 text-left transition-all duration-300 border border-white/10 bg-white/[0.04] hover:border-purple-400/30 hover:bg-purple-600/10">
-                          <div className="relative z-10 flex flex-col gap-1.5">
-                            <Icon className="h-4 w-4 text-slate-300 group-hover/cat:text-white" />
-                            <div>
-                              <p className="text-xs font-black leading-tight text-slate-200">{cat.label}</p>
-                              <p className="text-[10px] leading-tight text-slate-400">{cat.subtitle}</p>
-                            </div>
-                          </div>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-              <div key="tabs" className="group">
-                <GridWidgetControls widgetId="tabs" onDuplicate={() => grid.duplicateWidget('tabs')} onDelete={() => grid.removeWidget('tabs')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                <div className="pointer-events-none">
-                  <HomeTabs activeTab={activeTab} setActiveTab={setActiveTab} liveCount={allLiveItems.length} battleCount={battleItems.length} presidentTabLabel={presidentTabLabel} />
-                </div>
-              </div>
-              <div key="trollwall" className="group">
-                <GridWidgetControls widgetId="trollwall" onDuplicate={() => grid.duplicateWidget('trollwall')} onDelete={() => grid.removeWidget('trollwall')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                <div className={`${glass} rounded-2xl p-4`}>
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="flex items-center gap-2 text-2xl font-black text-white">Troll Wall <span>🏳️‍🌈</span></h2>
-                      <p className="text-sm font-medium text-slate-400">The live social pulse of Troll City.</p>
-                    </div>
-                    <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-black text-cyan-100">∞ LIVE FEED</span>
-                  </div>
-                  <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" />
-                </div>
-              </div>
-              <div key="levelstatus" className="group">
-                <GridWidgetControls widgetId="levelstatus" onDuplicate={() => grid.duplicateWidget('levelstatus')} onDelete={() => grid.removeWidget('levelstatus')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                <LevelStatusCard />
-              </div>
-              <div key="floatingposter" className="group">
-                <GridWidgetControls widgetId="floatingposter" onDuplicate={() => grid.duplicateWidget('floatingposter')} onDelete={() => grid.removeWidget('floatingposter')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                <FloatingPoster />
-              </div>
-              <div key="auction" className="group">
-                <GridWidgetControls widgetId="auction" onDuplicate={() => grid.duplicateWidget('auction')} onDelete={() => grid.removeWidget('auction')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                {liveAuctions.length > 0 && <LiveAuctionMiniWindow auction={liveAuctions[0]} onRequireAuth={requireAuth} />}
-              </div>
-              <div key="prideleft" className="group">
-                <GridWidgetControls widgetId="prideleft" onDuplicate={() => grid.duplicateWidget('prideleft')} onDelete={() => grid.removeWidget('prideleft')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                {isPrideMonth() && <PrideAdRail />}
-              </div>
-              <div key="pridecollection" className="group">
-                <GridWidgetControls widgetId="pridecollection" onDuplicate={() => grid.duplicateWidget('pridecollection')} onDelete={() => grid.removeWidget('pridecollection')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                {isPrideMonth() && <PrideCollectionCard onOpenStore={openStore} />}
-              </div>
-              <div key="pridechallenges" className="group">
-                <GridWidgetControls widgetId="pridechallenges" onDuplicate={() => grid.duplicateWidget('pridechallenges')} onDelete={() => grid.removeWidget('pridechallenges')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                {isPrideMonth() && <PrideChallengesCard onOpenChallenges={openChallenges} />}
-              </div>
-              <div key="cityannouncement" className="group">
-                <GridWidgetControls widgetId="cityannouncement" onDuplicate={() => grid.duplicateWidget('cityannouncement')} onDelete={() => grid.removeWidget('cityannouncement')} />
-                <div className="grid-drag-handle absolute inset-0 z-10 cursor-grab rounded-2xl border-2 border-dashed border-cyan-400/40 hover:border-cyan-400/70 active:cursor-grabbing" />
-                {isPrideMonth() && <CityAnnouncementCard />}
-              </div>
-            </ResponsiveGrid>
           </section>
         )}
 

@@ -25,6 +25,7 @@ import {
 
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/utils'
+import useSEO from '@/hooks/useSEO';
 
 interface AuctionShow {
   id: string
@@ -120,6 +121,16 @@ function formatTime(value: string | null | undefined) {
 
 export default function AuctionsPage() {
   const navigate = useNavigate()
+
+  useSEO({
+    title: 'Live Auctions | Troll City - Bid Online & Win',
+    description: 'Join live auctions on Troll City. Bid on exclusive items, virtual goods, and unique experiences. Social auctions with real-time bidding and entertainment.',
+    keywords: [
+      'live auctions', 'online auctions', 'bid online', 'social auctions',
+      'virtual auctions', 'auction platform', 'live bidding', 'online bidding',
+      'auction entertainment', 'Troll City auctions'
+    ]
+  });
 
   const [auctions, setAuctions] = useState<AuctionShow[]>([])
   const [loading, setLoading] = useState(true)
