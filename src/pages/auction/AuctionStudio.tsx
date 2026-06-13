@@ -1280,6 +1280,7 @@ function ShowHero({
   onGoLive: () => void
   onDelete: () => void
 }) {
+  const navigate = useNavigate()
   const canGoLive = show.status === 'draft' || show.status === 'scheduled'
   const canDelete = show.status === 'draft'
 
@@ -1344,7 +1345,7 @@ function ShowHero({
             )}
 
             {show.status === 'live' && (
-              <button className={primary}>
+              <button onClick={() => navigate(`/auctions/studio/${show.id}/live`)} className={primary}>
                 <Radio className="h-4 w-4" />
                 Live Control
               </button>

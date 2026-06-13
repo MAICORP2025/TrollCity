@@ -1559,8 +1559,8 @@ const handleStartStream = async () => {
     if (category === 'tcnn') {
       const isNewsCaster = (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster;
       const isAdmin = profile?.role === 'admin' || profile?.is_admin ||
-                      profile?.role === 'superadmin' || profile?.is_superadmin;
-      const isRestrictedRole = profile?.is_troll_officer || (profile as any)?.is_lead_troll_officer ||
+                       profile?.role === 'superadmin' || profile?.is_superadmin;
+      const isRestrictedRole = profile?.is_troll_officer || (profile as any)?.is_lead_troll_troll_officer ||
                                profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer';
       if (!isNewsCaster && !isAdmin) {
         toast.error('TCNN category is only available to News Casters, Chief News Casters, and Admins');
@@ -1733,8 +1733,8 @@ const handleStartStream = async () => {
              universe_mode: true,
              battle_status: 'waiting'
            }),
-           ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? { battle_mode: 'random_queue' } : {}),
-         };
+            ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? { battle_mode: 'random_queue' } : {}),
+          };
 
       // Add password protection if enabled
       if (isProtected && broadcastPassword.length >= 4) {
@@ -1793,20 +1793,20 @@ const handleStartStream = async () => {
         setLivekitRoom(room);
         PreflightStore.setLivekitRoom(room);
 
-        const isScreenShareMode = category === 'gaming' && streamMode === 'screen' && !!screenTrack;
-        failureStage = 'publishing LiveKit tracks';
-        broadcastStartLog('publishing LiveKit tracks', {
-          streamId: data.id,
-          roomName: tokenData.roomName,
-          isScreenShareMode,
-          hasAudio: !!livekitTracksRef.current[0],
-          hasCamera: !!livekitTracksRef.current[1],
-          hasScreen: !!screenTrack,
-        });
-        await publishSetupTracksToRoom(room, livekitTracksRef.current, screenTrack, isScreenShareMode);
+         const isScreenShareMode = category === 'gaming' && streamMode === 'screen' && !!screenTrack;
+         failureStage = 'publishing LiveKit tracks';
+         broadcastStartLog('publishing LiveKit tracks', {
+           streamId: data.id,
+           roomName: tokenData.roomName,
+           isScreenShareMode,
+           hasAudio: !!livekitTracksRef.current[0],
+           hasCamera: !!livekitTracksRef.current[1],
+           hasScreen: !!screenTrack,
+          });
+         await publishSetupTracksToRoom(room, livekitTracksRef.current, screenTrack, isScreenShareMode);
 
-         // Mark stream as live now that LiveKit is connected and tracks are published
-         const { error: updateError } = await supabase
+           // Mark stream as live now that LiveKit is connected and tracks are published
+          const { error: updateError } = await supabase
            .from('streams')
            .update({
              status: 'live',

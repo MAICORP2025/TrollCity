@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
-import { Users, Video, Radio, Star } from 'lucide-react';
+import { Users, Radio, Star } from 'lucide-react';
+import LazyLiveThumbnail from '@/components/broadcast/LazyLiveThumbnail';
 
 interface Stream {
   id: string;
@@ -145,25 +146,18 @@ export default function HomeLiveGrid() {
             onClick={() => navigate(stream.agora_channel || stream.category === 'gaming' ? `/gaming/watch/${stream.id}` : `/watch/${stream.id}`)}
             className="group cursor-pointer bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-1"
           >
-            {/* Thumbnail / Preview Area */}
-          <div className="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
-            {stream.thumbnail_url ? (
-              <img
-                src={stream.thumbnail_url}
-                alt={stream.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-            ) : stream.user_profiles?.avatar_url ? (
-              <img
-                src={stream.user_profiles.avatar_url}
-                alt={stream.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 to-cyan-900/20 group-hover:from-purple-900/40 group-hover:to-cyan-900/40 transition-colors">
-                <Video className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-white/20 group-hover:text-white/40 transition-colors" />
-              </div>
-            )}
+            {/* Thumbnail / Preview Area — lazy loaded live preview on hover */}
+          <div className="relative aspect-video overflow-hidden">
+            <LazyLiveThumbnail
+              streamId={stream.id}
+              agoraChannel={stream.agora_channel}
+              category={stream.category}
+              thumbnailUrl={stream.thumbnail_url}
+              avatarUrl={stream.user_profiles?.avatar_url}
+              title={stream.title}
+              isLive={stream.status === 'live' || stream.is_live}
+              onClick={() => navigate(stream.agora_channel || stream.category === 'gaming' ? `/gaming/watch/${stream.id}` : `/watch/${stream.id}`)}
+            />
             
             {/* Featured Badge */}
             {stream.user_profiles?.featured_broadcaster_until && new Date(stream.user_profiles.featured_broadcaster_until) > new Date() && (

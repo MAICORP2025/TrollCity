@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Stream } from '@/types/broadcast';
 import { User, Eye, Play } from 'lucide-react';
+import LazyLiveThumbnail from '@/components/broadcast/LazyLiveThumbnail';
 
 interface FeaturedStream extends Stream {
   user_profiles?: {
@@ -118,24 +119,16 @@ export default function FeaturedBroadcasts() {
               onClick={() => handleStreamClick(stream.id)}
               className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden border border-pink-500/30 hover:border-pink-500/60 transition-all cursor-pointer group"
             >
-              {/* Video Player placeholder - click to watch full stream */}
-              {stream.thumbnail_url ? (
-                <img 
-                  src={stream.thumbnail_url} 
-                  alt={stream.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : stream.user_profiles?.avatar_url ? (
-                <img 
-                  src={stream.user_profiles.avatar_url} 
-                  alt={stream.user_profiles.username}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-purple-900/20 to-cyan-900/20 flex items-center justify-center">
-                  <User className="w-12 h-12 text-white/20" />
-                </div>
-              )}
+              {/* Lazy-loaded live thumbnail with hover preview */}
+              <LazyLiveThumbnail
+                streamId={stream.id}
+                category="broadcast"
+                thumbnailUrl={stream.thumbnail_url}
+                avatarUrl={stream.user_profiles?.avatar_url}
+                title={stream.title}
+                isLive={stream.is_live}
+                onClick={() => handleStreamClick(stream.id)}
+              />
 
               {/* Overlay gradient */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />

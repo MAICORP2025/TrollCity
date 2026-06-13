@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SceneConfig } from '@/components/broadcast/GamingSceneManager'
+import TipBanner from '@/components/broadcast/TipBanner'
 
 interface GamingSetupProps {
   streamTitle?: string
@@ -79,6 +80,7 @@ interface GamingSetupProps {
   onToggleCamera?: () => void
   inlineAgreementChecked?: boolean
   onInlineAgreementChange?: (checked: boolean) => void
+  streamId?: string | null
 }
 
 export function GamingSetup({
@@ -125,6 +127,7 @@ export function GamingSetup({
   onToggleCamera,
   inlineAgreementChecked = false,
   onInlineAgreementChange,
+  streamId,
 }: GamingSetupProps) {
   const [showGameSearch, setShowGameSearch] = React.useState(false)
   const [gameSearchQuery, setGameSearchQuery] = React.useState('')
@@ -156,7 +159,10 @@ export function GamingSetup({
   }, [isConnecting, isLive, isPreviewing])
 
   return (
-    <div className={cn('min-h-screen overflow-hidden bg-[#05080f] text-white', 'bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.14),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,0.12),transparent_30%),linear-gradient(180deg,#05080f,#02040a)]', className)}>
+    <div className={cn('flex h-screen flex-col overflow-hidden bg-[#05080f] text-white', 'bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.14),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,0.12),transparent_30%),linear-gradient(180deg,#05080f,#02040a)]', className)}>
+      {/* Tip Banner — shows when gifts are sent during stream */}
+      {streamId && <TipBanner streamId={streamId} />}
+
       {/* ── Header ── */}
       <header className="border-b border-cyan-400/15 bg-black/35 px-4 py-3 backdrop-blur-2xl sm:px-6">
         <div className="flex items-center justify-between gap-4">
@@ -176,7 +182,7 @@ export function GamingSetup({
       </header>
 
       {/* ── Main Grid ── */}
-      <main className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[360px_minmax(560px,1fr)_360px] 2xl:grid-cols-[420px_minmax(680px,1fr)_420px]">
+      <main className="grid min-h-0 flex-1 gap-4 p-4 sm:p-6 xl:grid-cols-[360px_minmax(560px,1fr)_360px] 2xl:grid-cols-[420px_minmax(680px,1fr)_420px]">
 
         {/* ── Left Column: Controls + Settings ── */}
         <section className="space-y-4">
@@ -510,8 +516,8 @@ export function GamingSetup({
         </section>
 
         {/* ── Right Column: Chat ── */}
-        <section className="space-y-4">
-          <Panel className="flex flex-col" style={{ maxHeight: 380 }}>
+        <section className="flex flex-col space-y-4">
+          <Panel className="flex flex-1 flex-col" style={{ minHeight: 480 }}>
             <PanelHeader icon={<Mail className="h-4 w-4" />} title="Chat" right={<CounterBadge value={isLive ? 'Live' : 'Offline'} />} />
             <div className="min-h-0 flex-1 overflow-hidden p-2">{chatPanel || <p className="py-4 text-center text-xs text-slate-500">Start streaming to enable chat</p>}</div>
           </Panel>

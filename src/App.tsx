@@ -153,6 +153,7 @@ const LeadOfficerDashboard = lazyWithRetry(() => import("./pages/lead-officer/Le
 const ReportDetailsPage = lazyWithRetry(() => import("./pages/ReportDetailsPage"));
 const PasswordReset = lazyWithRetry(() => import("./pages/PasswordReset"));
 const CreditScorePage = lazyWithRetry(() => import("./pages/CreditScorePage"));
+const CrownRedemption = lazyWithRetry(() => import("./pages/CrownRedemption"));
 
 
 // Admin pages
@@ -498,6 +499,7 @@ import AuctionInventory from "./pages/auction/AuctionInventory.js";
 import AuctionOrderManagement from "./pages/auction/AuctionOrderManagement.js";
 import PackingStation from "./pages/auction/PackingStation.js";
 import DeviceManagement from "./pages/auction/DeviceManagement.js";
+import AuctioneerScanner from "./pages/auction/AuctioneerScanner.js";
 import CoinStore from "./pages/CoinStore.jsx";
 import SellOnTrollCity from "./pages/SellOnTrollCity.js";
 import SellerOrders from "./pages/SellerOrders.js";
@@ -1665,6 +1667,7 @@ const handleVisibilityChange = async () => {
                   <Route path="/profile/setup" element={<ProfileSetup />} />
                   <Route path="/profile/id/:userId" element={<Profile />} />
                    <Route path="/profile/:username" element={<Profile />} />
+                  <Route path="/crowns/redeem" element={<CrownRedemption />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/blocked-users" element={<BlockedUsers />} />
 <Route path="/district/:districtName" element={<DistrictTour />} />
@@ -1843,7 +1846,15 @@ const handleVisibilityChange = async () => {
                         </RequireRole>
                       }
                     />
-                    
+                    <Route
+                      path="/auctioneer/scanner"
+                      element={
+                        <RequireRole roles={['auctioneer']}>
+                          <AuctioneerScanner />
+                        </RequireRole>
+                      }
+                    />
+
                     {/* 🎙️ Podcast Central */}
                    <Route path="/podcast" element={<PodcastCentral />} />
                    <Route path="/podcast/:id" element={<PodcastRoom />} />

@@ -62,6 +62,7 @@ import { useAgoraGamingViewer } from '@/hooks/useAgoraGamingViewer'
 import { useBroadcastRealtime } from '@/hooks/useBroadcastRealtime'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import GamingChat from '@/components/broadcast/GamingChat'
+import TipBanner from '@/components/broadcast/TipBanner'
 import {
   getAnonymousDisplayName,
   reserveAnonymousChatSlot,
@@ -515,6 +516,9 @@ export default function HytroGamingViewer() {
   if (!isMobile) {
     return (
       <div className="flex h-screen overflow-hidden bg-[#02040a] text-white">
+        {/* Tip Banner — shows when gifts are sent */}
+        <TipBanner streamId={streamId || ''} />
+
         {/* ── Left Sidebar ── */}
         <aside className={cn(
           'flex shrink-0 flex-col border-r border-white/5 bg-[#0a0e17] transition-all duration-300',
@@ -777,6 +781,9 @@ export default function HytroGamingViewer() {
   // ─── Mobile Layout ──────────────────────────────────────────────────────
   return (
     <div className="flex h-[100dvh] flex-col bg-[#02040a] text-white">
+      {/* Tip Banner — shows when gifts are sent */}
+      <TipBanner streamId={streamId || ''} />
+
       {/* Mobile Top Bar */}
       <header className="flex items-center justify-between bg-black/80 px-3 py-2 backdrop-blur-xl" style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}>
         <div className="flex min-w-0 items-center gap-2">

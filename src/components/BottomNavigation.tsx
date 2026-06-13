@@ -59,6 +59,7 @@ import {
   Briefcase,
   Sparkles,
   Zap,
+  Smartphone,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -634,6 +635,11 @@ export default function BottomNavigation() {
 
       { category: 'Careers + Work', label: 'Careers', icon: FileText, path: '/careers' },
       { category: 'Careers + Work', label: 'Mai Class', icon: BookOpen, path: '/mai-class' },
+      { category: 'Careers + Work', label: 'My Earnings', icon: DollarSign, path: '/my-earnings' },
+      { category: 'Careers + Work', label: 'My Orders', icon: ClipboardList, path: '/my-orders' },
+      { category: 'Careers + Work', label: 'Hytro Gaming', icon: Gamepad2, path: '/hytrogaming' },
+      { category: 'Careers + Work', label: 'Academy', icon: BookOpen, path: '/academy' },
+      { category: 'Careers + Work', label: 'Shop', icon: Store, path: '/shop' },
 
       { category: 'City Center', label: 'Appeals', icon: Scale, path: '/city-registry' },
       { category: 'City Center', label: 'Coin Store', icon: Coins, path: '/store' },
@@ -642,6 +648,7 @@ export default function BottomNavigation() {
       { category: 'City Center', label: 'Leaderboard', icon: Trophy, path: '/leaderboard' },
       { category: 'City Center', label: 'Live Auctions', icon: Gavel, path: '/auctions' },
       { category: 'City Center', label: 'Marketplace', icon: Store, path: '/marketplace' },
+      { category: 'City Center', label: 'Crown Redemption', icon: Crown, path: '/crowns/redeem' },
       { category: 'City Center', label: 'Troll Court', icon: Scale, path: '/troll-court' },
       { category: 'City Center', label: 'Wallet', icon: Banknote, path: '/wallet' },
 
@@ -725,6 +732,82 @@ export default function BottomNavigation() {
     return pages
   }, [isOfficer, isSecretary, isAdmin, isLead, isPresident, canSeeCourt, profile])
 
+  const auctioneerPages: MenuOption[] = useMemo(() => {
+    if (!isAuctioneer && !isAdmin) return []
+    return [
+      { category: 'Auctioneer', label: 'Auction Dashboard', icon: LayoutDashboard, path: '/auction/dashboard' },
+      { category: 'Auctioneer', label: 'Auction Studio', icon: Video, path: '/auction/studio' },
+      { category: 'Auctioneer', label: 'My Shows', icon: Radio, path: '/auction/my-shows' },
+      { category: 'Auctioneer', label: 'Scanner', icon: Scan, path: '/auctioneer/scanner' },
+      { category: 'Auctioneer', label: 'Lots', icon: Package, path: '/auction/studio/lots' },
+      { category: 'Auctioneer', label: 'Bidders', icon: Users, path: '/auction/bidders' },
+      { category: 'Auctioneer', label: 'Sales', icon: DollarSign, path: '/auction/sales' },
+      { category: 'Auctioneer', label: 'Reports', icon: BarChart3, path: '/auction/reports' },
+      { category: 'Auctioneer', label: 'Analytics', icon: TrendingUp, path: '/auction/analytics' },
+      { category: 'Auctioneer', label: 'Settings', icon: Settings, path: '/auction/settings' },
+      { category: 'Auctioneer', label: 'Inventory', icon: Warehouse, path: '/auction/inventory' },
+      { category: 'Auctioneer', label: 'Orders', icon: ClipboardList, path: '/auction/orders' },
+      { category: 'Auctioneer', label: 'Packing', icon: Package, path: '/auction/packing' },
+      { category: 'Auctioneer', label: 'Devices', icon: Smartphone, path: '/auction/devices' },
+    ]
+  }, [isAuctioneer, isAdmin])
+
+  const attorneyPages: MenuOption[] = useMemo(() => {
+    if (!isAttorney && !isProsecutor && !isAdmin) return []
+    const pages: MenuOption[] = []
+    if (isAttorney || isAdmin) {
+      pages.push({ category: 'Legal Career', label: 'Attorney Dashboard', icon: Scale, path: '/attorney' })
+    }
+    if (isProsecutor || isAdmin) {
+      pages.push({ category: 'Legal Career', label: 'Prosecutor Dashboard', icon: Gavel, path: '/prosecutor' })
+    }
+    return pages
+  }, [isAttorney, isProsecutor, isAdmin])
+
+  const broadcasterPages: MenuOption[] = useMemo(() => {
+    if (!isBroadcaster && !isAdmin) return []
+    return [
+      { category: 'Broadcaster', label: 'Creator Dashboard', icon: LayoutDashboard, path: '/creator/dashboard' },
+      { category: 'Broadcaster', label: 'Creator Onboarding', icon: Sparkles, path: '/creator/onboarding' },
+      { category: 'Broadcaster', label: 'My Earnings', icon: DollarSign, path: '/creator/earnings' },
+      { category: 'Broadcaster', label: 'Shop', icon: Store, path: '/shop' },
+    ]
+  }, [isBroadcaster, isAdmin])
+
+  const agencyHRPages: MenuOption[] = useMemo(() => {
+    if (!isAgencyHR && !isAdmin) return []
+    return [
+      { category: 'Agency HR', label: 'HR Dashboard', icon: Users, path: '/agency-hr-dashboard' },
+      { category: 'Agency HR', label: 'My Agency', icon: Building2, path: '/agency-dashboard' },
+    ]
+  }, [isAgencyHR, isAdmin])
+
+  const ceoAssistantPages: MenuOption[] = useMemo(() => {
+    const pages: MenuOption[] = []
+    if (isCEOAssistant || isAdmin) {
+      pages.push({ category: 'Executive', label: 'CEO Assistant', icon: Briefcase, path: '/ceo-assistant-dashboard' })
+    }
+    if (isNoahAssistant || isAdmin) {
+      pages.push({ category: 'Executive', label: 'Noah Assistant', icon: Briefcase, path: '/noah-assistant-dashboard' })
+    }
+    return pages
+  }, [isCEOAssistant, isNoahAssistant, isAdmin])
+
+  const journalistPages: MenuOption[] = useMemo(() => {
+    if (!isJournalist && !isNewsCaster && !isChiefNewsCaster && !isAdmin) return []
+    const pages: MenuOption[] = []
+    if (isJournalist || isAdmin) {
+      pages.push({ category: 'News', label: 'Journalist', icon: Newspaper, path: '/tcnn' })
+    }
+    if (isNewsCaster || isAdmin) {
+      pages.push({ category: 'News', label: 'News Caster', icon: Radio, path: '/tcnn/broadcaster' })
+    }
+    if (isChiefNewsCaster || isAdmin) {
+      pages.push({ category: 'News', label: 'Chief Caster', icon: Star, path: '/tcnn/chief' })
+    }
+    return pages
+  }, [isJournalist, isNewsCaster, isChiefNewsCaster, isAdmin])
+
   const adminPages: MenuOption[] = useMemo(() => {
     if (!isAdmin) return []
 
@@ -775,7 +858,7 @@ export default function BottomNavigation() {
   const menuOptions = useMemo(() => {
     const seen = new Set<string>()
 
-    return [...basePages, ...governmentPages, ...adminPages]
+    return [...basePages, ...governmentPages, ...auctioneerPages, ...attorneyPages, ...broadcasterPages, ...agencyHRPages, ...ceoAssistantPages, ...journalistPages, ...adminPages]
       .filter((item) => item.show !== false)
       .filter((item) => {
         const key = `${item.category}:${item.label}:${item.path}`
@@ -783,7 +866,7 @@ export default function BottomNavigation() {
         seen.add(key)
         return true
       })
-  }, [basePages, governmentPages, adminPages])
+  }, [basePages, governmentPages, auctioneerPages, attorneyPages, broadcasterPages, agencyHRPages, ceoAssistantPages, journalistPages, adminPages])
 
   const groupedOptions = useMemo(() => {
     const normalizedSearch = pageSearch.trim().toLowerCase()

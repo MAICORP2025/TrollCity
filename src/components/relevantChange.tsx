@@ -38,6 +38,7 @@ import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import FloatingPoster from '@/components/home/FloatingPoster'
 import JoinPoster from '@/components/home/JoinPoster'
+import LazyLiveThumbnail from '@/components/broadcast/LazyLiveThumbnail'
 
 interface AuctionShow {
   id: string
@@ -597,24 +598,23 @@ function LiveGrid({
               liveItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => onClickItem(item)}
                   className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-slate-900 text-left transition hover:border-cyan-300/60"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-slate-950 to-cyan-900/50" />
-                  {item.type === 'auction' ? (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Gavel className="h-16 w-16 text-cyan-300/40" />
-                    </div>
-                  ) : item.streamerAvatar ? (
-                    <img src={item.streamerAvatar} alt={item.streamerName} className="absolute inset-0 h-full w-full object-cover opacity-80" />
-                  ) : (
-                    <Play className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-white/20" />
-                  )}
-                  <div className="absolute left-2 top-2 rounded-lg bg-red-600 px-2 py-1 text-[10px] font-black text-white">LIVE</div>
-                  <div className="absolute right-2 top-2 rounded-lg bg-black/50 px-2 py-1 text-[10px] font-black text-white">
+                  <LazyLiveThumbnail
+                    streamId={item.id}
+                    category={item.category || undefined}
+                    thumbnailUrl={item.streamerAvatar}
+                    avatarUrl={item.streamerAvatar}
+                    title={item.title}
+                    isLive={true}
+                    onClick={() => onClickItem(item)}
+                  />
+                  {/* Viewer count overlay */}
+                  <div className="pointer-events-none absolute right-2 top-2 z-10 rounded-lg bg-black/50 px-2 py-1 text-[10px] font-black text-white">
                     👁 {item.viewerCount}
                   </div>
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-3">
+                  {/* Title overlay */}
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/70 to-transparent p-3">
                     <p className="truncate text-sm font-black text-white">{item.title}</p>
                     <p className="truncate text-xs font-bold text-slate-300">{item.streamerName}</p>
                   </div>

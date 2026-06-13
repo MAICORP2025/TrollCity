@@ -37,6 +37,7 @@ import { useAuthStore } from '../../lib/store'
 import { useAuctionTimer } from '../../hooks/useAuctionTimer'
 
 interface AuctionLot {
+  [x: string]: any
   id: string
   title: string
   description?: string | null
@@ -543,6 +544,7 @@ export default function AuctioneerDashboard() {
   const upcomingLots = lots.filter((l) => l.status === 'queued' || l.status === 'upcoming').sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0))
   const soldLots = lots.filter((l) => l.status === 'sold')
   const isLive = show?.status === 'live'
+  const currentLot = lots.find((l) => l.status === 'live') || null
 
   // Timer for the current lot
   const timer = useAuctionTimer(currentLot?.id ?? null, isAuctioneer)

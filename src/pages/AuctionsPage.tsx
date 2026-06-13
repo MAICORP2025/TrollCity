@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../lib/store'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import {
   AlertCircle,
   ArrowRight,
@@ -14,6 +16,7 @@ import {
   Loader2,
   Play,
   RefreshCw,
+  Scan,
   Search,
   ShieldCheck,
   Sparkles,
@@ -52,7 +55,7 @@ interface AuctionShow {
   }
 }
 
-type TabType = 'live' | 'upcoming' | 'ended'
+type TabType = 'live' | 'ended'
 
 const BID_MINIMUM_COINS = 500
 
@@ -121,6 +124,14 @@ function formatTime(value: string | null | undefined) {
 
 export default function AuctionsPage() {
   const navigate = useNavigate()
+  const { profile } = useAuthStore()
+  const isMobile = useIsMobile()
+
+  const isAuctioneer =
+    profile?.role === 'auctioneer' ||
+    profile?.troll_role === 'auctioneer' ||
+    !!(profile as any)?.is_auctioneer ||
+    !!(profile as any)?.is_admin
 
   useSEO({
     title: 'Live Auctions | Troll City - Bid Online & Win',
@@ -171,7 +182,6 @@ export default function AuctionsPage() {
   const visibleAuctions = useMemo(() => {
     return auctions.filter((auction) => {
       if (activeTab === 'live' && auction.status !== 'live') return false
-      if (activeTab === 'upcoming' && auction.status !== 'scheduled') return false
       if (activeTab === 'ended' && auction.status !== 'ended') return false
 
       const normalizedSearch = searchQuery.trim().toLowerCase()
@@ -196,7 +206,6 @@ export default function AuctionsPage() {
   }, [auctions])
 
   const liveCount = auctions.filter((auction) => auction.status === 'live').length
-  const upcomingCount = auctions.filter((auction) => auction.status === 'scheduled').length
   const endedCount = auctions.filter((auction) => auction.status === 'ended').length
   const featured =
     auctions.find((auction) => auction.status === 'live' && auction.is_featured) ||
@@ -212,31 +221,35 @@ export default function AuctionsPage() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.22),transparent_34%),radial-gradient(circle_at_85%_0%,rgba(168,85,247,0.16),transparent_32%)]" />
 
             <div className="relative flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.65rem] border border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_34px_rgba(34,211,238,0.2)]">
-                  <Gavel className="h-10 w-10 text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]" />
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className={cn('relative flex shrink-0 items-center justify-center rounded-[1.65rem] border border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_34px_rgba(34,211,238,0.2)]', isMobile ? 'h-14 w-14' : 'h-20 w-20')}>
+                  <Gavel className={cn('text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]', isMobile ? 'h-7 w-7' : 'h-10 w-10')} />
                   <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-xl border border-purple-300/25 bg-purple-500/20">
                     <Sparkles className="h-4 w-4 text-purple-100" />
                   </div>
                 </div>
 
                 <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-100">
-                      Troll City Auction House
-                    </span>
-                    <span className="rounded-full border border-purple-300/20 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-purple-100">
-                      Powered by Troll Coins
-                    </span>
-                  </div>
+                  {!isMobile && (
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-100">
+                        Troll City Auction House
+                      </span>
+                      <span className="rounded-full border border-purple-300/20 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-purple-100">
+                        Powered by Troll Coins
+                      </span>
+                    </div>
+                  )}
 
-                  <h1 className="bg-gradient-to-r from-white via-cyan-100 to-blue-300 bg-clip-text text-4xl font-black tracking-tight text-transparent md:text-6xl">
+                  <h1 className={cn('bg-gradient-to-r from-white via-cyan-100 to-blue-300 bg-clip-text font-black tracking-tight text-transparent', isMobile ? 'text-2xl' : 'text-4xl md:text-6xl')}>
                     Live Auctions
                   </h1>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 md:text-base">
-                    Enter official live auction shows, place real-time bids with Troll Coins, and follow upcoming
-                    drops from verified auctioneers.
-                  </p>
+                  {!isMobile && (
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 md:text-base">
+                      Enter official live auction shows, place real-time bids with Troll Coins, and follow upcoming
+                      drops from verified auctioneers.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -250,18 +263,24 @@ export default function AuctionsPage() {
                   <Video className="h-4 w-4" />
                   Auctioneer Studio
                 </button>
+
+                {isAuctioneer && isMobile && (
+                  <button onClick={() => navigate('/auctioneer/scanner')} className={secondaryButton}>
+                    <Scan className="h-4 w-4" />
+                    Scanner
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="grid gap-3 p-4 md:grid-cols-3">
+          <div className={cn('grid gap-3 p-4', isMobile ? 'grid-cols-2' : 'md:grid-cols-3')}>
             <StatCard icon={<Zap className="h-5 w-5" />} label="Live Now" value={liveCount} tone="red" />
-            <StatCard icon={<Calendar className="h-5 w-5" />} label="Upcoming" value={upcomingCount} tone="cyan" />
             <StatCard icon={<Trophy className="h-5 w-5" />} label="Recently Ended" value={endedCount} tone="green" />
           </div>
         </header>
 
-        {featured && activeTab === 'live' && (
+        {featured && activeTab === 'live' && !isMobile && (
           <section className={cn(panel, 'overflow-hidden p-4 md:p-5')}>
             <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="relative aspect-video overflow-hidden rounded-[1.65rem] border border-cyan-300/16 bg-slate-900 shadow-[0_0_38px_rgba(34,211,238,0.10)]">
@@ -312,11 +331,6 @@ export default function AuctionsPage() {
                     Enter Auction
                     <ChevronRight className="h-4 w-4" />
                   </button>
-
-                  <button onClick={() => setActiveTab('upcoming')} className={darkButton}>
-                    View Schedule
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
                 </div>
               </div>
             </div>
@@ -326,9 +340,8 @@ export default function AuctionsPage() {
         <section className={cn(panel, 'p-4 md:p-5')}>
           <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex gap-2 overflow-x-auto pb-1">
-              <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={<Play className="h-4 w-4" />} label="Live Now" count={liveCount} />
-              <TabButton active={activeTab === 'upcoming'} onClick={() => setActiveTab('upcoming')} icon={<Calendar className="h-4 w-4" />} label="Upcoming" count={upcomingCount} />
-              <TabButton active={activeTab === 'ended'} onClick={() => setActiveTab('ended')} icon={<Trophy className="h-4 w-4" />} label="Recently Ended" count={endedCount} />
+              <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={<Play className="h-4 w-4" />} label={isMobile ? 'Live' : 'Live Now'} count={liveCount} />
+              <TabButton active={activeTab === 'ended'} onClick={() => setActiveTab('ended')} icon={<Trophy className="h-4 w-4" />} label={isMobile ? 'Ended' : 'Recently Ended'} count={endedCount} />
             </div>
 
             <div className="flex items-center gap-2 rounded-2xl border border-cyan-300/15 bg-cyan-400/6 px-4 py-3 text-sm font-bold text-cyan-100">
@@ -337,7 +350,7 @@ export default function AuctionsPage() {
             </div>
           </div>
 
-          <div className="mb-6 grid gap-3 lg:grid-cols-[1fr_260px_52px]">
+          <div className={cn('mb-4 grid gap-3', isMobile ? 'grid-cols-[1fr_48px]' : 'lg:grid-cols-[1fr_260px_52px]')}>
             <div className="relative">
               <Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-500" />
               <input
@@ -370,7 +383,7 @@ export default function AuctionsPage() {
           ) : visibleAuctions.length === 0 ? (
             <EmptyState activeTab={activeTab} setActiveTab={setActiveTab} />
           ) : (
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div className={cn('grid gap-4', isMobile ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-3')}>
               {visibleAuctions.map((auction) => (
                 <AuctionCard
                   key={auction.id}
@@ -654,18 +667,9 @@ function EmptyState({
         <h3 className="text-xl font-black text-white">No auctions found</h3>
         <p className="mt-2 text-sm leading-6 text-slate-500">
           {activeTab === 'live'
-            ? 'No live auctions are running right now. Check upcoming shows or refresh the auction floor.'
-            : activeTab === 'upcoming'
-              ? 'No upcoming auctions are scheduled yet.'
-              : 'No ended auctions are available.'}
+            ? 'No live auctions are running right now. Refresh the auction floor or check back soon.'
+            : 'No ended auctions are available.'}
         </p>
-
-        {activeTab === 'live' && (
-          <button onClick={() => setActiveTab('upcoming')} className={cn(primaryButton, 'mt-5')}>
-            View Upcoming
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        )}
       </div>
     </div>
   )

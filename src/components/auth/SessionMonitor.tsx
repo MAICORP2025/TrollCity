@@ -1,19 +1,32 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { toast } from 'sonner'
+import { canHaveMultiSession } from '../../lib/sessionUtils'
 
 export default function SessionMonitor() {
   const { user, logout } = useAuthStore()
   const hasCheckedRef = useRef(false)
   const loginTimeRef = useRef<number>(Date.now())
 
-  const checkSession = async (sessionId: string) => {
+  /**
+   * Check if the user is allowed multi-session. If so, skip all concurrent checks.
+   */
+  const checkSession = useCallback(async (sessionId: string) => {
     // Validate sessionId is a proper UUID to avoid 400 errors
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!sessionId || sessionId === 'undefined' || !uuidRegex.test(sessionId)) {
       console.log('[SessionMonitor] Invalid or missing session ID:', sessionId);
       return;
+    }
+
+    // If user has a multi-session role (auctioneer, admin, CEO, etc.), skip all checks
+    if (user?.id) {
+      const isMulti = await canHaveMultiSession(user.id)
+      if (isMulti) {
+        console.log('[SessionMonitor] User has multi-session role — skipping concurrent checks')
+        return
+      }
     }
 
     console.log('[SessionMonitor] Checking session:', sessionId, 'for user:', user?.id);
@@ -27,17 +40,13 @@ export default function SessionMonitor() {
     console.log('[SessionMonitor] Session query result:', { data, error });
 
     // If no session found (error or null data), session doesn't exist or was deleted
-    // This can happen if session was cleaned up or is a stale localStorage value
     if (error || !data) {
-      // For new logins, give more time for register_session to complete
       const timeSinceLogin = Date.now() - loginTimeRef.current;
-      const isNewLogin = timeSinceLogin < 5000; // First 5 seconds after login
-      
+      const isNewLogin = timeSinceLogin < 5000;
+
       console.log('[SessionMonitor] Session not found or error:', error?.message, 'Time since login:', timeSinceLogin, 'ms', 'isNewLogin:', isNewLogin)
-      
-      // Only check for concurrent login if it's not a brand new session
+
       if (!isNewLogin) {
-        // Check if user has any other active sessions - if so, this is a concurrent login
         const { data: otherSessions } = await supabase
           .from('active_sessions')
           .select('session_id')
@@ -45,9 +54,7 @@ export default function SessionMonitor() {
           .eq('is_active', true)
           .neq('session_id', sessionId)
           .limit(1)
-        
-        // Only logout if there are other active sessions (concurrent login)
-        // If no other sessions exist, this is just a stale localStorage value or cleanup
+
         if (otherSessions && otherSessions.length > 0) {
           console.log('[SessionMonitor] Other active sessions found - logging out')
           toast.error('Session expired. You have logged in on another device.')
@@ -62,8 +69,6 @@ export default function SessionMonitor() {
     }
 
     if (data.is_active === false) {
-      // Check if this is because of a new session being created (same device)
-      // by checking if there are other active sessions for this user
       const { data: otherSessions } = await supabase
         .from('active_sessions')
         .select('session_id')
@@ -71,19 +76,16 @@ export default function SessionMonitor() {
         .eq('is_active', true)
         .neq('session_id', sessionId)
         .limit(1)
-      
+
       if (otherSessions && otherSessions.length > 0) {
-        // Another device logged in - logout
         console.log('[SessionMonitor] Session is inactive and other sessions exist. Logging out.')
         toast.error('Session expired. You have logged in on another device.')
         logout()
       } else {
-        // No other sessions - this is likely the same device's session being
-        // replaced during refresh or re-login. Don't logout.
         console.log('[SessionMonitor] Session is inactive but no other sessions - not logging out')
       }
     }
-  }
+  }, [user, logout])
 
   useEffect(() => {
     if (!user) return
@@ -126,25 +128,30 @@ export default function SessionMonitor() {
         },
         (payload) => {
           if (payload.new && payload.new.is_active === false) {
-            // Check if there are other active sessions - only logout if another device logged in
-            supabase
-              .from('active_sessions')
-              .select('session_id')
-              .eq('user_id', user.id)
-              .eq('is_active', true)
-              .neq('session_id', sessionId)
-              .limit(1)
-              .then(({ data: otherSessions }) => {
-                if (otherSessions && otherSessions.length > 0) {
-                  // Another device logged in - logout
-                  console.log('[SessionMonitor] Session deactivated via realtime and other sessions exist. Logging out.')
-                  toast.error('Session expired. You have logged in on another device.')
-                  logout()
-                } else {
-                  // No other active sessions - this is likely same device refresh
-                  console.log('[SessionMonitor] Session deactivated but no other sessions - not logging out')
-                }
-              })
+            // If user has multi-session role, don't logout
+            canHaveMultiSession(user.id).then((isMulti) => {
+              if (isMulti) {
+                console.log('[SessionMonitor] Multi-session role — ignoring deactivation')
+                return
+              }
+              // Check if there are other active sessions - only logout if another device logged in
+              supabase
+                .from('active_sessions')
+                .select('session_id')
+                .eq('user_id', user.id)
+                .eq('is_active', true)
+                .neq('session_id', sessionId)
+                .limit(1)
+                .then(({ data: otherSessions }) => {
+                  if (otherSessions && otherSessions.length > 0) {
+                    console.log('[SessionMonitor] Session deactivated via realtime and other sessions exist. Logging out.')
+                    toast.error('Session expired. You have logged in on another device.')
+                    logout()
+                  } else {
+                    console.log('[SessionMonitor] Session deactivated but no other sessions - not logging out')
+                  }
+                })
+            })
           }
         }
       )

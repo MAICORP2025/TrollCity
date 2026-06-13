@@ -46,6 +46,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { cn, formatCompactNumber } from '@/lib/utils';
 import useSEO from '@/hooks/useSEO';
+import LazyLiveThumbnail from '@/components/broadcast/LazyLiveThumbnail';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -208,62 +209,47 @@ function GamingStreamCard({
           featured ? 'aspect-[16/8.5]' : 'aspect-[16/10]'
         )}
       >
-        {stream.thumbnail_url ? (
-          <img
-            src={stream.thumbnail_url}
-            alt={stream.title || 'Gaming stream thumbnail'}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,rgba(34,211,238,0.26),transparent_30%),radial-gradient(circle_at_75%_80%,rgba(168,85,247,0.22),transparent_35%),linear-gradient(135deg,rgba(15,23,42,0.8),rgba(2,6,23,1))]" />
-            <div className="absolute inset-0 opacity-[0.12] [background-image:linear-gradient(rgba(255,255,255,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.12)_1px,transparent_1px)] [background-size:26px_26px]" />
-            <div className="relative flex flex-col items-center gap-3">
-              <div className="grid h-20 w-20 place-items-center rounded-3xl border border-cyan-300/25 bg-cyan-300/10 shadow-[0_0_40px_rgba(34,211,238,0.16)]">
-                <MonitorPlay className="h-10 w-10 text-cyan-200" />
-              </div>
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-100/60">
-                Live Gaming
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Lazy-loaded live thumbnail — loads preview on hover */}
+        <LazyLiveThumbnail
+          streamId={stream.id}
+          agoraChannel={stream.agora_channel}
+          category="gaming"
+          thumbnailUrl={stream.thumbnail_url}
+          avatarUrl={stream.broadcaster_avatar}
+          title={stream.title}
+          isLive={stream.is_live}
+          onClick={onClick}
+        />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-black/15" />
+        {/* Gradient overlay for text readability */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black via-black/25 to-black/15" />
 
-        <div className="absolute left-3 top-3 flex flex-wrap items-center gap-2">
+        {/* Live + Gaming badges */}
+        <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2">
           {stream.is_live && (
             <div className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-2.5 py-1.5 shadow-lg shadow-red-600/25">
               <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-              <span className="text-[11px] font-black uppercase tracking-wide text-white">
-                Live
-              </span>
+              <span className="text-[11px] font-black uppercase tracking-wide text-white">Live</span>
             </div>
           )}
-
           <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/45 px-2.5 py-1.5 backdrop-blur-md">
             <Gamepad2 className="h-3.5 w-3.5 text-cyan-200" />
             <span className="text-[11px] font-bold text-white/85">Gaming</span>
           </div>
         </div>
 
+        {/* Featured badge */}
         {stream.is_featured && (
-          <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-400 to-yellow-300 px-2.5 py-1.5 shadow-lg shadow-orange-500/20">
+          <div className="pointer-events-none absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-400 to-yellow-300 px-2.5 py-1.5 shadow-lg shadow-orange-500/20">
             <Flame className="h-3.5 w-3.5 text-black" />
             <span className="text-[11px] font-black uppercase text-black">Hot</span>
           </div>
         )}
 
-        <div className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur-md">
+        {/* Viewer count */}
+        <div className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur-md">
           <Eye className="h-3.5 w-3.5 text-white/65" />
           <span className="text-xs font-bold text-white">{formatCompactNumber(getStreamViewers(stream))}</span>
-        </div>
-
-        <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-          <div className="flex items-center gap-2 rounded-full border border-cyan-200/40 bg-cyan-400/20 px-5 py-3 text-sm font-black text-cyan-50 shadow-[0_0_35px_rgba(34,211,238,0.25)] backdrop-blur-xl">
-            <Play className="h-4 w-4 fill-current" />
-            Watch Now
-          </div>
         </div>
       </div>
 

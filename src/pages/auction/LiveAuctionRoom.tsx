@@ -35,6 +35,7 @@ import {
   Sparkles,
   Store,
   Truck,
+  Trophy,
   Users,
   Video,
   VideoOff,
@@ -48,6 +49,8 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { useAuctionTimer } from '../../hooks/useAuctionTimer'
+import ShareModal from '../../components/broadcast/ShareModal'
+import ReportModal from '../../components/report/ReportModal'
 
 type AuctionShowStatus = 'draft' | 'scheduled' | 'live' | 'ended' | 'cancelled'
 type AuctionLotStatus =
@@ -140,8 +143,8 @@ interface PlaceBidResult {
   new_highest_bid?: number
 }
 
-const MIN_COINS_TO_BID = 100
-const GLOBAL_AGORA_JOIN_LOCKS = new Set<string>()
+  const MIN_COINS_TO_BID = 0
+  const GLOBAL_AGORA_JOIN_LOCKS = new Set<string>()
 
 const CATEGORY_CHIPS = [
   'All',
@@ -269,6 +272,20 @@ export default function LiveAuctionRoom() {
   // Chat bidding
   const [showCustomBidModal, setShowCustomBidModal] = useState(false)
   const [customBidAmount, setCustomBidAmount] = useState('')
+
+  // View All Lots modal
+  const [showAllLotsModal, setShowAllLotsModal] = useState(false)
+
+  // Share modal
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+
+  // Report modal
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
+
+  // Auction watchlist
+  const [isWatchlisted, setIsWatchlisted] = useState(false)
+  const [watchlistCount, setWatchlistCount] = useState(0)
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
   const [chatMessages, setChatMessages] = useState<Array<{
     id: string
     type: 'chat' | 'bid' | 'system'
@@ -305,6 +322,65 @@ export default function LiveAuctionRoom() {
       .then(({ data }) => setAuctioneerProfileId(data?.id ?? null))
   }, [user?.id])
 
+  // Fetch watchlist status and count
+  useEffect(() => {
+    if (!showId) return
+
+    async function fetchWatchlistInfo() {
+      try {
+        const { data: countData } = await supabase.rpc('get_auction_watchlist_count', {
+          p_auction_show_id: showId,
+        })
+        setWatchlistCount(Number(countData || 0))
+
+        if (user?.id) {
+          const { data: wlData } = await supabase
+            .from('auction_watchlist')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('auction_show_id', showId)
+            .maybeSingle()
+          setIsWatchlisted(!!wlData)
+        }
+      } catch {
+        // silently fail
+      }
+    }
+
+    void fetchWatchlistInfo()
+  }, [showId, user?.id])
+
+  const toggleWatchlist = useCallback(async () => {
+    if (!user?.id || !showId || watchlistLoading) return
+
+    setWatchlistLoading(true)
+    try {
+      if (isWatchlisted) {
+        const { error } = await supabase
+          .from('auction_watchlist')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('auction_show_id', showId)
+        if (error) throw error
+        setIsWatchlisted(false)
+        setWatchlistCount((prev) => Math.max(0, prev - 1))
+        toast.success('Removed from watchlist')
+      } else {
+        const { error } = await supabase
+          .from('auction_watchlist')
+          .insert({ user_id: user.id, auction_show_id: showId })
+        if (error) throw error
+        setIsWatchlisted(true)
+        setWatchlistCount((prev) => prev + 1)
+        toast.success('Added to watchlist')
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update watchlist')
+    } finally {
+      setWatchlistLoading(false)
+    }
+  }, [user?.id, showId, isWatchlisted, watchlistLoading])
+
   const isAuctioneer = useMemo(() => {
     if (!show) return false
     // Admins can always access
@@ -328,8 +404,7 @@ export default function LiveAuctionRoom() {
   const canBid = Boolean(
     user &&
       currentLot &&
-      currentLot.status === 'live' &&
-      Number(userProfile?.troll_coins || 0) >= MIN_COINS_TO_BID
+      currentLot.status === 'live'
   )
 
   const fetchUserProfile = useCallback(async () => {
@@ -784,13 +859,13 @@ export default function LiveAuctionRoom() {
     setIsMuted(nextMuted)
   }, [isMuted])
 
-  const placeBid = useCallback(async () => {
+  const placeBid = useCallback(async (overrideAmount?: number) => {
     if (!showId || !currentLot || !user?.id) {
       toast.error('You must be logged in to bid')
       return
     }
 
-    const bidValue = Number.parseInt(bidAmount, 10)
+    const bidValue = overrideAmount ?? Number(bidAmount)
 
     if (!Number.isFinite(bidValue) || bidValue <= 0) {
       setBidStatus('error')
@@ -813,9 +888,9 @@ export default function LiveAuctionRoom() {
       return
     }
 
-    if (Number(userProfile?.troll_coins || 0) < MIN_COINS_TO_BID) {
+    if (Number(userProfile?.troll_coins || 0) < bidValue) {
       setBidStatus('error')
-      setBidError(`Minimum ${formatCoins(MIN_COINS_TO_BID)} coins required to bid`)
+      setBidError('Insufficient troll coins')
       window.setTimeout(() => setBidStatus('idle'), 3000)
       return
     }
@@ -850,7 +925,9 @@ export default function LiveAuctionRoom() {
     }
   }, [bidAmount, currentLot, fetchLiveState, fetchUserProfile, minimumBid, showId, user?.id, userProfile?.troll_coins])
 
-  const quickBid = useCallback((extra: number) => setBidAmount(String(minimumBid + extra)), [minimumBid])
+  const quickBid = useCallback((extra: number) => {
+    void placeBid(minimumBid + extra)
+  }, [minimumBid, placeBid])
 
   // Synced timer for the current lot (reads from DB, synced via realtime)
   const timer = useAuctionTimer(currentLot?.id ?? null, false)
@@ -968,17 +1045,10 @@ export default function LiveAuctionRoom() {
       toast.error('Enter a valid amount')
       return
     }
-    if (amount < minimumBid) {
-      toast.error(`Minimum bid is ${formatCoins(minimumBid)} coins`)
-      return
-    }
     setShowCustomBidModal(false)
     setCustomBidAmount('')
-
-    // Simulate typing the bid in chat
-    chatDraftRef.current = `$${amount}`
-    await handleChatOrBid()
-  }, [customBidAmount, minimumBid, handleChatOrBid])
+    await placeBid(amount)
+  }, [customBidAmount, placeBid])
 
   const chatDraftRef = useRef('')
 
@@ -1370,7 +1440,10 @@ export default function LiveAuctionRoom() {
             <div className="rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.04] p-4 shadow-[0_0_30px_rgba(34,211,238,0.08)] backdrop-blur-xl">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-sm font-black uppercase tracking-[0.2em] text-cyan-100">Next Lots</h3>
-                <button className="flex items-center gap-1 text-sm font-bold text-cyan-300 hover:text-cyan-100">
+                <button
+                  onClick={() => setShowAllLotsModal(true)}
+                  className="flex items-center gap-1 text-sm font-bold text-cyan-300 hover:text-cyan-100"
+                >
                   View All Lots
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1436,58 +1509,43 @@ export default function LiveAuctionRoom() {
 
               {!isAuctioneer && (
                 <>
-                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {[100, 250, 500].map((amount) => (
-                      <button
-                        key={amount}
-                        onClick={() => quickBid(amount)}
-                        disabled={!canBid}
-                        className="rounded-2xl border border-cyan-300/20 bg-black/35 px-3 py-3 text-left transition hover:border-cyan-300/45 hover:bg-cyan-400/10 disabled:opacity-50"
-                      >
-                        <p className="text-lg font-black text-cyan-100">+{formatCoins(amount)}</p>
-                        <p className="text-xs text-slate-400">{formatCoins(minimumBid + amount)}</p>
-                      </button>
-                    ))}
-
-                    <div className="rounded-2xl border border-purple-300/20 bg-black/35 px-3 py-3">
-                      <input
-                        type="number"
-                        value={bidAmount}
-                        onChange={(event) => setBidAmount(event.target.value)}
-                        placeholder="Custom"
-                        className="w-full bg-transparent text-sm font-black text-white outline-none placeholder:text-slate-500"
-                      />
-                      <p className="mt-1 text-xs text-slate-500">coins</p>
-                    </div>
-                  </div>
-
                   <button
-                    onClick={placeBid}
-                    disabled={!bidAmount || !canBid}
+                    onClick={() => void placeBid(minimumBid)}
+                    disabled={!canBid}
                     className="mt-5 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-500 px-6 py-4 text-lg font-black uppercase tracking-[0.18em] text-white shadow-[0_0_30px_rgba(34,211,238,0.22)] transition hover:scale-[1.01] hover:from-purple-500 hover:to-cyan-400 disabled:cursor-not-allowed disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-400"
                   >
-                    Place Bid
+                    <Coins className="h-6 w-6 text-yellow-300" />
+                    Place Bid — {formatCoins(minimumBid)} TC
                     <ChevronRight className="h-6 w-6" />
                   </button>
 
-                  <div className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-cyan-200">
-                    <Coins className="h-4 w-4 text-yellow-300" />
-                    Bid with Troll Coins
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {[100, 250, 500].map((extra) => (
+                      <button
+                        key={extra}
+                        onClick={() => void quickBid(extra)}
+                        disabled={!canBid}
+                        className="rounded-2xl border border-cyan-300/20 bg-black/35 px-3 py-2.5 text-center transition hover:border-cyan-300/45 hover:bg-cyan-400/10 disabled:opacity-50"
+                      >
+                        <p className="text-sm font-black text-cyan-100">+{formatCoins(extra)}</p>
+                        <p className="text-[10px] text-slate-400">{formatCoins(minimumBid + extra)} TC</p>
+                      </button>
+                    ))}
                   </div>
 
                   <p className="mt-3 text-center text-sm text-slate-400">
-                    You have <span className="font-black text-white">{formatCoins(userProfile?.troll_coins || 0)}</span> Troll Coins.
+                    You have <span className="font-black text-yellow-300">{formatCoins(userProfile?.troll_coins || 0)}</span> Troll Coins
                   </p>
 
                   {bidStatus === 'success' && (
-                    <div className="mt-4 flex items-center gap-2 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 p-3 text-cyan-200">
+                    <div className="mt-3 flex items-center gap-2 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 p-3 text-cyan-200">
                       <CheckCircle className="h-5 w-5" />
                       Bid accepted!
                     </div>
                   )}
 
                   {bidStatus === 'error' && (
-                    <div className="mt-4 flex items-center gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-red-200">
+                    <div className="mt-3 flex items-center gap-2 rounded-2xl border border-red-400/30 bg-red-500/10 p-3 text-red-200">
                       <AlertCircle className="h-5 w-5" />
                       {bidError}
                     </div>
@@ -1497,9 +1555,24 @@ export default function LiveAuctionRoom() {
             </div>
 
             <div className="mt-5 grid grid-cols-3 gap-3">
-              <ActionButton icon={<Heart className="h-4 w-4" />} label="Watchlist" value="245" />
-              <ActionButton icon={<Share2 className="h-4 w-4" />} label="Share" />
-              <ActionButton icon={<Flag className="h-4 w-4" />} label="Report" danger />
+              <ActionButton
+                icon={<Heart className={`h-4 w-4 ${isWatchlisted ? 'fill-red-400 text-red-400' : ''}`} />}
+                label="Watchlist"
+                value={String(watchlistCount)}
+                onClick={user?.id ? toggleWatchlist : undefined}
+                loading={watchlistLoading}
+              />
+              <ActionButton
+                icon={<Share2 className="h-4 w-4" />}
+                label="Share"
+                onClick={() => setIsShareModalOpen(true)}
+              />
+              <ActionButton
+                icon={<Flag className="h-4 w-4" />}
+                label="Report"
+                danger
+                onClick={() => setIsReportModalOpen(true)}
+              />
             </div>
           </div>
         </section>
@@ -1591,7 +1664,7 @@ export default function LiveAuctionRoom() {
                 {/* Quick Bid Buttons */}
                 {canBid && (
                   <div className="flex items-center gap-0.5 shrink-0">
-                    {[1, 5, 10, 25, 50, 100].map(amount => (
+                    {[100, 250, 500].map(amount => (
                       <button
                         key={amount}
                         onClick={() => quickBid(amount)}
@@ -1771,7 +1844,7 @@ export default function LiveAuctionRoom() {
                 </button>
                 <button
                   onClick={() => void submitCustomBid()}
-                  disabled={!customBidAmount || parseInt(customBidAmount, 10) < minimumBid}
+                  disabled={!customBidAmount || parseInt(customBidAmount, 10) <= 0}
                   className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 px-4 py-3 text-sm font-black text-white shadow-[0_0_20px_rgba(168,85,247,0.3)] transition hover:from-purple-500 hover:to-cyan-400 disabled:opacity-50"
                 >
                   Submit Bid
@@ -1780,6 +1853,107 @@ export default function LiveAuctionRoom() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* All Lots Modal */}
+      {showAllLotsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setShowAllLotsModal(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl max-h-[85vh] overflow-hidden rounded-3xl border border-cyan-300/20 bg-gradient-to-br from-[#0c1a32] to-[#0a1628] shadow-[0_0_60px_rgba(34,211,238,0.15)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400" />
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-400/10">
+                  <Package className="h-5 w-5 text-cyan-200" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-white">All Lots</h2>
+                  <p className="text-xs text-slate-400">{show.title} — {lots.length} lots</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAllLotsModal(false)}
+                className="rounded-full border border-white/10 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(85vh - 80px)' }}>
+              {lots.length === 0 ? (
+                <div className="py-16 text-center">
+                  <Package className="mx-auto mb-4 h-16 w-16 text-slate-600" />
+                  <p className="text-lg font-bold text-slate-400">No lots available</p>
+                  <p className="mt-1 text-sm text-slate-500">Lots will appear here when the auctioneer adds them.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                  {lots.map((lot, index) => (
+                    <div
+                      key={lot.id}
+                      className={`group overflow-hidden rounded-2xl border transition ${
+                        lot.id === currentLot?.id
+                          ? 'border-cyan-300/40 bg-cyan-400/10'
+                          : 'border-white/10 bg-black/30 hover:border-cyan-300/30'
+                      }`}
+                    >
+                      <div className="aspect-square bg-slate-900">
+                        {lot.image_url ? (
+                          <img src={lot.image_url} alt={lot.title} className="h-full w-full object-cover transition group-hover:scale-105" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-950/40 to-purple-950/40">
+                            <Package className="h-10 w-10 text-cyan-200/50" />
+                          </div>
+                        )}
+                        <div className="absolute top-2 left-2 flex h-6 w-6 items-center justify-center rounded-lg bg-black/60 text-xs font-black text-white">
+                          {index + 1}
+                        </div>
+                      </div>
+                      <div className="p-3">
+                        <p className="truncate text-xs font-black text-white">{lot.title}</p>
+                        <p className="mt-1 text-xs font-bold">
+                          {lot.status === 'sold' ? (
+                            <span className="text-emerald-300">Sold: {formatCoins(lot.current_highest_bid)} TC</span>
+                          ) : lot.status === 'live' ? (
+                            <span className="text-yellow-300">Current: {formatCoins(lot.current_highest_bid || lot.starting_bid)} TC</span>
+                          ) : (
+                            <span className="text-cyan-300">Starting: {formatCoins(lot.starting_bid)} TC</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {show && (
+        <ShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          streamTitle={show.title}
+          streamUrl={`${window.location.origin}/auction/${showId}`}
+          broadcasterName="Troll City Auction"
+        />
+      )}
+
+      {/* Report Modal */}
+      {show && (
+        <ReportModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          streamId={show.id}
+          streamTitle={show.title}
+          reportedUserId={show.auctioneer_id}
+        />
       )}
 
       {/* Winner Popup — shown when auction ends and user won */}
@@ -1972,22 +2146,27 @@ function ActionButton({
   label,
   value,
   danger,
+  onClick,
+  loading,
 }: {
   icon: React.ReactNode
   label: string
   value?: string
   danger?: boolean
+  onClick?: () => void
+  loading?: boolean
 }) {
   return (
     <button
-      onClick={() => toast.info(`${label} feature coming soon`)}
+      onClick={onClick || (() => toast.info(`${label} feature coming soon`))}
+      disabled={loading}
       className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-black transition ${
         danger
           ? 'border-red-400/25 bg-red-500/10 text-red-200 hover:bg-red-500/20'
           : 'border-white/10 bg-black/30 text-slate-200 hover:border-cyan-300/30 hover:bg-cyan-400/10'
-      }`}
+      } ${loading ? 'opacity-60 cursor-wait' : ''}`}
     >
-      {icon}
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
       <span>{label}</span>
       {value && <span className="rounded-lg bg-white/10 px-2 py-0.5 text-xs text-slate-300">{value}</span>}
     </button>

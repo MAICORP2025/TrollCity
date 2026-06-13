@@ -10,6 +10,8 @@ import {
   Coins,
   CreditCard,
   FileText,
+  Gavel,
+  Heart,
   Home,
   Link as LinkIcon,
   Loader2,
@@ -50,6 +52,7 @@ import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPi
 import { cars } from '../data/vehicles';
 import ProfileFeed from '../components/profile/ProfileFeed';
 import SavedBroadcasts from '../components/profile/SavedBroadcasts';
+import ProfileWatchlist from '../components/profile/ProfileWatchlist';
 
 type InventoryState = {
   perks: any[];
@@ -210,6 +213,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   const tabOptions: TabOption[] = [
     { key: 'social', label: 'Social', icon: MessageCircle, show: true },
     { key: 'saved_streams', label: 'Saved Streams', icon: Sparkles, show: isOwnProfile },
+    { key: 'watchlist', label: 'Watchlist', icon: Heart, show: isOwnProfile },
     { key: 'background', label: 'Background Check', icon: Shield, show: canUseBackground },
     { key: 'inventory', label: 'Inventory & Perks', icon: Package, show: canSeeFullProfile },
     { key: 'earnings', label: 'Earnings', icon: Coins, show: canSeeFullProfile },
@@ -1205,6 +1209,10 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
     switch (activeTab) {
       case 'social':
         return renderSocial();
+      case 'saved_streams':
+        return <SavedBroadcasts userId={profile.id} />;
+      case 'watchlist':
+        return <ProfileWatchlist userId={profile.id} />;
       case 'background':
         return <BackgroundCheckView userId={profile.id} />;
       case 'inventory':

@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { useAgoraScreenShare } from '@/hooks/useAgoraScreenShare'
 import { useGamingHeartbeat } from '@/hooks/useGamingHeartbeat'
 import GamingChat from '@/components/broadcast/GamingChat'
+import TipBanner from '@/components/broadcast/TipBanner'
 import { GamingStreamProvider, useSetGamingStreamId } from '@/contexts/GamingStreamContext'
 
 import {
@@ -443,6 +444,7 @@ function GamingSetupPageInner() {
       hasScreenAudioTrack={Boolean(agora.screenAudioTrack)}
       inlineAgreementChecked={inlineAgreementChecked}
       onInlineAgreementChange={setInlineAgreementChecked}
+      streamId={streamData?.id || null}
     />
   );
 }

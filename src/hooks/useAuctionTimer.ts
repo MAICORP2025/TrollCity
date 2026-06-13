@@ -25,7 +25,7 @@ export function useAuctionTimer(lotId: string | null, isAuctioneer: boolean) {
     }
   }, [])
 
-  // Start the countdown locally
+  // Start the countdown locally — also used by realtime handler
   const startCountdown = useCallback((fromSeconds: number) => {
     clearTimerInterval()
     setSecondsLeft(fromSeconds)
@@ -44,7 +44,11 @@ export function useAuctionTimer(lotId: string | null, isAuctioneer: boolean) {
     }, 1000)
   }, [clearTimerInterval])
 
-   // Use refs for callbacks so the realtime effect only depends on lotId
+  // Expose intervalRef via a ref so the realtime handler can restart intervals
+  const intervalRefStable = useRef(intervalRef)
+  useEffect(() => { intervalRefStable.current = intervalRef }, [])
+
+  // Use refs for callbacks so the realtime effect only depends on lotId
   const startCountdownRef = useRef(startCountdown)
   const clearTimerIntervalRef = useRef(clearTimerInterval)
   useEffect(() => { startCountdownRef.current = startCountdown }, [startCountdown])
@@ -85,18 +89,30 @@ export function useAuctionTimer(lotId: string | null, isAuctioneer: boolean) {
         },
         (payload: any) => {
           const newLot = payload.new
+          clearTimerIntervalRef.current()
           if (newLot.countdown_end_at) {
             const diff = Math.max(0, Math.ceil((new Date(newLot.countdown_end_at).getTime() - Date.now()) / 1000))
             if (diff > 0 && newLot.status === 'live') {
-              startCountdownRef.current(diff)
+              setSecondsLeft(diff)
+              setIsRunning(true)
+              setIsExpired(false)
+              intervalRefStable.current.current = setInterval(() => {
+                setSecondsLeft((prev) => {
+                  if (prev <= 1) {
+                    clearTimerIntervalRef.current()
+                    setIsRunning(false)
+                    setIsExpired(true)
+                    return 0
+                  }
+                  return prev - 1
+                })
+              }, 1000)
             } else if (diff <= 0) {
-              clearTimerIntervalRef.current()
               setSecondsLeft(0)
               setIsRunning(false)
               setIsExpired(true)
             }
           } else {
-            clearTimerIntervalRef.current()
             setSecondsLeft(0)
             setIsRunning(false)
             setIsExpired(false)

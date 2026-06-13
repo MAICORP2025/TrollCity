@@ -12,36 +12,79 @@ export interface ConcurrentLoginResult {
 }
 
 /**
- * Check if a user has an active session from another device
- * Returns details about the original session if found
+ * Roles that are allowed to have concurrent sessions on multiple devices.
+ * Auctioneers need this so they can run the desktop auction studio while
+ * simultaneously using the mobile scanner (PWA or mobile web).
+ */
+const MULTI_SESSION_ROLES = new Set([
+  'admin',
+  'superadmin',
+  'ceo',
+  'auctioneer',
+  'officer',
+  'lead_officer',
+])
+
+/**
+ * Check if a user has an active session from another device.
+ * Uses the DB function check_concurrent_login which looks for other
+ * active sessions within the last 30 minutes.
  */
 export async function checkConcurrentLogin(userId: string, sessionId: string): Promise<ConcurrentLoginResult> {
-  // DISABLED: This check is too aggressive and causing false positives
-  // Returning false to skip concurrent login check entirely
-  console.log('[ConcurrentLogin] Check disabled - returning false')
-  return { hasConcurrentLogin: false, originalSessionId: null, originalDeviceInfo: null, originalLastActive: null }
+  try {
+    const { data, error } = await supabase.rpc('check_concurrent_login', {
+      p_user_id: userId,
+      p_current_session_id: sessionId,
+    })
+
+    if (error) {
+      console.warn('[ConcurrentLogin] RPC error:', error)
+      return { hasConcurrentLogin: false, originalSessionId: null, originalDeviceInfo: null, originalLastActive: null }
+    }
+
+    // The RPC returns a table row; data may be an array or single object
+    const row = Array.isArray(data) ? data?.[0] : data
+    if (!row) {
+      return { hasConcurrentLogin: false, originalSessionId: null, originalDeviceInfo: null, originalLastActive: null }
+    }
+
+    return {
+      hasConcurrentLogin: !!row.has_concurrent_login,
+      originalSessionId: row.original_session_id || null,
+      originalDeviceInfo: row.original_device_info || null,
+      originalLastActive: row.original_last_active || null,
+    }
+  } catch (err) {
+    console.warn('[ConcurrentLogin] Check failed:', err)
+    return { hasConcurrentLogin: false, originalSessionId: null, originalDeviceInfo: null, originalLastActive: null }
+  }
 }
 
 /**
- * Check if user has admin or CEO role
+ * Check if user has a role that permits multi-session (admin, CEO, auctioneer, etc.)
  */
-export async function isUserAdminOrCEO(userId: string): Promise<boolean> {
+export async function canHaveMultiSession(userId: string): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('role, is_admin')
+      .select('role, is_admin, is_auctioneer, is_ceo, is_superadmin, is_troll_officer, is_lead_officer')
       .eq('id', userId)
       .maybeSingle()
 
-    if (error) {
-      console.error('Error checking user role:', error)
-      return false
-    }
+    if (error || !data) return false
 
-    // Check if user is admin or has admin privileges
-    return data?.role === 'admin' || data?.is_admin === true
+    // Explicit multi-session roles
+    if (MULTI_SESSION_ROLES.has(data.role || '')) return true
+    if (data.is_admin === true) return true
+    if (data.is_superadmin === true) return true
+    if (data.is_ceo === true) return true
+    if (data.is_auctioneer === true) return true
+    if (data.is_troll_officer === true) return true
+    if (data.is_lead_officer === true) return true
+
+    return false
   } catch (err) {
-    console.error('Failed to check user role:', err)
+    console.error('[MultiSession] Failed to check user role:', err)
     return false
   }
 }
@@ -55,7 +98,7 @@ export async function summonUserForFraud(defendantId: string, reason: string): P
       p_defendant_id: defendantId,
       p_reason: reason,
       p_users_involved: [],
-      p_docket_id: null
+      p_docket_id: null,
     })
 
     if (error) {
@@ -71,14 +114,18 @@ export async function summonUserForFraud(defendantId: string, reason: string): P
 }
 
 /**
- * Handle concurrent login detection
- * - If user is admin/CEO, allow concurrent sessions
- * - If non-admin/CEO has concurrent login, log them out and summon original account to court
+ * Handle concurrent login detection.
+ *
+ * - Admins, CEOs, auctioneers, officers → allowed concurrent sessions (no action).
+ * - Regular users with concurrent login → logged out + summoned to court.
+ *
+ * For auctioneers specifically, the multi-session allowance enables the
+ * desktop auction studio + mobile scanner workflow.
  */
 export async function handleConcurrentLogin(
-  userId: string, 
+  userId: string,
   currentSessionId: string,
-  onLogout: () => void
+  onLogout: () => void,
 ): Promise<boolean> {
   // Skip if we've already handled this session
   if (concurrentLoginCheckDone) {
@@ -87,16 +134,16 @@ export async function handleConcurrentLogin(
   concurrentLoginCheckDone = true
 
   try {
-    // First check if user is admin/CEO - they are allowed to have concurrent sessions
-    const isAdminOrCEO = await isUserAdminOrCEO(userId)
-    if (isAdminOrCEO) {
-      console.log('[ConcurrentLogin] User is admin/CEO, allowing concurrent sessions')
+    // Check if user is allowed multi-session (admin, CEO, auctioneer, officer, etc.)
+    const isMultiSessionAllowed = await canHaveMultiSession(userId)
+    if (isMultiSessionAllowed) {
+      console.log('[ConcurrentLogin] User has multi-session role — allowing concurrent sessions')
       return false
     }
 
     // Check for concurrent login
     const result = await checkConcurrentLogin(userId, currentSessionId)
-    
+
     if (!result.hasConcurrentLogin) {
       console.log('[ConcurrentLogin] No concurrent login detected')
       return false
@@ -107,22 +154,21 @@ export async function handleConcurrentLogin(
     // Show warning toast
     toast.error(
       '⚠️ FRAUD ALERT: You have been logged out because your account was accessed from another device. This incident has been reported.',
-      { duration: 10000 }
+      { duration: 10000 },
     )
 
     // Summon the original account to court for fraud
     const fraudReason = `AUTOMATIC SUMMONS: Concurrent login fraud detected. Account was accessed from multiple devices simultaneously. Original session was active on: ${result.originalLastActive || 'unknown date'}. Device: ${result.originalDeviceInfo || 'unknown device'}.`
-    
+
     await summonUserForFraud(userId, fraudReason)
-    
+
     console.log('[ConcurrentLogin] User summoned to court for fraud investigation')
 
     // Log the user out
     setTimeout(() => {
       onLogout()
-      // Redirect to auth page after logout
       window.location.href = '/auth?message=fraud_logout'
-    }, 3000) // Give user 3 seconds to see the warning
+    }, 3000)
 
     return true
   } catch (err) {

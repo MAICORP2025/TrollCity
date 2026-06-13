@@ -49,6 +49,7 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
   const mountedRef = useRef(true);
   const screenUidRef = useRef<UID | null>(null);
   const cameraUidRef = useRef<UID | null>(null);
+  const knownCameraUids = useRef<Set<UID>>(new Set());
   const audioSubscribedRef = useRef(false);
   const pendingFirstVideoTrack = useRef<{ uid: UID; track: IRemoteVideoTrack } | null>(null);
   const firstVideoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -162,12 +163,14 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
 
               cameraUidRef.current = user.uid;
               setRemoteCameraTrack(videoTrack);
+              knownCameraUids.current.add(user.uid);
               debug('Camera video track set (second arrived) from uid:', user.uid);
               pendingFirstVideoTrack.current = null;
             } else if (screenUidRef.current && !cameraUidRef.current && user.uid !== screenUidRef.current) {
               // Screen already assigned, this is the camera
               cameraUidRef.current = user.uid;
               setRemoteCameraTrack(videoTrack);
+              knownCameraUids.current.add(user.uid);
               debug('Camera video track set from uid:', user.uid);
             } else if (cameraUidRef.current && !screenUidRef.current && user.uid !== cameraUidRef.current) {
               // Camera already assigned, this is the screen share
@@ -187,6 +190,7 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
                 // Third+ video track — treat as camera replacement
                 cameraUidRef.current = user.uid;
                 setRemoteCameraTrack(videoTrack);
+                knownCameraUids.current.add(user.uid);
                 debug('Additional video track set as camera from uid:', user.uid);
               }
             }
@@ -231,9 +235,10 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
           if (user.uid === screenUidRef.current) {
             setRemoteVideoTrack(null);
             setHasVideo(false);
-            screenUidRef.current = null;
+            // Keep screenUidRef intact so this UID is never reassigned to camera
           } else if (user.uid === cameraUidRef.current) {
             setRemoteCameraTrack(null);
+            knownCameraUids.current.add(user.uid);
             cameraUidRef.current = null;
           }
         }
@@ -274,10 +279,11 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
           if (user.uid === screenUidRef.current) {
             setRemoteVideoTrack(null);
             setHasVideo(false);
-            screenUidRef.current = null;
+            // Keep screenUidRef intact so this UID is never reassigned to camera
           }
           if (user.uid === cameraUidRef.current) {
             setRemoteCameraTrack(null);
+            knownCameraUids.current.add(user.uid);
             cameraUidRef.current = null;
           }
           // If all remote users left, clear all audio tracks too
@@ -335,6 +341,13 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
           if (!videoTrack) continue;
           const alreadyAssigned = (screenUidRef.current === uid) || (cameraUidRef.current === uid);
           if (alreadyAssigned) continue;
+          // Never reassign a known camera UID as screen
+          if (knownCameraUids.current.has(uid)) {
+            cameraUidRef.current = uid;
+            setRemoteCameraTrack(videoTrack);
+            debug('Poll: known camera uid reassigned as camera:', uid);
+            continue;
+          }
 
           // Found an unassigned video track
           console.log('[AgoraGamingViewer] Poll found unassigned track from uid:', uid);
@@ -396,8 +409,9 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       setRemoteScreenAudioTrack(null);
       setHasVideo(false);
       setHasAudio(false);
-      screenUidRef.current = null;
-      cameraUidRef.current = null;
+       screenUidRef.current = null;
+       cameraUidRef.current = null;
+       knownCameraUids.current.clear();
       audioSubscribedRef.current = false;
       pendingFirstVideoTrack.current = null;
       if (firstVideoTimerRef.current) {
