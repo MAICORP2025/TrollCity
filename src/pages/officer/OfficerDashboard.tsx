@@ -144,14 +144,16 @@ export default function OfficerDashboard() {
 
     setTogglingGhost(true)
     try {
-      const { error } = await supabase.functions.invoke('toggle-ghost-mode', {
-        body: { enabled: !profile.is_ghost_mode }
-      })
+      const newEnabled = !profile.is_ghost_mode
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ is_ghost_mode: newEnabled })
+        .eq('id', user.id)
 
       if (error) throw error
 
       if (refreshProfile) await refreshProfile()
-      toast.success(profile.is_ghost_mode ? 'Ghost mode disabled' : 'Ghost mode enabled')
+      toast.success(newEnabled ? 'Ghost mode enabled' : 'Ghost mode disabled')
     } catch (error: any) {
       console.error('Error toggling ghost mode:', error)
       toast.error('Failed to toggle ghost mode')

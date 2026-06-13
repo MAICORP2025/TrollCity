@@ -69,7 +69,7 @@ export default function UtromailThreadView({ threadId, onBack, onRefresh }: Prop
     try {
       await sendMessage({
         senderId: user!.id,
-        senderMail: profile?.utromail_address || `${profile?.username}@utromail`,
+        senderMail: `${profile?.username || 'user'}@utromail`,
         recipientId: lastMsg.sender_id === user!.id ? lastMsg.recipient_id! : lastMsg.sender_id,
         recipientMail: lastMsg.sender_id === user!.id ? lastMsg.recipient_mail_address! : lastMsg.sender_mail_address,
         subject: lastMsg.subject || '(No subject)',

@@ -105,7 +105,12 @@ function useRoleChecks(profile: any) {
     trollRole === 'broadcaster' ||
     !!(profile as any)?.is_broadcaster;
 
-  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, role, trollRole };
+  const isAgencyHR =
+    role === String(UserRole.AGENCY_HR_MANAGER) ||
+    trollRole === String(UserRole.AGENCY_HR_MANAGER) ||
+    !!(profile as any)?.is_agency_hr;
+
+  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, role, trollRole };
 }
 
 /* ─── Format helpers ─── */
@@ -291,7 +296,7 @@ interface PageEntry {
 function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
   const { user, profile, logout } = useAuthStore();
   const navigate = useNavigate_fixed();
-  const { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster } = useRoleChecks(profile);
+  const { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR } = useRoleChecks(profile);
   const [search, setSearch] = useState('');
   const prideActive = isPrideMonth();
 
@@ -315,6 +320,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Inventory', icon: Package, path: '/inventory' },
           { label: 'Wallet', icon: Wallet, path: '/wallet' },
           { label: 'Coin Store', icon: Coins, path: '/store' },
+          { label: 'Crown Redemption', icon: Crown, path: '/crowns/redeem' },
           { label: 'My Garage', icon: Car, path: '/garage' },
         ],
       },
@@ -356,6 +362,9 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
             : []),
           ...(isPresident || isAdmin
             ? [{ label: 'President', icon: Crown as any, path: '/president' }]
+            : []),
+          ...(isAgencyHR || isAdmin
+            ? [{ label: 'Agency HR', icon: Briefcase as any, path: '/agency-hr-dashboard' }]
             : []),
         ],
       },
@@ -408,7 +417,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
       ...cat,
       items: cat.items.filter((item) => item.show !== false),
     }));
-  }, [isAdmin, isSecretary, isLead, isOfficer, isPresident, profile?.username]);
+  }, [isAdmin, isSecretary, isLead, isOfficer, isPresident, isAgencyHR, profile?.username]);
 
   const filteredPages = useMemo(() => {
     if (!search.trim()) return allPages;

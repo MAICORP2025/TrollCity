@@ -414,8 +414,13 @@ import_map = "./functions/broadcast-seats/deno.json"
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/broadcast-seats/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
+# For example, if you want to serve static HTML pages in this function:
 # static_files = [ "./functions/broadcast-seats/*.html" ]
+
+[functions.upload-to-r2]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/upload-to-r2/index.ts"
 
 [functions.send-announcement]
 enabled = true

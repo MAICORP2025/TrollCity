@@ -226,6 +226,7 @@ export default function SetupPage() {
   const [loading, setLoading] = useState(false);
   const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean } | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [saveReplay, setSaveReplay] = useState(false);
   const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
   const canUseCeoTheme = isCeoThemeEligible(user?.id, user?.email ?? null);
   const selectableThemes = useMemo(
@@ -1725,8 +1726,9 @@ const handleStartStream = async () => {
            agora_channel: roomName,
            broadcast_disclaimer_accepted: true,
            broadcast_disclaimer_accepted_at: agreementAcceptedAt,
-           broadcast_disclaimer_user_id: user.id,
-           ...(category === 'spiritual' && { selected_religion: selectedReligion }),
+            broadcast_disclaimer_user_id: user.id,
+            save_replay: saveReplay,
+            ...(category === 'spiritual' && { selected_religion: selectedReligion }),
            ...(category === 'battle' && { 
              battle_format: universeBattleMode === 'multi' ? selectedMultiBattleFormat : '4v4',
              battle_mode: universeBattleMode === 'multi' ? 'universal' : 'troll',
@@ -1837,7 +1839,7 @@ const handleStartStream = async () => {
           const bcName = profile?.username || profile?.display_name || 'A Broadcaster'
           const bcStreamUrl = `/watch/${data.id}`
           await supabase.from('troll_wall_posts').insert({
-            user_id: '00000000-0000-0000-0000-000000000001',
+            user_id: user?.id,
             username: 'Troll City System',
             post_type: 'stream_announce',
             content: `📺 ${bcName} is now LIVE on Troll City!`,
@@ -2475,6 +2477,36 @@ const handleStartStream = async () => {
             <span className="text-xs text-zinc-300 leading-snug">
               I am 18 years of age or older and agree to the Broadcast Agreement, Terms of Service, and Community Guidelines.
             </span>
+          </label>
+        </div>
+
+        {/* Save Replay Toggle */}
+        <div className="bg-zinc-900/80 rounded-2xl border border-white/10 p-4">
+          <label className="flex items-center justify-between cursor-pointer group">
+            <div className="flex items-center gap-3">
+              <Bookmark size={16} className={saveReplay ? 'text-emerald-400' : 'text-zinc-500'} />
+              <div>
+                <span className="text-sm font-bold text-white">Save Replay</span>
+                <p className="text-[10px] text-zinc-400 mt-0.5">Upload broadcast recording to cloud storage after stream ends</p>
+              </div>
+            </div>
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={saveReplay}
+                onChange={(e) => setSaveReplay(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className={cn(
+                'w-10 h-5 rounded-full transition-all',
+                saveReplay ? 'bg-emerald-500' : 'bg-zinc-700'
+              )}>
+                <div className={cn(
+                  'w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-0.5',
+                  saveReplay ? 'translate-x-5.5 ml-0.5' : 'translate-x-0.5'
+                )} />
+              </div>
+            </div>
           </label>
         </div>
 

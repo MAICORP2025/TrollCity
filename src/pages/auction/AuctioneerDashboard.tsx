@@ -12,9 +12,12 @@ import {
   CheckCircle,
   Clock,
   Coins,
+  Eye,
+  EyeOff,
   Flag,
   Gavel,
   Loader2,
+  Lock,
   Maximize2,
   Megaphone,
   Mic,
@@ -35,6 +38,8 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { useAuctionTimer } from '../../hooks/useAuctionTimer'
+import { useAnonymousRound } from '../../hooks/useAnonymousRound'
+import { usePredictionBid } from '../../hooks/usePredictionBid'
 
 interface AuctionLot {
   [x: string]: any
@@ -147,6 +152,12 @@ export default function AuctioneerDashboard() {
     if (auctioneerProfileId && show.auctioneer_id === auctioneerProfileId) return true
     return false
   }, [show, auctioneerProfileId, profile?.role, profile?.is_admin])
+
+  // Anonymous Round
+  const anonymousRound = useAnonymousRound(showId, isAuctioneer);
+
+  // Predictions
+  const predictions = usePredictionBid(showId, isAuctioneer);
 
   const getAgoraToken = useCallback(async (channelName: string, uid: number, role: 'publisher' | 'audience') => {
     const { data, error } = await supabase.functions.invoke('agora-token', {
@@ -685,6 +696,90 @@ export default function AuctioneerDashboard() {
               </button>
             </div>
           </div>
+
+          {/* Anonymous Round Controls */}
+          {isLive && (
+            <div className={`rounded-3xl border p-5 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl ${anonymousRound.state.isActive ? 'border-indigo-400/30 bg-indigo-950/20' : 'border-cyan-400/20 bg-white/[0.04]'}`}>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {anonymousRound.state.isActive ? <EyeOff className="h-5 w-5 text-indigo-300" /> : <Eye className="h-5 w-5 text-cyan-300" />}
+                  <h3 className="text-lg font-black text-white">Anonymous Bid Round</h3>
+                  {anonymousRound.state.isActive && (
+                    <span className="flex items-center gap-1 rounded-full border border-indigo-300/30 bg-indigo-400/10 px-2 py-0.5 text-[10px] font-bold text-indigo-200">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
+                      ACTIVE
+                    </span>
+                  )}
+                </div>
+                {anonymousRound.state.isActive && (
+                  <div className="font-mono text-2xl font-black text-indigo-300">
+                    {Math.floor(anonymousRound.state.secondsRemaining / 60)}:{String(anonymousRound.state.secondsRemaining % 60).padStart(2, '0')}
+                  </div>
+                )}
+              </div>
+              <p className="mb-3 text-xs text-slate-500">
+                Hide bidder identities from viewers for a configurable duration. Bidders and admins still see real names.
+              </p>
+              {!anonymousRound.state.isActive ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-400">Duration:</span>
+                  {[15, 30, 45, 60].map((sec) => (
+                    <button
+                      key={sec}
+                      onClick={() => anonymousRound.startRound(sec)}
+                      disabled={anonymousRound.loading}
+                      className="rounded-xl border border-indigo-300/20 bg-indigo-400/10 px-3 py-1.5 text-xs font-bold text-indigo-100 hover:bg-indigo-400/20 disabled:opacity-50"
+                    >
+                      {sec}s
+                    </button>
+                  ))}
+                  <span className="text-xs text-slate-600">(max {anonymousRound.state.maxDuration}s)</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => anonymousRound.endRound()}
+                  disabled={anonymousRound.loading}
+                  className="rounded-xl border border-red-300/30 bg-red-500/20 px-4 py-2 text-sm font-bold text-red-100 hover:bg-red-500/30 disabled:opacity-50"
+                >
+                  End Anonymous Round Early
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Prediction Controls */}
+          {isLive && (
+            <div className="rounded-3xl border border-purple-400/20 bg-white/[0.04] p-5 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Lock className="h-5 w-5 text-purple-300" />
+                  <h3 className="text-lg font-black text-white">Prediction Bids</h3>
+                  {predictions.isLocked && (
+                    <span className="flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                      LOCKED
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm text-slate-400">{predictions.predictionCount} predictions</span>
+              </div>
+              <p className="mb-3 text-xs text-slate-500">
+                Let bidders and spectators predict auction outcomes. Lock predictions before the final countdown.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {!predictions.isLocked ? (
+                  <button
+                    onClick={() => predictions.lockPredictions()}
+                    disabled={predictions.loading}
+                    className="rounded-xl border border-amber-300/30 bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50"
+                  >
+                    <Lock className="mr-1 inline h-3.5 w-3.5" /> Lock Predictions
+                  </button>
+                ) : (
+                  <span className="text-sm font-bold text-amber-200">Predictions are locked — no new entries allowed</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {currentLot ? (
             <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5 shadow-[0_0_35px_rgba(34,211,238,0.08)] backdrop-blur-xl">

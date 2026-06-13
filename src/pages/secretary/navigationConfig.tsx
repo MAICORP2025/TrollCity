@@ -22,6 +22,7 @@ type View =
   | 'staff'
   | 'calendar'
   | 'secretary_dashboard'
+  | 'crown_redemptions'
 
 interface NavigationItem {
   id: View
@@ -123,6 +124,11 @@ export const navigation: NavigationGroup[] = [
         id: 'calendar',
         label: 'Secretary Calendar',
         icon: <CalendarDays className="w-4 h-4" />
+      },
+      {
+        id: 'crown_redemptions',
+        label: 'Crown Redemptions',
+        icon: <Crown className="w-4 h-4" />
       }
     ]
   },

@@ -17,6 +17,7 @@ import {
   Clock,
   Coins,
   Eye,
+  EyeOff,
   Flag,
   Gavel,
   Heart,
@@ -49,6 +50,9 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { useAuctionTimer } from '../../hooks/useAuctionTimer'
+import { useAnonymousRound } from '../../hooks/useAnonymousRound'
+import { useBoostBid } from '../../hooks/useBoostBid'
+import { usePredictionBid } from '../../hooks/usePredictionBid'
 import ShareModal from '../../components/broadcast/ShareModal'
 import ReportModal from '../../components/report/ReportModal'
 
@@ -208,8 +212,11 @@ function logAgoraError(scope: string, error: any) {
   return message
 }
 
-function getBidderName(bid?: AuctionBid | null) {
-  return bid?.bidder?.username || bid?.bidder?.display_name || 'Anonymous'
+function getBidderName(bid?: AuctionBid | null, isAnonymous?: boolean) {
+  if (isAnonymous || (bid as any)?.is_anonymous) {
+    return (bid as any)?.anonymous_label || 'Anonymous Bidder';
+  }
+  return bid?.bidder?.username || bid?.bidder?.display_name || 'Anonymous';
 }
 
 function getInitials(name: string) {
@@ -281,6 +288,16 @@ export default function LiveAuctionRoom() {
 
   // Report modal
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
+
+  // Prediction modal
+  const [showPredictionModal, setShowPredictionModal] = useState(false);
+  const [predictionWinnerId, setPredictionWinnerId] = useState<string>('');
+  const [predictionPrice, setPredictionPrice] = useState<string>('');
+  const [predictionType, setPredictionType] = useState<'winner' | 'price' | 'combined'>('combined');
+
+  // Boost Bid UI
+  const [showBoostDropdown, setShowBoostDropdown] = useState(false);
+  const [selectedBoost, setSelectedBoost] = useState(0);
 
   // Auction watchlist
   const [isWatchlisted, setIsWatchlisted] = useState(false)
@@ -389,6 +406,15 @@ export default function LiveAuctionRoom() {
     if (auctioneerProfileId && show.auctioneer_id === auctioneerProfileId) return true
     return false
   }, [show, auctioneerProfileId, profile?.role, profile?.is_admin])
+
+  // Anonymous Round
+  const anonymousRound = useAnonymousRound(showId, isAuctioneer);
+
+  // Boost Bid
+  const boostBid = useBoostBid(showId, isAuctioneer);
+
+  // Predictions
+  const predictions = usePredictionBid(showId, isAuctioneer);
 
   const minimumBid = useMemo(() => {
     if (!currentLot) return 0
@@ -896,11 +922,23 @@ export default function LiveAuctionRoom() {
     }
 
     try {
-      const { data, error } = await supabase.rpc('place_bid', {
-        p_show_id: showId,
-        p_lot_id: currentLot.id,
-        p_bid_amount: bidValue,
-      })
+      let data, error;
+
+      // Use boost bid RPC if boost is selected
+      if (selectedBoost > 0 && boostBid.config.enabled) {
+        ({ data, error } = await supabase.rpc('place_boost_bid', {
+          p_show_id: showId,
+          p_lot_id: currentLot.id,
+          p_bid_amount: bidValue,
+          p_boost_amount: selectedBoost,
+        }));
+      } else {
+        ({ data, error } = await supabase.rpc('place_bid', {
+          p_show_id: showId,
+          p_lot_id: currentLot.id,
+          p_bid_amount: bidValue,
+        }));
+      }
 
       if (error) throw error
 
@@ -915,6 +953,8 @@ export default function LiveAuctionRoom() {
 
       setBidStatus('success')
       setBidAmount('')
+      setSelectedBoost(0)
+      setShowBoostDropdown(false)
       await Promise.all([fetchLiveState(), fetchUserProfile()])
       window.setTimeout(() => setBidStatus('idle'), 2000)
     } catch (error: any) {
@@ -923,7 +963,7 @@ export default function LiveAuctionRoom() {
       setBidError(error?.message || 'Failed to place bid')
       window.setTimeout(() => setBidStatus('idle'), 3000)
     }
-  }, [bidAmount, currentLot, fetchLiveState, fetchUserProfile, minimumBid, showId, user?.id, userProfile?.troll_coins])
+  }, [bidAmount, currentLot, fetchLiveState, fetchUserProfile, minimumBid, showId, user?.id, userProfile?.troll_coins, selectedBoost, boostBid.config.enabled])
 
   const quickBid = useCallback((extra: number) => {
     void placeBid(minimumBid + extra)
@@ -1319,6 +1359,24 @@ export default function LiveAuctionRoom() {
         </div>
       </header>
 
+      {/* Anonymous Mode Banner */}
+      {anonymousRound.state.isActive && !isAuctioneer && (
+        <div className="relative z-10 border-b border-indigo-400/20 bg-gradient-to-r from-indigo-950/80 via-purple-950/60 to-indigo-950/80 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-[1920px] items-center justify-center gap-4 px-4 py-3 lg:px-7">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-indigo-300/30 bg-indigo-400/10">
+              <EyeOff className="h-4 w-4 text-indigo-300" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-black text-indigo-200">🔒 Anonymous Bid Round Active</p>
+              <p className="text-xs text-indigo-300/70">Bidder identities are hidden. Place your bids — stay anonymous!</p>
+            </div>
+            <div className="font-mono text-xl font-black text-indigo-300">
+              {Math.floor(anonymousRound.state.secondsRemaining / 60)}:{String(anonymousRound.state.secondsRemaining % 60).padStart(2, '0')}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="relative z-10 mx-auto grid max-w-[1920px] grid-cols-1 gap-5 p-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.72fr)] xl:grid-cols-[minmax(0,1.05fr)_560px_510px] lg:p-7">
         <section className="space-y-5">
           <div
@@ -1533,6 +1591,78 @@ export default function LiveAuctionRoom() {
                     ))}
                   </div>
 
+                  {/* Boost Bid Section */}
+                  {boostBid.config.enabled && canBid && (
+                    <div className="mt-3 rounded-2xl border border-amber-300/20 bg-amber-950/20 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="h-4 w-4 text-amber-300" />
+                          <p className="text-xs font-black text-amber-200">Boost Bid</p>
+                        </div>
+                        <button
+                          onClick={() => setShowBoostDropdown(!showBoostDropdown)}
+                          className="text-[10px] font-bold text-amber-300 hover:text-amber-100"
+                        >
+                          {showBoostDropdown ? 'Hide' : 'Show'} Options
+                        </button>
+                      </div>
+                      {showBoostDropdown && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] text-slate-500">Add to your bid increment for extra impact!</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {boostBid.config.allowedIncrements.map((inc) => (
+                              <button
+                                key={inc}
+                                onClick={() => {
+                                  setSelectedBoost(inc);
+                                  setShowBoostDropdown(false);
+                                }}
+                                className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                                  selectedBoost === inc
+                                    ? 'border-amber-300/40 bg-amber-400/20 text-amber-100'
+                                    : 'border-amber-300/15 bg-amber-400/5 text-amber-200 hover:bg-amber-400/10'
+                                }`}
+                              >
+                                +{inc}
+                              </button>
+                            ))}
+                            {boostBid.config.customEnabled && (
+                              <button
+                                onClick={() => setSelectedBoost(boostBid.config.maxAmount)}
+                                className="rounded-lg border border-amber-300/15 bg-amber-400/5 px-2.5 py-1 text-xs font-bold text-amber-200 hover:bg-amber-400/10"
+                              >
+                                Max (+{boostBid.config.maxAmount})
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {selectedBoost > 0 && (
+                        <div className="mt-2 flex items-center justify-between rounded-lg border border-amber-300/20 bg-amber-400/10 px-3 py-1.5">
+                          <span className="text-xs font-bold text-amber-200">
+                            ⚡ Boost: +{selectedBoost} coins
+                          </span>
+                          <button
+                            onClick={() => setSelectedBoost(0)}
+                            className="text-[10px] font-bold text-amber-300 hover:text-amber-100"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
+                      {selectedBoost > 0 && (
+                        <button
+                          onClick={() => void placeBid(minimumBid + selectedBoost)}
+                          disabled={!canBid}
+                          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-black uppercase tracking-[0.1em] text-white shadow-[0_0_20px_rgba(245,158,11,0.3)] transition hover:from-amber-400 hover:to-orange-400 disabled:opacity-50"
+                        >
+                          <Zap className="h-4 w-4" />
+                          Boost Bid — {formatCoins(minimumBid + selectedBoost)} TC
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <p className="mt-3 text-center text-sm text-slate-400">
                     You have <span className="font-black text-yellow-300">{formatCoins(userProfile?.troll_coins || 0)}</span> Troll Coins
                   </p>
@@ -1576,6 +1706,91 @@ export default function LiveAuctionRoom() {
             </div>
           </div>
         </section>
+
+        {/* Prediction Panel */}
+        {predictions.isEnabled && !isAuctioneer && user?.id && (
+          <section className="space-y-5 xl:block">
+            <div className="rounded-[1.75rem] border border-purple-300/20 bg-[#0c1329]/80 p-5 shadow-[0_0_45px_rgba(139,92,246,0.14)] backdrop-blur-2xl">
+              <div className="rounded-[1.35rem] border border-purple-300/25 bg-gradient-to-br from-purple-400/10 via-indigo-500/10 to-blue-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-5 w-5 text-purple-300" />
+                    <h3 className="text-sm font-black uppercase tracking-[0.15em] text-purple-200">Prediction Bid</h3>
+                  </div>
+                  <span className="text-xs text-slate-400">{predictions.predictionCount} entered</span>
+                </div>
+
+                {predictions.isLocked ? (
+                  <div className="rounded-xl border border-amber-300/20 bg-amber-400/10 p-3 text-center">
+                    <Lock className="mx-auto mb-1 h-5 w-5 text-amber-300" />
+                    <p className="text-xs font-bold text-amber-200">Predictions Locked</p>
+                    <p className="text-[10px] text-amber-300/70">No more entries accepted</p>
+                  </div>
+                ) : predictions.prediction ? (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-purple-300/20 bg-purple-400/10 p-3">
+                      <p className="text-xs font-bold text-purple-200">Your Prediction</p>
+                      <p className="mt-1 text-sm text-white">
+                        {predictions.prediction.prediction_type === 'winner' && '🏆 Predicted Winner'}
+                        {predictions.prediction.prediction_type === 'price' && `💰 Predicted Price: ${formatCoins(predictions.prediction.predicted_price)} TC`}
+                        {predictions.prediction.prediction_type === 'combined' && `🏆 Winner + 💰 ${formatCoins(predictions.prediction.predicted_price)} TC`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowPredictionModal(true)}
+                      className="w-full rounded-xl border border-purple-300/20 bg-purple-400/10 px-4 py-2 text-xs font-bold text-purple-200 hover:bg-purple-400/20"
+                    >
+                      Edit Prediction
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-400">Predict the auction outcome and earn rewards!</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => {
+                          setPredictionType('winner');
+                          setShowPredictionModal(true);
+                        }}
+                        className="rounded-xl border border-purple-300/20 bg-purple-400/10 px-3 py-2 text-center transition hover:bg-purple-400/20"
+                      >
+                        <p className="text-xs font-black text-purple-100">🏆 Winner</p>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPredictionType('price');
+                          setShowPredictionModal(true);
+                        }}
+                        className="rounded-xl border border-purple-300/20 bg-purple-400/10 px-3 py-2 text-center transition hover:bg-purple-400/20"
+                      >
+                        <p className="text-xs font-black text-purple-100">💰 Price</p>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPredictionType('combined');
+                          setShowPredictionModal(true);
+                        }}
+                        className="rounded-xl border border-purple-300/20 bg-purple-400/10 px-3 py-2 text-center transition hover:bg-purple-400/20"
+                      >
+                        <p className="text-xs font-black text-purple-100">🔮 Both</p>
+                      </button>
+                    </div>
+                    {predictions.settings && (
+                      <div className="rounded-lg border border-purple-300/10 bg-purple-400/5 p-2">
+                        <p className="text-[10px] text-slate-500">Rewards:</p>
+                        <div className="mt-1 flex flex-wrap gap-2 text-[10px]">
+                          <span className="text-amber-300">👑 {predictions.settings.reward_crowns_combined} Crowns</span>
+                          <span className="text-cyan-300">⭐ {predictions.settings.reward_xp_combined} XP</span>
+                          <span className="text-purple-300">🎯 {predictions.settings.reward_event_points_combined} Pts</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <aside className="space-y-5 lg:col-span-2 xl:col-span-1">
           <div className="overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.04] shadow-[0_0_35px_rgba(34,211,238,0.10)] backdrop-blur-xl">
@@ -1630,19 +1845,20 @@ export default function LiveAuctionRoom() {
                 })
               ) : bids.length > 0 ? (
                 bids.slice(0, 5).map((bid) => {
-                  const name = getBidderName(bid)
+                  const isAnon = anonymousRound.state.isActive && (bid as any)?.is_anonymous;
+                  const name = getBidderName(bid, isAnon);
                   return (
                     <div key={`chat-${bid.id}`} className="flex gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-yellow-300/30 bg-yellow-400/10">
-                        <span className="text-xs font-black text-yellow-300">🔨</span>
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${isAnon ? 'border-indigo-300/30 bg-indigo-400/10' : 'border-yellow-300/30 bg-yellow-400/10'}`}>
+                        <span className={`text-xs font-black ${isAnon ? 'text-indigo-300' : 'text-yellow-300'}`}>{isAnon ? '🔒' : '🔨'}</span>
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-black text-yellow-300">{name}</p>
+                          <p className={`truncate text-sm font-black ${isAnon ? 'text-indigo-300' : 'text-yellow-300'}`}>{name}</p>
                           <p className="text-[10px] text-slate-500">{new Date(bid.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
                         </div>
                         <p className="text-sm font-bold text-amber-200">
-                          Bid <span className="text-yellow-300">{formatCoins(bid.bid_amount)}</span> coins 🔥
+                          Bid <span className="text-yellow-300">{formatCoins(bid.bid_amount)}</span> coins {(bid as any)?.is_boost_bid ? '⚡🔥' : '🔥'}
                         </p>
                       </div>
                     </div>
@@ -1716,12 +1932,23 @@ export default function LiveAuctionRoom() {
                 <p className="py-8 text-center text-sm text-slate-500">No bids yet</p>
               ) : (
                 bids.slice(0, 7).map((bid) => {
-                  const name = getBidderName(bid)
+                  const isAnon = anonymousRound.state.isActive && (bid as any)?.is_anonymous;
+                  const name = getBidderName(bid, isAnon);
+                  const isBoost = (bid as any)?.is_boost_bid;
                   return (
-                    <div key={bid.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-3">
+                    <div key={bid.id} className={`flex items-center justify-between rounded-2xl border p-3 ${isAnon ? 'border-indigo-300/20 bg-indigo-950/20' : 'border-white/10 bg-black/30'}`}>
                       <div className="flex items-center gap-3">
-                        <BidAvatar name={name} />
-                        <p className="text-sm font-black text-white">{name}</p>
+                        {isAnon ? (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-indigo-300/30 bg-indigo-400/10">
+                            <EyeOff className="h-4 w-4 text-indigo-300" />
+                          </div>
+                        ) : (
+                          <BidAvatar name={name} />
+                        )}
+                        <div>
+                          <p className={`text-sm font-black ${isAnon ? 'text-indigo-300' : 'text-white'}`}>{name}</p>
+                          {isBoost && <p className="text-[10px] font-bold text-amber-300">⚡ Boost +{(bid as any)?.boost_amount}</p>}
+                        </div>
                       </div>
                       <div className="text-right">
                         <p className="font-black text-yellow-300">
@@ -1929,6 +2156,120 @@ export default function LiveAuctionRoom() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prediction Modal */}
+      {showPredictionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-purple-400/30 bg-gradient-to-br from-[#0c1a32] to-[#0a1628] shadow-[0_0_60px_rgba(139,92,246,0.2)]">
+            <div className="h-1.5 bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400" />
+            <div className="p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-purple-300/25 bg-purple-400/10">
+                  <Trophy className="h-5 w-5 text-purple-200" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-white">Prediction Bid</h3>
+                  <p className="text-xs text-slate-400">
+                    {predictionType === 'winner' && 'Predict the winning bidder'}
+                    {predictionType === 'price' && 'Predict the final price'}
+                    {predictionType === 'combined' && 'Predict both winner and price'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Prediction Type Selector */}
+              <div className="mb-4 grid grid-cols-3 gap-2">
+                {(['winner', 'price', 'combined'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setPredictionType(type)}
+                    className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                      predictionType === type
+                        ? 'border-purple-300/40 bg-purple-400/20 text-purple-100'
+                        : 'border-purple-300/15 bg-purple-400/5 text-purple-300 hover:bg-purple-400/10'
+                    }`}
+                  >
+                    {type === 'winner' && '🏆 Winner'}
+                    {type === 'price' && '💰 Price'}
+                    {type === 'combined' && '🔮 Both'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Winner Prediction */}
+              {(predictionType === 'winner' || predictionType === 'combined') && (
+                <div className="mb-4">
+                  <label className="mb-1 block text-xs font-bold text-slate-400">Predicted Winner (User ID)</label>
+                  <input
+                    type="text"
+                    value={predictionWinnerId}
+                    onChange={(e) => setPredictionWinnerId(e.target.value)}
+                    placeholder="Enter user ID of predicted winner..."
+                    className="w-full rounded-xl border border-purple-300/20 bg-black/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-purple-300/50 focus:ring-2 focus:ring-purple-300/15"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-600">Enter the user ID of who you think will win</p>
+                </div>
+              )}
+
+              {/* Price Prediction */}
+              {(predictionType === 'price' || predictionType === 'combined') && (
+                <div className="mb-4">
+                  <label className="mb-1 block text-xs font-bold text-slate-400">Predicted Final Price (coins)</label>
+                  <input
+                    type="number"
+                    value={predictionPrice}
+                    onChange={(e) => setPredictionPrice(e.target.value)}
+                    placeholder="Enter predicted price..."
+                    className="w-full rounded-xl border border-purple-300/20 bg-black/40 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-purple-300/50 focus:ring-2 focus:ring-purple-300/15"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-600">Your best guess for the final winning bid</p>
+                </div>
+              )}
+
+              {/* Rewards Info */}
+              {predictions.settings && (
+                <div className="mb-4 rounded-xl border border-purple-300/10 bg-purple-400/5 p-3">
+                  <p className="text-xs font-bold text-purple-200">Potential Rewards (Combined):</p>
+                  <div className="mt-1 flex gap-3 text-xs">
+                    <span className="text-amber-300">👑 {predictions.settings.reward_crowns_combined}</span>
+                    <span className="text-cyan-300">⭐ {predictions.settings.reward_xp_combined} XP</span>
+                    <span className="text-purple-300">🎯 {predictions.settings.reward_event_points_combined} Pts</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowPredictionModal(false);
+                    setPredictionWinnerId('');
+                    setPredictionPrice('');
+                  }}
+                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-300 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    const winnerId = (predictionType === 'winner' || predictionType === 'combined') ? predictionWinnerId : null;
+                    const price = (predictionType === 'price' || predictionType === 'combined') ? (parseInt(predictionPrice, 10) || null) : null;
+                    const success = await predictions.submitPrediction(winnerId, price, predictionType);
+                    if (success) {
+                      setShowPredictionModal(false);
+                      setPredictionWinnerId('');
+                      setPredictionPrice('');
+                    }
+                  }}
+                  disabled={predictions.loading}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-500 px-4 py-3 text-sm font-black text-white shadow-[0_0_20px_rgba(139,92,246,0.3)] transition hover:from-purple-500 hover:to-indigo-400 disabled:opacity-50"
+                >
+                  {predictions.loading ? 'Submitting...' : 'Submit Prediction'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

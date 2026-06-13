@@ -31,6 +31,7 @@ import NeighborApprovals from './components/NeighborApprovals'
 import CityAdsManager from './components/CityAdsManager'
 import SecretaryCalendar from './components/SecretaryCalendar'
 import SecretaryOwnDashboard from './components/SecretaryOwnDashboard'
+import SecretaryCrownRedemptions from './components/SecretaryCrownRedemptions'
 
 /* ================================
    Types
@@ -60,6 +61,7 @@ type View =
   | 'payout_control'
   | 'calendar'
   | 'secretary_dashboard'
+  | 'crown_redemptions'
 
 /* ================================
    Main Component
@@ -298,6 +300,9 @@ export default function ExecutiveOperationsConsole() {
 
       case 'calendar':
         return <SecretaryCalendar />
+
+      case 'crown_redemptions':
+        return <SecretaryCrownRedemptions />
 
       case 'secretary_dashboard':
         return <SecretaryOwnDashboard />

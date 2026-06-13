@@ -278,7 +278,7 @@ async function run() {
         console.log('\n--- TESTING BROADOFFICER ASSIGNMENT ---');
         const officerCandidate = viewerClients[2];
         const { error: officerError } = await streamer.client.rpc('assign_broadofficer', {
-            p_user_id: officerCandidate.user.id
+            p_officer_id: officerCandidate.user.id
         });
         if (officerError) console.error('Assign Officer Failed:', officerError.message);
         else console.log('Assign Officer Success');

@@ -446,6 +446,7 @@ import GamingMonetization from "./pages/broadcast/gaming/GamingMonetization.tsx"
 import GamingStore from "./pages/broadcast/gaming/GamingStore.tsx";
 import BroadcastRouter from "./pages/broadcast/BroadcastRouter.js";
 import StreamSummary from "./pages/broadcast/StreamSummary.js";
+import ReplayPage from "./pages/broadcast/ReplayPage.js";
 import PresidentPage from "./pages/President.js";
 import PresidentDashboard from "./pages/president/PresidentDashboard.js";
 import SecretaryDashboard from "./pages/president/SecretaryDashboard.js";
@@ -1554,7 +1555,9 @@ const handleVisibilityChange = async () => {
                     <Route path="/broadcast/:id" element={<BroadcastRouter />} />
                     <Route path="/watch/:id" element={<BroadcastRouter />} />
                    <Route path="/kick-fee/:streamId" element={<KickFeePage />} />
-                   <Route path="/broadcast/summary/:streamId" element={<StreamSummary />} />
+                    <Route path="/broadcast/summary/:streamId" element={<StreamSummary />} />
+                    <Route path="/replay/:streamId" element={<ReplayPage />} />
+
                   
                   {/* President Routes */}
                   <Route path="/president" element={<PresidentPage />} />

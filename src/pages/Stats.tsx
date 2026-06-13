@@ -46,6 +46,7 @@ interface UserStats {
   nextLevelXp: number
   troll_coins: number
   paid_coins: number
+  hype_coins: number
   cashout_coins: number
   cashout_reserved_coins: number
   familyName?: string
@@ -214,7 +215,7 @@ export default function Stats() {
       const { data: battleProfile, error: battleProfileError } = await supabase
         .from('user_profiles')
         .select('total_battle_wins,battle_crown_streak,battle_crowns,total_battle_matches')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle()
 
       if (battleProfileError) {
@@ -255,6 +256,7 @@ export default function Stats() {
         nextLevelXp: currentXp.xpToNext + currentXp.xpTotal,
         troll_coins: balances.troll_coins || 0,
         paid_coins: balances.paid_coins || 0,
+        hype_coins: balances.hype_coins || 0,
         cashout_coins: balances.cashout_coins || 0,
         cashout_reserved_coins: balances.cashout_reserved_coins || 0,
         ...familyData,
@@ -274,6 +276,7 @@ export default function Stats() {
     profile,
     balances.troll_coins,
     balances.paid_coins,
+    balances.hype_coins,
     balances.cashout_coins,
     balances.cashout_reserved_coins,
   ])
@@ -524,11 +527,11 @@ export default function Stats() {
                </p>
              </div>
 
-             <div className="grid grid-cols-3 gap-2">
-               <MetricBox label="Level" value={level || 1} tone="cyan" />
-               <MetricBox label="Coins" value={(balances.troll_coins || 0).toLocaleString()} tone="green" />
-               <MetricBox label="XP" value={(xpTotal || 0).toLocaleString()} tone="purple" />
-             </div>
+              <div className="grid grid-cols-3 gap-2">
+                <MetricBox label="Level" value={level || 1} tone="cyan" />
+                <MetricBox label="Coins" value={(balances.troll_coins || 0).toLocaleString()} tone="green" />
+                <MetricBox label="Hype" value={(balances.hype_coins || 0).toLocaleString()} tone="purple" />
+              </div>
            </div>
          </div>
 
@@ -695,12 +698,27 @@ export default function Stats() {
                        </span>
                      </div>
 
-                     <div className="flex items-center justify-between rounded-2xl border border-emerald-300/10 bg-slate-950/60 p-4">
-                       <span className="font-bold text-slate-100">💰 Gifted Coins</span>
-                       <span className="text-xl font-black text-emerald-300">
-                         {stats.paid_coins.toLocaleString()}
-                       </span>
-                     </div>
+                      <div className="flex items-center justify-between rounded-2xl border border-emerald-300/10 bg-slate-950/60 p-4">
+                        <span className="font-bold text-slate-100">💰 Gifted Coins</span>
+                        <span className="text-xl font-black text-emerald-300">
+                          {stats.paid_coins.toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-2xl border border-purple-300/10 bg-slate-950/60 p-4">
+                        <span className="font-bold text-slate-100">⚡ Hype Coins</span>
+                        <div className="text-right">
+                          <span className="text-xl font-black text-purple-300">
+                            {stats.hype_coins.toLocaleString()}
+                          </span>
+                          <button
+                            onClick={() => navigate('/crowns/redeem')}
+                            className="ml-2 text-xs font-bold text-cyan-300 hover:text-cyan-200 underline"
+                          >
+                            Convert
+                          </button>
+                        </div>
+                      </div>
 
                      <div className="rounded-2xl border border-purple-300/10 bg-slate-950/60 p-4">
                        <div className="flex items-center justify-between">

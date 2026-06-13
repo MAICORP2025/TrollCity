@@ -309,11 +309,11 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
     const channel = supabase.channel('public:troll_wall_posts_feed')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'troll_wall_posts' },
+        { event: 'INSERT', schema: 'public', table: 'troll_wall_posts' },
         (payload) => {
-          const incoming = (payload.event === 'DELETE' ? payload.old : payload.new) as any
+          const incoming = payload.new as any
           if (!incoming || !incoming.id) return
-          postBufferRef.current.push({ ...incoming, _event: payload.event } as any)
+          postBufferRef.current.push({ ...incoming, _event: 'INSERT' } as any)
         }
       )
       .subscribe()
@@ -324,50 +324,63 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
       const updates = [...postBufferRef.current]
       postBufferRef.current = []
 
-      setPosts(prev => {
-        let next = [...prev]
-        updates.forEach(newPost => {
-          if (!newPost || !newPost.id) return
+      // Fetch user profiles for new posts so they render correctly
+      const userIds = [...new Set(updates.map(p => p.user_id).filter(Boolean))]
+      if (userIds.length > 0) {
+        supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, is_admin, is_troll_officer, is_og_user, created_at, is_verified, is_gold, username_style, badge, officer_level, troller_level, is_troller, rgb_username_expires_at, glowing_username_color')
+          .in('id', userIds)
+          .then(({ data: profiles }) => {
+            const profileMap: Record<string, any> = {}
+            ;(profiles || []).forEach((p: any) => { profileMap[p.id] = p })
 
-          if (newPost._event === 'DELETE') {
-            next = next.filter((post) => post.id !== newPost.id)
-            return
-          }
+            setPosts(prev => {
+              let next = [...prev]
+              updates.forEach(newPost => {
+                if (!newPost || !newPost.id) return
+                // Skip if already in feed
+                if (next.findIndex(p => p.id === newPost.id) !== -1) return
 
-          if (newPost.reply_to_post_id) {
-            const parentIdx = next.findIndex(p => p.id === newPost.reply_to_post_id)
-            if (parentIdx !== -1) {
-              const parent = next[parentIdx]
-              const existingReplies = parent.replies || []
-              const replyIdx = existingReplies.findIndex(r => r.id === newPost.id)
-              if (replyIdx !== -1) {
-                const updatedReplies = [...existingReplies]
-                updatedReplies[replyIdx] = { ...updatedReplies[replyIdx], ...newPost }
-                next[parentIdx] = { ...parent, replies: updatedReplies }
-              } else {
-                next[parentIdx] = {
-                  ...parent,
-                  replies: [...existingReplies, newPost as WallPost]
+                const author = profileMap[newPost.user_id] || {}
+                const enriched = {
+                  ...newPost,
+                  username: newPost.is_system_generated ? 'Troll City System' : (author.username || newPost.username),
+                  avatar_url: author.avatar_url,
+                  is_admin: author.is_admin,
+                  is_troll_officer: author.is_troll_officer,
+                  is_og_user: author.is_og_user,
+                  user_created_at: author.created_at,
+                  is_verified: author.is_verified,
+                  is_gold: author.is_gold,
+                  username_style: author.username_style,
+                  badge: author.badge,
+                  officer_level: author.officer_level,
+                  troller_level: author.troller_level,
+                  is_troller: author.is_troller,
+                  rgb_username_expires_at: author.rgb_username_expires_at,
+                  glowing_username_color: author.glowing_username_color,
+                  replies: [],
+                } as WallPost
+
+                if (newPost.reply_to_post_id) {
+                  const parentIdx = next.findIndex(p => p.id === newPost.reply_to_post_id)
+                  if (parentIdx !== -1) {
+                    const parent = next[parentIdx]
+                    next[parentIdx] = {
+                      ...parent,
+                      replies: [...(parent.replies || []), enriched],
+                    }
+                  }
+                  // If parent not found, skip — it'll appear on next loadPosts
+                } else {
+                  next = [enriched, ...next]
                 }
-              }
-            } else {
-              const existingIdx = next.findIndex(p => p.id === newPost.id)
-              if (existingIdx === -1) {
-                next = [{ ...newPost, replies: [] }, ...next]
-              }
-            }
-          } else {
-            const idx = next.findIndex(p => p.id === newPost.id)
-            if (idx !== -1) {
-              const existingReplies = next[idx].replies || []
-              next[idx] = { ...next[idx], ...newPost, replies: existingReplies }
-            } else {
-              next = [{ ...newPost, replies: [] }, ...next]
-            }
-          }
-        })
-        return next.slice(0, 100)
-      })
+              })
+              return next.slice(0, 100)
+            })
+          })
+      }
     }, POST_BUFFER_FLUSH_MS)
 
     return () => {

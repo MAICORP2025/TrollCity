@@ -275,7 +275,7 @@ function GamingSetupPageInner() {
       const broadcasterName = profile?.username || profile?.display_name || 'A Gamer'
       const streamUrl = `/gaming/watch/${streamData.id}`
       await supabase.from('troll_wall_posts').insert({
-        user_id: '00000000-0000-0000-0000-000000000001',
+        user_id: user?.id,
         username: 'Troll City System',
         post_type: 'stream_announce',
         content: `🎮 ${broadcasterName} is now LIVE on HytroGaming!`,

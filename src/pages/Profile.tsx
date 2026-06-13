@@ -29,6 +29,7 @@ import {
   Sparkles,
   Trash2,
   UserPlus,
+  Video,
   X,
   Zap,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPi
 import { cars } from '../data/vehicles';
 import ProfileFeed from '../components/profile/ProfileFeed';
 import SavedBroadcasts from '../components/profile/SavedBroadcasts';
+import ProfileReplays from '../components/profile/ProfileReplays';
 import ProfileWatchlist from '../components/profile/ProfileWatchlist';
 
 type InventoryState = {
@@ -213,6 +215,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   const tabOptions: TabOption[] = [
     { key: 'social', label: 'Social', icon: MessageCircle, show: true },
     { key: 'saved_streams', label: 'Saved Streams', icon: Sparkles, show: isOwnProfile },
+    { key: 'replays', label: 'Replays', icon: Video, show: isOwnProfile },
     { key: 'watchlist', label: 'Watchlist', icon: Heart, show: isOwnProfile },
     { key: 'background', label: 'Background Check', icon: Shield, show: canUseBackground },
     { key: 'inventory', label: 'Inventory & Perks', icon: Package, show: canSeeFullProfile },
@@ -1211,6 +1214,8 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
         return renderSocial();
       case 'saved_streams':
         return <SavedBroadcasts userId={profile.id} />;
+      case 'replays':
+        return <ProfileReplays userId={profile.id} />;
       case 'watchlist':
         return <ProfileWatchlist userId={profile.id} />;
       case 'background':

@@ -35,17 +35,26 @@ export function useGhostMode({ streamId, userId, isCEO, roomRef }: UseGhostModeP
 
     setIsJoiningGhost(true)
     try {
-      const { data, error } = await supabase.functions.invoke('ghost-mode', {
-        body: { action: 'create', streamId, userId },
-      })
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ is_ghost_mode: true })
+        .eq('id', userId)
+        .select('id')
+        .maybeSingle()
 
       if (error) {
-        toast.error(error.message || 'Failed to create ghost session')
+        toast.error(error.message || 'Failed to enable ghost mode')
         return false
       }
 
-      setGhostSession(data)
-      console.log('[useGhostMode] Ghost session created:', data)
+      setGhostSession({
+        id: userId,
+        stream_id: streamId,
+        user_id: userId,
+        joined_at: new Date().toISOString(),
+        microphone_enabled: true,
+        camera_enabled: false,
+      })
       return true
     } catch (err) {
       console.error('createGhostSession error:', err)
@@ -114,15 +123,14 @@ export function useGhostMode({ streamId, userId, isCEO, roomRef }: UseGhostModeP
     try {
       const room = roomRef?.current
       if (room?.localParticipant) {
-        // Disable ghost mode by setting metadata to non-ghost
-        // The ghost participant will be filtered out automatically
         console.log('[useGhostMode] Leaving ghost mode - disabling mic')
         await room.localParticipant.setMicrophoneEnabled(false)
       }
 
-      await supabase.functions.invoke('ghost-mode', {
-        body: { action: 'leave', streamId, userId },
-      })
+      await supabase
+        .from('user_profiles')
+        .update({ is_ghost_mode: false })
+        .eq('id', userId)
 
       setGhostSession(null)
       setIsMicEnabled(false)

@@ -4,10 +4,13 @@ import {
   Check,
   Clock3,
   Coins,
+  Eye,
   Loader2,
   Save,
   Shield,
+  Trophy,
   User,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -26,6 +29,17 @@ interface AuctioneerSettings {
   default_auction_duration_minutes: number
   min_starting_bid: number
   max_lots_per_show: number
+  // Anonymous Round
+  anonymous_round_enabled: boolean
+  anonymous_round_default_duration: number
+  anonymous_round_max_duration: number
+  // Boost Bid
+  boost_bids_enabled: boolean
+  boost_bid_allowed_increments: string
+  boost_bid_max_amount: number
+  boost_bid_custom_enabled: boolean
+  // Predictions
+  predictions_enabled: boolean
 }
 
 const shell =
@@ -57,6 +71,17 @@ export default function AuctionSettings() {
     default_auction_duration_minutes: 120,
     min_starting_bid: 100,
     max_lots_per_show: 50,
+    // Anonymous Round
+    anonymous_round_enabled: true,
+    anonymous_round_default_duration: 30,
+    anonymous_round_max_duration: 120,
+    // Boost Bid
+    boost_bids_enabled: true,
+    boost_bid_allowed_increments: '2,5,10',
+    boost_bid_max_amount: 100,
+    boost_bid_custom_enabled: false,
+    // Predictions
+    predictions_enabled: true,
   })
 
   const fetchSettings = useCallback(async () => {
@@ -74,7 +99,15 @@ export default function AuctionSettings() {
       if (auctioneer) {
         setAuctioneerId(auctioneer.id)
         if (auctioneer.settings) {
-          setSettings((prev) => ({ ...prev, ...(auctioneer.settings as Partial<AuctioneerSettings>) }))
+          const s = auctioneer.settings as any;
+          setSettings((prev) => ({
+            ...prev,
+            ...s,
+            // Convert int[] to comma-separated string for UI
+            boost_bid_allowed_increments: Array.isArray(s.boost_bid_allowed_increments)
+              ? s.boost_bid_allowed_increments.join(',')
+              : (s.boost_bid_allowed_increments || '2,5,10'),
+          }));
         }
       }
     } catch (error) {
@@ -97,9 +130,18 @@ export default function AuctionSettings() {
 
     setSaving(true)
     try {
+      // Convert comma-separated string to int[] for DB
+      const settingsToSave = {
+        ...settings,
+        boost_bid_allowed_increments: settings.boost_bid_allowed_increments
+          .split(',')
+          .map((s: string) => parseInt(s.trim(), 10))
+          .filter((n: number) => !isNaN(n)),
+      };
+
       const { error } = await supabase
         .from('auctioneer_profiles')
-        .update({ settings })
+        .update({ settings: settingsToSave })
         .eq('id', auctioneerId)
 
       if (error) throw error
@@ -235,6 +277,124 @@ export default function AuctionSettings() {
               checked={settings.notify_on_sale}
               onChange={(v) => updateSetting('notify_on_sale', v)}
             />
+          </div>
+        </section>
+
+        {/* Anonymous Round Settings */}
+        <section className={cn(panel, 'p-5')}>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-white">
+            <Eye className="h-5 w-5 text-indigo-300" />
+            Anonymous Bid Round
+          </h2>
+
+          <div className="space-y-4">
+            <ToggleRow
+              label="Enable Anonymous Rounds"
+              description="Allow hiding bidder identities during live auctions"
+              checked={settings.anonymous_round_enabled}
+              onChange={(v) => updateSetting('anonymous_round_enabled', v)}
+            />
+
+            {settings.anonymous_round_enabled && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-bold text-indigo-100">Default Duration (seconds)</label>
+                  <input
+                    type="number"
+                    value={settings.anonymous_round_default_duration}
+                    onChange={(e) => updateSetting('anonymous_round_default_duration', Number(e.target.value))}
+                    min={10}
+                    max={300}
+                    className={input}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">Default duration when starting an anonymous round</p>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-bold text-indigo-100">Max Duration (seconds)</label>
+                  <input
+                    type="number"
+                    value={settings.anonymous_round_max_duration}
+                    onChange={(e) => updateSetting('anonymous_round_max_duration', Number(e.target.value))}
+                    min={10}
+                    max={600}
+                    className={input}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">Maximum allowed anonymous round duration</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Boost Bid Settings */}
+        <section className={cn(panel, 'p-5')}>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-white">
+            <Zap className="h-5 w-5 text-amber-300" />
+            Boost Bids
+          </h2>
+
+          <div className="space-y-4">
+            <ToggleRow
+              label="Enable Boost Bids"
+              description="Allow bidders to increase their bid increment for extra impact"
+              checked={settings.boost_bids_enabled}
+              onChange={(v) => updateSetting('boost_bids_enabled', v)}
+            />
+
+            {settings.boost_bids_enabled && (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-bold text-amber-100">Allowed Increments (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={settings.boost_bid_allowed_increments}
+                      onChange={(e) => updateSetting('boost_bid_allowed_increments', e.target.value)}
+                      placeholder="2,5,10"
+                      className={input}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">Comma-separated boost values (e.g. 2,5,10)</p>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-bold text-amber-100">Max Boost Amount</label>
+                    <input
+                      type="number"
+                      value={settings.boost_bid_max_amount}
+                      onChange={(e) => updateSetting('boost_bid_max_amount', Number(e.target.value))}
+                      min={1}
+                      className={input}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">Maximum boost in coins</p>
+                  </div>
+                </div>
+                <ToggleRow
+                  label="Allow Custom Boost Amounts"
+                  description="Let bidders enter any boost amount up to the maximum"
+                  checked={settings.boost_bid_custom_enabled}
+                  onChange={(v) => updateSetting('boost_bid_custom_enabled', v)}
+                />
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Prediction Settings */}
+        <section className={cn(panel, 'p-5')}>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-black text-white">
+            <Trophy className="h-5 w-5 text-purple-300" />
+            Prediction Bids
+          </h2>
+
+          <div className="space-y-3">
+            <ToggleRow
+              label="Enable Predictions"
+              description="Let bidders and spectators predict auction outcomes"
+              checked={settings.predictions_enabled}
+              onChange={(v) => updateSetting('predictions_enabled', v)}
+            />
+            <p className="text-xs text-slate-500">
+              Reward settings (crowns, XP, event points) are configured by admins in the global auction settings.
+            </p>
           </div>
         </section>
 

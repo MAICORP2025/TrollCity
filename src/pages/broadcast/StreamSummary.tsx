@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { Home, Trophy, Coins, Gift, Heart, UserPlus, Loader2 } from 'lucide-react';
+import { Home, Trophy, Coins, Gift, Heart, UserPlus, Loader2, Play, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 
@@ -18,6 +18,13 @@ interface UserStats {
   newFollowers: number;
 }
 
+interface ReplayInfo {
+  id: string;
+  replay_url: string;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+}
+
 export default function StreamSummary() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,6 +40,7 @@ export default function StreamSummary() {
   const [isBroadcaster, setIsBroadcaster] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [replay, setReplay] = useState<ReplayInfo | null>(null);
 
   useEffect(() => {
     if (!streamId) {
@@ -42,7 +50,6 @@ export default function StreamSummary() {
 
     const fetchStreamStats = async () => {
       try {
-        // Get stream info with timing data
         const { data: stream, error } = await supabase
           .from('streams')
           .select('title, total_likes, created_at, ended_at, user_id')
@@ -63,11 +70,9 @@ export default function StreamSummary() {
           broadcasterId
         });
 
-        // Check if current user is the broadcaster
         const userIsBroadcaster = user?.id === broadcasterId;
         setIsBroadcaster(userIsBroadcaster);
 
-  // Auto-save stream to user's profile (broadcaster only)
         if (userIsBroadcaster && user?.id && streamId && !isSaved) {
           try {
             await supabase
@@ -85,55 +90,48 @@ export default function StreamSummary() {
               setIsSaved(true);
             }
           }
-          }
+        }
 
-        // Initialize user stats
+        const { data: replayData } = await supabase
+          .from('broadcast_replays')
+          .select('id, replay_url, thumbnail_url, duration_seconds')
+          .eq('stream_id', streamId)
+          .maybeSingle();
+
+        if (replayData) {
+          setReplay(replayData as ReplayInfo);
+        }
+
         let trollmondsSpent = 0;
         let giftsReceived = 0;
         let newFollowers = 0;
 
         if (user?.id) {
-          console.log('[StreamSummary] Fetching gift data for user:', user.id, 'stream:', streamId);
-
-          // 1. Get trollmonds spent by this user (as sender)
-          // The RPC now records trollmonds_spent directly in stream_gifts for gifts >= 100 coins
           const { data: streamGiftsSpent, error: streamGiftsSpentError } = await supabase
             .from('stream_gifts')
             .select('id, trollmonds_spent, metadata')
             .eq('stream_id', streamId)
             .eq('sender_id', user.id);
 
-          console.log('[StreamSummary] stream_gifts spent data:', streamGiftsSpent, 'error:', streamGiftsSpentError);
-
           if (streamGiftsSpent && streamGiftsSpent.length > 0) {
             trollmondsSpent = streamGiftsSpent.reduce((sum: number, g: any) => {
-              // Use trollmonds_spent column if available, fallback to metadata
               const spent = g.trollmonds_spent ?? g.metadata?.trollmonds_spent ?? g.metadata?.trollmonds_deducted ?? 0;
               return sum + (typeof spent === 'number' ? spent : 0);
             }, 0);
           }
 
-          // 2. Get gifts received by this user (as receiver)
-          // Count the number of gifts received
           const { data: streamGiftsReceived, error: streamGiftsReceivedError } = await supabase
             .from('stream_gifts')
             .select('id, quantity')
             .eq('stream_id', streamId)
             .eq('receiver_id', user.id);
 
-          console.log('[StreamSummary] stream_gifts received data:', streamGiftsReceived, 'error:', streamGiftsReceivedError);
-
           if (streamGiftsReceived && streamGiftsReceived.length > 0) {
-            // Count total number of gifts received (including quantities)
             giftsReceived = streamGiftsReceived.reduce((sum: number, g: any) => {
               return sum + (g.quantity || 1);
             }, 0);
           }
-          
-          console.log('[StreamSummary] Final user stats:', { trollmondsSpent, giftsReceived });
 
-          // 3. Get new followers gained during this stream
-          // Check if user has an artist profile
           const { data: artistProfile } = await supabase
             .from('artist_profiles')
             .select('id')
@@ -141,7 +139,6 @@ export default function StreamSummary() {
             .maybeSingle();
 
           if (artistProfile?.id) {
-            // Count followers created during the stream
             const { count: followerCount } = await supabase
               .from('artist_followers')
               .select('id', { count: 'exact' })
@@ -176,13 +173,12 @@ export default function StreamSummary() {
     );
   }
 
-  const displayStreamStats = streamStats || { 
-    title: 'Stream Ended', 
-    totalLikes: 0, 
-    broadcasterId: '' 
+  const displayStreamStats = streamStats || {
+    title: 'Stream Ended',
+    totalLikes: 0,
+    broadcasterId: ''
   };
 
-  // Format the stat value for display
   const formatValue = (value: number): string => {
     if (value >= 1000000) {
       return (value / 1000000).toFixed(1) + 'M';
@@ -193,6 +189,15 @@ export default function StreamSummary() {
     return value.toLocaleString();
   };
 
+  const formatDuration = (seconds: number | null): string => {
+    if (!seconds) return '';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
   return (
     <div className="h-screen bg-black text-white flex flex-col items-center p-4 overflow-y-auto">
       <div className="max-w-lg w-full bg-zinc-900 border border-white/10 rounded-2xl p-5 sm:p-8 flex flex-col items-center text-center shadow-2xl my-auto shrink-0">
@@ -200,12 +205,11 @@ export default function StreamSummary() {
           <Trophy size={32} className="text-yellow-500 sm:hidden" />
           <Trophy size={40} className="text-yellow-500 hidden sm:block" />
         </div>
-        
+
         <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Broadcast Ended</h1>
         <p className="text-zinc-400 mb-4 sm:mb-8 text-sm sm:text-base">{displayStreamStats.title || "Great stream! Here's how it went:"}</p>
 
         <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full mb-4 sm:mb-8">
-          {/* Trollmonds Spent - What the user spent on this stream */}
           <div className="bg-black/40 rounded-xl p-3 sm:p-4 flex flex-col items-center border border-white/5">
             <Coins className="text-yellow-400 mb-1 sm:mb-2" size={24} />
             <span className="text-2xl sm:text-3xl font-bold text-yellow-400">
@@ -214,7 +218,6 @@ export default function StreamSummary() {
             <span className="text-[10px] sm:text-xs text-zinc-500 uppercase tracking-wider mt-1">Trollmonds Spent</span>
           </div>
 
-          {/* Gifts Received - What the user received */}
           <div className="bg-black/40 rounded-xl p-3 sm:p-4 flex flex-col items-center border border-white/5">
             <Gift className="text-pink-400 mb-1 sm:mb-2" size={24} />
             <span className="text-2xl sm:text-3xl font-bold text-pink-400">
@@ -223,7 +226,6 @@ export default function StreamSummary() {
             <span className="text-[10px] sm:text-xs text-zinc-500 uppercase tracking-wider mt-1">Gifts Received</span>
           </div>
 
-          {/* Total Likes - Stream likes */}
           <div className="bg-black/40 rounded-xl p-3 sm:p-4 flex flex-col items-center border border-white/5">
             <Heart className="text-red-400 mb-1 sm:mb-2" size={24} />
             <span className="text-2xl sm:text-3xl font-bold text-red-400">
@@ -232,7 +234,6 @@ export default function StreamSummary() {
             <span className="text-[10px] sm:text-xs text-zinc-500 uppercase tracking-wider mt-1">Total Likes</span>
           </div>
 
-          {/* New Followers - Followers gained during stream */}
           <div className="bg-black/40 rounded-xl p-3 sm:p-4 flex flex-col items-center border border-white/5">
             <UserPlus className="text-green-400 mb-1 sm:mb-2" size={24} />
             <span className="text-2xl sm:text-3xl font-bold text-green-400">
@@ -242,41 +243,52 @@ export default function StreamSummary() {
           </div>
         </div>
 
-         {/* User info & Saved Status */}
-         {user && (
-           <div className="mb-4 sm:mb-6 w-full space-y-2">
-             <div className="p-2 sm:p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
-               <p className="text-xs sm:text-sm text-purple-300">
-                 {isBroadcaster 
-                   ? "You're the broadcaster!"
-                   : `Watching as: ${profile?.username || 'User'}`
-                 }
-               </p>
-             </div>
-             
-             {/* Saved Status */}
-             {isBroadcaster && (
-               <div className={`p-2 sm:p-3 rounded-lg border text-xs sm:text-sm flex items-center justify-center gap-2 ${
-                 isSaved
-                   ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                   : 'bg-zinc-500/10 border-zinc-500/30 text-zinc-400'
-               }`}>
-                 {isSaved ? (
-                   <>
-                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                       <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
-                     </svg>
-                     Saved to Profile
-                   </>
-                 ) : (
-                   'Not saved to profile'
-                 )}
-               </div>
-             )}
-           </div>
-         )}
+        {user && (
+          <div className="mb-4 sm:mb-6 w-full space-y-2">
+            <div className="p-2 sm:p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
+              <p className="text-xs sm:text-sm text-purple-300">
+                {isBroadcaster
+                  ? "You're the broadcaster!"
+                  : `Watching as: ${profile?.username || 'User'}`
+                }
+              </p>
+            </div>
 
-        <button 
+            {isBroadcaster && (
+              <div className={`p-2 sm:p-3 rounded-lg border text-xs sm:text-sm flex items-center justify-center gap-2 ${
+                isSaved
+                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                  : 'bg-zinc-500/10 border-zinc-500/30 text-zinc-400'
+              }`}>
+                {isSaved ? (
+                  <>
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                    </svg>
+                    Saved to Profile
+                  </>
+                ) : (
+                  'Not saved to profile'
+                )}
+              </div>
+            )}
+
+            {replay && (
+              <button
+                onClick={() => navigate(`/replay/${streamId}`)}
+                className="w-full p-2 sm:p-3 rounded-lg border text-xs sm:text-sm flex items-center justify-center gap-2 bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition"
+              >
+                <Play size={14} />
+                Watch Replay
+                {replay.duration_seconds && (
+                  <span className="text-emerald-500/70">({formatDuration(replay.duration_seconds)})</span>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
+        <button
           onClick={() => navigate('/')}
           className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition flex items-center justify-center gap-2"
         >

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Activity,
   Bluetooth,
@@ -19,8 +19,6 @@ import {
   Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import QRCode from 'qrcode'
-
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
@@ -91,7 +89,8 @@ export default function DeviceManagement() {
   const [mobileSessions, setMobileSessions] = useState<MobileScannerSession[]>([])
   const [showPairingModal, setShowPairingModal] = useState(false)
   const [pairingCode, setPairingCode] = useState('')
-  const [qrDataUrl, setQrDataUrl] = useState('')
+  const [desktopCodeInput, setDesktopCodeInput] = useState('')
+  const [showCodeInput, setShowCodeInput] = useState(false)
   const [activeAuctions, setActiveAuctions] = useState<Array<{ id: string; title: string }>>([])
   const [selectedAuctionId, setSelectedAuctionId] = useState<string>('')
 
@@ -144,11 +143,108 @@ export default function DeviceManagement() {
 
   const removeDevice = async (id: string) => {
     try {
+      // Find the device being removed
+      const device = devices.find(d => d.id === id)
+
+      // If it's a Bluetooth device that's currently connected, disconnect first
+      if (device?.connection_type === 'bluetooth' && device?.status === 'connected') {
+        if (bluetoothDeviceRef.current && bluetoothDeviceRef.current.gatt?.connected) {
+          bluetoothDeviceRef.current.gatt.disconnect()
+        }
+        bluetoothDeviceRef.current = null
+        bluetoothServerRef.current = null
+      }
+
+      // Also remove any associated mobile device sessions for this device name
+      if (device?.device_name) {
+        await supabase
+          .from('auction_device_sessions')
+          .delete()
+          .eq('device_name', device.device_name)
+          .eq('auctioneer_id', user?.id || '')
+      }
+
+      // Remove the device from auction_devices
       await supabase.from('auction_devices').delete().eq('id', id)
       toast.success('Device removed')
       await fetchDevices()
     } catch {
       toast.error('Failed to remove device')
+    }
+  }
+
+  // ── Web Bluetooth connection state ──────────────────────────────────────
+  const bluetoothDeviceRef = useRef<BluetoothDevice | null>(null)
+  const bluetoothServerRef = useRef<BluetoothRemoteGATTServer | null>(null)
+
+  const connectBluetoothDevice = async (device: Device): Promise<boolean> => {
+    // Check if Web Bluetooth is supported
+    if (!navigator.bluetooth) {
+      toast.error('Web Bluetooth is not supported in this browser. Use Chrome or Edge.')
+      return false
+    }
+
+    try {
+      // Request a Bluetooth device
+      const btDevice = await navigator.bluetooth.requestDevice({
+        // For printers, accept all devices; for scanners, filter by service
+        filters: device.device_type === 'printer'
+          ? [{ services: ['generic_access'] }]
+          : [{ services: ['generic_access', 'human_interface_device'] }],
+        optionalServices: [
+          'generic_access',
+          'human_interface_device',
+          'battery_service',
+          // Common printer service UUIDs
+          '000018f0-0000-1000-8000-00805f9b34fb', // Printer service
+        ],
+      })
+
+      bluetoothDeviceRef.current = btDevice
+
+      // Connect to the GATT server
+      const server = await btDevice.gatt?.connect()
+      if (!server) {
+        toast.error('Failed to connect to device GATT server')
+        return false
+      }
+      bluetoothServerRef.current = server
+
+      // Listen for disconnection
+      btDevice.addEventListener('gattserverdisconnected', () => {
+        bluetoothDeviceRef.current = null
+        bluetoothServerRef.current = null
+        // Update device status in DB
+        supabase
+          .from('auction_devices')
+          .update({ status: 'disconnected' })
+          .eq('id', device.id)
+          .then(() => fetchDevices())
+        toast.warning(`${device.device_name} disconnected`)
+      })
+
+      toast.success(`${device.device_name} connected via Bluetooth`)
+      return true
+    } catch (err: any) {
+      if (err?.name === 'NotFoundError') {
+        toast.error('No device selected or device not found')
+      } else {
+        toast.error(`Bluetooth connection failed: ${err?.message || 'Unknown error'}`)
+      }
+      return false
+    }
+  }
+
+  const disconnectBluetoothDevice = async (device: Device) => {
+    try {
+      if (bluetoothDeviceRef.current && bluetoothDeviceRef.current.gatt?.connected) {
+        bluetoothDeviceRef.current.gatt.disconnect()
+      }
+      bluetoothDeviceRef.current = null
+      bluetoothServerRef.current = null
+      toast.success(`${device.device_name} disconnected`)
+    } catch (err: any) {
+      toast.error(`Disconnect failed: ${err?.message || 'Unknown error'}`)
     }
   }
 
@@ -164,14 +260,34 @@ export default function DeviceManagement() {
         .eq('id', device.id)
 
       if (newStatus === 'pairing') {
-        // Simulate pairing
-        setTimeout(async () => {
-          await supabase
-            .from('auction_devices')
-            .update({ status: 'connected', last_connected_at: new Date().toISOString() })
-            .eq('id', device.id)
+        if (device.connection_type === 'bluetooth') {
+          // Use Web Bluetooth API for Bluetooth devices
+          const connected = await connectBluetoothDevice(device)
+          if (connected) {
+            await supabase
+              .from('auction_devices')
+              .update({ status: 'connected', last_connected_at: new Date().toISOString() })
+              .eq('id', device.id)
+          } else {
+            // Revert to disconnected if connection failed
+            await supabase
+              .from('auction_devices')
+              .update({ status: 'disconnected' })
+              .eq('id', device.id)
+          }
           await fetchDevices()
-        }, 2000)
+        } else {
+          // Simulate pairing for USB/HID/Network devices
+          setTimeout(async () => {
+            await supabase
+              .from('auction_devices')
+              .update({ status: 'connected', last_connected_at: new Date().toISOString() })
+              .eq('id', device.id)
+            await fetchDevices()
+          }, 2000)
+        }
+      } else if (newStatus === 'disconnected' && device.connection_type === 'bluetooth') {
+        await disconnectBluetoothDevice(device)
       }
 
       await fetchDevices()
@@ -186,6 +302,7 @@ export default function DeviceManagement() {
     results.push(`[${new Date().toLocaleTimeString()}] Scanning USB ports...`)
     results.push(`[${new Date().toLocaleTimeString()}] Found ${devices.filter(d => d.connection_type === 'usb').length} USB device(s)`)
     results.push(`[${new Date().toLocaleTimeString()}] Scanning Bluetooth...`)
+    results.push(`[${new Date().toLocaleTimeString()}] Web Bluetooth API: ${navigator.bluetooth ? 'Available' : 'Not available (use Chrome/Edge)'}`)
     results.push(`[${new Date().toLocaleTimeString()}] Found ${devices.filter(d => d.connection_type === 'bluetooth').length} Bluetooth device(s)`)
     results.push(`[${new Date().toLocaleTimeString()}] Checking HID keyboard scanners...`)
     results.push(`[${new Date().toLocaleTimeString()}] HID scanners are detected automatically via keyboard input`)
@@ -257,20 +374,6 @@ export default function DeviceManagement() {
       setPairingCode(code)
       await fetchMobileSessions()
 
-      // Generate QR code
-      const qrPayload = JSON.stringify({
-        type: 'trollcity_auction_scanner',
-        pairingCode: code,
-        sessionToken: token,
-        auctionId: selectedAuctionId || null,
-      })
-      const qrUrl = await QRCode.toDataURL(qrPayload, {
-        width: 256,
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-      })
-      setQrDataUrl(qrUrl)
-
       // Subscribe to session updates
       const channel = supabase
         .channel(`device_session_${data.id}`)
@@ -307,6 +410,75 @@ export default function DeviceManagement() {
       toast.error(err?.message || 'Failed to generate pairing code')
     }
   }, [user?.id, selectedAuctionId, fetchMobileSessions])
+
+  // ── Desktop enters a code from mobile ────────────────────────────────────
+
+  const connectDesktopWithCode = useCallback(async () => {
+    const code = desktopCodeInput.trim()
+    if (!code || code.length !== 6) {
+      toast.error('Enter a valid 6-digit code')
+      return
+    }
+
+    try {
+      // Find a pending session with this code (created by mobile)
+      const { data: existingSession, error: findError } = await supabase
+        .from('auction_device_sessions')
+        .select('*')
+        .eq('pairing_code', code)
+        .eq('status', 'pending')
+        .maybeSingle()
+
+      if (findError) throw findError
+
+      if (existingSession) {
+        // Found a pending session from mobile — mark as connected
+        const { data, error: updateError } = await supabase
+          .from('auction_device_sessions')
+          .update({
+            status: 'connected',
+            connected_at: new Date().toISOString(),
+          })
+          .eq('id', existingSession.id)
+          .select('*')
+          .single()
+
+        if (updateError) throw updateError
+
+        setPairingCode(code)
+        setShowCodeInput(false)
+        setDesktopCodeInput('')
+        await fetchMobileSessions()
+        toast.success(`Scanner connected: ${data.device_name || 'Mobile Device'}`)
+      } else {
+        // No pending session — create a new connected session with this code
+        const token = generateUUID()
+        const { data, error: createError } = await supabase
+          .from('auction_device_sessions')
+          .insert({
+            auctioneer_id: user!.id,
+            auction_id: selectedAuctionId || null,
+            pairing_code: code,
+            session_token: token,
+            device_name: 'Web Scanner',
+            status: 'connected',
+            connected_at: new Date().toISOString(),
+          })
+          .select('*')
+          .single()
+
+        if (createError) throw createError
+
+        setPairingCode(code)
+        setShowCodeInput(false)
+        setDesktopCodeInput('')
+        await fetchMobileSessions()
+        toast.success('Scanner connected!')
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to connect with code')
+    }
+  }, [desktopCodeInput, user?.id, selectedAuctionId, fetchMobileSessions])
 
   const removeMobileSession = useCallback(async (sessionId: string) => {
     try {
@@ -633,106 +805,185 @@ export default function DeviceManagement() {
         )}
 
         {/* ── Mobile Scanner Pairing Modal ──────────────────────────────────── */}
-        {showPairingModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className={cn(panel, 'w-full max-w-md p-6')}>
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-xl font-black text-white">Connect Mobile Scanner</h3>
-                <button
-                  onClick={() => {
-                    setShowPairingModal(false)
-                    setPairingCode('')
-                    setQrDataUrl('')
-                  }}
-                  className={ghost}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+        {showPairingModal && (() => {
+          // Check if the current pairing code's session is connected
+          const currentSession = mobileSessions.find(
+            (s) => s.pairing_code === pairingCode && s.status === 'connected'
+          )
+          const isConnected = !!currentSession
 
-              <div className="space-y-4">
-                {/* Auction selector */}
-                {activeAuctions.length > 0 && (
-                  <div>
-                    <label className="mb-1 block text-xs text-slate-500">Link to Auction</label>
-                    <select
-                      value={selectedAuctionId}
-                      onChange={(e) => setSelectedAuctionId(e.target.value)}
-                      className={input}
-                    >
-                      <option value="" className="bg-slate-950">No specific auction</option>
-                      {activeAuctions.map((a) => (
-                        <option key={a.id} value={a.id} className="bg-slate-950">{a.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Generate button or QR display */}
-                {!pairingCode ? (
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className={cn(panel, 'w-full max-w-md p-6')}>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-xl font-black text-white">
+                    {isConnected ? 'Scanner Connected' : 'Connect Mobile Scanner'}
+                  </h3>
                   <button
-                    onClick={generatePairingCode}
-                    className={cn(primary, 'w-full')}
+                    onClick={() => {
+                      setShowPairingModal(false)
+                      setPairingCode('')
+                    }}
+                    className={ghost}
                   >
-                    <QrCode className="h-4 w-4" /> Generate Pairing Code
+                    <X className="h-4 w-4" />
                   </button>
-                ) : (
-                  <div className="space-y-4">
-                    {/* QR Code */}
-                    {qrDataUrl && (
-                      <div className="flex flex-col items-center rounded-2xl border border-cyan-300/20 bg-white p-4">
-                        <img src={qrDataUrl} alt="Pairing QR Code" className="h-48 w-48" />
-                        <p className="mt-2 text-[10px] text-slate-500">Scan with mobile scanner</p>
-                      </div>
-                    )}
+                </div>
 
-                    {/* Numeric code */}
-                    <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/5 p-4 text-center">
-                      <p className="text-[10px] font-bold text-cyan-300 uppercase tracking-widest">Auction Code</p>
-                      <div className="mt-1 flex items-center justify-center gap-3">
-                        <p className="text-3xl font-black tracking-[0.3em] text-white">{pairingCode}</p>
-                        <button onClick={copyPairingCode} className={cn(ghost, 'text-xs')}>
-                          <Copy className="h-4 w-4" />
+                <div className="space-y-4">
+                  {/* Connected state */}
+                  {isConnected ? (
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/5 p-6 text-center">
+                        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
+                        <p className="mt-3 text-lg font-black text-emerald-200">Scanner Connected!</p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {currentSession!.device_name || 'Mobile Scanner'} is now linked to your auction.
+                        </p>
+                        <div className="mt-3 flex items-center justify-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-xs font-bold text-emerald-300">Live</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setPairingCode('')
+                          }}
+                          className={cn(secondary, 'flex-1 text-xs')}
+                        >
+                          Connect Another Scanner
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowPairingModal(false)
+                            setPairingCode('')
+                          }}
+                          className={cn(primary, 'flex-1 text-xs')}
+                        >
+                          Done
                         </button>
                       </div>
-                      <p className="mt-2 text-[10px] text-slate-500">
-                        Enter this code on your mobile device at <span className="font-mono text-cyan-400">/auctioneer/scanner</span>
-                      </p>
                     </div>
+                  ) : (
+                    <>
+                      {/* Auction selector */}
+                      {activeAuctions.length > 0 && (
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-500">Link to Auction</label>
+                          <select
+                            value={selectedAuctionId}
+                            onChange={(e) => setSelectedAuctionId(e.target.value)}
+                            className={input}
+                          >
+                            <option value="" className="bg-slate-950">No specific auction</option>
+                            {activeAuctions.map((a) => (
+                              <option key={a.id} value={a.id} className="bg-slate-950">{a.title}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
-                    {/* Status */}
-                    <div className="flex items-center justify-center gap-2 text-xs text-amber-300">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Waiting for mobile device to connect...
-                    </div>
+                      {/* Generate button or code display */}
+                      {!pairingCode && !showCodeInput ? (
+                        <div className="space-y-3">
+                          <button
+                            onClick={generatePairingCode}
+                            className={cn(primary, 'w-full')}
+                          >
+                            <QrCode className="h-4 w-4" /> Generate Pairing Code
+                          </button>
+                          <button
+                            onClick={() => setShowCodeInput(true)}
+                            className={cn(secondary, 'w-full text-xs')}
+                          >
+                            <Smartphone className="h-4 w-4" /> Enter Mobile Code
+                          </button>
+                        </div>
+                      ) : showCodeInput ? (
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Enter Mobile Code</p>
+                            <p className="mt-1 text-[10px] text-slate-500">Enter the code generated on your mobile device.</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              value={desktopCodeInput}
+                              onChange={(e) => setDesktopCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              placeholder="6-digit code"
+                              className={cn(input, 'text-center text-lg font-black tracking-[0.2em]')}
+                              maxLength={6}
+                            />
+                            <button
+                              onClick={connectDesktopWithCode}
+                              disabled={desktopCodeInput.length !== 6}
+                              className={cn(primary, 'px-4')}
+                            >
+                              <Send className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setShowCodeInput(false)
+                              setDesktopCodeInput('')
+                            }}
+                            className={cn(ghost, 'w-full text-xs')}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {/* Numeric code */}
+                          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/5 p-4 text-center">
+                            <p className="text-[10px] font-bold text-cyan-300 uppercase tracking-widest">Auction Code</p>
+                            <div className="mt-1 flex items-center justify-center gap-3">
+                              <p className="text-3xl font-black tracking-[0.3em] text-white">{pairingCode}</p>
+                              <button onClick={copyPairingCode} className={cn(ghost, 'text-xs')}>
+                                <Copy className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <p className="mt-2 text-[10px] text-slate-500">
+                              Enter this code on your mobile device at <span className="font-mono text-cyan-400">/auctioneer/scanner</span>
+                            </p>
+                          </div>
 
-                    {/* Generate new */}
-                    <button
-                      onClick={() => {
-                        setPairingCode('')
-                        setQrDataUrl('')
-                      }}
-                      className={cn(secondary, 'w-full text-xs')}
-                    >
-                      Generate New Code
-                    </button>
-                  </div>
-                )}
+                          {/* Status */}
+                          <div className="flex items-center justify-center gap-2 text-xs text-amber-300">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Waiting for mobile device to connect...
+                          </div>
 
-                {/* Instructions */}
-                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">How to connect</p>
-                  <ol className="space-y-1 text-[11px] text-slate-400">
-                    <li>1. Click &quot;Generate Pairing Code&quot; above</li>
-                    <li>2. Open <span className="font-mono text-cyan-400">/auctioneer/scanner</span> on your phone</li>
-                    <li>3. Scan the QR code OR enter the 6-digit code</li>
-                    <li>4. The scanner will connect automatically</li>
-                  </ol>
+                          {/* Generate new */}
+                          <button
+                            onClick={() => {
+                              setPairingCode('')
+                            }}
+                            className={cn(secondary, 'w-full text-xs')}
+                          >
+                            Generate New Code
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Instructions */}
+                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">How to connect</p>
+                        <ol className="space-y-1 text-[11px] text-slate-400">
+                          <li>1. Click &quot;Generate Pairing Code&quot; above</li>
+                          <li>2. Open <span className="font-mono text-cyan-400">/auctioneer/scanner</span> on your phone</li>
+                          <li>3. Enter the 6-digit code</li>
+                          <li>4. The scanner will connect automatically</li>
+                        </ol>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </main>
     </div>
   )

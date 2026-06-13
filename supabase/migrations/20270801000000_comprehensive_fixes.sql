@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS public.broadcast_officers (
 CREATE INDEX IF NOT EXISTS idx_broadcast_officers_stream ON public.broadcast_officers(stream_id);
 
 CREATE OR REPLACE FUNCTION public.assign_broadofficer(
-    p_user_id UUID, -- The officer to assign
+    p_officer_id UUID, -- The officer to assign
     p_stream_id UUID DEFAULT NULL -- Optional stream_id for stream-specific officers
 )
 RETURNS VOID
@@ -217,9 +217,9 @@ DECLARE
     v_broadcaster_id UUID;
 BEGIN
     v_broadcaster_id := auth.uid();
-    
+
     INSERT INTO public.broadcast_officers (broadcaster_id, officer_id, stream_id)
-    VALUES (v_broadcaster_id, p_user_id, p_stream_id)
+    VALUES (v_broadcaster_id, p_officer_id, p_stream_id)
     ON CONFLICT (broadcaster_id, officer_id, stream_id) DO NOTHING;
 END;
 $$;

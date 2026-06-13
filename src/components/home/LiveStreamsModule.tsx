@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Video, Star, Trophy } from 'lucide-react'
+import { Users, Video, Star, Trophy, TrendingUp, Flame, Zap, Crown, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { trollCityTheme } from '@/styles/trollCityTheme'
 import { useLiveStreams } from '@/hooks/useQueries'
@@ -16,10 +16,27 @@ interface Stream {
   is_featured?: boolean
   likes_count?: number
   gifts_value?: number
+  visibility_score?: number
+  hot_score?: number
+  is_rising?: boolean
+  is_trending?: boolean
+  momentum_level?: number
+  velocity_trend?: string
   user_profiles?: {
     username: string | null
     avatar_url: string | null
   }
+}
+
+interface SectionConfig {
+  key: string
+  label: string
+  icon: React.ReactNode
+  description: string
+  filter: (s: Stream) => boolean
+  sort: (a: Stream, b: Stream) => number
+  badgeColor: string
+  limit: number
 }
 
 interface LiveStreamsModuleProps {
@@ -28,52 +45,27 @@ interface LiveStreamsModuleProps {
 
 export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModuleProps) {
   const [streams, setStreams] = useState<Stream[]>([])
-  const [rankings, setRankings] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
-  // Use centralized query hook with shared cache
   const { data: streamsData, isLoading: streamsLoading } = useLiveStreams({
-    refetchInterval: 60000, // Poll less frequently - every 60s when idle
+    refetchInterval: 60000,
     enabled: true
   })
 
-  // Fetch rankings separately (less frequent)
-  useEffect(() => {
-    const fetchRankings = async () => {
-      try {
-        const { data: rankingsData } = await supabase
-          .from('broadcast_rankings')
-          .select('stream_id, rank_position')
-          .order('rank_position', { ascending: true })
-          .limit(100)
-
-        const rankingsMap = new Map<string, number>()
-        rankingsData?.forEach((r) => {
-          rankingsMap.set(r.stream_id, r.rank_position)
-        })
-        
-        setRankings(rankingsMap)
-      } catch (err) {
-        console.error('Error fetching rankings:', err)
-      }
-    }
-
-    fetchRankings()
-    // Refresh rankings every 5 minutes (not needed as frequently)
-    const interval = setInterval(fetchRankings, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Transform data from centralized query
   useEffect(() => {
     if (streamsData) {
       const normalized = (streamsData || []).map((row: any) => ({
         ...row,
         user_profiles: Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles,
-        status: 'live' as const
+        status: 'live' as const,
+        visibility_score: row.visibility_score || (row as any).final_visibility_score || 0,
+        hot_score: row.hot_score || 0,
+        is_rising: row.is_rising || false,
+        is_trending: row.is_trending || false,
+        momentum_level: row.momentum_level || (row as any).stream_momentum?.momentum || 0,
+        velocity_trend: row.velocity_trend || (row as any).stream_momentum?.velocity_trend || 'stable',
       }))
-      
       setStreams(normalized as Stream[])
       setLoading(false)
     } else {
@@ -81,16 +73,55 @@ export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModulePr
     }
   }, [streamsData, streamsLoading])
 
-  // Sort streams: featured first, then by viewer count
-  const sortedStreams = useMemo(() => {
-    return [...streams].sort((a, b) => {
-      // Featured streams always first
-      if (a.is_featured && !b.is_featured) return -1
-      if (!a.is_featured && b.is_featured) return 1
-      // Then by viewer count
-      return (b.viewer_count || b.current_viewers || 0) - (a.viewer_count || a.current_viewers || 0)
-    })
-  }, [streams])
+  const sections: SectionConfig[] = useMemo(() => [
+    {
+      key: 'featured',
+      label: 'Featured',
+      icon: <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />,
+      description: 'Hand-picked by our team',
+      filter: (s) => s.is_featured === true,
+      sort: (a, b) => (b.visibility_score || 0) - (a.visibility_score || 0),
+      badgeColor: 'bg-gradient-to-r from-pink-600 to-purple-600',
+      limit: 4,
+    },
+    {
+      key: 'trending',
+      label: 'Trending Now',
+      icon: <Flame className="w-5 h-5 text-orange-400" />,
+      description: 'Hottest streams right now',
+      filter: (s) => (s.hot_score || 0) > 50 || s.is_trending === true,
+      sort: (a, b) => (b.hot_score || 0) - (a.hot_score || 0),
+      badgeColor: 'bg-gradient-to-r from-orange-500 to-red-500',
+      limit: 6,
+    },
+    {
+      key: 'rising',
+      label: 'Rising',
+      icon: <TrendingUp className="w-5 h-5 text-green-400" />,
+      description: 'Fastest growing streams',
+      filter: (s) => s.is_rising === true,
+      sort: (a, b) => (b.momentum_level || 0) - (a.momentum_level || 0),
+      badgeColor: 'bg-gradient-to-r from-green-500 to-emerald-400',
+      limit: 6,
+    },
+    {
+      key: 'live',
+      label: 'All Live Streams',
+      icon: <Trophy className="w-5 h-5 text-cyan-400" />,
+      description: 'Ranked by visibility score',
+      filter: () => true,
+      sort: (a, b) => (b.visibility_score || b.current_viewers || 0) - (a.visibility_score || a.current_viewers || 0),
+      badgeColor: '',
+      limit: 100,
+    },
+  ], [])
+
+  const sectionStreams = useMemo(() => {
+    return sections.map(section => ({
+      ...section,
+      streams: streams.filter(section.filter).sort(section.sort).slice(0, section.limit),
+    }))
+  }, [streams, sections])
 
   const handleJoin = (streamId: string) => {
     if (!onRequireAuth('join live streams')) return
@@ -122,29 +153,65 @@ export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModulePr
     )
   }
 
-  // Get featured streams count
-  const featuredCount = streams.filter(s => s.is_featured).length
+  const getSectionBadge = (section: SectionConfig) => {
+    switch (section.key) {
+      case 'featured':
+        return (
+          <span className="px-2 py-1 bg-gradient-to-r from-pink-600 to-purple-600 text-white text-xs font-bold rounded flex items-center gap-1">
+            <Star className="w-3 h-3 fill-white" />
+            FEATURED
+          </span>
+        )
+      case 'trending':
+        return (
+          <span className="px-2 py-1 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs font-bold rounded flex items-center gap-1">
+            <Flame className="w-3 h-3" />
+            TRENDING
+          </span>
+        )
+      case 'rising':
+        return (
+          <span className="px-2 py-1 bg-gradient-to-r from-green-500 to-emerald-400 text-white text-xs font-bold rounded flex items-center gap-1">
+            <Zap className="w-3 h-3" />
+            RISING
+          </span>
+        )
+      default:
+        return null
+    }
+  }
 
   return (
-    <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-      {/* Featured Section */}
-      {featuredCount > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-            <h3 className="text-lg font-semibold text-white">Featured Broadcasters</h3>
-            <span className="text-xs text-slate-400">(Pinned)</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sortedStreams.filter(s => s.is_featured).map((stream) => {
-              const rank = rankings.get(stream.id)
-              return (
+    <div className="max-h-[800px] overflow-y-auto pr-2 custom-scrollbar space-y-6">
+      {sectionStreams.map((section) => {
+        if (section.streams.length === 0) return null
+        const isSpecialSection = section.key !== 'live'
+
+        return (
+          <div key={section.key}>
+            <div className="flex items-center gap-2 mb-3">
+              {section.icon}
+              <h3 className="text-lg font-semibold text-white">{section.label}</h3>
+              {getSectionBadge(section)}
+              {section.key !== 'live' && (
+                <span className="text-xs text-slate-400">({section.streams.length})</span>
+              )}
+            </div>
+            <div className={`grid gap-4 ${isSpecialSection ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
+              {section.streams.map((stream) => (
                 <div
                   key={stream.id}
                   onClick={() => handleJoin(stream.id)}
-                  className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl overflow-hidden cursor-pointer hover:border-yellow-400/40 transition-all duration-300 hover:shadow-lg hover:shadow-yellow-500/10 hover:-translate-y-1 border-2 border-yellow-500/30`}
+                  className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 ${
+                    isSpecialSection && section.key === 'featured'
+                      ? 'hover:border-yellow-400/40 hover:shadow-lg hover:shadow-yellow-500/10 border-2 border-yellow-500/30'
+                      : isSpecialSection && section.key === 'trending'
+                      ? 'hover:border-orange-400/40 hover:shadow-lg hover:shadow-orange-500/10 border border-orange-500/20'
+                      : isSpecialSection && section.key === 'rising'
+                      ? 'hover:border-green-400/40 hover:shadow-lg hover:shadow-green-500/10 border border-green-500/20'
+                      : 'hover:border-cyan-400/40 hover:shadow-lg hover:shadow-cyan-500/10'
+                  }`}
                 >
-                  {/* Thumbnail */}
                   <div className="relative aspect-video bg-black/40 flex items-center justify-center overflow-hidden">
                     {stream.thumbnail_url ? (
                       <img src={stream.thumbnail_url} alt={stream.title || 'Live stream'} className="w-full h-full object-cover" />
@@ -155,41 +222,42 @@ export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModulePr
                         <Video className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-white/20" />
                       </div>
                     )}
-                    
-                    {/* Badges */}
+
                     <div className="absolute top-3 left-3 flex items-center gap-2">
                       <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded flex items-center gap-1 shadow-lg shadow-red-900/20 animate-pulse">
                         <span className="w-2 h-2 bg-white rounded-full" />
                         LIVE
                       </span>
-                      <span className="px-2 py-1 bg-yellow-600 text-white text-xs font-bold rounded flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-white" />
-                        FEATURED
-                      </span>
+                      {stream.velocity_trend === 'accelerating' && (
+                        <span className="px-2 py-1 bg-green-600 text-white text-xs font-bold rounded flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          FAST
+                        </span>
+                      )}
                     </div>
 
-                    {/* Ranking */}
-                    {rank && rank <= 10 && (
+                    {stream.is_rising && section.key !== 'rising' && (
                       <div className="absolute top-3 right-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                          rank === 1 ? 'bg-yellow-500 text-black' :
-                          rank === 2 ? 'bg-slate-300 text-black' :
-                          rank === 3 ? 'bg-amber-600 text-white' :
-                          'bg-slate-700 text-white'
-                        }`}>
-                          #{rank}
+                        <div className="px-2 py-1 bg-green-500/80 text-white text-xs font-bold rounded flex items-center gap-1">
+                          <Zap className="w-3 h-3" />
+                          {Math.round(stream.momentum_level || 0)}
                         </div>
                       </div>
                     )}
 
-                    {/* Viewer Count */}
+                    {stream.visibility_score !== undefined && stream.visibility_score > 0 && (
+                      <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-medium text-white/90">
+                        <Sparkles className="w-3 h-3 text-yellow-400" />
+                        {Math.round(stream.visibility_score)}
+                      </div>
+                    )}
+
                     <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-medium text-white/90">
                       <Users className="w-3 h-3" />
                       {stream.current_viewers || stream.viewer_count || 0}
                     </div>
                   </div>
 
-                  {/* Stream Info */}
                   <div className="p-4">
                     <div className="flex gap-3">
                       <div className="flex-shrink-0">
@@ -214,98 +282,11 @@ export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModulePr
                     </div>
                   </div>
                 </div>
-              )
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* All Streams Section */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Trophy className="w-5 h-5 text-cyan-400" />
-          <h3 className="text-lg font-semibold text-white">All Live Streams</h3>
-          <span className="text-xs text-slate-400">(Top 100)</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sortedStreams.filter(s => !s.is_featured).map((stream) => {
-            const rank = rankings.get(stream.id)
-            return (
-              <div
-                key={stream.id}
-                onClick={() => handleJoin(stream.id)}
-                className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-2xl overflow-hidden cursor-pointer hover:border-cyan-400/40 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 hover:-translate-y-1`}
-              >
-                {/* Thumbnail */}
-                <div className="relative aspect-video bg-black/40 flex items-center justify-center overflow-hidden">
-                  {stream.thumbnail_url ? (
-                    <img src={stream.thumbnail_url} alt={stream.title || 'Live stream'} className="w-full h-full object-cover" />
-                  ) : stream.user_profiles?.avatar_url ? (
-                    <img src={stream.user_profiles.avatar_url} alt={stream.user_profiles.username || ''} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 to-cyan-900/20">
-                      <Video className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-white/20" />
-                    </div>
-                  )}
-                  
-                  {/* Live Badge */}
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
-                    <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded flex items-center gap-1 shadow-lg shadow-red-900/20 animate-pulse">
-                      <span className="w-2 h-2 bg-white rounded-full" />
-                      LIVE
-                    </span>
-                  </div>
-
-                  {/* Ranking Number */}
-                  {rank && (
-                    <div className="absolute top-3 right-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                        rank === 1 ? 'bg-yellow-500 text-black' :
-                        rank === 2 ? 'bg-slate-300 text-black' :
-                        rank === 3 ? 'bg-amber-600 text-white' :
-                        'bg-slate-700 text-white'
-                      }`}>
-                        #{rank}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Viewer Count */}
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-medium text-white/90">
-                    <Users className="w-3 h-3" />
-                    {stream.current_viewers || stream.viewer_count || 0}
-                  </div>
-                </div>
-
-                {/* Stream Info */}
-                <div className="p-4">
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden border border-white/10">
-                        {stream.user_profiles?.avatar_url ? (
-                          <img src={stream.user_profiles.avatar_url} alt={stream.user_profiles.username || ''} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-600 text-white font-bold text-lg">
-                            {stream.user_profiles?.username?.[0]?.toUpperCase() || '?'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white font-medium truncate hover:text-cyan-400 transition-colors">
-                        {stream.title || 'Untitled Stream'}
-                      </p>
-                      <p className="text-slate-400 text-sm truncate">
-                        {stream.user_profiles?.username || 'Unknown streamer'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+        )
+      })}
     </div>
   )
 }

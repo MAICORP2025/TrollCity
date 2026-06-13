@@ -30,7 +30,7 @@ import {
   getUtromailAccount,
 } from '@/services/utromailService';
 import type { UtromailThread, UtromailRequest, UtromailMessage } from '@/types/mail';
-import UtromailCompose from './UtromailCompose';
+import UtromailCompose from '@/pages/utromail/UtromailCompose';
 import { toast } from 'sonner';
 
 const glass = 'border border-white/10 bg-[#070b19]/70 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]';

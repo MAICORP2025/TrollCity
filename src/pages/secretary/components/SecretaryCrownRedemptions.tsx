@@ -6,6 +6,8 @@ import {
   Coins,
   Crown,
   Gift,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   Mail,
@@ -19,8 +21,6 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface RedemptionRecord {
   id: string
@@ -47,12 +47,9 @@ interface RedemptionRecord {
 
 type FilterStatus = 'all' | 'pending' | 'approved' | 'fulfilled' | 'rejected' | 'cancelled'
 
-// ─── Component ───────────────────────────────────────────────────────────────
-
-export default function AdminCrownRedemptions() {
+export default function SecretaryCrownRedemptions() {
   const { user } = useAuthStore()
 
-  // State
   const [redemptions, setRedemptions] = useState<RedemptionRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
@@ -62,8 +59,7 @@ export default function AdminCrownRedemptions() {
   const [notes, setNotes] = useState('')
   const [giftcardCode, setGiftcardCode] = useState('')
   const [showDetailModal, setShowDetailModal] = useState(false)
-
-  // ── Fetch redemptions ────────────────────────────────────────────────────
+  const [showCode, setShowCode] = useState(false)
 
   const fetchRedemptions = useCallback(async () => {
     setLoading(true)
@@ -112,7 +108,7 @@ export default function AdminCrownRedemptions() {
 
       setRedemptions(results)
     } catch (err) {
-      console.error('[AdminCrownRedemptions] Fetch error:', err)
+      console.error('[SecretaryCrownRedemptions] Fetch error:', err)
       toast.error('Failed to load redemptions')
     } finally {
       setLoading(false)
@@ -122,8 +118,6 @@ export default function AdminCrownRedemptions() {
   useEffect(() => {
     fetchRedemptions()
   }, [fetchRedemptions])
-
-  // ── Admin actions ────────────────────────────────────────────────────────
 
   const handleApprove = useCallback(async (redemption: RedemptionRecord) => {
     setActionLoading(true)
@@ -162,6 +156,7 @@ export default function AdminCrownRedemptions() {
         setShowDetailModal(false)
         setNotes('')
         setGiftcardCode('')
+        setShowCode(false)
         fetchRedemptions()
       } else {
         toast.error(data?.error || 'Failed to fulfill')
@@ -179,7 +174,7 @@ export default function AdminCrownRedemptions() {
       const { data, error } = await supabase.rpc('admin_reject_redemption', {
         p_redemption_id: redemption.id,
         p_admin_id: user!.id,
-        p_notes: notes || 'Rejected by admin',
+        p_notes: notes || 'Rejected',
       })
       if (error) throw error
       if (data?.success) {
@@ -196,8 +191,6 @@ export default function AdminCrownRedemptions() {
       setActionLoading(false)
     }
   }, [user?.id, notes, fetchRedemptions])
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -235,8 +228,6 @@ export default function AdminCrownRedemptions() {
     rejected: redemptions.filter((r) => r.status === 'rejected').length,
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
-
   const filters: { key: FilterStatus; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: statusCounts.all },
     { key: 'pending', label: 'Pending', count: statusCounts.pending },
@@ -247,7 +238,6 @@ export default function AdminCrownRedemptions() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-2xl border border-amber-300/25 bg-amber-400/10">
@@ -260,14 +250,13 @@ export default function AdminCrownRedemptions() {
         </div>
         <button
           onClick={fetchRedemptions}
-          className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-400/20"
+          className="inline-flex items-center gap-2 rounded-xl border border-purple-300/20 bg-purple-400/10 px-4 py-2 text-xs font-bold text-purple-200 hover:bg-purple-400/20"
         >
           <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
           Refresh
         </button>
       </div>
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
         <input
@@ -275,11 +264,10 @@ export default function AdminCrownRedemptions() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search by username, reward, or ID..."
-          className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 outline-none focus:border-cyan-300/40"
+          className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-300/40"
         />
       </div>
 
-      {/* Status filters */}
       <div className="flex flex-wrap gap-2">
         {filters.map((f) => (
           <button
@@ -288,7 +276,7 @@ export default function AdminCrownRedemptions() {
             className={cn(
               'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition',
               filterStatus === f.key
-                ? 'border-cyan-300/40 bg-cyan-400/15 text-cyan-200'
+                ? 'border-purple-300/40 bg-purple-400/15 text-purple-200'
                 : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10',
             )}
           >
@@ -298,7 +286,6 @@ export default function AdminCrownRedemptions() {
         ))}
       </div>
 
-      {/* Redemptions list */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
@@ -314,7 +301,13 @@ export default function AdminCrownRedemptions() {
           {redemptions.map((r) => (
             <button
               key={r.id}
-              onClick={() => { setSelectedRedemption(r); setShowDetailModal(true); setNotes(''); setGiftcardCode('') }}
+              onClick={() => {
+                setSelectedRedemption(r)
+                setShowDetailModal(true)
+                setNotes('')
+                setGiftcardCode('')
+                setShowCode(false)
+              }}
               className="flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]"
             >
               <div className={cn(
@@ -349,21 +342,19 @@ export default function AdminCrownRedemptions() {
         </div>
       )}
 
-      {/* ── Detail Modal ──────────────────────────────────────────────────── */}
       {showDetailModal && selectedRedemption && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-cyan-300/20 bg-[#0b1628] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-3xl border border-purple-300/20 bg-[#0A0814] p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-black">Redemption Details</h3>
               <button
-                onClick={() => setShowDetailModal(false)}
+                onClick={() => { setShowDetailModal(false); setShowCode(false) }}
                 className="grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 hover:bg-white/10"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* User info */}
             <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
               <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 place-items-center rounded-full bg-amber-400/10">
@@ -380,7 +371,6 @@ export default function AdminCrownRedemptions() {
               </div>
             </div>
 
-            {/* Redemption details */}
             <div className="mb-4 space-y-2">
               <div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2">
                 <span className="text-xs text-slate-400">Type</span>
@@ -424,11 +414,19 @@ export default function AdminCrownRedemptions() {
               )}
               {selectedRedemption.giftcard_code && (
                 <div className="rounded-lg bg-white/[0.03] px-3 py-2">
-                  <div className="flex items-center gap-1.5">
-                    <KeyRound className="h-3 w-3 text-amber-400" />
+                  <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-400">Gift Card Code</span>
+                    <button
+                      onClick={() => setShowCode(!showCode)}
+                      className="flex items-center gap-1 text-[10px] text-purple-300 hover:text-purple-200"
+                    >
+                      {showCode ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      {showCode ? 'Hide' : 'Show'}
+                    </button>
                   </div>
-                  <p className="mt-0.5 font-mono text-xs font-bold text-emerald-300">{selectedRedemption.giftcard_code}</p>
+                  {showCode && (
+                    <p className="mt-1 font-mono text-xs font-bold text-emerald-300">{selectedRedemption.giftcard_code}</p>
+                  )}
                 </div>
               )}
               {selectedRedemption.notes && (
@@ -439,7 +437,6 @@ export default function AdminCrownRedemptions() {
               )}
             </div>
 
-            {/* Admin notes input */}
             {(selectedRedemption.status === 'pending' || selectedRedemption.status === 'approved') && (
               <div className="mb-4 space-y-3">
                 <div>
@@ -449,7 +446,7 @@ export default function AdminCrownRedemptions() {
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Add fulfillment notes..."
                     rows={2}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-cyan-300/40"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-purple-300/40"
                   />
                 </div>
                 {selectedRedemption.reward_type === 'gift_card' && selectedRedemption.status === 'approved' && (
@@ -463,7 +460,7 @@ export default function AdminCrownRedemptions() {
                       value={giftcardCode}
                       onChange={(e) => setGiftcardCode(e.target.value)}
                       placeholder="Enter the gift card code to send to user..."
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-cyan-300/40"
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder:text-slate-600 outline-none focus:border-purple-300/40"
                     />
                     <p className="mt-1 text-[10px] text-slate-500">
                       This code will be sent to the user via in-app notification when you mark as fulfilled.
@@ -473,7 +470,6 @@ export default function AdminCrownRedemptions() {
               </div>
             )}
 
-            {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
               {selectedRedemption.status === 'pending' && (
                 <>

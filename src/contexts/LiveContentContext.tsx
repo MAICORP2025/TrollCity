@@ -13,6 +13,12 @@ export interface LiveItem {
   battleFormat?: string
   battleStatus?: string
   category?: string | null
+  visibilityScore?: number
+  hotScore?: number
+  isRising?: boolean
+  isTrending?: boolean
+  momentumLevel?: number
+  velocityTrend?: string
 }
 
 export interface AuctionShow {
@@ -30,6 +36,10 @@ export interface AuctionShow {
   current_lot_id?: string | null
   hls_url?: string | null
   egress_id?: string | null
+  visibilityScore?: number
+  hotScore?: number
+  isRising?: boolean
+  isTrending?: boolean
 }
 
 interface LiveContentState {
@@ -56,41 +66,72 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
 
   const fetchLiveContent = useCallback(async () => {
     try {
-      const { data: streamsData, error: streamsError } = await supabase
-        .from('streams')
-        .select(`
-          id,
-          title,
-          current_viewers,
-          viewer_count,
-          is_featured,
-          battle_mode,
-          battle_format,
-          battle_status,
-          category,
-          broadcaster_id,
-          user_profiles!streams_broadcaster_id_fkey(username, avatar_url)
-        `)
-        .eq('is_live', true)
-        .order('is_featured', { ascending: false })
-        .order('current_viewers', { ascending: false })
-        .limit(100)
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_active_streams_v2', {
+        p_limit: 100,
+        p_offset: 0,
+        p_sort_by: 'visibility'
+      })
 
-      if (streamsError) throw streamsError
+      if (rpcError) {
+        const { data: streamsData, error: streamsError } = await supabase
+          .from('streams')
+          .select(`
+            id,
+            title,
+            current_viewers,
+            viewer_count,
+            is_featured,
+            battle_mode,
+            battle_format,
+            battle_status,
+            category,
+            broadcaster_id,
+            user_profiles!streams_broadcaster_id_fkey(username, avatar_url)
+          `)
+          .eq('is_live', true)
+          .order('current_viewers', { ascending: false })
+          .limit(100)
+
+        if (streamsError) throw streamsError
+        if (!mountedRef.current) return
+
+        const streams: LiveItem[] = (streamsData || []).map((stream: any) => ({
+          id: stream.id,
+          title: stream.title || 'Untitled Stream',
+          type: 'stream' as const,
+          viewerCount: stream.current_viewers || stream.viewer_count || 0,
+          streamerName: stream.user_profiles?.username || 'Unknown',
+          streamerAvatar: stream.user_profiles?.avatar_url || null,
+          isFeatured: stream.is_featured || false,
+          isBattle: stream.battle_mode === 'universal',
+          battleFormat: stream.battle_format,
+          battleStatus: stream.battle_status,
+          category: stream.category || null,
+        }))
+
+        setLiveItems(streams)
+        setTotalViewers(streams.reduce((sum, item) => sum + item.viewerCount, 0))
+        return
+      }
+
       if (!mountedRef.current) return
 
-      const streams: LiveItem[] = (streamsData || []).map((stream: any) => ({
-        id: stream.id,
-        title: stream.title || 'Untitled Stream',
+      const streams: LiveItem[] = (rpcData || []).map((row: any) => ({
+        id: row.id,
+        title: row.title || 'Untitled Stream',
         type: 'stream' as const,
-        viewerCount: stream.current_viewers || stream.viewer_count || 0,
-        streamerName: stream.user_profiles?.username || 'Unknown',
-        streamerAvatar: stream.user_profiles?.avatar_url || null,
-        isFeatured: stream.is_featured || false,
-        isBattle: stream.battle_mode === 'universal',
-        battleFormat: stream.battle_format,
-        battleStatus: stream.battle_status,
-        category: stream.category || null,
+        viewerCount: row.current_viewers || 0,
+        streamerName: row.broadcaster_username || 'Unknown',
+        streamerAvatar: row.broadcaster_avatar || null,
+        isFeatured: row.visibility_score > 0,
+        isBattle: false,
+        category: row.category || null,
+        visibilityScore: row.visibility_score || 0,
+        hotScore: row.hot_score || 0,
+        isRising: row.is_rising || false,
+        isTrending: row.is_trending || false,
+        momentumLevel: row.momentum_level || 0,
+        velocityTrend: row.stream_momentum?.velocity_trend || 'stable',
       }))
 
       setLiveItems(streams)
@@ -112,7 +153,7 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
         .limit(5)
 
       if (error) throw error
-      if (mountedRef.current) setLiveAuctions(data || [])
+      if (!mountedRef.current) setLiveAuctions(data || [])
     } catch (err) {
       console.error('Error fetching live auctions:', err)
     }
@@ -153,11 +194,18 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
     })
     auctionChannel.subscribe()
 
+    const visibilityChannel = supabase.channel('home:visibility-scores')
+    visibilityChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, () => {
+      fetchLiveContent()
+    })
+    visibilityChannel.subscribe()
+
     return () => {
       clearInterval(streamInterval)
       clearInterval(auctionInterval)
       try { supabase.removeChannel(channel) } catch {}
       try { supabase.removeChannel(auctionChannel) } catch {}
+      try { supabase.removeChannel(visibilityChannel) } catch {}
     }
   }, [fetchLiveContent, fetchLiveAuctions])
 

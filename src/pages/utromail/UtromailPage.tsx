@@ -5,6 +5,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
+import { supabase } from '@/lib/supabase';
 import {
   Search,
   PenSquare,
@@ -216,6 +217,93 @@ export default function UtromailPage() {
     setShowMobileChat(false);
     setActiveConversationId(null);
   };
+
+  // Real-time: watch for new message notifications for this user
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const notifChannel = supabase
+      .channel(`utromail-notifs:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'utromail_notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchThreads();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(notifChannel);
+    };
+  }, [user?.id, fetchThreads]);
+
+  // Real-time: watch for new messages in the active thread
+  useEffect(() => {
+    if (!activeConversationId || !user?.id) return;
+
+    const msgChannel = supabase
+      .channel(`utromail-thread:${activeConversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'utromail_messages',
+          filter: `thread_id=eq.${activeConversationId}`,
+        },
+        async (payload) => {
+          const newMsg = payload.new as any;
+          if (newMsg.sender_id === user.id) return;
+
+          const { data: senderProfile } = await supabase
+            .from('user_profiles')
+            .select('username, display_name, avatar_url')
+            .eq('id', newMsg.sender_id)
+            .maybeSingle();
+
+          const mappedMsg: UtromailMessage = {
+            id: newMsg.id,
+            thread_id: newMsg.thread_id,
+            sender_id: newMsg.sender_id,
+            sender_mail_address: newMsg.sender_mail_address,
+            recipient_id: newMsg.recipient_id,
+            recipient_mail_address: newMsg.recipient_mail_address,
+            subject: newMsg.subject,
+            body: newMsg.body,
+            body_html: newMsg.body_html,
+            message_type: newMsg.message_type,
+            is_starred: false,
+            is_draft: false,
+            parent_message_id: newMsg.parent_message_id,
+            sent_at: newMsg.sent_at,
+            created_at: newMsg.created_at,
+            updated_at: newMsg.updated_at,
+            sender_name: (senderProfile as any)?.display_name || (senderProfile as any)?.username || null,
+            sender_username: (senderProfile as any)?.username || null,
+            sender_avatar: (senderProfile as any)?.avatar_url || null,
+          };
+
+          setMessages(prev => {
+            if (prev.some(m => m.id === mappedMsg.id)) return prev;
+            return [...prev, mappedMsg];
+          });
+
+          await markThreadAsRead(activeConversationId, user.id);
+          fetchThreads();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(msgChannel);
+    };
+  }, [activeConversationId, user?.id, fetchThreads]);
 
   const handleDeleteConversation = async () => {
     if (!activeConversationId || !user?.id) return;

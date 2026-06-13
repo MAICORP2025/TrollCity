@@ -4,8 +4,11 @@ import {
   CheckCircle2,
   Coins,
   Crown,
+  Eye,
+  EyeOff,
   Gift,
   History,
+  KeyRound,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -30,6 +33,7 @@ interface RedemptionRecord {
   email_sent: boolean
   fulfilled_at: string | null
   notes: string | null
+  giftcard_code: string | null
   created_at: string
   updated_at: string
 }
@@ -70,6 +74,7 @@ export default function CrownRedemption() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [pendingAction, setPendingAction] = useState<'convert' | 'gift_card' | null>(null)
+  const [visibleCodes, setVisibleCodes] = useState<Set<string>>(new Set())
 
   // ── Fetch crown balance ──────────────────────────────────────────────────
 
@@ -526,7 +531,9 @@ export default function CrownRedemption() {
                 <p className="mt-1 text-xs text-slate-500">Your redemption history will appear here</p>
               </div>
             ) : (
-              redemptions.map((r) => (
+              redemptions.map((r) => {
+                const codeVisible = visibleCodes.has(r.id)
+                return (
                 <div
                   key={r.id}
                   className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
@@ -568,13 +575,44 @@ export default function CrownRedemption() {
                       )}
                     </div>
                   </div>
+                  {/* Gift card code display for fulfilled gift card redemptions */}
+                  {r.status === 'fulfilled' && r.giftcard_code && (
+                    <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <KeyRound className="h-3.5 w-3.5 text-emerald-400" />
+                          <span className="text-[10px] font-bold text-emerald-300">Gift Card Code</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setVisibleCodes(prev => {
+                              const next = new Set(prev)
+                              if (next.has(r.id)) next.delete(r.id)
+                              else next.add(r.id)
+                              return next
+                            })
+                          }}
+                          className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-200"
+                        >
+                          {codeVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                          {codeVisible ? 'Hide' : 'View Code'}
+                        </button>
+                      </div>
+                      {codeVisible && (
+                        <p className="mt-2 font-mono text-sm font-black tracking-wider text-emerald-300">
+                          {r.giftcard_code}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {r.notes && (
                     <p className="mt-2 rounded-lg bg-white/[0.03] px-3 py-1.5 text-[10px] text-slate-400">
                       Note: {r.notes}
                     </p>
                   )}
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         )}

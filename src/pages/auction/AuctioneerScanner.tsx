@@ -9,6 +9,7 @@ import {
   Flashlight,
   FlashlightOff,
   Loader2,
+  Monitor,
   QrCode,
   RefreshCw,
   Scan,
@@ -27,6 +28,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { generateUUID } from '@/lib/uuid'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,8 @@ interface DeviceSession {
   status: 'pending' | 'paired' | 'connected' | 'disconnected' | 'expired'
   connected_at: string | null
   last_seen_at: string
+  device_name?: string | null
+  device_info?: Record<string, any> | null
 }
 
 interface ScanResult {
@@ -52,23 +56,33 @@ interface ScanResult {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function generatePairingCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000))
-}
-
 function generateSessionToken(): string {
   return generateUUID()
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+function getIsMobileBrowser(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  // Check touch capability
+  const hasTouch = (navigator.maxTouchPoints ?? 0) > 0
+  // Check user agent for mobile keywords
+  const ua = navigator.userAgent.toLowerCase()
+  const isMobileUA = /android|iphone|ipad|ipod|blackberry|windows phone|mobile|tablet/i.test(ua)
+  // Check screen width
+  const isNarrowScreen = (window.visualViewport?.width ?? window.innerWidth) < 768
+  // Consider it mobile if: narrow screen OR (mobile UA with touch)
+  return isNarrowScreen || (isMobileUA && hasTouch)
+}
+
 export default function AuctioneerScanner() {
   const { user, profile } = useAuthStore()
+  const { isMobileWidth } = useIsMobile()
+  const isMobileDevice = isMobileWidth || getIsMobileBrowser()
 
   // Connection state
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
   const [session, setSession] = useState<DeviceSession | null>(null)
-  const [pairingCode, setPairingCode] = useState('')
   const [manualCode, setManualCode] = useState('')
   const [auctionId, setAuctionId] = useState<string | null>(null)
   const [activeAuctions, setActiveAuctions] = useState<Array<{ id: string; title: string }>>([])
@@ -82,7 +96,7 @@ export default function AuctioneerScanner() {
   const [scanCount, setScanCount] = useState(0)
 
   // UI state
-  const [showPairingModal, setShowPairingModal] = useState(true)
+  const [showPairingModal, setShowPairingModal] = useState(false)
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -316,94 +330,6 @@ export default function AuctioneerScanner() {
     if (navigator.vibrate) navigator.vibrate(50)
   }, [manualCode, connectionState, session, sendScanToDesktop])
 
-  // ── Pairing: create a new device session ──────────────────────────────────
-
-  const createPairingSession = useCallback(async () => {
-    if (!user?.id) return
-
-    setConnectionState('pairing')
-    setError(null)
-
-    const code = generatePairingCode()
-    const token = generateSessionToken()
-
-    try {
-      const { data, error: dbError } = await supabase
-        .from('auction_device_sessions')
-        .insert({
-          auctioneer_id: user.id,
-          auction_id: auctionId,
-          pairing_code: code,
-          session_token: token,
-          device_id: `mobile-${generateUUID().slice(0, 8)}`,
-          device_name: navigator.userAgent?.match(/Android|iPhone|iPad/i)?.[0] || 'Mobile Device',
-          device_info: {
-            platform: navigator.platform,
-            userAgent: navigator.userAgent,
-            screen: `${screen.width}x${screen.height}`,
-          },
-          status: 'pending',
-        })
-        .select('*')
-        .single()
-
-      if (dbError) throw dbError
-
-      setPairingCode(code)
-      setSession(data as DeviceSession)
-
-      // Subscribe to session updates (desktop may update status)
-      const channel = supabase
-        .channel(`scanner_session_${data.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'auction_device_sessions',
-            filter: `id=eq.${data.id}`,
-          },
-          (payload) => {
-            const updated = payload.new as DeviceSession
-            setSession(updated)
-            if (updated.status === 'expired') {
-              setConnectionState('error')
-              setError('Pairing code expired. Please generate a new one.')
-            }
-          },
-        )
-        .subscribe()
-
-      scanChannelRef.current = channel
-
-      // Mark the session as connected immediately since the scanner is active
-      // This ensures the desktop side sees the scanner as connected right away
-      // and we don't show the "waiting for desktop" modal
-      void (async () => {
-        try {
-          const { data: updatedSession } = await supabase
-            .from('auction_device_sessions')
-            .update({ status: 'connected', connected_at: new Date().toISOString() })
-            .eq('id', data.id)
-            .select('*')
-            .single()
-          if (updatedSession) {
-            setSession(updatedSession as DeviceSession)
-            setConnectionState('connected')
-            toast.success('Scanner connected!')
-            startHeartbeat()
-          }
-        } catch (err) {
-          console.warn('[Scanner] Failed to mark as connected:', err)
-        }
-      })()
-    } catch (err: any) {
-      console.error('[Scanner] Pairing failed:', err)
-      setError(err?.message || 'Failed to create pairing session')
-      setConnectionState('error')
-    }
-  }, [user?.id, auctionId, session?.status])
-
   // ── Pairing: connect with manual code ─────────────────────────────────────
 
   const connectWithCode = useCallback(async () => {
@@ -510,9 +436,66 @@ export default function AuctioneerScanner() {
     if (scanChannelRef.current) supabase.removeChannel(scanChannelRef.current)
     setSession(null)
     setConnectionState('disconnected')
-    setPairingCode('')
     stopCamera()
   }, [session?.id, stopCamera])
+
+  // ── Auto-close modal when connected ──────────────────────────────────────
+
+  useEffect(() => {
+    if (connectionState === 'connected' && showPairingModal) {
+      const timer = setTimeout(() => {
+        setShowPairingModal(false)
+      }, 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [connectionState, showPairingModal])
+
+  // ── Cross-device realtime sync ────────────────────────────────────────────
+  // When the same account is used on two devices, this listens for session
+  // updates so both devices reflect the connection state instantly.
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    // Listen for any session updates for this auctioneer
+    const channel = supabase
+      .channel(`scanner_sync_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'auction_device_sessions',
+          filter: `auctioneer_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as DeviceSession
+
+          // If another device connected this session, update local state
+          if (updated.status === 'connected' && session?.id === updated.id) {
+            setSession(updated)
+            if (connectionState !== 'connected') {
+              setConnectionState('connected')
+              toast.success(`Scanner connected: ${updated.device_name || 'Device'}`)
+              startHeartbeat()
+            }
+          }
+
+          // If the session was disconnected/expired from another device
+          if ((updated.status === 'disconnected' || updated.status === 'expired') && session?.id === updated.id) {
+            setSession(null)
+            setConnectionState('disconnected')
+            stopCamera()
+            toast.warning('Scanner disconnected from other device')
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id, session?.id, connectionState, startHeartbeat, stopCamera])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -587,7 +570,77 @@ export default function AuctioneerScanner() {
 
       {/* ── Camera Preview ────────────────────────────────────────────────── */}
       <div className="relative flex-1">
-        {cameraActive ? (
+        {/* Scanner is only available after pairing connection */}
+        {connectionState !== 'connected' ? (
+          /* ── Not connected: show pairing prompt ── */
+          <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
+            <div className="grid h-24 w-24 place-items-center rounded-3xl border border-cyan-300/20 bg-cyan-400/10">
+              {isMobileDevice ? (
+                <Smartphone className="h-12 w-12 text-cyan-300/60" />
+              ) : (
+                <Monitor className="h-12 w-12 text-cyan-300/60" />
+              )}
+            </div>
+            <div className="text-center">
+              <h2 className="text-lg font-black">
+                {isMobileDevice ? 'Mobile Scanner' : 'Web Scanner'}
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                {isMobileDevice
+                  ? 'Connect to your auction to start scanning barcodes'
+                  : 'Connect to start using your camera as a barcode scanner'}
+              </p>
+            </div>
+
+            {/* Connection status indicator */}
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2">
+              <span className={cn(
+                'h-2 w-2 rounded-full',
+                connectionState === 'connecting' || connectionState === 'pairing'
+                  ? 'bg-amber-400 animate-pulse'
+                  : connectionState === 'error'
+                    ? 'bg-red-400'
+                    : 'bg-slate-500',
+              )} />
+              <span className="text-xs font-bold text-slate-400">
+                {connectionState === 'connecting'
+                  ? 'Connecting...'
+                  : connectionState === 'pairing'
+                    ? 'Pairing...'
+                    : connectionState === 'error'
+                      ? 'Connection error'
+                      : 'Not connected'}
+              </span>
+            </div>
+
+            <button
+              onClick={() => setShowPairingModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-200/40 bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_0_26px_rgba(34,211,238,0.28)] transition hover:bg-cyan-200"
+            >
+              {isMobileDevice ? (
+                <><Smartphone className="h-5 w-5" /> Connect Scanner</>
+              ) : (
+                <><Scan className="h-5 w-5" /> Connect & Start Scanner</>
+              )}
+            </button>
+
+            {error && (
+              <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2 text-xs text-red-200">
+                {error}
+              </div>
+            )}
+
+            {/* Info for cross-device usage */}
+            <div className="mt-2 max-w-xs rounded-xl border border-white/5 bg-white/[0.02] p-3 text-center">
+              <p className="text-[10px] text-slate-500">
+                {isMobileDevice
+                  ? 'Generate a code on your desktop auction device, then enter it here to connect.'
+                  : 'Generate a code here, then enter it on your mobile device at /auctioneer/scanner'}
+              </p>
+            </div>
+          </div>
+        ) : cameraActive ? (
+          /* ── Connected + camera active: show scanner ── */
           <div className="relative h-full w-full bg-black">
             <video
               ref={videoRef}
@@ -613,48 +666,79 @@ export default function AuctioneerScanner() {
 
             {/* Camera controls overlay */}
             <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-4">
-              <button
-                onClick={() => setFlashOn(!flashOn)}
-                className={cn(
-                  'grid h-12 w-12 place-items-center rounded-full border backdrop-blur-sm transition',
-                  flashOn
-                    ? 'border-amber-400/40 bg-amber-400/20 text-amber-200'
-                    : 'border-white/20 bg-black/40 text-white/70',
-                )}
-              >
-                {flashOn ? <Flashlight className="h-5 w-5" /> : <FlashlightOff className="h-5 w-5" />}
-              </button>
+              {!isMobileDevice && (
+                <button
+                  onClick={toggleCamera}
+                  className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/40 text-white/70 backdrop-blur-sm"
+                  title="Toggle camera"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
+              )}
+              {isMobileDevice && (
+                <button
+                  onClick={() => setFlashOn(!flashOn)}
+                  className={cn(
+                    'grid h-12 w-12 place-items-center rounded-full border backdrop-blur-sm transition',
+                    flashOn
+                      ? 'border-amber-400/40 bg-amber-400/20 text-amber-200'
+                      : 'border-white/20 bg-black/40 text-white/70',
+                  )}
+                >
+                  {flashOn ? <Flashlight className="h-5 w-5" /> : <FlashlightOff className="h-5 w-5" />}
+                </button>
+              )}
               <button
                 onClick={stopCamera}
                 className="grid h-14 w-14 place-items-center rounded-full border-2 border-red-400/60 bg-red-500/20 text-red-200 backdrop-blur-sm"
               >
                 <CameraOff className="h-6 w-6" />
               </button>
-              <button
-                onClick={toggleCamera}
-                className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/40 text-white/70 backdrop-blur-sm"
-              >
-                <RefreshCw className="h-5 w-5" />
-              </button>
+              {isMobileDevice && (
+                <button
+                  onClick={toggleCamera}
+                  className="grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/40 text-white/70 backdrop-blur-sm"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
+              )}
+              {!isMobileDevice && (
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="relative grid h-12 w-12 place-items-center rounded-full border border-white/20 bg-black/40 text-white/70 backdrop-blur-sm"
+                >
+                  <Clipboard className="h-5 w-5" />
+                  {scanCount > 0 && (
+                    <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-cyan-500 text-[8px] font-black text-white">
+                      {scanCount > 99 ? '99+' : scanCount}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         ) : (
-          /* Camera off state */
+          /* ── Connected but camera off: show start button ── */
           <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
-            <div className="grid h-24 w-24 place-items-center rounded-3xl border border-cyan-300/20 bg-cyan-400/10">
-              <Camera className="h-12 w-12 text-cyan-300/60" />
+            <div className="grid h-24 w-24 place-items-center rounded-3xl border border-emerald-300/20 bg-emerald-400/10">
+              <Camera className="h-12 w-12 text-emerald-300/60" />
             </div>
             <div className="text-center">
-              <h2 className="text-lg font-black">Camera Scanner</h2>
+              <h2 className="text-lg font-black">Scanner Ready</h2>
               <p className="mt-1 text-sm text-slate-400">
-                {barcodeDetectorRef.current
-                  ? 'Point your camera at a barcode or QR code'
-                  : 'Camera scanner — connect to auction first'}
+                {isMobileDevice
+                  ? 'Camera scanner — point at a barcode or QR code'
+                  : 'Click below to start your camera and scan barcodes'}
               </p>
+              {session?.device_name && (
+                <p className="mt-2 text-xs text-emerald-400">
+                  Connected: {session.device_name}
+                </p>
+              )}
             </div>
             <button
               onClick={startCamera}
-              className="inline-flex items-center gap-2 rounded-xl border border-cyan-200/40 bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_0_26px_rgba(34,211,238,0.28)] transition hover:bg-cyan-200"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200/40 bg-emerald-300 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_0_26px_rgba(52,211,153,0.28)] transition hover:bg-emerald-200"
             >
               <Camera className="h-5 w-5" />
               Start Camera
@@ -718,9 +802,9 @@ export default function AuctioneerScanner() {
               {connectionState === 'pairing' || connectionState === 'connecting' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <QrCode className="h-4 w-4" />
+                <Smartphone className="h-4 w-4" />
               )}
-              {connectionState === 'pairing' ? 'Pairing...' : connectionState === 'connecting' ? 'Connecting...' : 'Connect'}
+              {connectionState === 'pairing' ? 'Pairing...' : connectionState === 'connecting' ? 'Connecting...' : 'Connect Scanner'}
             </button>
           )}
 
@@ -765,7 +849,6 @@ export default function AuctioneerScanner() {
                   }
                   setConnectionState('disconnected')
                   setSession(null)
-                  setPairingCode('')
                 }}
                 className="grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 hover:bg-white/10"
               >
@@ -775,39 +858,10 @@ export default function AuctioneerScanner() {
 
             {!session || connectionState !== 'connected' ? (
               <div className="mt-4 space-y-4">
-                {/* Method 1: Generate QR / Pairing Code */}
+                {/* Enter mobile code */}
                 <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Method 1: Pairing Code</p>
-                  {pairingCode ? (
-                    <div className="mt-2 rounded-2xl border border-cyan-300/20 bg-cyan-400/5 p-4 text-center">
-                      <p className="text-[10px] font-bold text-cyan-300 uppercase tracking-widest">Auction Code</p>
-                      <p className="mt-1 text-3xl font-black tracking-[0.3em] text-white">{pairingCode}</p>
-                      <p className="mt-2 text-[10px] text-slate-500">Enter this code on your desktop auction device</p>
-                      <div className="mt-2 flex items-center justify-center gap-1 text-[10px] text-amber-400">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Waiting for desktop to connect...
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={createPairingSession}
-                      className="mt-2 w-full rounded-xl border border-cyan-200/40 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950"
-                    >
-                      Generate Pairing Code
-                    </button>
-                  )}
-                </div>
-
-                {/* Divider */}
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-white/10" />
-                  <span className="text-[10px] font-bold text-slate-500">OR</span>
-                  <div className="h-px flex-1 bg-white/10" />
-                </div>
-
-                {/* Method 2: Enter code from desktop */}
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Method 2: Enter Desktop Code</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Enter Mobile Code</p>
+                  <p className="mt-1 text-[10px] text-slate-500">Generate a code on your mobile device and enter it below.</p>
                   <div className="mt-2 flex gap-2">
                     <input
                       value={manualCode}
@@ -854,12 +908,7 @@ export default function AuctioneerScanner() {
                 <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
                 <p className="mt-2 text-sm font-black text-emerald-200">Connected!</p>
                 <p className="mt-1 text-xs text-slate-400">Scanner is synced with your auction.</p>
-                <button
-                  onClick={() => setShowPairingModal(false)}
-                  className="mt-4 w-full rounded-xl border border-cyan-200/40 bg-cyan-300 px-4 py-2.5 text-sm font-black text-slate-950"
-                >
-                  Start Scanning
-                </button>
+                <p className="mt-2 text-[10px] text-emerald-400">Closing automatically...</p>
               </div>
             )}
           </div>

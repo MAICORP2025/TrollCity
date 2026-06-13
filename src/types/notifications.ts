@@ -150,7 +150,14 @@ export type NotificationType =
   | 'theme_equipped'
   | 'vip_perk_unlocked'
   | 'subscription_renewed'
-  | 'subscription_expired';
+  | 'subscription_expired'
+
+  // CROWN REDEMPTIONS
+  | 'crown_redemption_submitted'
+  | 'crown_redemption_approved'
+  | 'crown_redemption_fulfilled'
+  | 'crown_redemption_rejected'
+  | 'crown_redemption_cancelled';
 
 export interface Notification {
   id: string

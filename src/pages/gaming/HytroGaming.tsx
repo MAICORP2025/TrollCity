@@ -23,7 +23,9 @@ import React, {
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  Briefcase,
   ChevronRight,
+  Clock3,
   Crown,
   Eye,
   Flame,
@@ -309,7 +311,61 @@ function GamingStreamCard({
 
 export default function HytroGaming() {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
+  const { user, profile } = useAuthStore();
+
+  // ── Agency status check ──────────────────────────────────────────────────
+  const [agencyStatus, setAgencyStatus] = useState<'loading' | 'approved' | 'pending' | 'none' | 'exempt'>('loading');
+
+  useEffect(() => {
+    if (!user?.id) {
+      setAgencyStatus('none');
+      return;
+    }
+
+    // Admins and certain roles are exempt from agency requirement
+    const exemptRoles = ['admin', 'moderator', 'staff', 'troll_officer', 'lead_troll_officer'];
+    if (exemptRoles.includes(profile?.role || '') || exemptRoles.includes((profile as any)?.troll_role || '')) {
+      setAgencyStatus('exempt');
+      return;
+    }
+
+    const checkAgency = async () => {
+      try {
+        // Check if user has an active agency membership
+        const { data: agencyMember } = await supabase
+          .from('agency_members')
+          .select('id, status, agency_id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (agencyMember) {
+          setAgencyStatus('approved');
+          return;
+        }
+
+        // Check if user has a pending agency application
+        const { data: pendingApp } = await supabase
+          .from('agency_applications')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (pendingApp) {
+          setAgencyStatus('pending');
+          return;
+        }
+
+        setAgencyStatus('none');
+      } catch (err) {
+        console.warn('[HytroGaming] Failed to check agency status:', err);
+        setAgencyStatus('none');
+      }
+    };
+
+    void checkAgency();
+  }, [user?.id, profile?.role, (profile as any)?.troll_role]);
 
   useSEO({
     title: 'HydroGaming | Live Game Streaming & Screen Sharing | Troll City',
@@ -570,7 +626,76 @@ export default function HytroGaming() {
         </div>
       </header>
 
+      {/* ── Agency Application Gate ─────────────────────────────────────────── */}
+      {agencyStatus === 'loading' && (
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-12">
+          <div className="flex flex-col items-center justify-center gap-4 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
+            <p className="text-sm text-slate-400">Checking agency status...</p>
+          </div>
+        </div>
+      )}
+
+      {agencyStatus === 'pending' && (
+        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-6">
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5 text-center">
+            <Clock3 className="mx-auto h-8 w-8 text-amber-300" />
+            <h3 className="mt-3 text-lg font-black text-amber-100">Agency Application Pending</h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Your agency application is under review. You'll be able to access HytroGaming once approved.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/hytrogaming/apply')}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300 px-5 py-2.5 text-sm font-black text-slate-950 transition hover:bg-amber-200"
+            >
+              <Briefcase className="h-4 w-4" />
+              View Application
+            </button>
+          </div>
+        </div>
+      )}
+
+      {agencyStatus === 'none' && user && (
+        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-6">
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/5 p-6 text-center sm:p-8">
+            <Gamepad2 className="mx-auto h-10 w-10 text-cyan-300" />
+            <h3 className="mt-4 text-xl font-black text-white">Apply for Agency to Game Share</h3>
+            <p className="mt-2 max-w-lg mx-auto text-sm text-slate-400">
+              To stream on HytroGaming, you need to apply for an agency. 
+              The startup fee is the same as regular agencies, with a monthly fee of 5,000 Troll Coins.
+              You can also apply for a loan to cover the fees.
+            </p>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => navigate('/hytrogaming/apply')}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-6 py-3 text-sm font-black text-white shadow-[0_0_35px_rgba(34,211,238,0.20)] transition hover:scale-[1.02]"
+              >
+                <Briefcase className="h-4 w-4" />
+                Apply for Agency
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/agencies')}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white/90 transition hover:bg-white/[0.1]"
+              >
+                Learn More
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-6 sm:pt-8">
+        {/* Only show content if user has agency or is exempt */}
+        {(agencyStatus !== 'approved' && agencyStatus !== 'exempt') && (
+          <div className="py-12 text-center">
+            <p className="text-sm text-slate-500">Apply for an agency to access HytroGaming streams.</p>
+          </div>
+        )}
+        {(agencyStatus === 'approved' || agencyStatus === 'exempt') && (
+        <>
         {/* Hero */}
         <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/30 backdrop-blur-2xl sm:p-8 lg:p-10">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.20),transparent_30%),radial-gradient(circle_at_80%_30%,rgba(168,85,247,0.18),transparent_32%)]" />
@@ -797,6 +922,8 @@ export default function HytroGaming() {
             </div>
           )}
         </section>
+        </>
+        )}
       </main>
     </div>
   );

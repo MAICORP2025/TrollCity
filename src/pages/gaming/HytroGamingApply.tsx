@@ -47,6 +47,9 @@ export default function HytroGamingApply() {
   const [motivation, setMotivation] = useState('');
   const [experience, setExperience] = useState('');
   const [referralCode, setReferralCode] = useState('');
+  const [applyForLoan, setApplyForLoan] = useState(false);
+  const [loanAmount, setLoanAmount] = useState('');
+  const MAX_LOAN_AMOUNT = 5000;
 
   const toggleCategory = (cat: string) => {
     setSelectedCategories((prev) =>
@@ -93,6 +96,18 @@ export default function HytroGamingApply() {
       return;
     }
 
+    if (applyForLoan) {
+      const loanVal = parseFloat(loanAmount) || 0;
+      if (loanVal <= 0) {
+        toast.error('Enter a valid loan amount');
+        return;
+      }
+      if (loanVal > 5000) {
+        toast.error('Loan amount cannot exceed 5,000 Troll Coins');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const { error } = await supabase.from('agency_applications').insert({
@@ -107,6 +122,8 @@ export default function HytroGamingApply() {
         motivation: motivation.trim() || null,
         experience: experience.trim() || null,
         referral_code: referralCode.trim() || null,
+        apply_for_loan: applyForLoan,
+        loan_amount: applyForLoan ? (parseFloat(loanAmount) || 0) : 0,
         status: 'pending',
       });
 
@@ -325,7 +342,68 @@ export default function HytroGamingApply() {
             </div>
           </div>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Loan Application Section */}
+          <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-black text-white">Need a Loan?</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  Apply for a loan to cover the agency startup fee. Monthly fee is 5,000 Troll Coins.
+                  Tips received while streaming go toward loan balance first.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApplyForLoan(!applyForLoan)}
+                className={`shrink-0 rounded-xl border px-4 py-2 text-xs font-bold transition ${
+                  applyForLoan
+                    ? 'border-cyan-300/40 bg-cyan-500/20 text-cyan-100'
+                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                }`}
+              >
+                {applyForLoan ? 'Loan Applied ✓' : 'Apply for Loan'}
+              </button>
+            </div>
+
+            {applyForLoan && (
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-300">Loan Amount (Troll Coins, max 5,000)</label>
+                  <input
+                    type="number"
+                    value={loanAmount}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setLoanAmount('');
+                        return;
+                      }
+                      const num = parseFloat(val);
+                      if (num > MAX_LOAN_AMOUNT) {
+                        setLoanAmount(String(MAX_LOAN_AMOUNT));
+                        toast.warning(`Maximum loan is ${MAX_LOAN_AMOUNT.toLocaleString()} TC`);
+                      } else {
+                        setLoanAmount(val);
+                      }
+                    }}
+                    placeholder="e.g. 5000"
+                    min="0"
+                    max={MAX_LOAN_AMOUNT}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/20"
+                  />
+                </div>
+                <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3">
+                  <p className="text-[11px] text-amber-200">
+                    <strong>Loan Terms:</strong> Startup fee same as regular agencies. Monthly fee: 5,000 TC (vs 10,000 TC regular).
+                    All tips go toward loan balance first. No cashouts allowed until loan is fully paid off.
+                    Loan is restricted to Hytro Gaming Agency use only.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">
               By applying, you agree to the HytroGaming Agency terms. Applications are reviewed by Agency HR.
             </p>
