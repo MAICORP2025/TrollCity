@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { StreamAudienceMember } from './AudienceBubbleTicker'
 import { useNavigate } from 'react-router-dom'
 import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton'
+import StorageIndicator from './StorageIndicator'
 
 const LIVE_DOT_CLASS = 'h-2 w-2 rounded-full bg-red-500 animate-pulse'
 
@@ -289,6 +290,10 @@ export default function BroadcastNeonHeader({
 
 <div className="flex shrink-0 items-center gap-2">
             {isHost && (
+              <StorageIndicator userId={profile?.id} storageType="broadcast" />
+            )}
+            
+            {isHost && (
               <div className="relative">
                 <StaffWalkieTalkieButton 
                   showFullControls={false} 
@@ -298,30 +303,30 @@ export default function BroadcastNeonHeader({
               </div>
             )}
            <div className="flex items-center gap-2 rounded-2xl border border-yellow-400/25 bg-yellow-500/10 px-3 py-2 shadow-[0_0_18px_rgba(234,179,8,0.14)]">
-             <Coins className="h-4 w-4 text-yellow-300" />
-             <span className="text-sm font-black tabular-nums text-yellow-300">
-               {formattedCoins}
-             </span>
+              <Coins className="h-4 w-4 text-yellow-300" />
+              <span className="text-sm font-black tabular-nums text-yellow-300">
+                {formattedCoins}
+              </span>
 
-             {onOpenCoinStore && (
-               <button
-                 onClick={onOpenCoinStore}
-                 className="grid h-6 w-6 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-                 aria-label="Open coin store"
-               >
-                 <Plus className="h-3.5 w-3.5 text-white" />
-               </button>
-             )}
-           </div>
+              {onOpenCoinStore && (
+                <button
+                  onClick={onOpenCoinStore}
+                  className="grid h-6 w-6 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+                  aria-label="Open coin store"
+                >
+                  <Plus className="h-3.5 w-3.5 text-white" />
+                </button>
+              )}
+            </div>
 
-           <button
-             onClick={onGift}
-             className="flex h-11 items-center gap-2 rounded-2xl border border-fuchsia-400/50 bg-gradient-to-r from-purple-700/80 to-fuchsia-600/80 px-5 text-sm font-black uppercase text-white shadow-[0_0_22px_rgba(217,70,239,0.38)] transition-transform hover:scale-[1.02]"
-           >
-             <Gift className="h-4 w-4 text-yellow-300" />
-             Gift
-           </button>
-         </div>
+            <button
+              onClick={onGift}
+              className="flex h-11 items-center gap-2 rounded-2xl border border-fuchsia-400/50 bg-gradient-to-r from-purple-700/80 to-fuchsia-600/80 px-5 text-sm font-black uppercase text-white shadow-[0_0_22px_rgba(217,70,239,0.38)] transition-transform hover:scale-[1.02]"
+            >
+              <Gift className="h-4 w-4 text-yellow-300" />
+              Gift
+            </button>
+          </div>
       </div>
     </header>
   )

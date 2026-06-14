@@ -136,7 +136,7 @@ function GamingSetupPageInner() {
         // Check for existing active gaming stream
         const { data: existing } = await supabase
           .from('streams')
-          .select('id,title,game_title,status,is_live,current_viewers,started_at,ended_at,created_at,user_id,category,agora_channel')
+          .select('id,title,game_title,status,is_live,current_viewers,started_at,ended_at,created_at,user_id,broadcaster_id,category,agora_channel')
           .eq('user_id', user.id)
           .eq('category', 'gaming')
           .in('status', ['starting', 'live'])
@@ -161,6 +161,7 @@ function GamingSetupPageInner() {
           .insert({
             id: streamId,
             user_id: user.id,
+            broadcaster_id: user.id,
             title: defaultTitle,
             game_title: selectedGame || '',
             category: 'gaming',

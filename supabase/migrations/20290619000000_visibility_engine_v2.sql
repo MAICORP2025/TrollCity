@@ -2027,7 +2027,7 @@ BEGIN
     s.thumbnail_url,
     u.username,
     u.avatar_url,
-    u.date_of_birth,
+    u.date_of_birth::TEXT,
     COALESCE(vs.final_visibility_score, 0),
     COALESCE(vs.hot_score, 0),
     COALESCE(vs.is_rising, false),

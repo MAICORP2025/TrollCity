@@ -5,10 +5,11 @@ import { useAuthStore } from '../lib/store';
 interface ChatBlockStatus {
   blocked: boolean;
   expiresAt: string | null;
+  isPermanent: boolean;
 }
 
 export function useChatBlockStatus(userId?: string | null, streamId?: string | null) {
-  const [status, setStatus] = useState<ChatBlockStatus>({ blocked: false, expiresAt: null });
+  const [status, setStatus] = useState<ChatBlockStatus>({ blocked: false, expiresAt: null, isPermanent: false });
   const expiryTimerRef = useRef<number | null>(null);
   const profileMutedUntilRef = useRef<string | null>(null);
 
@@ -19,27 +20,29 @@ export function useChatBlockStatus(userId?: string | null, streamId?: string | n
     }
   }, []);
 
-  const applyResolvedStatus = useCallback((blocked: boolean, expiresAt: string | null) => {
-    setStatus({ blocked, expiresAt });
+  const applyResolvedStatus = useCallback((blocked: boolean, expiresAt: string | null, isPermanent: boolean = false) => {
+    setStatus({ blocked, expiresAt, isPermanent });
   }, []);
 
   const refresh = useCallback(async () => {
     clearExpiryTimer();
 
     if (!userId) {
-      applyResolvedStatus(false, null);
+      applyResolvedStatus(false, null, false);
       return;
     }
 
     let highestBlocked = false;
     let highestExpiresAt: string | null = null;
+    let highestIsPermanent = false;
 
     // 1 ── stream-specific / global block from chat_blocks
     let query = supabase
       .from('chat_blocks')
-      .select('expires_at')
+      .select('expires_at, is_permanent')
       .eq('user_id', userId)
-      .gt('expires_at', new Date().toISOString())
+      .or(`is_permanent.eq.true,expires_at.gt.${new Date().toISOString()}`)
+      .order('is_permanent', { ascending: false })
       .order('expires_at', { ascending: false })
       .limit(1);
 
@@ -50,7 +53,12 @@ export function useChatBlockStatus(userId?: string | null, streamId?: string | n
     const { data } = await query.maybeSingle();
     if (data?.expires_at) {
       highestBlocked = true;
-      highestExpiresAt = data.expires_at;
+      if (data.is_permanent) {
+        highestIsPermanent = true;
+        highestExpiresAt = null;
+      } else {
+        highestExpiresAt = data.expires_at;
+      }
     }
 
     // 2 ── global moderator block via user_profiles.muted_until
@@ -68,12 +76,12 @@ export function useChatBlockStatus(userId?: string | null, streamId?: string | n
       }
     }
 
-    applyResolvedStatus(highestBlocked, highestExpiresAt);
+    applyResolvedStatus(highestBlocked, highestExpiresAt, highestIsPermanent);
 
     if (highestExpiresAt) {
       const delay = Math.max(0, new Date(highestExpiresAt).getTime() - Date.now()) + 250;
       expiryTimerRef.current = window.setTimeout(() => {
-        applyResolvedStatus(false, null);
+        applyResolvedStatus(false, null, false);
       }, delay);
     }
   }, [clearExpiryTimer, streamId, userId, applyResolvedStatus]);
@@ -150,6 +158,7 @@ export function useChatBlockStatus(userId?: string | null, streamId?: string | n
     userChatDisabled: status.blocked,
     chatDisabledUntil: status.expiresAt,
     chatDisabledRemainingMinutes: remainingMinutes,
+    chatDisabledPermanently: status.isPermanent,
     refreshChatBlockStatus: refresh,
   };
 }

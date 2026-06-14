@@ -16,6 +16,14 @@ import {
   Clock3
 } from 'lucide-react'
 import { toast } from 'sonner'
+import type { TransactionContextMaps } from '../lib/transactionContext'
+import {
+  enrichTransactionWithProfile,
+  getTransactionAccountLabel,
+  getTransactionStreamLabel,
+  getTransactionUserLabel,
+  loadTransactionContext,
+} from '../lib/transactionContext'
 
 interface CoinTransaction {
   id: string
@@ -104,6 +112,10 @@ export default function TransactionHistory() {
   const [manualOrders, setManualOrders] = useState<ManualOrder[]>([])
   const [manualLoading, setManualLoading] = useState(true)
   const [manualExpanded, setManualExpanded] = useState(false)
+  const [transactionContext, setTransactionContext] = useState<TransactionContextMaps>({
+    profiles: new Map(),
+    streams: new Map(),
+  })
 
   useEffect(() => {
     if (isAdmin && queryUserId && queryUserId !== user?.id) {
@@ -142,7 +154,11 @@ export default function TransactionHistory() {
 
       if (error) throw error
 
-      setTransactions(data || [])
+      const context = await loadTransactionContext(supabase, data || [])
+      setTransactionContext(context)
+
+      const enrichedTransactions = (data || []).map((transaction) => enrichTransactionWithProfile(transaction, context.profiles, context.streams))
+      setTransactions(enrichedTransactions)
 
       // Calculate stats
       if (data) {
@@ -236,6 +252,10 @@ export default function TransactionHistory() {
   }
 
   const uniqueTypes = Array.from(new Set(transactions.map(t => t.type)))
+
+  const getUserLabel = (tx: CoinTransaction) => getTransactionUserLabel(tx, transactionContext.profiles)
+  const getAccountLabel = (tx: CoinTransaction) => getTransactionAccountLabel(tx, transactionContext.profiles)
+  const getStreamLabel = (tx: CoinTransaction) => getTransactionStreamLabel(tx, transactionContext.profiles, transactionContext.streams)
 
   if (loading) {
     return (
@@ -442,6 +462,13 @@ export default function TransactionHistory() {
                               {formatTransactionType(tx.type)}
                             </h3>
                             <p className="text-gray-400 text-sm mt-1">{tx.description}</p>
+                            <p className="text-xs text-gray-300 mt-1 truncate">{getUserLabel(tx)}</p>
+                            <p className="text-xs text-gray-400 truncate">{getAccountLabel(tx)}</p>
+                            {getStreamLabel(tx) && (
+                              <span className="inline-block mt-2 px-2 py-1 bg-cyan-950/70 border border-cyan-500/30 rounded text-xs text-cyan-200">
+                                {getStreamLabel(tx)}
+                              </span>
+                            )}
                             {tx.metadata?.package_name && (
                               <span className="inline-block mt-2 px-2 py-1 bg-gray-700 rounded text-xs text-gray-300">
                                 {tx.metadata.package_name}

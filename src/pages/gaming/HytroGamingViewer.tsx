@@ -25,6 +25,7 @@ import {
   Crown,
   Eye,
   Flame,
+  Lock,
   Gamepad2,
   Gift,
   Heart,
@@ -63,6 +64,7 @@ import { useBroadcastRealtime } from '@/hooks/useBroadcastRealtime'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import GamingChat from '@/components/broadcast/GamingChat'
 import TipBanner from '@/components/broadcast/TipBanner'
+import StorageIndicator from '@/components/broadcast/StorageIndicator'
 import {
   getAnonymousDisplayName,
   reserveAnonymousChatSlot,
@@ -93,6 +95,8 @@ interface StreamData {
   cloudflare_playback_url?: string | null
   game_title?: string | null
   thumbnail_url?: string | null
+  // Password protection fields
+  is_protected?: boolean
 }
 
 interface TopSupporter {
@@ -132,7 +136,8 @@ const COIN_PACKS = [
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function HytroGamingViewer() {
-  const { streamId } = useParams<{ streamId: string }>()
+  const params = useParams<{ streamId?: string; id?: string }>()
+  const streamId = params.streamId || params.id
   const navigate = useNavigate()
   const { user, profile } = useAuthStore()
   const { isMobile, hasMounted } = useIsMobile()
@@ -150,62 +155,111 @@ export default function HytroGamingViewer() {
   const [sendingTip, setSendingTip] = useState(false)
   const [showMobileChat, setShowMobileChat] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [enteredPassword, setEnteredPassword] = useState('')
+  const [validatingPassword, setValidatingPassword] = useState(false)
+  const [hasAccess, setHasAccess] = useState(false)
 
-  // Fetch stream data
-  useEffect(() => {
-    let mounted = true
-    const fetchStream = async () => {
-      if (!streamId) return
-      setLoading(true)
-      try {
-        const { data, error } = await supabase
-          .from('streams')
-          .select('*')
-          .eq('id', streamId)
-          .maybeSingle()
+// Fetch stream data
+   useEffect(() => {
+     let mounted = true
+     const fetchStream = async () => {
+       if (!streamId) return
+       setLoading(true)
+       try {
+         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(streamId)
 
-        if (!mounted) return
-        if (error || !data) {
-          setStream(null)
-          setLoading(false)
-          return
-        }
+         let streamData = null
+         let broadcasterProfile = null
 
-        const { data: broadcasterProfile } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url, level')
-          .eq('id', data.user_id)
-          .maybeSingle()
+         if (isUUID) {
+           const { data, error } = await supabase
+             .from('streams')
+             .select('*')
+             .eq('id', streamId)
+             .maybeSingle()
 
-        if (!mounted) return
+           if (error || !data) {
+             setStream(null)
+             setLoading(false)
+             return
+           }
+           streamData = data
 
-        const resolved: StreamData = {
-          id: data.id,
-          title: data.title || 'Live Gaming Stream',
-          broadcaster_id: data.user_id,
-          broadcaster_name: broadcasterProfile?.username || 'Gamer',
-          broadcaster_avatar: broadcasterProfile?.avatar_url || null,
-          broadcaster_level: broadcasterProfile?.level || 1,
-          description: data.description || null,
-          category: data.category || 'gaming',
-          is_live: Boolean(data.is_live),
-          status: data.status || 'offline',
-          current_viewers: data.current_viewers || 0,
-          viewer_count: data.viewer_count || 0,
-          total_likes: data.total_likes || 0,
-          started_at: data.started_at,
-          ended_at: data.ended_at,
-          agora_channel: data.agora_channel || null,
-          livekit_room_name: data.livekit_room_name || null,
-          playback_url: data.playback_url || data.cloudflare_playback_url || null,
-          cloudflare_playback_url: data.cloudflare_playback_url || null,
-          game_title: data.game_title || null,
-          thumbnail_url: data.thumbnail_url || null,
-        }
+           const { data: profile } = await supabase
+             .from('user_profiles')
+             .select('id, username, avatar_url, level')
+             .eq('id', (data as any).user_id)
+             .maybeSingle()
+           broadcasterProfile = profile
+         } else {
+           // Username lookup: find user by username, then their live stream
+           const { data: userProfile } = await supabase
+             .from('user_profiles')
+             .select('id')
+             .eq('username', streamId)
+             .maybeSingle()
 
-        setStream(resolved)
-        setIsHost(data.user_id === user?.id)
-        setLikeCount(data.total_likes || 0)
+           if (!userProfile?.id) {
+             setStream(null)
+             setLoading(false)
+             return
+           }
+
+           // Find their active gaming stream
+           const { data, error } = await supabase
+             .from('streams')
+             .select('*')
+             .eq('user_id', userProfile.id)
+             .eq('category', 'gaming')
+             .eq('status', 'live')
+             .maybeSingle()
+
+           if (error || !data) {
+             setStream(null)
+             setLoading(false)
+             return
+           }
+           streamData = data
+
+           const { data: profile } = await supabase
+             .from('user_profiles')
+             .select('id, username, avatar_url, level')
+             .eq('id', userProfile.id)
+             .maybeSingle()
+           broadcasterProfile = profile
+}
+
+          if (!mounted) return
+
+          const resolved: StreamData = {
+            id: (streamData as any).id,
+            title: (streamData as any).title || 'Live Gaming Stream',
+            broadcaster_id: (streamData as any).user_id,
+            broadcaster_name: broadcasterProfile?.username || 'Gamer',
+            broadcaster_avatar: broadcasterProfile?.avatar_url || null,
+            broadcaster_level: broadcasterProfile?.level || 1,
+            description: (streamData as any).description || null,
+            category: (streamData as any).category || 'gaming',
+            is_live: Boolean((streamData as any).is_live),
+            status: (streamData as any).status || 'offline',
+            current_viewers: (streamData as any).current_viewers || 0,
+            viewer_count: (streamData as any).viewer_count || 0,
+            total_likes: (streamData as any).total_likes || 0,
+            started_at: (streamData as any).started_at,
+            ended_at: (streamData as any).ended_at,
+            agora_channel: (streamData as any).agora_channel || null,
+            livekit_room_name: (streamData as any).livekit_room_name || null,
+            playback_url: (streamData as any).playback_url || (streamData as any).cloudflare_playback_url || null,
+            cloudflare_playback_url: (streamData as any).cloudflare_playback_url || null,
+            game_title: (streamData as any).game_title || null,
+            thumbnail_url: (streamData as any).thumbnail_url || null,
+            is_protected: (streamData as any).is_protected ?? false,
+          }
+
+          setStream(resolved)
+          setIsHost((streamData as any).user_id === user?.id)
+          setLikeCount((streamData as any).total_likes || 0)
 
         // Fetch top supporters
         const { data: topGifts } = await supabase
@@ -256,6 +310,55 @@ export default function HytroGamingViewer() {
   const isLive = currentStream?.status === 'live' || currentStream?.is_live === true
   const viewerCount = currentStream?.current_viewers || currentStream?.viewer_count || 0
   const channelName = currentStream?.agora_channel || currentStream?.id
+
+  // Check password protection for public streams
+  useEffect(() => {
+    if (!currentStream || !streamId) return
+    
+    const protectedStream = (currentStream as any).is_protected === true
+    const sessionAccess = sessionStorage.getItem(`gaming_stream_access_${streamId}`)
+    
+    // If stream is protected and user hasn't provided access, show password modal
+    // Host always has access
+    if (!isHost && protectedStream && sessionAccess !== 'granted') {
+      setShowPasswordModal(true)
+      setHasAccess(false)
+    } else {
+      setHasAccess(true)
+    }
+  }, [currentStream, streamId, isHost])
+
+  const handleValidatePassword = useCallback(async () => {
+    if (!streamId) return
+    if (!enteredPassword.trim()) {
+      toast.error('Please enter a password')
+      return
+    }
+    
+    setValidatingPassword(true)
+    try {
+      const { data, error: rpcError } = await supabase.rpc('validate_broadcast_password', {
+        p_stream_id: streamId,
+        p_password: enteredPassword,
+      })
+      
+      if (rpcError) throw rpcError
+      
+      if (data?.success === true) {
+        sessionStorage.setItem(`gaming_stream_access_${streamId}`, 'granted')
+        setHasAccess(true)
+        setShowPasswordModal(false)
+        toast.success('Access granted!')
+      } else {
+        toast.error(data?.error || 'Incorrect password')
+      }
+    } catch (err: any) {
+      console.error('[HytroGamingViewer] Password validation error:', err)
+      toast.error(err?.message || 'Failed to validate password')
+    } finally {
+      setValidatingPassword(false)
+    }
+  }, [enteredPassword, streamId])
 
   // SEO meta tags for stream page (accessible to Google for indexing)
   const streamUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://maitrollcity.com'}/gaming/watch/${streamId}`
@@ -489,6 +592,64 @@ export default function HytroGamingViewer() {
     )
   }
 
+  // Password protected - show password modal for non-hosts
+  if (showPasswordModal && !hasAccess) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-purple-500/30 bg-slate-900 p-6">
+          <div className="flex items-center gap-3 text-purple-400">
+            <Lock className="h-6 w-6" />
+            <h2 className="text-xl font-bold text-white">Protected Stream</h2>
+          </div>
+
+          <p className="text-sm text-gray-400">
+            This gaming stream is password protected. Please enter the password to join.
+          </p>
+
+          <input
+            type="password"
+            value={enteredPassword}
+            onChange={(event) => setEnteredPassword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                void handleValidatePassword()
+              }
+            }}
+            placeholder="Enter password..."
+            className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            autoFocus
+          />
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="flex-1 rounded-xl bg-white/10 py-3 text-white transition-colors hover:bg-white/20"
+            >
+              Go Back
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleValidatePassword()}
+              disabled={validatingPassword}
+              className="flex-1 rounded-xl bg-purple-600 py-3 text-white transition-colors hover:bg-purple-500 disabled:opacity-50"
+            >
+              {validatingPassword ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking...
+                </span>
+              ) : (
+                'Join Stream'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!currentStream) {
     return (
       <div className="grid min-h-screen place-items-center bg-[#02040a] px-6 text-center">
@@ -613,6 +774,9 @@ export default function HytroGamingViewer() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {isHost && (
+                <StorageIndicator userId={user?.id} storageType="hytro_gaming" />
+              )}
               {isLive && (
                 <span className="flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-white" />

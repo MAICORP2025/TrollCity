@@ -7,7 +7,7 @@ import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { useAllCreditScores } from '../lib/hooks/useAllCreditScores';
 import { useStockMarket } from '../lib/hooks/useStockMarket';
 // import { toast } from 'sonner';
-import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, BarChart3, Wallet, Briefcase, Crown, Flame, RefreshCw } from 'lucide-react';
+import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, BarChart3, Wallet, Briefcase, Crown, Flame, RefreshCw, HardDrive } from 'lucide-react';
 import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
 import { ENTRANCE_EFFECTS_DATA, purchaseEntranceEffect } from '../lib/entranceEffects';
 import { getBroadcastTheme } from '../lib/broadcastThemes';
@@ -1217,10 +1217,10 @@ useEffect(() => {
             </div>
 
             <div className="flex gap-2 hidden md:flex relative items-center">
-              <button type="button" className={`px-3 py-2 rounded ${tab==='coins'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('coins')}>Coins</button>
-              <button type="button" className={`px-3 py-2 rounded ${tab==='bank'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('bank')}>Bank</button>
-              <button type="button" className={`px-3 py-2 rounded ${tab==='market'?'bg-green-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('market')}>Market</button>
-              <button type="button" className={`px-3 py-2 rounded ${tab==='portfolio'?'bg-green-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('portfolio')}>Portfolio</button>
+               <button type="button" className={`px-3 py-2 rounded ${tab==='coins'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('coins')}>Coins</button>
+               <button type="button" className={`px-3 py-2 rounded ${tab==='bank'?'bg-purple-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('bank')}>Bank</button>
+               <button type="button" className={`px-3 py-2 rounded ${tab==='market'?'bg-green-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('market')}>Market</button>
+               <button type="button" className={`px-3 py-2 rounded ${tab==='portfolio'?'bg-green-600':trollCityTheme.backgrounds.card}`} onClick={() => setTab('portfolio')}>Portfolio</button>
               
               <div className="relative">
                  <button 
@@ -1232,14 +1232,14 @@ useEffect(() => {
                      <ChevronDown className="w-4 h-4" />
                  </button>
                  
-                 {showStoreDropdown && (
-                     <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-purple-500/30 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
-                             <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='perks' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('perks'); setShowStoreDropdown(false); }}>Perks</button>
-                         <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
-                         <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='themes' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('themes'); setShowStoreDropdown(false); }}>Broadcast Themes</button>
- 
-                     </div>
-                 )}
+                  {showStoreDropdown && (
+                      <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-purple-500/30 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
+                               <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='perks' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('perks'); setShowStoreDropdown(false); }}>Perks</button>
+                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
+                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='insurance' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('insurance'); setShowStoreDropdown(false); }}>Insurance</button>
+                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='storage' ? 'text-cyan-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('storage'); setShowStoreDropdown(false); }}>Storage</button>
+                      </div>
+                  )}
                </div>
               
 {/* Use Credit Card Toggle */}
@@ -1273,7 +1273,8 @@ useEffect(() => {
                  <option value="portfolio">Portfolio</option>
                  <option value="perks">Perks</option>
                  <option value="calls">Call Minutes</option>
-                 <option value="insurance">Insurance</option>
+                  <option value="insurance">Insurance</option>
+                  <option value="storage">Storage</option>
                </select>
               
               {/* Mobile Use Credit Card Toggle */}
@@ -2083,6 +2084,34 @@ useEffect(() => {
             </>
           )}
 
+          {/* Storage Tab */}
+          {tab === 'storage' && (
+            <StorageTab
+              userId={user?.id}
+              trollCoins={troll_coins}
+              onPurchase={async (tierIndex, fee) => {
+                try {
+                  const { success, error } = await deductCoins({
+                    userId: user.id,
+                    amount: fee,
+                    type: 'storage_purchase',
+                    description: `Storage upgrade: ${STORAGE_TIERS[tierIndex].label}`,
+                    metadata: { tier_index: tierIndex, tier_label: STORAGE_TIERS[tierIndex].label, bytes_granted: STORAGE_TIERS[tierIndex].end },
+                    useCredit,
+                    supabaseClient: supabase,
+                  });
+                  if (!success) throw new Error(error || 'Purchase failed');
+                  toast.success(`Storage upgraded to ${STORAGE_TIERS[tierIndex].label}!`);
+                  showPurchaseCompleteOverlay();
+                  await refreshCoins();
+                } catch (err) {
+                  console.error('Storage purchase error:', err);
+                  toast.error(err?.message || 'Failed to purchase storage');
+                }
+              }}
+            />
+          )}
+
           {/* Call Minutes Tab */}
           {tab === 'calls' && (
             <>
@@ -2232,4 +2261,98 @@ useEffect(() => {
   );
 }
 
+const STORAGE_TIERS = [
+  { start: 0, end: 10 * 1024 * 1024 * 1024, fee: 50, label: '0–10 GB', description: 'Starter tier — basic stream recordings' },
+  { start: 10 * 1024 * 1024 * 1024, end: 25 * 1024 * 1024 * 1024, fee: 100, label: '10–25 GB', description: 'Regular streamer — more room for archives' },
+  { start: 25 * 1024 * 1024 * 1024, end: 50 * 1024 * 1024 * 1024, fee: 250, label: '25–50 GB', description: 'Power user — gaming clips + broadcasts' },
+  { start: 50 * 1024 * 1024 * 1024, end: 100 * 1024 * 1024 * 1024, fee: 500, label: '50–100 GB', description: 'Heavy creator — full archive access' },
+  { start: 100 * 1024 * 1024 * 1024, end: null, fee: 1000, label: '100 GB+', description: 'Unlimited tier — no hard cap' },
+];
 
+function StorageTab({ userId, trollCoins, onPurchase }) {
+  const [purchasing, setPurchasing] = useState(null);
+
+  const handleBuy = async (tierIndex) => {
+    const tier = STORAGE_TIERS[tierIndex];
+    if (trollCoins < tier.fee) {
+      toast.error(`Not enough Troll Coins. Need ${tier.fee}, have ${trollCoins}`);
+      return;
+    }
+    setPurchasing(tierIndex);
+    try {
+      await onPurchase(tierIndex, tier.fee);
+    } finally {
+      setPurchasing(null);
+    }
+  };
+
+  return (
+    <div className="animate-fadeIn">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-500/10 border border-cyan-400/30">
+          <HardDrive className="h-6 w-6 text-cyan-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white">Cloud Storage</h2>
+          <p className="text-sm text-slate-400">Upgrade your storage for stream recordings, gaming clips, and media</p>
+        </div>
+      </div>
+
+      <div className="mb-6 p-4 bg-cyan-500/5 border border-cyan-400/20 rounded-xl">
+        <div className="flex items-center gap-2 text-sm text-slate-300">
+          <AlertTriangle className="h-4 w-4 text-amber-400" />
+          <span>Storage tiers are recurring monthly charges deducted from your Troll Coin balance.</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {STORAGE_TIERS.map((tier, idx) => {
+          const isCurrent = idx === 0;
+          const canAfford = trollCoins >= tier.fee;
+          const isPurchasingThis = purchasing === idx;
+
+          return (
+            <div
+              key={tier.label}
+              className={`relative rounded-2xl border p-5 transition-all ${
+                isCurrent
+                  ? 'border-cyan-400/40 bg-cyan-500/5'
+                  : 'border-white/10 bg-white/[0.02] hover:border-cyan-400/20'
+              }`}
+            >
+              {isCurrent && (
+                <div className="absolute -top-3 left-4 rounded-full bg-cyan-500 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                  Current
+                </div>
+              )}
+
+              <div className="mb-3">
+                <div className="text-lg font-black text-white">{tier.label}</div>
+                <div className="text-xs text-slate-400 mt-1">{tier.description}</div>
+              </div>
+
+              <div className="flex items-baseline gap-1 mb-4">
+                <span className="text-3xl font-black text-cyan-300">{tier.fee}</span>
+                <span className="text-xs font-bold text-slate-400">coins/mo</span>
+              </div>
+
+              <button
+                onClick={() => handleBuy(idx)}
+                disabled={!canAfford || isPurchasingThis}
+                className={`w-full rounded-xl py-2.5 text-sm font-black transition ${
+                  isCurrent
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 cursor-default'
+                    : canAfford
+                      ? 'bg-cyan-500 hover:bg-cyan-400 text-white'
+                      : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/10'
+                }`}
+              >
+                {isPurchasingThis ? 'Processing...' : isCurrent ? 'Active Plan' : canAfford ? 'Upgrade' : `Need ${tier.fee - trollCoins} more`}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

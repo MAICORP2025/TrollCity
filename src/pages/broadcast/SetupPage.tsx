@@ -6,7 +6,7 @@ import { PreflightStore } from '@/lib/preflightStore';
 import requestBroadcastMediaAccess from '@/lib/media/requestBroadcastMediaAccess';
 import { useStreamStore } from '@/lib/streamStore';
 import { LocalAudioTrack, LocalVideoTrack, AudioPresets, VideoPresets, Room } from 'livekit-client';
-import { Video, VideoOff, Mic, MicOff, RefreshCw, Swords, Gamepad2, Monitor, Lock, Eye, EyeOff, Radio, Bookmark, ShieldCheck } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, RefreshCw, Swords, Gamepad2, Monitor, Lock, Eye, EyeOff, Radio, ShieldCheck } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScreenShare, StreamMode, canScreenShare } from '../../hooks/useScreenShare';
 import { DraggableCameraOverlay } from '../../components/broadcast/DraggableCameraOverlay';
@@ -225,9 +225,7 @@ export default function SetupPage() {
   const [ownedThemes, setOwnedThemes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean } | null>(null);
-  const [isSaved, setIsSaved] = useState(false);
-  const [saveReplay, setSaveReplay] = useState(false);
-  const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
+const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
   const canUseCeoTheme = isCeoThemeEligible(user?.id, user?.email ?? null);
   const selectableThemes = useMemo(
     () => getSelectableBroadcastThemes({ includeCeoTheme: canUseCeoTheme }),
@@ -368,20 +366,7 @@ export default function SetupPage() {
   const isPageVisible = useRef(true);
   const isTabSwitching = useRef(false);
 
-  // Save broadcast to profile (optimistic - actual save happens after stream creation)
-  const handleSaveStream = () => {
-    if (!user?.id) {
-      toast.error('Please log in to save broadcasts');
-      return;
-    }
-    setIsSaved(true);
-    toast.success('Broadcast will be saved to your profile after it ends!');
-  };
-
-  // Check if stream is already saved (for existing streams, not applicable for new)
-  // This is mostly a no-op for new streams but included for completeness
-
-  // LiveKit room state - created in SetupPage and passed to BroadcastPage
+// LiveKit room state - created in SetupPage and passed to BroadcastPage
   const [livekitRoom, setLivekitRoom] = useState<Room | null>(null);
   const livekitRoomRef = useRef<Room | null>(null);
 
@@ -1722,13 +1707,12 @@ const handleStartStream = async () => {
            broadcast_theme_slug: normalizedSelectedTheme,
            random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' ? randomBattleQueueEnabled : false,
            random_battle_queued_at: null,
-           livekit_room_name: roomName,
-           agora_channel: roomName,
-           broadcast_disclaimer_accepted: true,
-           broadcast_disclaimer_accepted_at: agreementAcceptedAt,
-            broadcast_disclaimer_user_id: user.id,
-            save_replay: saveReplay,
-            ...(category === 'spiritual' && { selected_religion: selectedReligion }),
+livekit_room_name: roomName,
+            agora_channel: roomName,
+            broadcast_disclaimer_accepted: true,
+            broadcast_disclaimer_accepted_at: agreementAcceptedAt,
+             broadcast_disclaimer_user_id: user.id,
+             ...(category === 'spiritual' && { selected_religion: selectedReligion }),
            ...(category === 'battle' && { 
              battle_format: universeBattleMode === 'multi' ? selectedMultiBattleFormat : '4v4',
              battle_mode: universeBattleMode === 'multi' ? 'universal' : 'troll',
@@ -2480,36 +2464,6 @@ const handleStartStream = async () => {
           </label>
         </div>
 
-        {/* Save Replay Toggle */}
-        <div className="bg-zinc-900/80 rounded-2xl border border-white/10 p-4">
-          <label className="flex items-center justify-between cursor-pointer group">
-            <div className="flex items-center gap-3">
-              <Bookmark size={16} className={saveReplay ? 'text-emerald-400' : 'text-zinc-500'} />
-              <div>
-                <span className="text-sm font-bold text-white">Save Replay</span>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Upload broadcast recording to cloud storage after stream ends</p>
-              </div>
-            </div>
-            <div className="relative">
-              <input
-                type="checkbox"
-                checked={saveReplay}
-                onChange={(e) => setSaveReplay(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className={cn(
-                'w-10 h-5 rounded-full transition-all',
-                saveReplay ? 'bg-emerald-500' : 'bg-zinc-700'
-              )}>
-                <div className={cn(
-                  'w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-0.5',
-                  saveReplay ? 'translate-x-5.5 ml-0.5' : 'translate-x-0.5'
-                )} />
-              </div>
-            </div>
-          </label>
-        </div>
-
         {/* Bottom Row: Title + Category + Go Live */}
         <div className="bg-zinc-900/80 rounded-2xl border border-white/10 p-4 flex flex-col md:flex-row items-stretch md:items-end gap-3">
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2538,87 +2492,63 @@ const handleStartStream = async () => {
                    setCategory(selectedCategory);
                  }}
                  className="w-full bg-zinc-900/80 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+>
+                  {Object.values(BROADCAST_CATEGORIES)
+                    .filter((cat) => {
+                      // Gaming has its own dedicated setup page
+                      if (cat.id === 'gaming') return false;
+                      // Hide TCNN and President Elections from regular users
+                      if (cat.id === 'tcnn' || cat.id === 'election') {
+                        return isUserAdmin || profile?.role === 'secretary' ||
+                               (profile as any)?.is_lead_troll_officer || profile?.is_troll_officer ||
+                               (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster;
+                      }
+                      return true;
+                    })
+                    .map((cat) => (
+                      <option key={cat.id} value={cat.id} disabled={cat.id === 'battle'} className={cat.id === 'battle' ? 'text-gray-500' : ''}>
+                        {cat.icon} {cat.name}{cat.id === 'battle' ? ' (Under Construction)' : ''}
+</option>
+                    ))}
+                </select>
+             </div>
+          </div>
+
+             {/* Start Broadcast Button */}
+             <div className="shrink-0">
+               <button
+                 type="button"
+                 onClick={handleStartStream}
+                 disabled={
+                   loading ||
+                   !title.trim() ||
+                   (categoryRequiresReligion && !selectedReligion) ||
+                   (shouldForceRearCamera && !hasRearCamera) ||
+                   showPermissionPrompt ||
+                   (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ||
+                   (isBroadcastLocked && !canBroadcast())
+                 }
+                 className="w-full md:w-auto px-8 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-black font-bold text-sm hover:from-amber-300 hover:to-orange-400 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 whitespace-nowrap"
                >
-                 {Object.values(BROADCAST_CATEGORIES)
-                   .filter((cat) => {
-                     // Gaming has its own dedicated setup page
-                     if (cat.id === 'gaming') return false;
-                     // Hide TCNN and President Elections from regular users
-                     if (cat.id === 'tcnn' || cat.id === 'election') {
-                       return isUserAdmin || profile?.role === 'secretary' ||
-                              (profile as any)?.is_lead_troll_officer || profile?.is_troll_officer ||
-                              (profile as any)?.is_news_caster || (profile as any)?.is_chief_news_caster;
-                     }
-                     return true;
-                   })
-                   .map((cat) => (
-                     <option key={cat.id} value={cat.id} disabled={cat.id === 'battle'} className={cat.id === 'battle' ? 'text-gray-500' : ''}>
-                       {cat.icon} {cat.name}{cat.id === 'battle' ? ' (Under Construction)' : ''}
-                     </option>
-                   ))}
-               </select>
-            </div>
-
-            </div>
-            <div className="shrink-0 flex flex-col gap-2">
-              {/* Save Broadcast Button */}
-              <button
-                type="button"
-                onClick={handleSaveStream}
-                disabled={isSaved}
-                className={`w-full md:w-auto px-6 py-2.5 rounded-xl font-bold text-sm transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2 whitespace-nowrap ${
-                  isSaved
-                    ? 'bg-green-600 text-white'
-                    : 'bg-zinc-700 hover:bg-zinc-600 text-white'
-                }`}
-              >
-                {isSaved ? (
-                  <>
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
-                    Saved to Profile
-                  </>
-                ) : (
-                  <>
-                    <Bookmark className="w-4 h-4" />
-                    Save Broadcast
-                  </>
-                )}
-              </button>
-
-              {/* Start Broadcast Button */}
-              <button
-                type="button"
-                onClick={handleStartStream}
-                disabled={
-                  loading ||
-                  !title.trim() ||
-                  (categoryRequiresReligion && !selectedReligion) ||
-                  (shouldForceRearCamera && !hasRearCamera) ||
-                  showPermissionPrompt ||
-                  (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ||
-                  (isBroadcastLocked && !canBroadcast())
-                }
-                className="w-full md:w-auto px-8 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-black font-bold text-sm hover:from-amber-300 hover:to-orange-400 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 whitespace-nowrap"
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></span>
-                    Starting...
-                  </span>
-                ) : showPermissionPrompt ? (
-                  'Grant Permissions'
-                ) : (isBroadcastLocked && !canBroadcast()) ? (
-                  'Broadcast Locked'
-                ) : (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ? (
-                  'Limit Reached'
-                ) : (
-                  <>
-                    <Radio size={16} />
-                    Start Broadcast
-                  </>
-                )}
-              </button>
-            </div>
+                 {loading ? (
+                   <span className="flex items-center gap-2">
+                     <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></span>
+                     Starting...
+                   </span>
+                 ) : showPermissionPrompt ? (
+                   'Grant Permissions'
+                 ) : (isBroadcastLocked && !canBroadcast()) ? (
+                   'Broadcast Locked'
+                 ) : (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ? (
+                   'Limit Reached'
+                 ) : (
+                   <>
+                     <Radio size={16} />
+                     Start Broadcast
+                   </>
+                 )}
+               </button>
+             </div>
          </div>
 
         {shouldForceRearCamera && !hasRearCamera && (

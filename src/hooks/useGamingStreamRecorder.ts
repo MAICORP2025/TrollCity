@@ -6,35 +6,29 @@ interface UseGamingStreamRecorderReturn {
   isRecording: boolean
   isUploading: boolean
   recordingDuration: number
-  cloudflareUid: string | null
   startRecording: (sourceElement?: HTMLElement | null) => Promise<void>
-  stopRecording: () => Promise<void>
-  uploadToCloudflare: (streamId: string) => Promise<string | null>
-  confirmUpload: (streamId: string, uid: string) => Promise<boolean>
+  stopRecording: () => Promise<Blob | null>
+  uploadRecording: (streamId: string) => Promise<string | null>
   error: string | null
 }
 
 /**
  * useGamingStreamRecorder
  *
- * Records the HytroGaming viewer page and uploads to Cloudflare Stream.
- * Only metadata (cloudflare_recording_id, cloudflare_playback_url) is
- * stored in Supabase — the actual video lives on Cloudflare.
+ * Records the HytroGaming viewer page and uploads to Supabase Storage.
+ * Video files are stored directly in the stream-recordings bucket.
  *
  * Flow:
  * 1. startRecording() — captures the game element via captureStream()
- * 2. stopRecording() — stops capture, chunks are buffered in memory
- * 3. uploadToCloudflare(streamId) — gets a TUS upload URL from the edge
- *    function, then uploads the blob directly to Cloudflare Stream
- * 4. confirmUpload(streamId, uid) — tells the edge function to finalize,
- *    which updates streams table + saved_streams
+ * 2. stopRecording() — stops capture, returns the recorded blob
+ * 3. uploadRecording(streamId) — uploads to Supabase Storage and saves metadata
  */
 export function useGamingStreamRecorder(): UseGamingStreamRecorderReturn {
   const [isRecording, setIsRecording] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [cloudflareUid, setCloudflareUid] = useState<string | null>(null)
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -75,13 +69,6 @@ export function useGamingStreamRecorder(): UseGamingStreamRecorderReturn {
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
 
-      recorder.onstop = () => {
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((t) => t.stop())
-          streamRef.current = null
-        }
-      }
-
       const videoTrack = captureStream.getVideoTracks()[0]
       if (videoTrack) {
         videoTrack.addEventListener('ended', () => {
@@ -111,25 +98,41 @@ export function useGamingStreamRecorder(): UseGamingStreamRecorderReturn {
     }
   }, [])
 
-  const stopRecording = useCallback(async (): Promise<void> => {
+const stopRecording = useCallback(async (): Promise<Blob | null> => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') {
-      return
+      return null
     }
 
-    mediaRecorderRef.current.stop()
-    setIsRecording(false)
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
+    return new Promise((resolve) => {
+      const recorder = mediaRecorderRef.current!
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType })
+        setRecordedBlob(blob)
+        setIsRecording(false)
+
+        if (timerRef.current) {
+          clearInterval(timerRef.current)
+          timerRef.current = null
+        }
+
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop())
+          streamRef.current = null
+        }
+
+        resolve(blob)
+      }
+
+      recorder.stop()
+    })
   }, [])
 
   /**
-   * Upload the recorded blob to Cloudflare Stream via the edge function.
+   * Upload the recorded blob to Supabase Storage.
    */
-  const uploadToCloudflare = useCallback(async (streamId: string): Promise<string | null> => {
-    const blob = new Blob(chunksRef.current, { type: 'video/webm' })
-
+  const uploadRecording = useCallback(async (streamId: string, blobOverride?: Blob | null): Promise<string | null> => {
+    const blob = blobOverride ?? recordedBlob
     if (!blob || blob.size === 0) {
       toast.error('No recording to upload')
       return null
@@ -137,57 +140,54 @@ export function useGamingStreamRecorder(): UseGamingStreamRecorderReturn {
 
     setIsUploading(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData?.session?.access_token
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-      const edgeUrl = `${supabaseUrl}/functions/v1/upload-to-cloudflare-stream`
-
-      // Step 1: Get a direct upload URL from our edge function
-      const initRes = await fetch(`${edgeUrl}?action=getUploadUrl`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          streamId,
-          fileName: `gaming_${streamId}_${Date.now()}.webm`,
-          fileSize: blob.size,
-        }),
-      })
-
-      if (!initRes.ok) {
-        const errText = await initRes.text()
-        throw new Error(`Failed to get upload URL: ${errText}`)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user?.id) {
+        throw new Error('Not authenticated')
       }
 
-      const initData = await initRes.json()
-      if (!initData.success) {
-        throw new Error(initData.error || 'Failed to get upload URL')
-      }
+      console.log('[useGamingStreamRecorder] Uploading...')
+      console.log('[useGamingStreamRecorder] filePath:', `${user.id}/${streamId}/`)
+      console.log('[useGamingStreamRecorder] blob.size:', blob.size, 'blob.type:', blob.type)
 
-      const { uploadURL, uid } = initData
-      setCloudflareUid(uid)
+      const fileName = `gaming_${streamId}_${Date.now()}.webm`
+      const filePath = `${user.id}/${streamId}/${fileName}`
 
-      // Step 2: Upload the blob directly to Cloudflare Stream
-      const uploadRes = await fetch(uploadURL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Tus-Resumable': '1.0.0',
-          'Upload-Length': blob.size.toString(),
-          'Upload-Metadata': `source ${btoa('hytrogaming')}`,
-        },
-        body: blob,
-      })
+      const { error: uploadError } = await supabase.storage
+        .from('stream-recordings')
+        .upload(filePath, blob, { 
+          contentType: 'video/webm', 
+          upsert: false,
+          cacheControl: '3600',
+        })
 
-      if (!uploadRes.ok && uploadRes.status !== 201 && uploadRes.status !== 204) {
-        const errText = await uploadRes.text()
-        throw new Error(`Cloudflare upload failed: ${uploadRes.status} ${errText}`)
-      }
+      if (uploadError) throw uploadError
 
-      toast.success('Recording uploaded to Cloudflare')
-      return uid
+      const { data: urlData } = supabase.storage
+        .from('stream-recordings')
+        .getPublicUrl(filePath)
+
+      const recordingUrl = urlData.publicUrl
+
+      await supabase
+        .from('streams')
+        .update({ 
+          recording_url: recordingUrl,
+          playback_url: recordingUrl,
+        })
+        .eq('id', streamId)
+
+      await supabase
+        .from('saved_streams')
+        .upsert({
+          user_id: user.id,
+          stream_id: streamId,
+          source: 'gaming_recording',
+          storage_category: 'gaming_recording',
+          file_size_bytes: blob.size,
+        }, { onConflict: 'saved_streams_user_id_stream_id_key' })
+
+      toast.success('Recording saved to your profile')
+      return recordingUrl
     } catch (err: any) {
       console.error('[useGamingStreamRecorder] Upload failed:', err)
       toast.error(err?.message || 'Failed to upload recording')
@@ -195,45 +195,7 @@ export function useGamingStreamRecorder(): UseGamingStreamRecorderReturn {
     } finally {
       setIsUploading(false)
     }
-  }, [])
-
-  /**
-   * Confirm the upload is complete — edge function updates streams table
-   * with playback URL and auto-saves to saved_streams.
-   */
-  const confirmUpload = useCallback(async (streamId: string, uid: string): Promise<boolean> => {
-    try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData?.session?.access_token
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-      const edgeUrl = `${supabaseUrl}/functions/v1/upload-to-cloudflare-stream`
-
-      const res = await fetch(`${edgeUrl}?action=confirm`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ streamId, uid }),
-      })
-
-      if (!res.ok) {
-        const errText = await res.text()
-        throw new Error(`Confirm failed: ${errText}`)
-      }
-
-      const data = await res.json()
-      if (data.success) {
-        toast.success('Stream saved to your profile')
-        return true
-      }
-      return false
-    } catch (err: any) {
-      console.error('[useGamingStreamRecorder] Confirm failed:', err)
-      toast.error(err?.message || 'Failed to confirm upload')
-      return false
-    }
-  }, [])
+  }, [recordedBlob])
 
   useEffect(() => {
     return () => {
@@ -248,11 +210,9 @@ export function useGamingStreamRecorder(): UseGamingStreamRecorderReturn {
     isRecording,
     isUploading,
     recordingDuration,
-    cloudflareUid,
     startRecording,
     stopRecording,
-    uploadToCloudflare,
-    confirmUpload,
+    uploadRecording,
     error,
   }
 }

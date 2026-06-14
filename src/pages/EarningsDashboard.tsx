@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, getSystemSettings } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
@@ -9,6 +9,14 @@ import {
   ArrowRight,
   Clock
 } from 'lucide-react'
+import type { TransactionContextMaps } from '../lib/transactionContext'
+import {
+  enrichTransactionWithProfile,
+  getTransactionAccountLabel,
+  getTransactionStreamLabel,
+  getTransactionUserLabel,
+  loadTransactionContext,
+} from '../lib/transactionContext'
 
 interface EarningsTransaction {
   amount: number
@@ -57,6 +65,10 @@ export default function EarningsDashboard() {
   const [summary, setSummary] = useState<EarningsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [lockEnabled, setLockEnabled] = useState(false)
+  const [transactionContext, setTransactionContext] = useState<TransactionContextMaps>({
+    profiles: new Map(),
+    streams: new Map(),
+  })
 
   const loadEarningsSummary = useCallback(async () => {
     try {
@@ -98,15 +110,18 @@ export default function EarningsDashboard() {
     try {
       const { data, error } = await supabase
         .from('coin_transactions')
-        .select('amount, created_at, type, description, metadata')
+        .select('id, user_id, amount, created_at, type, description, metadata, source, coin_type, balance_after, from_user_id, from_user_name, to_user_id, to_user_name, stream_id')
         .eq('user_id', profile?.id)
-        .in('type', ['gift_receive', 'gift', 'gift_bonus'])
+        .in('type', ['gift_receive', 'gift', 'gift_bonus', 'gift_received', 'guest_box_income', 'gift_return_reward', 'agency_leader_bonus', 'agency_recruiter_bonus'])
         .gt('amount', 0)
         .order('created_at', { ascending: false })
         .limit(50)
 
       if (error) throw error
-      setEarnings(data || [])
+
+      const context = await loadTransactionContext(supabase, data || [])
+      setTransactionContext(context)
+      setEarnings((data || []).map((transaction) => enrichTransactionWithProfile(transaction, context.profiles, context.streams)))
     } catch (err: any) {
       console.error('Error loading transactions:', err)
     }
@@ -174,6 +189,27 @@ export default function EarningsDashboard() {
     }
     void loadLock()
   }, [])
+
+  const getUserLabel = useCallback((earning: EarningsTransaction) => {
+    return getTransactionUserLabel(earning, transactionContext.profiles)
+  }, [transactionContext.profiles])
+
+  const getAccountLabel = useCallback((earning: EarningsTransaction) => {
+    return getTransactionAccountLabel(earning, transactionContext.profiles)
+  }, [transactionContext.profiles])
+
+  const getStreamLabel = useCallback((earning: EarningsTransaction) => {
+    return getTransactionStreamLabel(earning, transactionContext.profiles, transactionContext.streams)
+  }, [transactionContext.profiles, transactionContext.streams])
+
+  const visibleEarnings = useMemo(() => {
+    return earnings.map((earning) => ({
+      ...earning,
+      userLabel: getUserLabel(earning),
+      accountLabel: getAccountLabel(earning),
+      streamLabel: getStreamLabel(earning),
+    }))
+  }, [earnings, getUserLabel, getAccountLabel, getStreamLabel])
 
   if (!user || !profile) {
     return (
@@ -455,17 +491,22 @@ export default function EarningsDashboard() {
                 <p className="text-gray-400 text-center py-8">No earnings transactions yet.</p>
               ) : (
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {earnings.map((earning, index) => (
+                  {visibleEarnings.map((earning, index) => (
                     <div 
                       key={index}
                       className="flex justify-between items-center p-3 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition"
                     >
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm text-gray-400">
                           {new Date(earning.created_at).toLocaleDateString()} {new Date(earning.created_at).toLocaleTimeString()}
                         </p>
                         {earning.type && (
                           <p className="text-xs text-gray-500 mt-1 capitalize">{earning.type.replace('_', ' ')}</p>
+                        )}
+                        <p className="text-xs text-gray-300 mt-1 truncate">{earning.userLabel}</p>
+                        <p className="text-xs text-gray-400 truncate">{earning.accountLabel}</p>
+                        {earning.streamLabel && (
+                          <p className="text-xs text-cyan-300 mt-1 truncate">{earning.streamLabel}</p>
                         )}
                       </div>
                       <div className="text-right">

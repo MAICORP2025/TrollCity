@@ -2,7 +2,7 @@
 import React, { useEffect, Suspense, useState, useRef } from "react";
 import TrollProvider from "./troll/TrollProvider";
 import { EffectsProvider } from "./contexts/BroadcastEffectsContext";
-import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "./lib/store";
 import { GlobalEventProvider } from "./contexts/GlobalEventContext";
 import { BatterySaverProvider } from "./contexts/BatterySaverContext";
@@ -263,14 +263,6 @@ const isPublicRoute = (pathname: string) => {
     return true
   }
 
-  if (pathname.startsWith('/watch/')) {
-    return true
-  }
-
-  if (pathname.startsWith('/kick-fee/')) {
-    return true
-  }
-
   // Live auctions browse/watch are public — anyone can view
   if (pathname === '/auctions') return true
   if (pathname.startsWith('/auctions/') && !pathname.startsWith('/auctions/studio')) return true
@@ -291,10 +283,22 @@ const isPublicRoute = (pathname: string) => {
   // Legal pages are public
   if (pathname.startsWith('/legal/')) return true
 
+  // Profile pages are public - usernames and user IDs
+  if (pathname.startsWith('/profile/')) return true
+
+  // Username-based routes (e.g., /ceo_of_mai) are public profile redirects
+  // Must come before broadcast check - route must look like a username (alphanumeric + underscores/hyphens)
+  if (/^[a-zA-Z0-9_-]+$/.test(pathname.slice(1))) return true
+
+  // Broadcast/Stream routes - public with password protection (handled by components)
   return (
-    pathname.startsWith('/broadcast/') &&
-    !pathname.startsWith('/broadcast/setup') &&
-    !pathname.startsWith('/broadcast/summary')
+    (pathname.startsWith('/broadcast/') &&
+     !pathname.startsWith('/broadcast/setup') &&
+     !pathname.startsWith('/broadcast/summary')) ||
+    pathname.startsWith('/watch/') ||
+    pathname.startsWith('/live/') ||
+    pathname.startsWith('/stream/') ||
+    pathname.startsWith('/gaming/watch/')
   )
 }
 
@@ -446,7 +450,6 @@ import GamingMonetization from "./pages/broadcast/gaming/GamingMonetization.tsx"
 import GamingStore from "./pages/broadcast/gaming/GamingStore.tsx";
 import BroadcastRouter from "./pages/broadcast/BroadcastRouter.js";
 import StreamSummary from "./pages/broadcast/StreamSummary.js";
-import ReplayPage from "./pages/broadcast/ReplayPage.js";
 import PresidentPage from "./pages/President.js";
 import PresidentDashboard from "./pages/president/PresidentDashboard.js";
 import SecretaryDashboard from "./pages/president/SecretaryDashboard.js";
@@ -1464,20 +1467,31 @@ const handleVisibilityChange = async () => {
                 <Route path="/agency/:agencyIdOrSlug/goals" element={<AgencyProfilePage />} />
                 <Route path="/agency-apply/:agencyIdOrSlug" element={<AgencyApplyPage />} />
 
-                 {/* Application Routes */}
-                 <Route path="/apply" element={<ApplicationPage />} />
+                {/* Application Routes */}
+                <Route path="/apply" element={<ApplicationPage />} />
 
-{/* Careers */}
+                {/* Careers */}
                 <Route path="/careers" element={<Career />} />
                 <Route path="/career" element={<Navigate to="/careers" replace />} />
 
                 {/* 🏠 Home - Public with limited auth for interactions */}
                 <Route path="/home" element={<Navigate to="/" replace />} />
-                 <Route path="/" element={<LiveContentProvider><AuthenticatedHome /></LiveContentProvider>} />
+                <Route path="/" element={<LiveContentProvider><AuthenticatedHome /></LiveContentProvider>} />
 
                 {/* 🎤 Live Auctions — Public browse/watch, studio gated below */}
                 <Route path="/auctions" element={<AuctionsPage />} />
                 <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
+
+{/* Username-based public profile routes - must be after known routes */}
+                <Route path="/profile/id/:userId" element={<Profile />} />
+                <Route path="/profile/:username" element={<Profile />} />
+
+                {/* Broadcast/Stream routes - public with password protection */}
+                <Route path="/gaming/watch/:streamId" element={<HytroGamingViewer />} />
+                <Route path="/broadcast/:id" element={<BroadcastRouter />} />
+                <Route path="/watch/:id" element={<BroadcastRouter />} />
+                <Route path="/live/:streamId" element={<BroadcastRouter />} />
+                <Route path="/stream/:id" element={<BroadcastRouter />} />
 
                 {/* 🎓 Troll City Academy */}
                 <Route path="/academy" element={<AcademyHomePage />} />
@@ -1549,17 +1563,13 @@ const handleVisibilityChange = async () => {
   <Route path="analytics" element={<GamingAnalytics />} />
   <Route path="community" element={<GamingCommunity />} />
   <Route path="monetization" element={<GamingMonetization />} />
-  <Route path="store" element={<GamingStore />} />
-</Route>
-                    <Route path="/gaming/watch/:streamId" element={<HytroGamingViewer />} />
-                    <Route path="/broadcast/:id" element={<BroadcastRouter />} />
-                    <Route path="/watch/:id" element={<BroadcastRouter />} />
-                   <Route path="/kick-fee/:streamId" element={<KickFeePage />} />
-                    <Route path="/broadcast/summary/:streamId" element={<StreamSummary />} />
-                    <Route path="/replay/:streamId" element={<ReplayPage />} />
+<Route path="store" element={<GamingStore />} />
+                   </Route>
 
-                  
-                  {/* President Routes */}
+                   {/* Kick Fee - for users who were kicked from streams */}
+                   <Route path="/kick-fee/:streamId" element={<KickFeePage />} />
+
+                   {/* President Routes */}
                   <Route path="/president" element={<PresidentPage />} />
                   <Route path="/president/dashboard" element={
                     <RequireRole roles={[UserRole.PRESIDENT, UserRole.ADMIN]}>
@@ -1582,9 +1592,8 @@ const handleVisibilityChange = async () => {
                     </RequireRole>
                   } />
 
-                  <Route path="/mobile" element={<Navigate to="/home" replace />} />
-                  <Route path="/live" element={<ExploreFeed />} />
-                  <Route path="/messages" element={<Navigate to="/utromail" replace />} />
+<Route path="/mobile" element={<Navigate to="/home" replace />} />
+                   <Route path="/messages" element={<Navigate to="/utromail" replace />} />
                   <Route path="/tcps" element={<Navigate to="/utromail" replace />} />
                   <Route path="/match" element={<MatchPage />} />
           <Route path="/city-hall" element={<Navigate to="/home" replace />} />
@@ -1667,10 +1676,9 @@ const handleVisibilityChange = async () => {
                   <Route path="/jail/appeal" element={<JailAppealPage />} />
                   <Route path="/wall" element={<TrollCityWall />} />
                   <Route path="/wall/:postId" element={<WallPostPage />} />
-                  <Route path="/profile/setup" element={<ProfileSetup />} />
-                  <Route path="/profile/id/:userId" element={<Profile />} />
-                   <Route path="/profile/:username" element={<Profile />} />
-                  <Route path="/crowns/redeem" element={<CrownRedemption />} />
+<Route path="/profile/setup" element={<ProfileSetup />} />
+                   <Route path="/profile/settings" element={<ProfileSettings />} />
+                   <Route path="/profile/delete" element={<DeleteAccount />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/blocked-users" element={<BlockedUsers />} />
 <Route path="/district/:districtName" element={<DistrictTour />} />
@@ -1725,21 +1733,10 @@ const handleVisibilityChange = async () => {
                   <Route path="/live/overlay/:streamId" element={<LiveStreamOverlay />} />
                   <Route path="/settings/audio" element={<AudioSettings />} />
 
-                   {/* 🎥 Streaming */}
-
-                   <Route path="/join" element={<JoinPage />} />
-                   <Route path="/kick-fee" element={<KickFee />} />
-                   <Route path="/troll-court/session" element={<TrollCourtSession />} />
-                   <Route path="/live/:streamId" element={<BroadcastRouter />} />
-                   <Route path="/stream/:id" element={<BroadcastRouter />} />
-                   <Route path="/stream/:streamId" element={<BroadcastRouter />} />
-                   <Route path="/stream/:id/summary" element={<Navigate to="/live" replace />} />
-                   <Route path="/stream-ended" element={<Navigate to="/live" replace />} />
-
-                  {/* ⚖️ Court */}
-                  <Route path="/troll-court" element={<TrollCourt />} />
-                  <Route path="/troll-court/watch/:sessionId" element={<CourtViewerPage />} />
-                  <Route path="/court/:courtId" element={<CourtRoom />} />
+{/* ⚖️ Court */}
+                    <Route path="/troll-court" element={<TrollCourt />} />
+                    <Route path="/troll-court/watch/:sessionId" element={<CourtViewerPage />} />
+                    <Route path="/court/:courtId" element={<CourtRoom />} />
                   
 {/* � Team Meeting Room */}
                    <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
@@ -2507,11 +2504,12 @@ const handleVisibilityChange = async () => {
                       </RequireRole>
                     }
                   />
-                  {/* Account routes removed - Settings/Account pages no longer in sidebar */}
+{/* Account routes removed - Settings/Account pages no longer in sidebar */}
                 </Route>
 
-                {/* 🔙 Catch-all */}
-                 <Route path="*" element={<Navigate to="/" replace />} />
+{/* 🔙 Catch-all - redirect username patterns to profile (PUBLIC ACCESS) */}
+                 <Route path="/:username" element={<UsernameRedirect />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
                    </Routes>
              </Suspense>
             </ErrorBoundary>
@@ -2582,6 +2580,72 @@ function App() {
 }
 
 export default App;
+
+// Username redirect component - redirects /{username} to their live stream or profile
+function UsernameRedirect() {
+  const { username } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    
+    if (!username) return;
+    
+    // Check if this looks like a username (not a known route)
+    const knownRoutes = ['home', 'auth', 'api', 'admin', 'agency', 'auctions', 'academy', 
+      'apply', 'careers', 'live', 'broadcast', 'watch', 'stream', 'gaming', 'hytrogaming',
+      'profile', 'wallet', 'stats', 'support', 'legal', 'church', 'podcast', 'auctions',
+      'government', 'troll-court', 'court', 'meeting', 'team-meeting', 'tromail', 'utromail',
+      'explore', 'leaderboard', 'marketplace', 'pool', 'map', 'settings', 'notifications',
+      'following', 'trollifications', 'trollifieds', 'garage', 'ktauto', 'district', 'living',
+      'insurance', 'neighborhood', 'driver-test', 'inbox', 'shop', 'inventory', 'troting',
+      'tcps', 'match', 'city-hall', 'city-registry', 'universe-event', 'events', 'terms',
+      'access-denied', 'reset-password', 'tax-onboarding', 'verification', 'founding-officer-trial',
+      'under-construction', 'jail', 'inmates', 'wall', 'crowns', 'credit-scores', 'search',
+      'blocked-users', 'pool', 'troll-games', 'troll-wheel', 'decree', 'executive', 'noah'];
+    
+    if (knownRoutes.includes(username)) return;
+    
+    // First look up the user_id from username
+    supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle()
+      .then(({ data: userProfile }) => {
+        if (cancelled) return;
+        if (!userProfile?.id) {
+          navigate(`/profile/${encodeURIComponent(username)}`, { replace: true });
+          return;
+        }
+        
+        // Check if user has an active live stream
+        return supabase
+          .from('streams')
+          .select('id, category')
+          .eq('user_id', userProfile.id)
+          .eq('is_live', true)
+          .eq('status', 'live')
+          .maybeSingle();
+      })
+      .then(({ data: liveStream }) => {
+        if (cancelled) return;
+        if (liveStream?.id) {
+          // Gaming streams route to gaming viewer, others to general watch
+          const targetPath = liveStream.category === 'gaming' 
+            ? `/gaming/watch/${liveStream.id}` 
+            : `/watch/${liveStream.id}`;
+          navigate(targetPath, { replace: true });
+        } else {
+          navigate(`/profile/${encodeURIComponent(username)}`, { replace: true });
+        }
+      });
+
+    return () => { cancelled = true };
+  }, [username, navigate]);
+
+  return <div className="flex min-h-screen items-center justify-center bg-[#0A0814] text-white"><div>Loading...</div></div>;
+}
 
 // Mini Podcast Player wrapper component
 function MiniPodcastPlayerWrapper() {

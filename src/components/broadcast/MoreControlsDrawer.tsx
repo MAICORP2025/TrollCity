@@ -17,6 +17,7 @@ import {
   Sparkles,
   X,
   Megaphone,
+  MessageSquareOff,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -49,9 +50,11 @@ interface MoreControlsDrawerProps {
 
   isOfficer?: boolean;
   onMuteUser?: (userId: string) => void
+  onDisableChat?: (userId: string) => void
   onBanUser?: (userId: string) => void
   onRemoveFromStage?: () => void
   onModGift?: (userId: string) => void
+  userActionUserId?: string
 }
 
 export default function MoreControlsDrawer({
@@ -78,9 +81,11 @@ export default function MoreControlsDrawer({
   isHost = false,
   isOfficer = false,
   onMuteUser,
+  onDisableChat,
   onBanUser,
   onRemoveFromStage,
   onModGift,
+  userActionUserId,
 }: MoreControlsDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null)
 
@@ -290,20 +295,38 @@ export default function MoreControlsDrawer({
                 <SectionTitle label="Officer Actions" className="mt-5" danger />
 
                 <div className="grid grid-cols-3 gap-2">
-                  {onMuteUser && (
+                  {onMuteUser && userActionUserId && (
                     <ControlButton
                       icon={MicOff}
                       label="Mute User"
-                      onClick={() => {}}
+                      onClick={() => {
+                        onMuteUser(userActionUserId)
+                        onClose()
+                      }}
                       danger
                     />
                   )}
 
-                  {onBanUser && (
+                  {onDisableChat && userActionUserId && (
+                    <ControlButton
+                      icon={MessageSquareOff}
+                      label="Disable Chat"
+                      onClick={() => {
+                        onDisableChat(userActionUserId)
+                        onClose()
+                      }}
+                      danger
+                    />
+                  )}
+
+                  {onBanUser && userActionUserId && (
                     <ControlButton
                       icon={Ban}
                       label="Jail/Ban"
-                      onClick={() => {}}
+                      onClick={() => {
+                        onBanUser(userActionUserId)
+                        onClose()
+                      }}
                       danger
                     />
                   )}

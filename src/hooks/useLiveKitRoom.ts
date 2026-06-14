@@ -126,7 +126,7 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
         throw new Error(`LiveKit token response missing token: ${JSON.stringify(data)}`);
       }
 
-      console.log('[useLiveKitRoom] Got token, room:', roomName);
+
       return data.token;
     } catch (err: any) {
       console.warn('[useLiveKitRoom] Token fetch failed, falling back to raw Supabase Function fetch:', err, requestDetails);
@@ -987,99 +987,71 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
     setLocalVideoTrack(null)
   }, [])
 
-  // Publish local camera/mic tracks to the existing room.
-  // Used when a viewer joins a seat — the room stays connected to keep broadcaster tracks.
-  // If the current token lacks publish permission (403), re-fetches a publisher token
-  // and reconnects before publishing.
-  const publishLocalTracks = useCallback(async () => {
-    const room = roomRef.current
-    if (!room || room.state !== 'connected') {
-      console.warn('[useLiveKitRoom] publishLocalTracks: room not connected')
-      return
-    }
+   const publishLocalTracks = useCallback(async () => {
+     const room = roomRef.current
+     if (!room || room.state !== 'connected') {
+       return
+     }
 
-    let audioTrack = localAudioTrackRef.current
-    let videoTrack = localVideoTrackRef.current
+     const currentRoomName = room.name
+     const userId = localUserIdRef.current || ''
+     const pubToken = await fetchToken(currentRoomName, userId, userName, true, undefined, 'seat-publisher')
 
-    const doPublish = async (): Promise<void> => {
-      await room.localParticipant.publishTrack(audioTrack)
-      if (videoTrack) {
-        await room.localParticipant.publishTrack(videoTrack)
-      }
-    }
+     if (!pubToken) {
+       throw new Error('Failed to get publish token from server')
+     }
 
-    try {
-      if (!audioTrack) {
-        audioTrack = await createLocalAudioTrack()
-        localAudioTrackRef.current = audioTrack
-        setLocalAudioTrack(audioTrack)
-      }
+     const url = getLiveKitUrl()
+     if (!url) {
+       throw new Error('Missing LiveKit URL for reconnect')
+     }
 
-      if (!videoTrack && !audioOnly) {
-        const { createLocalVideoTrack: createVideo } = await import('livekit-client')
-        videoTrack = await createVideo({ ...videoPreset, facingMode: 'user' })
-        localVideoTrackRef.current = videoTrack
-        setLocalVideoTrack(videoTrack)
-      }
+     const remoteParticipantsBefore = room.remoteParticipants
+       ? Array.from(room.remoteParticipants.values())
+       : []
 
-      try {
-        await doPublish()
-      } catch (publishErr: any) {
-        const isPermissionError = publishErr?.status === 403
-          || publishErr?.code === 15
-          || /403|permission|publish/i.test(String(publishErr?.message || publishErr))
+     await room.disconnect()
+     joinedRef.current = false
+     setIsConnected(false)
 
-        if (!isPermissionError) {
-          throw publishErr
-        }
+     await room.connect(url, pubToken)
+     await waitForRoomConnected(room, 10000)
 
-        console.warn('[useLiveKitRoom] publishLocalTracks: permission denied (403), re-fetching token with publish access')
+     joinedRef.current = true
+     setIsConnected(true)
 
-        // Re-fetch token with publish permissions (seat-publisher mode)
-        const currentRoomName = room.name
-        const userId = localUserIdRef.current || ''
-        const pubToken = await fetchToken(currentRoomName, userId, userName, true, undefined, 'seat-publisher')
+     const existingParticipants = room.remoteParticipants
+       ? Array.from(room.remoteParticipants.values())
+       : []
+     if (existingParticipants.length === 0 && remoteParticipantsBefore.length > 0) {
+       setRemoteUsers(remoteParticipantsBefore)
+     } else {
+       setRemoteUsers(existingParticipants)
+     }
 
-        if (!pubToken) {
-          throw new Error('Failed to get publish token from server')
-        }
+     let audioTrack = localAudioTrackRef.current
+     let videoTrack = localVideoTrackRef.current
 
-        // Reconnect room with the new publisher token
-        const url = getLiveKitUrl()
-        if (!url) {
-          throw new Error('Missing LiveKit URL for reconnect')
-        }
+     if (!audioTrack) {
+       audioTrack = await createLocalAudioTrack()
+       localAudioTrackRef.current = audioTrack
+       setLocalAudioTrack(audioTrack)
+     }
 
-        // Disconnect and reconnect with publish token
-        await room.disconnect()
-        joinedRef.current = false
-        setIsConnected(false)
+     if (!videoTrack && !audioOnly) {
+       const { createLocalVideoTrack: createVideo } = await import('livekit-client')
+       videoTrack = await createVideo({ ...videoPreset, facingMode: 'user' })
+       localVideoTrackRef.current = videoTrack
+       setLocalVideoTrack(videoTrack)
+     }
 
-        await room.connect(url, pubToken)
-        await waitForRoomConnected(room, 10000)
-
-        joinedRef.current = true
-        setIsConnected(true)
-
-        // Restore remote participants
-        const existingParticipants = room.remoteParticipants
-          ? Array.from(room.remoteParticipants.values())
-          : []
-        setRemoteUsers(existingParticipants)
-
-        console.log('[useLiveKitRoom] publishLocalTracks: reconnected with publisher token, retrying publish')
-
-        // Retry publish with the new token
-        await doPublish()
-      }
+     await room.localParticipant.publishTrack(audioTrack)
+     if (videoTrack) {
+       await room.localParticipant.publishTrack(videoTrack)
+     }
 
       setIsPublishing(true)
-      console.log('[useLiveKitRoom] publishLocalTracks: tracks published')
-    } catch (err) {
-      console.error(`[useLiveKitRoom] publishLocalTracks error: ${safeStringify(err)}`)
-      onError?.(err)
-    }
-  }, [audioOnly, videoPreset, onError, fetchToken, userName])
+    }, [audioOnly, videoPreset, onError, fetchToken, userName])
 
   // Unpublish only local camera/mic tracks. Does NOT disconnect the room.
   // Used when a viewer leaves a seat — broadcaster tracks stay subscribed.
@@ -1106,7 +1078,7 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
       }
 
       setIsPublishing(false)
-      console.log('[useLiveKitRoom] unpublishLocalTracks: tracks unpublished')
+
     } catch (err) {
       console.error(`[useLiveKitRoom] unpublishLocalTracks error: ${safeStringify(err)}`)
     }
@@ -1141,7 +1113,7 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
           facingMode: 'user',
         })
       } catch (err) {
-        console.warn('[useLiveKitRoom] prewarm video track failed:', err)
+
       }
     }
 
@@ -1338,7 +1310,7 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
           room.disconnect()
         }
       } catch (err) {
-        console.warn('[useLiveKitRoom] unmount cleanup failed:', err)
+
       }
 
       roomRef.current = null
@@ -1381,3 +1353,4 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
 }
 
 export default useLiveKitRoom;
+

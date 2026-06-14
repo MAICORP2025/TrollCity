@@ -2,10 +2,6 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 
-interface UseBroadcastRecorderOptions {
-  useR2?: boolean
-}
-
 interface UseBroadcastRecorderReturn {
   isRecording: boolean
   isUploading: boolean
@@ -17,15 +13,12 @@ interface UseBroadcastRecorderReturn {
   error: string | null
 }
 
-export function useBroadcastRecorder(options?: UseBroadcastRecorderOptions): UseBroadcastRecorderReturn {
-  const { useR2 = false } = options || {}
+export function useBroadcastRecorder(): UseBroadcastRecorderReturn {
   const [isRecording, setIsRecording] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [r2UploadUrl, setR2UploadUrl] = useState<string | null>(null)
-  const [r2Key, setR2Key] = useState<string | null>(null)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -33,89 +26,27 @@ export function useBroadcastRecorder(options?: UseBroadcastRecorderOptions): Use
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
 
-  const uploadToR2 = useCallback(async (blob: Blob, streamId: string): Promise<string | null> => {
-    setIsUploading(true)
-    try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const authToken = sessionData.session?.access_token || ''
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-      const edgeFunctionsUrl = import.meta.env.VITE_EDGE_FUNCTIONS_URL || `${supabaseUrl}/functions/v1`
-
-      const getUrlResp = await fetch(`${edgeFunctionsUrl}/upload-to-r2?action=getUploadUrl`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          streamId,
-          userId: (await supabase.auth.getUser()).data.user?.id,
-          fileName: `broadcast_${streamId}.webm`,
-          fileSize: blob.size,
-        }),
-      })
-
-      if (!getUrlResp.ok) {
-        const errText = await getUrlResp.text()
-        throw new Error(`Failed to get R2 upload URL: ${errText}`)
-      }
-
-      const getUrlData = await getUrlResp.json()
-      if (!getUrlData.success || !getUrlData.uploadUrl) {
-        throw new Error(getUrlData.error || 'Failed to get upload URL')
-      }
-
-      const uploadResponse = await fetch(getUrlData.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'video/webm',
-        },
-        body: blob,
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error(`R2 upload failed: ${uploadResponse.status}`)
-      }
-
-      await fetch(`${edgeFunctionsUrl}/upload-to-r2?action=confirm`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          streamId,
-          userId: (await supabase.auth.getUser()).data.user?.id,
-          key: getUrlData.key,
-          publicUrl: getUrlData.publicUrl,
-          durationSeconds: Math.floor(recordingDuration),
-          fileSize: blob.size,
-        }),
-      })
-
-      toast.success('Replay saved to your profile')
-      return getUrlData.publicUrl
-    } catch (err: any) {
-      console.error('[useBroadcastRecorder] R2 upload failed:', err)
-      toast.error(err?.message || 'Failed to upload replay to R2')
-      return null
-    } finally {
-      setIsUploading(false)
-    }
-  }, [recordingDuration])
-
-  const uploadToStorage = useCallback(async (streamId: string): Promise<string | null> => {
-    const blob = recordedBlob
+  const uploadToStorage = useCallback(async (streamId: string, blobOverride?: Blob | null): Promise<string | null> => {
+    const blob = blobOverride ?? recordedBlob
     if (!blob) {
       toast.error('No recording available to upload')
       return null
     }
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.id) {
+      toast.error('Not authenticated')
+      return null
+    }
+
+    console.log('[useBroadcastRecorder] Uploading...')
+    console.log('[useBroadcastRecorder] filePath:', `${user.id}/${streamId}/`)
+    console.log('[useBroadcastRecorder] blob.size:', blob.size, 'blob.type:', blob.type)
+
     setIsUploading(true)
     try {
       const fileName = `recording_${streamId}_${Date.now()}.webm`
-      const filePath = `recordings/${streamId}/${fileName}`
+      const filePath = `${user.id}/${streamId}/${fileName}`
 
       const { error: uploadError } = await supabase.storage
         .from('stream-recordings')
@@ -139,10 +70,12 @@ export function useBroadcastRecorder(options?: UseBroadcastRecorderOptions): Use
       await supabase
         .from('saved_streams')
         .upsert({
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user.id,
           stream_id: streamId,
-          source: 'gaming_recording',
-        }, { onConflict: 'user_id,stream_id' })
+          source: 'manual',
+          storage_category: 'broadcast_recording',
+          file_size_bytes: blob.size,
+        }, { onConflict: 'saved_streams_user_id_stream_id_key' })
 
       toast.success('Recording saved to your profile')
       return recordingUrl
@@ -180,11 +113,14 @@ export function useBroadcastRecorder(options?: UseBroadcastRecorderOptions): Use
       mediaRecorderRef.current = recorder
 
       recorder.ondataavailable = (e) => {
+        console.log('[useBroadcastRecorder] Chunk size:', e.data.size)
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
 
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType })
+        console.log('[useBroadcastRecorder] Blob created:', blob)
+        console.log('[useBroadcastRecorder] Blob size:', blob?.size)
         setRecordedBlob(blob)
 
         if (streamRef.current) {
@@ -229,6 +165,8 @@ export function useBroadcastRecorder(options?: UseBroadcastRecorderOptions): Use
 
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType })
+        console.log('[useBroadcastRecorder] Blob created:', blob)
+        console.log('[useBroadcastRecorder] Blob size:', blob?.size)
         setRecordedBlob(blob)
         setIsRecording(false)
 
@@ -250,16 +188,8 @@ export function useBroadcastRecorder(options?: UseBroadcastRecorderOptions): Use
   }, [])
 
   const uploadRecording = useCallback(async (streamId: string): Promise<string | null> => {
-    if (useR2) {
-      const blob = recordedBlob
-      if (!blob) {
-        toast.error('No recording available to upload')
-        return null
-      }
-      return uploadToR2(blob, streamId)
-    }
     return uploadToStorage(streamId)
-  }, [useR2, recordedBlob, uploadToR2, uploadToStorage])
+  }, [uploadToStorage])
 
   useEffect(() => {
     return () => {

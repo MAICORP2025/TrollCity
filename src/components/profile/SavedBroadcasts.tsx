@@ -265,7 +265,7 @@ export default function SavedBroadcasts({ userId }: SavedBroadcastsProps) {
             source: 'troll_court_evidence',
           },
           {
-            onConflict: 'user_id,stream_id',
+            onConflict: 'saved_streams_user_id_stream_id_key',
           }
         );
 

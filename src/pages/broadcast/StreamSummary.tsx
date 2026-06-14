@@ -77,11 +77,12 @@ export default function StreamSummary() {
           try {
             await supabase
               .from('saved_streams')
-              .insert({
+              .upsert({
                 user_id: user.id,
                 stream_id: streamId,
-                source: 'auto_stream_end'
-              });
+                source: 'auto_stream_end',
+                storage_category: 'broadcast_recording',
+              }, { onConflict: 'saved_streams_user_id_stream_id_key' });
             setIsSaved(true);
           } catch (err: any) {
             if (err.code !== '23505') {

@@ -65,10 +65,10 @@ BEGIN
     WHERE id = v_broadcaster_id;
 
     -- Transaction Logs
-    INSERT INTO public.coin_transactions (user_id, amount, type, description, metadata)
+    INSERT INTO public.coin_transactions (user_id, amount, type, description, stream_id, from_user_id, to_user_id, metadata)
     VALUES
-    (p_user_id, -v_box_price, 'guest_box_fee', 'Joined Guest Box (Flat Fee)', json_build_object('stream_id', p_stream_id, 'recipient', v_broadcaster_id)),
-    (v_broadcaster_id, v_box_price, 'guest_box_income', 'Guest Joined Box', json_build_object('stream_id', p_stream_id, 'sender', p_user_id));
+    (p_user_id, -v_box_price, 'guest_box_fee', 'Joined Guest Box (Flat Fee)', p_stream_id, p_user_id, v_broadcaster_id, json_build_object('stream_id', p_stream_id, 'recipient', v_broadcaster_id)),
+    (v_broadcaster_id, v_box_price, 'guest_box_income', 'Guest Joined Box', p_stream_id, p_user_id, v_broadcaster_id, json_build_object('stream_id', p_stream_id, 'sender', p_user_id));
   END IF;
 
   -- Add to stream_guests
@@ -135,9 +135,9 @@ BEGIN
         WHERE id = p_user_id;
 
         INSERT INTO public.coin_transactions (
-          user_id, amount, type, description, stream_id
+          user_id, amount, type, description, stream_id, from_user_id, to_user_id
         ) VALUES (
-          p_user_id, -v_cost, 'stream_cost', 'Broadcasting fee (1 min)', p_stream_id
+          p_user_id, -v_cost, 'stream_cost', 'Broadcasting fee (1 min)', p_stream_id, p_user_id, NULL
         );
     END IF;
 
@@ -173,10 +173,10 @@ BEGIN
           WHERE id = v_broadcaster_id;
 
           -- Record transactions for guest (debit) and broadcaster (credit)
-          INSERT INTO public.coin_transactions (user_id, amount, type, description, stream_id)
+          INSERT INTO public.coin_transactions (user_id, amount, type, description, stream_id, from_user_id, to_user_id)
           VALUES
-            (p_user_id, -v_cost, 'stream_cost', 'Guest participation fee (1 min)', p_stream_id),
-            (v_broadcaster_id, v_cost, 'guest_box_income', 'Guest participation fee (1 min)', p_stream_id);
+            (p_user_id, -v_cost, 'stream_cost', 'Guest participation fee (1 min)', p_stream_id, p_user_id, v_broadcaster_id),
+            (v_broadcaster_id, v_cost, 'guest_box_income', 'Guest participation fee (1 min)', p_stream_id, p_user_id, v_broadcaster_id);
       END IF;
 
       RETURN jsonb_build_object('success', true, 'cost', v_cost, 'remaining', v_user_profile.troll_coins - v_cost);

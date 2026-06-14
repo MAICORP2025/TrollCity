@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -42,14 +42,12 @@ import ErrorBoundary from '../../components/ErrorBoundary'
 import GiftBoxModal from '../../components/broadcast/GiftBoxModal'
 import GiftVideoOverlay from '../../components/broadcast/GiftVideoOverlay'
 import UserActionModal from '../../components/broadcast/UserActionModal'
-import HypeCoinPopup from '../../components/HypeCoinPopup'
 import { getGiftVisualConfig } from '../../lib/giftVisuals'
 
 
 import { GiftSystemProvider } from '../../lib/hooks/useGiftSystem'
 import BattleView from '../../components/broadcast/BattleView'
 import { useBoxCount } from '../../hooks/useBoxCount'
-import { useHypeCoins } from '../../lib/hooks/useHypeCoins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useUserLeagues } from '../../hooks/useUserLeagues'
 import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
@@ -73,6 +71,7 @@ import CityStatusOrb from '../../components/city/CityStatusOrb'
 import { useCityStatusOrb } from '../../lib/hooks/useCityStatusOrb'
 import SeatCityStatusOrb from '../../components/broadcast/SeatCityStatusOrb'
 import { useGhostMode } from '../../hooks/useGhostMode'
+import { useChatBlockStatus } from '../../hooks/useChatBlockStatus'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -261,7 +260,7 @@ function getAudioTrackFromParticipant(participant: any): any {
   return audioPub?.track || null
 }
 
-function RemoteVideoSurface({
+const RemoteVideoSurface = memo(function RemoteVideoSurface({
   participant,
   mirror = true,
   className,
@@ -315,54 +314,71 @@ function RemoteVideoSurface({
     })
   }
 
+  // Stable identity for the underlying media stream track.
+  // This prevents unnecessary detach/attach when trackTick bumps due to
+  // unrelated room events (e.g. another participant joining a seat).
+  const videoTrackId = videoTrack?.mediaStreamTrack?.id || videoTrack?.trackId || videoTrack?.sid || null
+  const audioTrackId = audioTrack?.mediaStreamTrack?.id || audioTrack?.trackId || audioTrack?.sid || null
+
+  // Use refs to track what we actually attached, so we only detach/reattach
+  // when the underlying track identity truly changes.
+  const attachedVideoIdRef = useRef<string | null>(null)
+  const attachedAudioIdRef = useRef<string | null>(null)
+
   useEffect(() => {
     const videoEl = videoRef.current
     if (!videoEl) return
 
-    if (videoTrack) {
-      try {
-        videoTrack.attach(videoEl)
-        videoEl.style.transform = mirror ? 'scaleX(-1)' : 'none'
-        videoEl.play().catch(() => {})
-      } catch (err) {
-        console.warn('[ViewerPage] Failed to attach remote video track:', err)
-      }
-    }
-
-    return () => {
-      if (videoTrack) {
+    // Only (re-)attach if the track identity actually changed
+    if (videoTrackId !== attachedVideoIdRef.current) {
+      // Detach previous track if we had one attached
+      if (attachedVideoIdRef.current !== null) {
         try {
-          videoTrack.detach(videoEl)
+          videoTrack?.detach?.(videoEl)
         } catch {
-          // ignore detach errors
+          // ignore
         }
       }
+
+      if (videoTrack) {
+        try {
+          videoTrack.attach(videoEl)
+          videoEl.style.transform = mirror ? 'scaleX(-1)' : 'none'
+          videoEl.play().catch(() => {})
+        } catch (err) {
+          console.warn('[ViewerPage] Failed to attach remote video track:', err)
+        }
+      }
+      attachedVideoIdRef.current = videoTrackId
     }
-  }, [videoTrack, trackTick, mirror])
+  }, [videoTrack, videoTrackId, trackTick, mirror])
 
   useEffect(() => {
     const audioEl = audioRef.current
     if (!audioEl) return
 
-    if (audioTrack) {
-      try {
-        audioTrack.attach(audioEl)
-        audioEl.play().catch(() => {})
-      } catch (err) {
-        console.warn('[ViewerPage] Failed to attach remote audio track:', err)
-      }
-    }
-
-    return () => {
-      if (audioTrack) {
+    // Only (re-)attach if the track identity actually changed
+    if (audioTrackId !== attachedAudioIdRef.current) {
+      // Detach previous track if we had one attached
+      if (attachedAudioIdRef.current !== null) {
         try {
-          audioTrack.detach(audioEl)
+          audioTrack?.detach?.(audioEl)
         } catch {
-          // ignore detach errors
+          // ignore
         }
       }
+
+      if (audioTrack) {
+        try {
+          audioTrack.attach(audioEl)
+          audioEl.play().catch(() => {})
+        } catch (err) {
+          console.warn('[ViewerPage] Failed to attach remote audio track:', err)
+        }
+      }
+      attachedAudioIdRef.current = audioTrackId
     }
-  }, [audioTrack, trackTick])
+  }, [audioTrack, audioTrackId, trackTick])
 
   return (
     <div
@@ -388,7 +404,43 @@ function RemoteVideoSurface({
       )}
     </div>
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom comparator for React.memo — returns true to SKIP re-render.
+  // Only re-render when the participant's actual track identity changes.
+
+  const prevVideo = getVideoTrackFromParticipant(prevProps.participant)
+  const nextVideo = getVideoTrackFromParticipant(nextProps.participant)
+  const prevAudio = getAudioTrackFromParticipant(prevProps.participant)
+  const nextAudio = getAudioTrackFromParticipant(nextProps.participant)
+
+  // Compare MediaStreamTrack IDs — the actual browser-level track identity
+  const prevVideoId = prevVideo?.mediaStreamTrack?.id || null
+  const nextVideoId = nextVideo?.mediaStreamTrack?.id || null
+  const prevAudioId = prevAudio?.mediaStreamTrack?.id || null
+  const nextAudioId = nextAudio?.mediaStreamTrack?.id || null
+
+  // Also compare the track SID (LiveKit-level identity) as fallback
+  const prevVideoSid = prevVideo?.sid || null
+  const nextVideoSid = nextVideo?.sid || null
+  const prevAudioSid = prevAudio?.sid || null
+  const nextAudioSid = nextAudio?.sid || null
+
+  const tracksUnchanged =
+    prevVideoId === nextVideoId &&
+    prevAudioId === nextAudioId &&
+    prevVideoSid === nextVideoSid &&
+    prevAudioSid === nextAudioSid
+
+  // Also check non-track props
+  const otherPropsUnchanged =
+    prevProps.mirror === nextProps.mirror &&
+    prevProps.className === nextProps.className &&
+    prevProps.onTap === nextProps.onTap &&
+    prevProps.room === nextProps.room
+
+  // Return true = skip re-render (props are "equal")
+  return tracksUnchanged && otherPropsUnchanged
+})
 
 function LocalVideoSurface({
   videoTrack,
@@ -489,7 +541,7 @@ function ViewerPage() {
   const location = useLocation()
   const { isMobileWidth, hasMounted } = useIsMobile()
   const isMobileViewer = hasMounted && isMobileWidth
-  const { recordHypeCoinsEarned, recordWatchTime } = useTrollFamilyActivity()
+  const { recordWatchTime } = useTrollFamilyActivity()
 
   // Broadcast Text Popup (viewers can only receive, not send)
   const {
@@ -580,6 +632,7 @@ function ViewerPage() {
    const [chatInput, setChatInput] = useState('')
     const floatingChatContainerRef = useRef<HTMLDivElement>(null)
     const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(new Set())
+    const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
 
     // Load blocked usernames for chat filtering
     useEffect(() => {
@@ -625,9 +678,6 @@ function ViewerPage() {
   } | null>(null)
   const [selectedSeatUserId, setSelectedSeatUserId] = useState<string | null>(null)
   const [viewerError, setViewerError] = useState<string | null>(null)
-  // Force re-render trigger for seat updates when broadcaster removes a user
-  const [, setSeatUpdateTick] = useState(0)
-  const [showHypeCoinPopup, setShowHypeCoinPopup] = useState(false)
   const { topGifters, isLoading: isTopFansLoading } = useStreamTopGifters({ streamId: streamId || null, limit: 10 })
 
   const resolveGiftAmount = useCallback((giftData: any): number => {
@@ -847,9 +897,7 @@ function ViewerPage() {
   const viewerIdentityRef = useRef<string>(
     `viewer-${streamId}-${user?.id || Math.random().toString(36).slice(2, 9)}`,
   )
-  const hypeRewardIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const watchTimeIntervalRef = useRef<number | null>(null)
-  const lastHypeRewardAttemptRef = useRef<number>(0)
+   const watchTimeIntervalRef = useRef<number | null>(null)
   const clickTimesRef = useRef<number[]>([])
   const blockedUntilRef = useRef<number | null>(null)
 
@@ -889,26 +937,65 @@ function ViewerPage() {
    } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
    const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
 
-   // Listen for seat_left broadcast events from broadcaster/officer removes
-   // This ensures immediate UI update when a user is kicked from a seat
-   useEffect(() => {
-     if (!streamId) return
+    // Refs to hold LiveKit functions populated after useLiveKitRoom hook runs
+    const unpublishLocalTracksRef = useRef<(() => Promise<void>) | null>(null)
+    const leaveLiveKitRoomRef = useRef<(() => Promise<void>) | null>(null)
+
+    // Track whether we already processed a kick for this user to avoid double-processing
+    const kickProcessedRef = useRef(false)
+
+    // Listen for seat_left broadcast events from broadcaster/officer removes
+    // When the kicked user is the current viewer, run the same client-side
+    // cleanup they would get if they clicked "Leave seat" themselves
+    useEffect(() => {
+      if (!streamId) return
+      kickProcessedRef.current = false
       const channel = supabase.channel(`stream-seat-events:${streamId}`)
-     channel
-       .on('broadcast', { event: 'seat_left' }, (payload) => {
-         const seatIndex = payload?.payload?.seat_index
-         // Immediately remove the seat from local state for instant UI update
-         if (seatIndex !== undefined && seatIndex !== null) {
-           removeSeat(Number(seatIndex))
-         }
-         // Also trigger a background refetch to sync with server
-         void refreshSeats()
-       })
-       .subscribe()
-     return () => {
-       supabase.removeChannel(channel)
-     }
-   }, [streamId, refreshSeats, removeSeat])
+      channel
+        .on('broadcast', { event: 'seat_left' }, (payload) => {
+          if (kickProcessedRef.current) return
+
+          const payloadUserId = payload?.payload?.user_id
+          const payloadSessionId = payload?.payload?.session_id
+          const seatIndex = payload?.payload?.seat_index
+
+          // Match by user ID or session ID - don't rely on mySeat since
+          // useStreamSeats may have already cleared it after refresh
+          const isCurrentUserKicked =
+            (payloadUserId && payloadUserId === user?.id) ||
+            (payloadSessionId && payloadSessionId === mySeat?.id) ||
+            (payloadUserId && (payloadUserId === mySeat?.user_id || payloadUserId === mySeat?.guest_id))
+
+          if (isCurrentUserKicked) {
+             kickProcessedRef.current = true
+             void (async () => {
+               try {
+                 await unpublishLocalTracksRef.current?.()
+               } catch (err) {
+                 // ignore
+               }
+               try {
+                 await leaveLiveKitRoomRef.current?.()
+               } catch (err) {
+                 // ignore
+               }
+               hasJoinedAudienceRef.current = false
+               joiningAudienceRef.current = false
+               currentRoomKeyRef.current = null
+               navigate('/?kicked=Removed%20from%20stage', { replace: true })
+             })()
+          } else {
+            if (seatIndex !== undefined && seatIndex !== null) {
+              removeSeat(Number(seatIndex))
+            }
+            void refreshSeats()
+          }
+        })
+        .subscribe()
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }, [streamId, refreshSeats, removeSeat, user?.id, mySeat?.id, mySeat?.user_id, mySeat?.guest_id])
 
    const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
    const isSeatActiveStatus = (status?: string | null) => {
@@ -1093,7 +1180,7 @@ const isActive = isStreamActive(stream)
 
   const noopCallback = useCallback(() => {}, [])
 
-  const {
+    const {
       remoteUsers,
       localVideoTrack,
       localAudioTrack,
@@ -1120,12 +1207,192 @@ const isActive = isStreamActive(stream)
       onError: handleLiveKitError,
     })
 
+    // Populate refs so the seat_left handler (defined before this hook) can call them
+    unpublishLocalTracksRef.current = unpublishLocalTracks
+    leaveLiveKitRoomRef.current = leaveLiveKitRoom
+
   // Expose dev-only join debug overlay for mobile PWA troubleshooting
   const [showJoinDebug, setShowJoinDebug] = useState(true);
 
   const remoteParticipants = useMemo(() => {
     return Array.isArray(remoteUsers) ? remoteUsers : []
   }, [remoteUsers])
+
+  // ─── ISOLATED SEAT-SPECIFIC STATE ──────────────────────────────────────
+  // Each seat manages its own track, user, and loading state keyed by seatId.
+  // The broadcaster track lives in a completely separate state object.
+  // No seat operation may ever modify broadcaster state or another seat's state.
+
+  interface SeatState {
+    participant: any;
+    videoTrack: any;
+    audioTrack: any;
+    isLoading: boolean;
+    userId: string | null;
+  }
+
+  interface BroadcasterState {
+    participant: any;
+    videoTrack: any;
+    audioTrack: any;
+  }
+
+  const [seatTracks, setSeatTracks] = useState<Record<number, SeatState>>({});
+  const [broadcasterState, setBroadcasterState] = useState<BroadcasterState>({
+    participant: null,
+    videoTrack: null,
+    audioTrack: null,
+  });
+
+  // Guard: verify seatId is a valid seat index (not broadcaster/box 0)
+  const isValidSeatId = useCallback((seatId: number): boolean => {
+    return Number.isInteger(seatId) && seatId >= 1;
+  }, []);
+
+  // Guard: verify uid matches the seat's assigned occupant
+  const seatMatchesUser = useCallback((seatId: number, userId: string | null): boolean => {
+    if (!isValidSeatId(seatId)) return false;
+    const seat = seats?.[seatId];
+    if (!seat) return false;
+    const seatUserId = seat?.user_id || seat?.guest_id || null;
+    return seatUserId !== null && seatUserId === userId;
+  }, [seats, isValidSeatId]);
+
+  // Guard: verify seat is active
+  const isSeatActive = useCallback((seatId: number): boolean => {
+    if (!isValidSeatId(seatId)) return false;
+    const seat = seats?.[seatId];
+    if (!seat) return false;
+    return isSeatActiveStatus(seat?.status);
+  }, [seats, isValidSeatId]);
+
+  // Update broadcaster state — only touches broadcaster, never seats
+  const updateBroadcasterState = useCallback((participant: any) => {
+    const videoTrack = getVideoTrackFromParticipant(participant);
+    const audioTrack = getAudioTrackFromParticipant(participant);
+    setBroadcasterState(prev => {
+      // Only update if track identity actually changed
+      const prevVideoId = prev.videoTrack?.mediaStreamTrack?.id || prev.videoTrack?.sid || null;
+      const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null;
+      const prevAudioId = prev.audioTrack?.mediaStreamTrack?.id || prev.audioTrack?.sid || null;
+      const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null;
+      if (prevVideoId === nextVideoId && prevAudioId === nextAudioId && prev.participant === participant) {
+        return prev; // No change
+      }
+      return { participant, videoTrack, audioTrack };
+    });
+  }, []);
+
+  // Update a specific seat's state — guarded to only affect the target seat
+  const updateSeatState = useCallback((seatId: number, participant: any, loading: boolean) => {
+    // Guard: must be a valid seat (not broadcaster)
+    if (!isValidSeatId(seatId)) {
+      console.warn('[ViewerPage] updateSeatState: invalid seatId', seatId, 'ignoring');
+      return;
+    }
+    const videoTrack = getVideoTrackFromParticipant(participant);
+    const audioTrack = getAudioTrackFromParticipant(participant);
+    const userId = participant ? (participant.identity || participant.name || null) : null;
+
+    setSeatTracks(prev => {
+      const prevSeat = prev[seatId];
+      // Only update if something actually changed
+      const prevVideoId = prevSeat?.videoTrack?.mediaStreamTrack?.id || prevSeat?.videoTrack?.sid || null;
+      const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null;
+      const prevAudioId = prevSeat?.audioTrack?.mediaStreamTrack?.id || prevSeat?.audioTrack?.sid || null;
+      const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null;
+      if (
+        prevVideoId === nextVideoId &&
+        prevAudioId === nextAudioId &&
+        prevSeat?.participant === participant &&
+        prevSeat?.isLoading === loading &&
+        prevSeat?.userId === userId
+      ) {
+        return prev; // No change
+      }
+      return {
+        ...prev,
+        [seatId]: { participant, videoTrack, audioTrack, isLoading: loading, userId },
+      };
+    });
+  }, [isValidSeatId]);
+
+  // Clear a specific seat's state — only clears the target seat
+  const clearSeatState = useCallback((seatId: number) => {
+    if (!isValidSeatId(seatId)) {
+      console.warn('[ViewerPage] clearSeatState: invalid seatId', seatId, 'ignoring');
+      return;
+    }
+    setSeatTracks(prev => {
+      if (!prev[seatId]) return prev; // Already empty
+      const next = { ...prev };
+      delete next[seatId];
+      return next;
+    });
+  }, [isValidSeatId]);
+
+  // Sync broadcaster state from remoteParticipants
+  useEffect(() => {
+    const exactHost = remoteParticipants.find((p: any) => participantMatchesUser(p, hostId));
+    const fallbackHost = exactHost || remoteParticipants.find((p: any) => !!getVideoTrackFromParticipant(p)) || null;
+    updateBroadcasterState(fallbackHost);
+  }, [remoteParticipants, hostId, updateBroadcasterState]);
+
+  // Sync seat states from remoteParticipants — each seat only updates itself
+  useEffect(() => {
+    if (!seats) return;
+
+    Object.entries(seats).forEach(([seatIndexStr, seat]: [string, any]) => {
+      const seatId = Number(seatIndexStr);
+      // Guard: skip broadcaster (seat 0)
+      if (!isValidSeatId(seatId)) return;
+
+      const seatUserId = seat?.user_id || seat?.guest_id || null;
+      const seatIdentity = seat?.livekit_participant_identity || seatUserId;
+      const isActive = isSeatActiveStatus(seat?.status);
+
+      if (!isActive || !seatUserId) {
+        // Seat is empty or inactive — clear it
+        clearSeatState(seatId);
+        return;
+      }
+
+      // Find the participant for this specific seat
+      const participant = remoteParticipants.find((p: any) => {
+        const pIdentity = String(p?.identity || '');
+        return (
+          participantMatchesUser(p, seatUserId) ||
+          participantMatchesUser(p, seatIdentity) ||
+          pIdentity === String(seatIdentity) ||
+          pIdentity.endsWith(`-${seatIdentity}`) ||
+          String(seatIdentity).endsWith(pIdentity)
+        );
+      }) || null;
+
+      // Guard: verify the found participant actually belongs to this seat
+      if (participant && !participantMatchesUser(participant, seatUserId) && !participantMatchesUser(participant, seatIdentity)) {
+        return; // Participant doesn't match — don't update
+      }
+
+      const isLoading = normalizeSeatStatus(seat?.status) === 'camera_starting';
+      updateSeatState(seatId, participant, isLoading);
+    });
+
+    // Clear seats that no longer exist in the seats data
+    setSeatTracks(prev => {
+      const validSeatIds = new Set(Object.keys(seats).map(Number).filter(isValidSeatId));
+      let changed = false;
+      const next: Record<number, SeatState> = {};
+      for (const [id, state] of Object.entries(prev)) {
+        if (validSeatIds.has(Number(id))) {
+          next[Number(id)] = state;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [seats, remoteParticipants, isValidSeatId, updateSeatState, clearSeatState]);
 
   // Mic mute callbacks for walkie-talkie integration (for users on stage)
   const handleToggleMic = useCallback(async () => {
@@ -1272,8 +1539,6 @@ const isActive = isStreamActive(stream)
 
     return profiles
   }, [activeSeats, broadcasterProfile, hostId])
-
-  const { hypeCoins, refreshHypeCoins, earnHypeCoinFromWatch } = useHypeCoins()
 
   const onGift = useCallback((userId?: string | null) => {
     setGiftRecipientId(userId || hostId || null)
@@ -1476,63 +1741,6 @@ const handleLeaveSeat = useCallback(async () => {
 
   useEffect(() => {
     if (!streamId || !user?.id || !isStreamLive || hostId === user.id) {
-      if (hypeRewardIntervalRef.current) {
-        clearInterval(hypeRewardIntervalRef.current)
-        hypeRewardIntervalRef.current = null
-      }
-      return
-    }
-
-    const attemptReward = async () => {
-      const now = Date.now()
-
-      if (now - lastHypeRewardAttemptRef.current < 5 * 60 * 1000) {
-        return
-      }
-
-      lastHypeRewardAttemptRef.current = now
-
-      try {
-        const result = await earnHypeCoinFromWatch(streamId)
-
-        if (result?.success && (result.earned_amount ?? 0) > 0) {
-          setShowHypeCoinPopup(true)
-
-          // Refresh balances after the reward is awarded
-          try {
-            await refreshHypeCoins()
-          } catch (refreshError) {
-            console.warn('[ViewerPage] refreshHypeCoins failed after reward:', refreshError)
-          }
-
-          // Record family activity for hype coins earned
-          try {
-            await recordHypeCoinsEarned(result.earned_amount || 0, streamId)
-          } catch (familyActivityError) {
-            console.warn('[ViewerPage] Family activity recording error:', familyActivityError)
-          }
-        }
-      } catch (error) {
-        console.warn('[ViewerPage] Hype reward failed:', error)
-      }
-    }
-
-    void attemptReward()
-
-    hypeRewardIntervalRef.current = setInterval(() => {
-      void attemptReward()
-    }, 5 * 60 * 1000)
-
-    return () => {
-      if (hypeRewardIntervalRef.current) {
-        clearInterval(hypeRewardIntervalRef.current)
-        hypeRewardIntervalRef.current = null
-      }
-    }
-  }, [streamId, user?.id, isStreamLive, hostId, refreshHypeCoins, earnHypeCoinFromWatch, recordHypeCoinsEarned])
-
-  useEffect(() => {
-    if (!streamId || !user?.id || !isStreamLive || hostId === user.id) {
       if (watchTimeIntervalRef.current) {
         window.clearInterval(watchTimeIntervalRef.current)
         watchTimeIntervalRef.current = null
@@ -1676,6 +1884,8 @@ useStreamRealtime(
         const participant = event.new
         if (participant.user_id !== user.id || participant.removed !== true || participant.stream_id !== streamId) return
 
+        kickProcessedRef.current = true
+
         const kickData = {
           timestamp: Date.now(),
           streamId,
@@ -1687,8 +1897,7 @@ useStreamRealtime(
         hasJoinedAudienceRef.current = false
         joiningAudienceRef.current = false
         currentRoomKeyRef.current = null
-        toast.error(`You were kicked from this broadcast: ${kickData.reason}`)
-        navigate('/', { replace: true })
+        navigate(`/?kicked=${encodeURIComponent(kickData.reason)}`, { replace: true })
       },
       onStream: (event: any) => {
         const next = event?.new || event
@@ -1781,13 +1990,81 @@ useStreamRealtime(
     }
   }, [streamId])
 
-  useEffect(() => {
-    return () => {
-      console.log('[ViewerPage] unmount cleanup: leaving LiveKit audience')
-      void leaveAudience()
-      leaveLiveKitRoom().catch(() => {})
-    }
-  }, [leaveAudience, leaveLiveKitRoom])
+   useEffect(() => {
+     return () => {
+       void leaveAudience()
+       leaveLiveKitRoom().catch(() => {})
+     }
+   }, [leaveAudience, leaveLiveKitRoom])
+
+   // Mute/chat detection: subscribe to stream_mutes for current user
+   useEffect(() => {
+     if (!streamId || !user?.id) return
+
+     const checkMuteState = async () => {
+       try {
+         const { data } = await supabase
+           .from('stream_mutes')
+           .select('id, expires_at')
+           .eq('stream_id', streamId)
+           .eq('user_id', user.id)
+           .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
+           .maybeSingle()
+
+         if (data) {
+           toast.error('You have been muted by a moderator.')
+           if (isUserOnStage && isPublishing) {
+             try { await unpublishLocalTracks() } catch {}
+           }
+         }
+       } catch {}
+     }
+
+     void checkMuteState()
+
+     const muteChannel = supabase
+       .channel(`viewer-mute:${streamId}:${user.id}`)
+       .on(
+         'postgres_changes',
+         {
+           event: 'INSERT',
+           schema: 'public',
+           table: 'stream_mutes',
+           filter: `stream_id=eq.${streamId}`,
+         },
+         (payload) => {
+           const newMute = payload.new as any
+           if (newMute?.user_id === user.id) {
+             toast.error('You have been muted by a moderator.')
+             if (isUserOnStage && isPublishing) {
+               void (async () => {
+                 try { await unpublishLocalTracks() } catch {}
+               })()
+             }
+           }
+         },
+       )
+       .on(
+         'postgres_changes',
+         {
+           event: 'DELETE',
+           schema: 'public',
+           table: 'stream_mutes',
+           filter: `stream_id=eq.${streamId}`,
+         },
+         (payload) => {
+           const oldMute = payload.old as any
+           if (oldMute?.user_id === user.id) {
+             toast.success('You have been unmuted.')
+           }
+         },
+       )
+       .subscribe()
+
+     return () => {
+       supabase.removeChannel(muteChannel)
+     }
+   }, [streamId, user?.id, isUserOnStage, isPublishing, unpublishLocalTracks])
 
    useEffect(() => {
     if (!streamId || !user?.id) return
@@ -1813,67 +2090,62 @@ useStreamRealtime(
 
        if (isKickBanActive(kickData)) {
          const timeSinceKick = Date.now() - kickData.timestamp
-         const remainingMs = Math.max(KICK_BAN_DURATION_MS - timeSinceKick, 0)
-         const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+          const remainingMs = Math.max(KICK_BAN_DURATION_MS - timeSinceKick, 0)
+          const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
 
-         toast.error(
-           `You were kicked from this broadcast and cannot rejoin for ${hoursRemaining} hour${
-             hoursRemaining === 1 ? '' : 's'
-           }.`,
-         )
+          leaveLiveKitRoom().catch(() => {})
+          hasJoinedAudienceRef.current = false
+          joiningAudienceRef.current = false
+          currentRoomKeyRef.current = null
+          toast.error(`You were kicked from this broadcast and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+        }
 
-         leaveLiveKitRoom().catch(() => {})
-         hasJoinedAudienceRef.current = false
-         joiningAudienceRef.current = false
-         currentRoomKeyRef.current = null
-         navigate('/', { replace: true })
-         return
-       }
+        if (kickRaw && !isKickBanActive(kickData)) {
+          localStorage.removeItem(kickKey)
+        }
+      }
 
-       if (kickRaw && !isKickBanActive(kickData)) {
-         localStorage.removeItem(kickKey)
-       }
-     }
+      const audienceRoomKey = `${streamId}:${roomId}`
 
-     const audienceRoomKey = `${streamId}:${roomId}`
+      if (isUserOnStage && !isPublishing) {
+        if (joiningPublisherRef.current || joiningAudienceRef.current) return
 
-     if (isUserOnStage && !isPublishing) {
-       if (joiningPublisherRef.current || joiningAudienceRef.current) return
+        joiningPublisherRef.current = true
+        currentRoomKeyRef.current = audienceRoomKey
 
-       joiningPublisherRef.current = true
-       currentRoomKeyRef.current = audienceRoomKey
+        publishLocalTracks()
+          .then(async () => {
+            setViewerError(null)
+            if (mySeat?.seat_index != null) {
+              await markSeatLive(mySeat.seat_index, viewerIdentityRef.current || viewerIdentity)
+            }
+          })
+          .catch(async (err: any) => {
+            const errorDetail = err?.message || err?.statusText || String(err) || 'Failed to publish seat tracks'
+            setViewerError(errorDetail)
+            if (mySeat?.id) {
+              await leaveSeat()
+            }
+          })
+          .finally(() => {
+            joiningPublisherRef.current = false
+          })
+        return
+      }
 
-       publishLocalTracks()
-         .then(async () => {
-           setViewerError(null)
-           if (mySeat?.seat_index != null) {
-             await markSeatLive(mySeat.seat_index, viewerIdentityRef.current || viewerIdentity)
-           }
-           console.log('[ViewerPage] seat tracks published:', { streamId, roomId })
-         })
-         .catch(async (err: any) => {
-           const errorDetail = err?.message || err?.statusText || String(err) || 'Failed to publish seat tracks'
-           console.warn('[ViewerPage] publishLocalTracks failed:', err, { errorDetail })
-           setViewerError(errorDetail)
-           if (mySeat?.id) {
-             await leaveSeat()
-           }
-         })
-         .finally(() => {
-           joiningPublisherRef.current = false
-         })
-       return
-     }
-
-     if (!isUserOnStage && isPublishing) {
-       joiningPublisherRef.current = true
-       unpublishLocalTracks()
-         .catch(() => {})
-         .finally(() => {
-           joiningPublisherRef.current = false
-         })
-       return
-     }
+      if (!isUserOnStage && isPublishing) {
+        joiningPublisherRef.current = true
+        unpublishLocalTracks()
+          .catch(() => {})
+          .finally(() => {
+            joiningPublisherRef.current = false
+          })
+        leaveLiveKitRoom().catch(() => {})
+        hasJoinedAudienceRef.current = false
+        joiningAudienceRef.current = false
+        currentRoomKeyRef.current = null
+        return
+      }
 
      if (isPublishing && !isUserOnStage) {
        return
@@ -2212,7 +2484,7 @@ useStreamRealtime(
               }
             >
               <RemoteVideoSurface
-                participant={hostParticipant}
+                participant={broadcasterState.participant}
                 mirror={true}
                 className="absolute inset-0"
                 onTap={handleLike}
@@ -2381,20 +2653,12 @@ useStreamRealtime(
                   {seatCards.map((seat) => {
                     const seatStatus = String(seat.seat?.status || '').toLowerCase()
                     const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
-                    const seatIdentity = seat.seat?.livekit_participant_identity || seatUserId
                     const isMine = Boolean(user?.id && (seat.seat?.user_id === user.id || seat.seat?.guest_id === user.id))
-                    const seatParticipant = !isMine && seatIdentity
-                      ? remoteParticipants.find((participant: any) => {
-                          const participantIdentity = String(participant?.identity || '')
-                          return (
-                            participantMatchesUser(participant, seatIdentity) ||
-                            participantMatchesUser(participant, seatUserId) ||
-                            participantIdentity === String(seatIdentity) ||
-                            participantIdentity.endsWith(`-${seatIdentity}`) ||
-                            String(seatIdentity).endsWith(participantIdentity)
-                          )
-                        })
-                      : null
+
+                    // Use isolated seat state — each seat only accesses its own track
+                    const seatState = seatTracks[seat.seatIndex] || null
+                    const seatParticipant = !isMine && seatState ? seatState.participant : null
+                    const seatIsLoading = seatState?.isLoading || false
 
                     const statusLabel = isMine
                       ? 'You'
@@ -2712,13 +2976,22 @@ useStreamRealtime(
                       )}
                     </div>
 
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault()
-                        const text = chatInput.trim()
-                        if (!text) return
+             <form
+               onSubmit={async (e) => {
+                 e.preventDefault()
+                 const text = chatInput.trim()
+                 if (!text) return
 
-                        if (!user && !reserveAnonymousChatSlot()) {
+                 if (userChatDisabled) {
+                   toast.error(
+                     chatDisabledRemainingMinutes
+                       ? `Your chat is disabled. Try again in ${chatDisabledRemainingMinutes} minute${chatDisabledRemainingMinutes === 1 ? '' : 's'}.`
+                       : 'Your chat has been permanently disabled in this stream.'
+                   )
+                   return
+                 }
+
+                 if (!user && !reserveAnonymousChatSlot()) {
                           toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
                           navigate('/auth?mode=login')
                           return
@@ -2943,23 +3216,27 @@ useStreamRealtime(
               } }
               className="flex gap-2 rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_0_24px_rgba(34,211,238,0.16)] backdrop-blur-xl"
             >
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Say something�"
-                className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-                maxLength={280} />
-              <button
-                type="submit"
-                disabled={!chatInput.trim()}
-                className={cn(
-                  'inline-flex h-11 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-black',
-                  chatInput.trim()
-                    ? 'border border-cyan-400/30 bg-cyan-500/20 text-cyan-300'
-                    : 'border border-white/10 bg-white/5 text-white/30'
-                )}
-              >
+               <input
+                 type="text"
+                 value={chatInput}
+                 onChange={(e) => setChatInput(e.target.value)}
+                 placeholder={userChatDisabled ? 'Chat disabled' : 'Say something�'}
+                 disabled={userChatDisabled}
+                 className={cn(
+                   "h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20",
+                   userChatDisabled && "opacity-50 cursor-not-allowed"
+                 )}
+                 maxLength={280} />
+               <button
+                 type="submit"
+                 disabled={!chatInput.trim() || userChatDisabled}
+                 className={cn(
+                   'inline-flex h-11 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-black',
+                   chatInput.trim() && !userChatDisabled
+                     ? 'border border-cyan-400/30 bg-cyan-500/20 text-cyan-300'
+                     : 'border border-white/10 bg-white/5 text-white/30'
+                 )}
+               >
                 Send
               </button>
             </form>
@@ -3102,10 +3379,6 @@ useStreamRealtime(
       />
 
     </ErrorBoundary>
-    <HypeCoinPopup
-      isVisible={showHypeCoinPopup}
-      onDismiss={() => setShowHypeCoinPopup(false)}
-    />
   </GiftSystemProvider>
 )
 }

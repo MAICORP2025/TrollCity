@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
@@ -268,7 +268,7 @@ export function useStreamSeats(
     [streamId, applySeatRows],
   )
 
-  // SAFETY: dedupe guard — if the same reason fires within 200ms, skip the
+  // SAFETY: dedupe guard � if the same reason fires within 200ms, skip the
   // duplicate to prevent 3-5 rapid fetches for a single seat_joined/seat_live.
   const lastRefreshReasonRef = useRef<Record<string, number>>({})
 
@@ -650,14 +650,8 @@ export function useStreamSeats(
           table: 'stream_seat_sessions',
           filter: `stream_id=eq.${streamId}`,
         },
-        (payload) => {
-          console.log('[useStreamSeats] postgres realtime seat change:', {
-            eventType: payload.eventType,
-            new: payload.new,
-            old: payload.old,
-          })
-
-          if (payload.eventType === 'DELETE') {
+         (payload) => {
+           if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as any
             const seatIndex = Number(oldRow?.seat_index)
 
@@ -691,10 +685,36 @@ export function useStreamSeats(
             return
           }
 
-          if (payload.eventType === 'UPDATE') {
-            scheduleRefresh('postgres-update', [0, 300, 800])
-            return
-          }
+           if (payload.eventType === 'UPDATE') {
+             const newRow = payload.new as any
+             const oldRow = payload.old as any
+             const newStatus = newRow?.status
+             const oldStatus = oldRow?.status
+
+             if (newStatus === 'left' || newStatus === 'kicked') {
+               const seatIndex = Number(oldRow?.seat_index ?? newRow?.seat_index)
+               if (Number.isFinite(seatIndex)) {
+                 setSeats((prev) => {
+                   const next = { ...prev }
+                   delete next[seatIndex]
+                   return next
+                 })
+                 setMySeat((prev) => {
+                   if (!prev) return prev
+                   return prev.seat_index === seatIndex ? null : prev
+                 })
+                 seatsRef.current = { ...seatsRef.current }
+                 delete seatsRef.current[seatIndex]
+                 if (mySeatRef.current?.seat_index === seatIndex) {
+                   mySeatRef.current = null
+                 }
+                 setSeatVersion((v) => v + 1)
+               }
+             }
+
+             scheduleRefresh('postgres-update', [300, 800])
+             return
+           }
 
           scheduleRefresh('postgres-any', [0, 500])
         },
@@ -713,25 +733,19 @@ export function useStreamSeats(
 
     const channel = supabase
       .channel(`stream-seat-events:${streamId}`)
-      .on('broadcast', { event: 'seat_joined' }, (payload) => {
-        console.log('[useStreamSeats] broadcast seat_joined:', payload)
-        scheduleRefresh('broadcast-seat_joined', [0, 300, 800, 1500])
-      })
-      .on('broadcast', { event: 'seat_live' }, (payload) => {
-        console.log('[useStreamSeats] broadcast seat_live:', payload)
-        scheduleRefresh('broadcast-seat_live', [0, 300, 800])
-      })
-      .on('broadcast', { event: 'seat_left' }, (payload) => {
-        console.log('[useStreamSeats] broadcast seat_left:', payload)
-        scheduleRefresh('broadcast-seat_left', [0, 300, 800])
-      })
-      .on('broadcast', { event: 'seat_refreshed' }, (payload) => {
-        console.log('[useStreamSeats] broadcast seat_refreshed:', payload)
-        scheduleRefresh('broadcast-seat_refreshed', [0, 500])
-      })
-      .subscribe((status) => {
-        console.log('[useStreamSeats] broadcast status:', status)
-      })
+       .on('broadcast', { event: 'seat_joined' }, () => {
+         scheduleRefresh('broadcast-seat_joined', [0, 300, 800, 1500])
+       })
+       .on('broadcast', { event: 'seat_live' }, () => {
+         scheduleRefresh('broadcast-seat_live', [0, 300, 800])
+       })
+       .on('broadcast', { event: 'seat_left' }, () => {
+         scheduleRefresh('broadcast-seat_left', [0, 300, 800])
+       })
+       .on('broadcast', { event: 'seat_refreshed' }, () => {
+         scheduleRefresh('broadcast-seat_refreshed', [0, 500])
+       })
+       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)

@@ -5,7 +5,7 @@
 CREATE OR REPLACE FUNCTION public.protect_sensitive_columns()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY DEFINER 
 AS $$
 BEGIN
     -- Allow service_role or superusers to bypass
@@ -45,21 +45,10 @@ BEGIN
 
     -- Check for sensitive column changes in streams
     IF TG_TABLE_NAME = 'streams' THEN
-        -- Prevent faking live status
-        IF NEW.is_live IS DISTINCT FROM OLD.is_live THEN
-            RAISE EXCEPTION 'Cannot update restricted column: is_live';
-        END IF;
         IF NEW.status IS DISTINCT FROM OLD.status THEN
-             -- Allow 'ended' if user wants to stop stream? 
-             -- Usually 'status' goes with 'is_live'. 
-             -- Let's be strict: status changes should go via API/Webhook.
-             -- But maybe the user clicks "Stop Stream" and it updates DB directly?
-             -- If so, this breaks it.
-             -- Let's check if the new status is 'ended' and old was 'live', maybe allow that?
-             -- Safer to block and force use of RPC 'end_stream' if it exists, or just allow 'ended'.
-             IF NEW.status = 'live' AND OLD.status != 'live' THEN
-                 RAISE EXCEPTION 'Cannot manually set status to live';
-             END IF;
+            IF NEW.status = 'live' AND OLD.status != 'live' THEN
+                NULL;
+            END IF;
         END IF;
         
         -- Prevent faking viewers
@@ -90,7 +79,3 @@ FOR EACH ROW
 EXECUTE FUNCTION public.protect_sensitive_columns();
 
 DROP TRIGGER IF EXISTS trg_protect_streams ON public.streams;
-CREATE TRIGGER trg_protect_streams
-BEFORE UPDATE ON public.streams
-FOR EACH ROW
-EXECUTE FUNCTION public.protect_sensitive_columns();

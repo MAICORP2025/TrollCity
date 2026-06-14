@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Gift, MicOff, Ban, Shield, X, UserPlus, MessageSquare, Eye, AlertTriangle, Wand2 } from 'lucide-react';
+import { User, Gift, MicOff, Ban, Shield, X, UserPlus, MessageSquare, Eye, AlertTriangle, Wand2, MessageSquareOff, Coins } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
@@ -62,6 +62,7 @@ export default function UserActionModal({
   const [selectedReason, setSelectedReason] = React.useState<string>('');
   const [reportDescription, setReportDescription] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isGiftingHype, setIsGiftingHype] = React.useState(false);
   const { user: currentUser } = useAuthStore.getState();
 
   // Report reasons
@@ -357,6 +358,65 @@ export default function UserActionModal({
     }
   };
 
+  const handleDisableChat = async () => {
+    if (isTargetStaff) {
+        toast.error("Cannot disable chat for staff members.");
+        return;
+    }
+    const hasBanShield = await shouldBlockModeration(userId, 'mute');
+    if (hasBanShield) {
+        toast.error("This user has Ban Shield active! Their chat cannot be disabled.");
+        return;
+    }
+    if (!streamId || !streamId.trim()) {
+      toast.error("Stream not found");
+      return;
+    }
+
+    let nextDuration = 5;
+    let strikeInfo = '';
+    try {
+      const { data: existingBlocks } = await supabase
+        .from('chat_blocks')
+        .select('strike_count, is_permanent')
+        .eq('stream_id', streamId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (existingBlocks && existingBlocks.length > 0) {
+        const last = existingBlocks[0];
+        if (last.is_permanent) {
+          toast.error("This user's chat is already permanently disabled in your stream.");
+          return;
+        }
+        const prevStrikes = last.strike_count || 0;
+        nextDuration = prevStrikes >= 5 ? 0 : [5, 10, 15, 30, 60][prevStrikes] || 60;
+        if (prevStrikes >= 4) {
+          strikeInfo = ' (permanent after this)';
+        }
+      }
+    } catch (_e) {
+      // fallback to default 5 min
+    }
+
+    const durationLabel = nextDuration === 0 ? 'permanently disable' : `disable for ${nextDuration} minutes`;
+    if (!confirm(`${durationLabel.charAt(0).toUpperCase() + durationLabel.slice(1)}${strikeInfo} for ${displayName}?`)) return;
+
+    const { data, error } = await supabase.rpc('moderator_disable_chat', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: nextDuration === 0 ? null : nextDuration, p_reason: 'Chat disabled by moderator' });
+    if (error) toast.error("Failed to disable user chat");
+    else if (data && data.is_permanent) {
+        toast.success("User permanently disabled from chatting in your stream");
+        onClose();
+    } else if (data && !data.success) {
+        toast.error(data.message || "Failed to disable user chat");
+    } else {
+        const mins = nextDuration === 0 ? 'permanently' : `for ${nextDuration} minutes`;
+        toast.success(`User chat disabled ${mins}`);
+        onClose();
+    }
+  };
+
   const handleTrollSpell = async () => {
     const { user: currentUser } = useAuthStore.getState();
     if (!currentUser) {
@@ -372,10 +432,43 @@ export default function UserActionModal({
         onClose();
     } else {
         toast.error(result.error || 'Failed to cast spell');
-    }
-  };
+     }
+   };
 
-  const handlePromote = async () => {
+   const handleGiftHypeCoin = async () => {
+     if (!currentUser || !streamId) {
+       toast.error('Not authenticated');
+       return;
+     }
+     if (isTargetStaff) {
+       toast.error('Cannot gift hype coins to staff members.');
+       return;
+     }
+     setIsGiftingHype(true);
+     try {
+       const { data, error } = await supabase.rpc('gift_hype_coin_to_viewer', {
+         p_stream_id: streamId,
+         p_viewer_id: userId,
+       });
+       if (error) {
+         toast.error(error.message || 'Failed to gift hype coin');
+         return;
+       }
+       const response = Array.isArray(data) ? data[0] : data;
+       if (response?.success) {
+         toast.success(`Gifted 1 Hype Coin to ${displayName}!`);
+       } else {
+         toast.error(response?.message || 'Failed to gift hype coin');
+       }
+     } catch (err: any) {
+       console.error('[UserActionModal] gift hype coin error:', err);
+       toast.error(err.message || 'Failed to gift hype coin');
+     } finally {
+       setIsGiftingHype(false);
+     }
+   };
+
+   const handlePromote = async () => {
     if (!confirm("Promote this user to Broadofficer? They will have moderation powers.")) return;
     const { error } = await supabase.rpc('assign_broadofficer', { p_stream_id: streamId, p_officer_id: userId });
     if (error) toast.error("Failed to promote user");
@@ -564,42 +657,57 @@ const handleViewProfile = () => {
                   <span>View Profile</span>
                </button>
 
-               {isTargetStaff ? (
-                   <button onClick={handleReport} className="w-full flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-700 text-yellow-500 rounded-lg transition-colors border border-white/5">
-                      <Shield size={16} />
-                      <span>Report Staff</span>
-                   </button>
-               ) : (
-                   <div className="flex justify-center">
-                     <div className="grid grid-cols-3 gap-2 w-full max-w-sm">
-                       <button onClick={handleMute} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-700 text-yellow-500 rounded-lg transition-colors border border-white/5">
-                          <MicOff size={16} />
-                          <span>Mute</span>
+                {isTargetStaff ? (
+                    <button onClick={handleReport} className="w-full flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-700 text-yellow-500 rounded-lg transition-colors border border-white/5">
+                       <Shield size={16} />
+                       <span>Report Staff</span>
+                    </button>
+                ) : (
+                    <div className="flex justify-center">
+                      <div className="grid grid-cols-4 gap-2 w-full max-w-sm">
+                        <button onClick={handleMute} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-700 text-yellow-500 rounded-lg transition-colors border border-white/5">
+                           <MicOff size={16} />
+                           <span>Mute</span>
+                        </button>
+                        <button onClick={handleDisableChat} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-zinc-700 text-orange-400 rounded-lg transition-colors border border-white/5">
+                           <MessageSquareOff size={16} />
+                           <span>No Chat</span>
+                        </button>
+                        <button onClick={handleKick} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-red-900/30 text-red-500 rounded-lg transition-colors border border-white/5">
+                          <X size={16} />
+                          <span>Kick (100c)</span>
                        </button>
-                       <button onClick={handleKick} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-red-900/30 text-red-500 rounded-lg transition-colors border border-white/5">
-                         <X size={16} />
-                         <span>Kick (100c)</span>
-                      </button>
-                       <button onClick={handleBan} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-red-900/30 text-red-500 rounded-lg transition-colors border border-white/5">
-                          <Ban size={16} />
-                          <span>Ban</span>
-                       </button>
-                     </div>
-                   </div>
-               )}
-
-                {isHost && !isTargetStaff && (
-                  <button onClick={handlePromote} className="w-full flex items-center justify-center gap-2 p-2 bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 rounded-lg transition-colors border border-blue-500/20 mt-2">
-                     <Shield size={16} />
-                     <span>Promote to Officer</span>
-                  </button>
+                        <button onClick={handleBan} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-red-900/30 text-red-500 rounded-lg transition-colors border border-white/5">
+                           <Ban size={16} />
+                           <span>Ban</span>
+                        </button>
+                      </div>
+                    </div>
                 )}
-                
-                {/* Troll Spell Button - Show if current user has the perk */}
-                <button onClick={handleTrollSpell} className="w-full flex items-center justify-center gap-2 p-2 bg-purple-900/20 hover:bg-purple-900/40 text-purple-400 rounded-lg transition-colors border border-purple-500/20 mt-2">
-                   <Wand2 size={16} />
-                   <span>Cast Troll Spell 🎭</span>
-                </button>
+
+                 {isHost && !isTargetStaff && (
+                   <button onClick={handlePromote} className="w-full flex items-center justify-center gap-2 p-2 bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 rounded-lg transition-colors border border-blue-500/20 mt-2">
+                      <Shield size={16} />
+                      <span>Promote to Officer</span>
+                   </button>
+                 )}
+
+                 {isHost && !isTargetStaff && (
+                   <button
+                     onClick={handleGiftHypeCoin}
+                     disabled={isGiftingHype}
+                     className="w-full flex items-center justify-center gap-2 p-2 bg-amber-900/20 hover:bg-amber-900/40 text-amber-400 rounded-lg transition-colors border border-amber-500/20 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                   >
+                      <Coins size={16} />
+                      <span>{isGiftingHype ? 'Gifting...' : 'Gift 1 Hype Coin'}</span>
+                   </button>
+                 )}
+
+                 {/* Troll Spell Button - Show if current user has the perk */}
+                 <button onClick={handleTrollSpell} className="w-full flex items-center justify-center gap-2 p-2 bg-purple-900/20 hover:bg-purple-900/40 text-purple-400 rounded-lg transition-colors border border-purple-500/20 mt-2">
+                    <Wand2 size={16} />
+                    <span>Cast Troll Spell 🎭</span>
+                 </button>
             </div>
           )}
         </div>

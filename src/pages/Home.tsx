@@ -1,6 +1,6 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { lazyWithRetry } from '@/utils/lazyImport'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   Bell,
@@ -912,6 +912,17 @@ export default function Home() {
 
   const [activeTab, setActiveTab] = useState<TabType>('wall')
   const [showLiveGrid, setShowLiveGrid] = useState<boolean | null>(null)
+  const [kickedReason, setKickedReason] = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const kicked = params.get('kicked')
+    if (kicked) {
+      setKickedReason(kicked)
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+    }
+  }, [])
   const { liveItems, liveAuctions, totalViewers, loadingLive } = useLiveContent()
   const [supportGoalReminder, setSupportGoalReminder] = useState<any>(null)
   const [reminderLoading, setReminderLoading] = useState(false)
@@ -1022,6 +1033,26 @@ export default function Home() {
       </Suspense>
 
       <main className="relative z-10 mx-auto flex w-full max-w-[1520px] flex-col gap-3 px-3 pb-8 pt-3 md:px-5">
+        {kickedReason && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-950/60 px-4 py-3 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/20">
+                <X className="h-4 w-4 text-red-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-red-300">You've been kicked</p>
+                <p className="text-xs text-red-400/80">{kickedReason}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setKickedReason(null)}
+              className="shrink-0 rounded-lg p-1 text-red-400/60 transition hover:bg-red-500/10 hover:text-red-300"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         <TopPrideHero onGoLive={goLive} onCelebrate={openChallenges} />
 
         {/* Browse Categories — SEO internal linking hub (hidden in PWA) */}

@@ -6,6 +6,12 @@
 --    treasure) via send_gift_in_stream but these don't exist in any gift table.
 --    Fix: seed them into gift_items with category='gaming_tip'.
 
+ALTER TABLE public.coin_transactions
+  ADD COLUMN IF NOT EXISTS stream_id uuid;
+
+CREATE INDEX IF NOT EXISTS idx_coin_transactions_stream_id
+  ON public.coin_transactions(stream_id);
+
 -- ============================================================================
 -- 1. FIX send_gift_in_stream GIFT LOOKUP ORDER
 -- ============================================================================
@@ -368,9 +374,9 @@ BEGIN
     WHERE id = v_leader_user_id;
 
     INSERT INTO public.coin_transactions (
-      user_id, amount, type, currency, transaction_type, metadata
+      user_id, amount, type, currency, transaction_type, stream_id, metadata
     ) VALUES (
-      v_leader_user_id, v_leader_bonus, 'agency_leader_bonus', 'coins', 'agency_leader_bonus',
+      v_leader_user_id, v_leader_bonus, 'agency_leader_bonus', 'coins', 'agency_leader_bonus', p_stream_id,
       jsonb_build_object(
         'stream_gift_id', v_existing_id, 'gift_id', p_gift_id,
         'gift_value', v_total_cost, 'bonus_amount', v_leader_bonus,
@@ -386,9 +392,9 @@ BEGIN
     WHERE id = v_recruiter_user_id;
 
     INSERT INTO public.coin_transactions (
-      user_id, amount, type, currency, transaction_type, metadata
+      user_id, amount, type, currency, transaction_type, stream_id, metadata
     ) VALUES (
-      v_recruiter_user_id, v_recruiter_bonus, 'agency_recruiter_bonus', 'coins', 'agency_recruiter_bonus',
+      v_recruiter_user_id, v_recruiter_bonus, 'agency_recruiter_bonus', 'coins', 'agency_recruiter_bonus', p_stream_id,
       jsonb_build_object(
         'stream_gift_id', v_existing_id, 'gift_id', p_gift_id,
         'gift_value', v_total_cost, 'bonus_amount', v_recruiter_bonus,
@@ -398,9 +404,9 @@ BEGIN
   END IF;
 
   -- ── Coin transactions ──────────────────────────────────────────────────
-  INSERT INTO public.coin_transactions (user_id, amount, type, currency, transaction_type, metadata)
+  INSERT INTO public.coin_transactions (user_id, amount, type, currency, transaction_type, stream_id, from_user_id, to_user_id, metadata)
   VALUES
-  (p_sender_id, -v_total_cost, 'gift_sent', 'coins', 'gift_sent',
+  (p_sender_id, -v_total_cost, 'gift_sent', 'coins', 'gift_sent', p_stream_id, p_sender_id, p_receiver_id,
     jsonb_build_object(
       'recipient_id', p_receiver_id, 'stream_id', p_stream_id,
       'gift_id', p_gift_id, 'gift_value', v_total_cost,
@@ -408,7 +414,7 @@ BEGIN
       'trollmonds_transferred', v_trollmonds_transferred,
       'coins_back', v_coins_back, 'stream_gift_id', v_existing_id
     )),
-  (p_receiver_id, v_recipient_share, 'gift_received', 'coins', 'gift_received',
+  (p_receiver_id, v_recipient_share, 'gift_received', 'coins', 'gift_received', p_stream_id, p_sender_id, p_receiver_id,
     jsonb_build_object(
       'sender_id', p_sender_id, 'stream_id', p_stream_id,
       'gift_id', p_gift_id, 'gift_value', v_total_cost,
@@ -416,9 +422,9 @@ BEGIN
     ));
 
   IF v_coins_back > 0 THEN
-    INSERT INTO public.coin_transactions (user_id, amount, type, currency, transaction_type, metadata)
+    INSERT INTO public.coin_transactions (user_id, amount, type, currency, transaction_type, stream_id, from_user_id, to_user_id, metadata)
     VALUES (
-      p_sender_id, v_coins_back, 'gift_return_reward', 'coins', 'gift_return_reward',
+      p_sender_id, v_coins_back, 'gift_return_reward', 'coins', 'gift_return_reward', p_stream_id, NULL, p_sender_id,
       jsonb_build_object(
         'stream_id', p_stream_id, 'gift_id', p_gift_id,
         'gift_value', v_total_cost, 'stream_gift_id', v_existing_id
