@@ -17,6 +17,7 @@ interface TickerState {
   isPaused: boolean;
   isControlPanelOpen: boolean;
   isSettingsOpen: boolean;
+  screenshareActive: boolean;
 
   // Actions
   addMessage: (msg: TickerMessage) => void;
@@ -30,6 +31,7 @@ interface TickerState {
   setControlPanelOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   resetSettings: (streamId: string) => void;
+  setScreenshareActive: (active: boolean) => void;
 }
 
 export const useTickerStore = create<TickerState>((set, get) => ({
@@ -39,6 +41,7 @@ export const useTickerStore = create<TickerState>((set, get) => ({
   isPaused: false,
   isControlPanelOpen: false,
   isSettingsOpen: false,
+  screenshareActive: false,
 
   addMessage: (msg) =>
     set((state) => {
@@ -82,4 +85,6 @@ export const useTickerStore = create<TickerState>((set, get) => ({
     set({
       settings: { ...DEFAULT_TICKER_SETTINGS, stream_id: streamId },
     }),
+
+  setScreenshareActive: (active) => set({ screenshareActive: active }),
 }));

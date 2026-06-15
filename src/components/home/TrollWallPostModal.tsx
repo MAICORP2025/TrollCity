@@ -1,0 +1,454 @@
+import React, { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  X,
+  Heart,
+  Reply,
+  Pin,
+  Trash2,
+  Share2,
+  MessageSquare,
+} from 'lucide-react'
+import { toast } from 'sonner'
+
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/lib/store'
+import { WallPost } from '@/types/trollWall'
+import NeonGlowUsername from '@/components/NeonGlowUsername'
+import UserNameWithAge from '@/components/UserNameWithAge'
+import { parseTextWithLinks } from '@/lib/utils'
+import { trackPrideWallAction } from '@/services/prideChallengeTracker'
+import WallShareModal from '@/components/trollWall/WallShareModal'
+
+interface TrollWallPostModalProps {
+  post: WallPost | null
+  onClose: () => void
+  onRequireAuth: (intent?: string) => boolean
+}
+
+export default function TrollWallPostModal({
+  post,
+  onClose,
+  onRequireAuth,
+}: TrollWallPostModalProps) {
+  const { user, isAdmin } = useAuthStore()
+  const [replies, setReplies] = useState<WallPost[]>([])
+  const [replyText, setReplyText] = useState('')
+  const [replying, setReplying] = useState(false)
+  const [liking, setLiking] = useState(false)
+  const [sharingPost, setSharingPost] = useState<WallPost | null>(null)
+  const [currentPost, setCurrentPost] = useState<WallPost | null>(post)
+
+  useEffect(() => {
+    setCurrentPost(post)
+  }, [post])
+
+  // Load replies when post changes
+  useEffect(() => {
+    if (!post?.id) {
+      setReplies([])
+      return
+    }
+    supabase
+      .from('troll_wall_posts')
+      .select(
+        '*, user_profiles(username, avatar_url, is_admin, is_troll_officer, is_og_user, created_at, is_verified, is_gold, username_style, badge, officer_level, troller_level, is_troller)'
+      )
+      .eq('reply_to_post_id', post.id)
+      .order('created_at', { ascending: true })
+      .limit(50)
+      .then(({ data, error }) => {
+        if (error) return
+        const rows = (data || []).map((r: any) => ({
+          ...r,
+          username: r.user_profiles?.username,
+          avatar_url: r.user_profiles?.avatar_url,
+          is_admin: r.user_profiles?.is_admin,
+          is_troll_officer: r.user_profiles?.is_troll_officer,
+          is_og_user: r.user_profiles?.is_og_user,
+          user_created_at: r.user_profiles?.created_at,
+          is_verified: r.user_profiles?.is_verified,
+          is_gold: r.user_profiles?.is_gold,
+        })) as WallPost[]
+        setReplies(rows)
+      })
+  }, [post?.id])
+
+  // Close on Escape
+  useEffect(() => {
+    if (!post) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [post, onClose])
+
+  const handleLike = useCallback(async () => {
+    if (!currentPost || !user?.id) {
+      onRequireAuth('like a post')
+      return
+    }
+    if (liking) return
+    setLiking(true)
+    try {
+      const { data, error } = await supabase.rpc('toggle_wall_post_like', {
+        p_post_id: currentPost.id,
+        p_user_id: user.id,
+      })
+      if (error) throw error
+      if (data) {
+        setCurrentPost((prev) =>
+          prev
+            ? { ...prev, likes: data.likes_count, user_liked: data.liked }
+            : prev
+        )
+        if (data.liked && user?.id) {
+          trackPrideWallAction(user.id, 'like_posts')
+        }
+      }
+    } catch {
+      toast.error('Failed to like post')
+    } finally {
+      setLiking(false)
+    }
+  }, [currentPost, user?.id, onRequireAuth, liking])
+
+  const handleReply = useCallback(async () => {
+    if (!currentPost || !user?.id) {
+      onRequireAuth('reply to a post')
+      return
+    }
+    if (!replyText.trim()) {
+      toast.error('Write a reply before posting')
+      return
+    }
+    setReplying(true)
+    try {
+      const { error } = await supabase.rpc('create_wall_post_reply', {
+        p_original_post_id: currentPost.id,
+        p_user_id: user.id,
+        p_content: replyText.trim(),
+      })
+      if (error) throw error
+      toast.success('Reply posted')
+      setReplyText('')
+      if (user?.id) {
+        trackPrideWallAction(user.id, 'reply_posts')
+      }
+      // Reload replies
+      const { data } = await supabase
+        .from('troll_wall_posts')
+        .select(
+          '*, user_profiles(username, avatar_url, is_admin, is_troll_officer, is_og_user, created_at, is_verified, is_gold)'
+        )
+        .eq('reply_to_post_id', currentPost.id)
+        .order('created_at', { ascending: true })
+        .limit(50)
+      if (data) {
+        setReplies(
+          data.map((r: any) => ({
+            ...r,
+            username: r.user_profiles?.username,
+            avatar_url: r.user_profiles?.avatar_url,
+          })) as WallPost[]
+        )
+      }
+    } catch {
+      toast.error('Failed to post reply')
+    } finally {
+      setReplying(false)
+    }
+  }, [currentPost, user?.id, replyText, onRequireAuth])
+
+  const handlePin = useCallback(async () => {
+    if (!currentPost || !user?.id) return
+    try {
+      const { data, error } = await supabase.rpc('toggle_wall_post_pin', {
+        p_post_id: currentPost.id,
+        p_user_id: user.id,
+      })
+      if (error) throw error
+      const pinned = typeof data === 'boolean' ? data : !currentPost.is_pinned
+      setCurrentPost((prev) => (prev ? { ...prev, is_pinned: pinned } : prev))
+      toast.success(pinned ? 'Post pinned' : 'Post unpinned')
+    } catch {
+      toast.error('Failed to pin/unpin')
+    }
+  }, [currentPost, user?.id])
+
+  const handleDelete = useCallback(async () => {
+    if (!currentPost || !user?.id) return
+    if (!confirm('Delete this post?')) return
+    try {
+      let query = supabase.from('troll_wall_posts').delete().eq('id', currentPost.id)
+      if (!isAdmin) query = query.eq('user_id', user.id)
+      const { error } = await query
+      if (error) throw error
+      toast.success('Post deleted')
+      onClose()
+    } catch {
+      toast.error('Failed to delete')
+    }
+  }, [currentPost, user?.id, isAdmin, onClose])
+
+  if (!post || !currentPost) return null
+
+  const avatarUrl =
+    currentPost.avatar_url ||
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+      currentPost.username || 'TC'
+    )}`
+
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#070b19]/95 shadow-[0_0_60px_rgba(34,211,238,0.12)] backdrop-blur-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-cyan-400" />
+            <span className="text-sm font-bold text-white">Post</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-full p-1.5 text-white/40 transition hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Author */}
+          <div className="px-4 pt-4">
+            {currentPost.is_system_generated ? (
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-cyan-500/10 text-sm text-cyan-400">
+                  ⚡
+                </div>
+                <div>
+                  <span className="text-sm font-bold text-cyan-400">Troll City System</span>
+                  <span className="ml-2 inline-flex items-center rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-300">
+                    System
+                  </span>
+                </div>
+              </div>
+            ) : currentPost.username ? (
+              <NeonGlowUsername
+                username={currentPost.username}
+                avatarUrl={avatarUrl}
+                profile={{
+                  is_admin: currentPost.is_admin,
+                  is_troll_officer: currentPost.is_troll_officer,
+                  is_og_user: currentPost.is_og_user,
+                  is_verified: currentPost.is_verified,
+                  is_gold: currentPost.is_gold,
+                  officer_level: currentPost.officer_level,
+                  troller_level: currentPost.troller_level,
+                  is_troller: currentPost.is_troller,
+                  username_style: currentPost.username_style,
+                  badge: currentPost.badge,
+                }}
+                size="md"
+              />
+            ) : (
+              <span className="text-sm text-white/50">Deleted User</span>
+            )}
+            <p className="mt-1 text-[10px] text-white/30">
+              {new Date(currentPost.created_at).toLocaleString()}
+            </p>
+          </div>
+
+          {/* Content */}
+          <div className="mt-3 px-4">
+            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/90">
+              {parseTextWithLinks(currentPost.content)}
+            </p>
+          </div>
+
+          {/* Media */}
+          {currentPost.metadata?.image_url && (
+            <div className="mt-3 overflow-hidden rounded-2xl border border-cyan-300/10 px-4">
+              <img
+                src={currentPost.metadata.image_url}
+                alt="Post media"
+                className="max-h-80 w-full rounded-2xl object-contain"
+              />
+            </div>
+          )}
+          {currentPost.metadata?.video_url && (
+            <div className="mt-3 overflow-hidden rounded-2xl border border-cyan-300/10 px-4">
+              <video
+                controls
+                preload="metadata"
+                poster={currentPost.metadata?.thumbnail_url || undefined}
+                className="max-h-80 w-full rounded-2xl bg-black"
+              >
+                <source src={currentPost.metadata.video_url} type="video/mp4" />
+                <source src={currentPost.metadata.video_url} type="video/webm" />
+              </video>
+            </div>
+          )}
+
+          {/* Action bar */}
+          <div className="mt-4 flex items-center gap-2 border-t border-white/[0.06] px-4 py-3">
+            <button
+              type="button"
+              onClick={handleLike}
+              disabled={liking}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-all ${
+                currentPost.user_liked
+                  ? 'border-pink-400/20 bg-pink-500/15 text-pink-300'
+                  : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-cyan-300/20 hover:text-cyan-100'
+              }`}
+            >
+              <Heart className={`h-3.5 w-3.5 ${currentPost.user_liked ? 'fill-current' : ''}`} />
+              {currentPost.likes || 0}
+            </button>
+
+            {user &&
+              (currentPost.user_id === user.id || isAdmin) && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePin}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-all ${
+                      currentPost.is_pinned
+                        ? 'border-yellow-300/20 bg-yellow-500/15 text-yellow-300'
+                        : 'border-white/10 bg-white/[0.03] text-white/60 hover:text-yellow-200'
+                    }`}
+                  >
+                    <Pin className={`h-3.5 w-3.5 ${currentPost.is_pinned ? 'fill-current' : ''}`} />
+                    {currentPost.is_pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    className="flex items-center gap-1.5 rounded-full border border-red-300/10 bg-red-500/5 px-3 py-1.5 text-xs text-red-300 transition hover:bg-red-500/15"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSharingPost(currentPost)}
+                    className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/60 transition hover:text-blue-200"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share
+                  </button>
+                </>
+              )}
+          </div>
+
+          {/* Replies section */}
+          {replies.length > 0 && (
+            <div className="border-t border-white/[0.06] px-4 py-3">
+              <p className="mb-3 text-xs font-bold text-white/50">
+                {replies.length} {replies.length === 1 ? 'Reply' : 'Replies'}
+              </p>
+              <div className="space-y-3">
+                {replies.map((reply) => {
+                  const rAvatar =
+                    reply.avatar_url ||
+                    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                      reply.username || 'TC'
+                    )}`
+                  return (
+                    <div
+                      key={reply.id}
+                      className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10">
+                          <img
+                            src={rAvatar}
+                            alt={reply.username || ''}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <UserNameWithAge
+                          user={{
+                            username: reply.username || 'Unknown',
+                            id: reply.user_id,
+                            is_admin: reply.is_admin,
+                            is_troll_officer: reply.is_troll_officer,
+                            is_og_user: reply.is_og_user,
+                            created_at: reply.user_created_at,
+                          }}
+                          className="text-xs font-semibold text-white"
+                        />
+                        <span className="ml-auto text-[9px] text-white/30">
+                          {new Date(reply.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 whitespace-pre-wrap break-words text-xs leading-5 text-white/70">
+                        {parseTextWithLinks(reply.content)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Reply input */}
+        {user && (
+          <div className="border-t border-white/[0.06] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleReply()
+                  }
+                }}
+                placeholder="Write a reply..."
+                className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white placeholder-white/30 focus:border-cyan-400/30 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleReply}
+                disabled={replying || !replyText.trim()}
+                className="rounded-xl bg-purple-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-purple-500 disabled:opacity-40"
+              >
+                <Reply className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {sharingPost && (
+        <WallShareModal
+          isOpen={!!sharingPost}
+          onClose={() => setSharingPost(null)}
+          post={sharingPost}
+          postUrl={`${window.location.origin}/wall/${sharingPost.id}`}
+          onShare={(postId) => {
+            if (!user?.id) return
+            supabase
+              .from('troll_wall_post_shares')
+              .insert({ post_id: postId, user_id: user.id })
+              .then(({ error }) => {
+                if (error) console.warn('Failed to record share:', error)
+              })
+          }}
+        />
+      )}
+    </div>
+  )
+
+  return createPortal(modalContent, document.body)
+}

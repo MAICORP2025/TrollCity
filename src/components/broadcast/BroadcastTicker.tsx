@@ -45,7 +45,7 @@ const THEME_STYLES: Record<
 };
 
 export default function BroadcastTicker({ className }: BroadcastTickerProps) {
-  const { messages, settings, priorityMessage, isPaused } = useTickerStore();
+  const { messages, settings, priorityMessage, isPaused, screenshareActive } = useTickerStore();
   const containerRef = useRef<HTMLDivElement>(null);
   
   const [isDragging, setIsDragging] = useState(false);
@@ -58,18 +58,32 @@ export default function BroadcastTicker({ className }: BroadcastTickerProps) {
   const dragStartPos = useRef({ x: 0, y: 0 });
   const resizeStartHeight = useRef(32);
 
+  // Throttle messages during screenshare to reduce re-renders
+  const throttledMessages = useMemo(() => {
+    if (screenshareActive) {
+      // During screenshare: cap at 5 messages, no duplication
+      return messages.slice(0, 5);
+    }
+    return messages;
+  }, [messages, screenshareActive]);
+
   const themeStyle = THEME_STYLES[settings.theme] || THEME_STYLES.neon;
   const speedPxPerSec = SPEED_MAP[settings.speed] || SPEED_MAP.medium;
 
+  // During screenshare: no animation duplication, just show messages statically
   const scrollingMessages = useMemo(() => {
-    if (messages.length === 0) return [];
-    return [...messages, ...messages];
-  }, [messages]);
+    if (throttledMessages.length === 0) return [];
+    if (screenshareActive) {
+      // No duplication — just single pass, no animation
+      return throttledMessages;
+    }
+    return [...throttledMessages, ...throttledMessages];
+  }, [throttledMessages, screenshareActive]);
 
   const scrollDuration = useMemo(() => {
-    if (messages.length === 0) return 30;
+    if (throttledMessages.length === 0) return 30;
     return SPEED_MAP[settings.speed] || SPEED_MAP.medium;
-  }, [messages.length, settings.speed]);
+  }, [throttledMessages.length, settings.speed]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (isEditing) return;
@@ -201,14 +215,14 @@ export default function BroadcastTicker({ className }: BroadcastTickerProps) {
           <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black/80 to-transparent z-10 pointer-events-none" />
 
           {/* Scrolling ticker content */}
-          {messages.length > 0 && !priorityMessage && (
+          {throttledMessages.length > 0 && !priorityMessage && (
             <div
               className={cn(
                 'ticker-scroll-container flex items-center h-full whitespace-nowrap pl-6 pr-8',
-                isPaused && 'ticker-paused'
+                (isPaused || screenshareActive) && 'ticker-paused'
               )}
               style={{
-                animation: isPaused
+                animation: (isPaused || screenshareActive)
                   ? 'none'
                   : `ticker-scroll ${scrollDuration}s linear infinite`,
               }}
@@ -225,7 +239,7 @@ export default function BroadcastTicker({ className }: BroadcastTickerProps) {
           )}
 
           {/* Empty state */}
-          {messages.length === 0 && !priorityMessage && (
+          {throttledMessages.length === 0 && !priorityMessage && (
             <div className="flex items-center justify-center h-full text-white/30 text-xs pl-6 pr-8">
               Ticker messages will appear here
             </div>

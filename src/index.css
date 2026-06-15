@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes heartPop {
+  0% { transform: scale(0); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
 @layer components {
   .text-gold-outline {
     color: #FFD700 !important; /* gold */
@@ -1597,5 +1603,59 @@ button:focus-visible {
   [class*="CoinSprite"],
   .animate-float-slow {
     animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   DISCOVERY DASHBOARD — Horizontal Scroll & Snap
+   ═══════════════════════════════════════════════════ */
+
+/* Smooth horizontal scroll with snap */
+.discovery-scroll {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar for discovery sections */
+.discovery-scroll::-webkit-scrollbar {
+  display: none;
+}
+.discovery-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Snap alignment for cards */
+.snap-start {
+  scroll-snap-align: start;
+}
+
+/* Drag cursor for desktop */
+.discovery-scroll {
+  cursor: grab;
+}
+.discovery-scroll:active {
+  cursor: grabbing;
+}
+
+/* Line clamp utilities */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Momentum scrolling on mobile */
+@supports (-webkit-overflow-scrolling: touch) {
+  .discovery-scroll {
+    -webkit-overflow-scrolling: touch;
   }
 }

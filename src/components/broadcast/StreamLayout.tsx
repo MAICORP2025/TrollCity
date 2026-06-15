@@ -7,6 +7,7 @@ interface Props {
   video: React.ReactNode
   controls: React.ReactNode
   chat: React.ReactNode
+  streamStartedAt?: string | null
 
   isChatOpen: boolean
   onToggleChat: () => void
@@ -44,6 +45,7 @@ export default function StreamLayout({
   battleGiftPanel,
   stats,
   forceViewMode,
+  streamStartedAt,
 }: Props) {
 
   const [chatWidth, setChatWidth] = useState(320)
@@ -59,18 +61,26 @@ export default function StreamLayout({
   })
   const [headerCollapsed, setHeaderCollapsed] = useState(false)
   const [streamDuration, setStreamDuration] = useState(0)
-  
-  // Auto switch to vertical mode when window resizes to mobile
+
+  // Stream duration timer - based on stream start time
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setViewMode('vertical');
-      }
+    if (!streamStartedAt) {
+      setStreamDuration(0);
+      return;
+    }
+    const start = new Date(streamStartedAt).getTime();
+    if (!Number.isFinite(start)) {
+      setStreamDuration(0);
+      return;
+    }
+    const update = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - start) / 1000));
+      setStreamDuration(elapsed);
     };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [])
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [streamStartedAt])
   
   // Stream duration timer - starts at 00:00 and counts up
   useEffect(() => {

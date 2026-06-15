@@ -20,6 +20,7 @@ import { parseTextWithLinks } from '../lib/utils'
 import { useIsPwa } from '../lib/hooks/useIsPwa'
 import MentionTextarea from '../components/MentionTextarea'
 import { useChatBlockStatus } from '../hooks/useChatBlockStatus'
+import { trackPrideWallAction } from '../services/prideChallengeTracker'
 
 // Available reactions
 const REACTIONS = [
@@ -315,7 +316,24 @@ export default function TrollCityWall() {
             const idx = next.findIndex(p => p.id === newPost.id)
             if (idx !== -1) {
               const existingReplies = next[idx].replies || []
-              next[idx] = { ...next[idx], ...newPost, replies: existingReplies }
+              const existing = next[idx]
+              next[idx] = {
+                ...existing,
+                ...newPost,
+                replies: existingReplies,
+                user_liked: existing.user_liked,
+                user_reaction: existing.user_reaction,
+                reactions: existing.reactions,
+                gifts: existing.gifts,
+                username: existing.username,
+                avatar_url: existing.avatar_url,
+                is_admin: existing.is_admin,
+                is_troll_officer: existing.is_troll_officer,
+                is_og_user: existing.is_og_user,
+                user_created_at: existing.user_created_at,
+                is_verified: existing.is_verified,
+                is_gold: existing.is_gold,
+              }
             } else {
               next = [{ ...newPost, replies: [] }, ...next]
             }
@@ -366,6 +384,9 @@ export default function TrollCityWall() {
               : p
           )
         )
+        if (data.liked) {
+          trackPrideWallAction(user.id, 'like_posts')
+        }
       }
     } catch (err: any) {
       console.error('Error toggling like:', err)
@@ -528,6 +549,7 @@ export default function TrollCityWall() {
       toast.success('Reply posted!')
       setShowReplyModal(null)
       setReplyContent('')
+      trackPrideWallAction(user.id, 'reply_posts')
       loadPosts()
     } catch (err: any) {
       console.error('Error creating reply:', err)

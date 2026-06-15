@@ -43,6 +43,7 @@ export default function AppLayout({
   const { isMobileWidth } = useIsMobile()
    const isAuthPage = location.pathname.startsWith('/auth');
    const isLivePage = location.pathname.startsWith('/live/') || location.pathname.startsWith('/watch/') || location.pathname.startsWith('/gaming/watch/') || (location.pathname.startsWith('/broadcast/') && !location.pathname.startsWith('/broadcast/setup')) || location.pathname.startsWith('/stream/') || location.pathname === '/live-swipe';
+   const isTreelzPage = location.pathname.startsWith('/treelz');
    const isUtromailPage = location.pathname.startsWith('/utromail') || location.pathname.startsWith('/tromail') || location.pathname.startsWith('/messages');
    const normalizedPath = location.pathname.toLowerCase();
    const isThemeExemptPage = normalizedPath.includes('court') || normalizedPath.startsWith('/church');
@@ -50,8 +51,8 @@ export default function AppLayout({
    const isMobileLayout = isMobileWidth && !isAuthPage;
 
    // New bottom nav bar is always shown (replaces sidebar on all screen sizes)
-   // Hidden on live pages only
-   const showNewBottomNavBar = !isAuthPage && !isLivePage;
+   // Hidden on live pages and treelz pages
+   const showNewBottomNavBar = !isAuthPage && !isLivePage && !isTreelzPage;
 
   // Setup global message notifications - opens chat bubble when message received
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function AppLayout({
   }, [isThemeExemptPage]);
 
    const effectiveShowSidebar = false;
-   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage;
+   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isTreelzPage;
    const effectiveShowBottomNav = false;
   const mainOverflowClass = isLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
   const mainPaddingClass = showNewBottomNavBar && !isLivePage ? 'pb-[calc(var(--bottom-nav-height,128px)+env(safe-area-inset-bottom,0px))]' : '';

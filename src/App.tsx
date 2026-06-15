@@ -3,6 +3,8 @@ import React, { useEffect, Suspense, useState, useRef } from "react";
 import TrollProvider from "./troll/TrollProvider";
 import { EffectsProvider } from "./contexts/BroadcastEffectsContext";
 import { Routes, Route, Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import TreelzPage from "./pages/TreelzPage";
+import TreelzUploadPage from "./pages/TreelzUploadPage";
 import { useAuthStore } from "./lib/store";
 import { GlobalEventProvider } from "./contexts/GlobalEventContext";
 import { BatterySaverProvider } from "./contexts/BatterySaverContext";
@@ -106,6 +108,7 @@ const TransactionHistory = lazyWithRetry(() => import("./pages/TransactionHistor
 const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
 const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
 const PrideShop = lazyWithRetry(() => import("./pages/PrideShop"));
+const PrideChallengesPage = lazyWithRetry(() => import("./pages/PrideChallengesPage"));
 const NotaryDashboard = lazyWithRetry(() => import("./pages/NotaryDashboard"));
 
 
@@ -218,6 +221,7 @@ const AuthenticatedHome = lazyWithRetry(() => import("./pages/Home"));
 
 // Tromail & UTroMail
 const TromailPage = lazyWithRetry(() => import("./pages/tromail/TromailPage"));
+const TroMailOfficePage = lazyWithRetry(() => import("./pages/office/TroMailOfficePage"));
 const UtromailPage = lazyWithRetry(() => import("./pages/utromail/UtromailPage"));
 const UtromailThreadView = lazyWithRetry(() => import("./pages/utromail/UtromailThreadView"));
 const UtromailCompose = lazyWithRetry(() => import("./pages/utromail/UtromailCompose"));
@@ -1481,6 +1485,8 @@ const handleVisibilityChange = async () => {
                 {/* 🎤 Live Auctions — Public browse/watch, studio gated below */}
                 <Route path="/auctions" element={<AuctionsPage />} />
                 <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
+                <Route path="/treelz" element={<TreelzPage />} />
+                <Route path="/treelz/upload" element={<TreelzUploadPage />} />
 
 {/* Username-based public profile routes - must be after known routes */}
                 <Route path="/profile/id/:userId" element={<Profile />} />
@@ -1746,6 +1752,7 @@ const handleVisibilityChange = async () => {
 
                    {/* 📧 Tromail - Internal Role Email */}
                    <Route path="/tromail" element={<TromailPage />} />
+                   <Route path="/tromail/office" element={<TroMailOfficePage />} />
 
                    {/* 🎥 Team Meeting Room */}
                    <Route
@@ -1871,11 +1878,14 @@ const handleVisibilityChange = async () => {
 
 {/* 🏳️‍🌈 Pride Shop */}
                    <Route path="/pride-shop" element={<PrideShop />} />
-                   {/* 💰 Earnings & Coins */}
-                   <Route path="/store" element={<CoinStore />} />
-                   <Route path="/coins" element={<CoinStore />} />
-                   <Route path="/coins/complete" element={<CoinsComplete />} />
-                   <Route path="/wallet" element={<WalletPage />} />
+                   {/* 🏳️‍🌈 Pride Challenges */}
+                   <Route path="/pride-challenges" element={<PrideChallengesPage />} />
+                    {/* 💰 Earnings & Coins */}
+                    <Route path="/store" element={<CoinStore />} />
+                    <Route path="/coins" element={<CoinStore />} />
+                    <Route path="/coins/complete" element={<CoinsComplete />} />
+                    <Route path="/crowns/redeem" element={<CrownRedemption />} />
+                    <Route path="/wallet" element={<WalletPage />} />
                    <Route path="/stats" element={<StatsPage />} />
                    <Route path="/payouts/setup" element={<PayoutSetupPage />} />
                   <Route path="/payouts/request" element={<PayoutRequest />} />
@@ -1957,14 +1967,22 @@ const handleVisibilityChange = async () => {
                       </RequireRole>
                     }
                   />
-                  <Route
-                    path="/officer/dashboard"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <OfficerDashboard />
-                      </RequireRole>
-                    }
-                  />
+                   <Route
+                     path="/officer/dashboard"
+                     element={
+                       <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
+                         <OfficerDashboard />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/officer/payroll"
+                     element={
+                       <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
+                         <OfficerPayrollDashboard />
+                       </RequireRole>
+                     }
+                   />
                    {/* 👑 Admin */}
                   <Route
                     path="/admin"

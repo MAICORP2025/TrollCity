@@ -12,6 +12,7 @@ import { supabase, UserProfile } from '../../lib/supabase'
 
 import { useAuthStore } from '../../lib/store'
 import { useStreamStore } from '../../lib/streamStore'
+import { useLiveTimer } from '../../hooks/useLiveTimer'
 import { cn } from '../../lib/utils'
 import { getLiveKitRoomName } from '../../lib/liveUtils'
 import {
@@ -603,6 +604,9 @@ export function BroadcastPage() {
    const isHost = stream?.user_id === user?.id
    const isBroadcaster = isHost;
 
+   const isStreamLive = stream?.status === 'live' && stream?.is_live === true;
+   const liveTimer = useLiveTimer(stream?.started_at, isStreamLive);
+
    // CityStatusOrb for broadcaster box display
    const broadcasterCityStatus = useCityStatusOrb({
      userId: stream?.user_id || '',
@@ -1042,7 +1046,7 @@ useEffect(() => {
 
   // Seat events: useStreamSeats hook already subscribes to stream-seat-events:${streamId}
   // and handles seat refresh scheduling. We only update local seatJoinTimes here
-  // by deriving from seat state changes — no duplicate channel needed.
+  // by deriving from seat state changes ï¿½ no duplicate channel needed.
   useEffect(() => {
     if (!streamId) return;
     // Track seat join times from current seats state
@@ -2892,7 +2896,7 @@ useStreamRealtime(streamId, {
 
   // ? Gift animations are now driven exclusively by useStreamRealtime.onGift
   // (stream_gifts postgres_changes).  The broadcast gift_sent channel is no
-  // longer subscribed here — the postgres event fires once per INSERT and
+  // longer subscribed here ï¿½ the postgres event fires once per INSERT and
   // both channels resolved to the same animationId (stream_gifts row UUID).
   // ? If you are building a minimal overlay or chat overlay that only shows
   // the in-chat gift line, re-subscribe to `giftChannel` here instead.
@@ -3923,7 +3927,7 @@ const toggleMicrophone = useCallback(async () => {
    }, [streamId, user?.id, isHost, supabase])
 
    // -- Troll Prank Definitions ---------------------------------------------
-   // Each prank is a temporary effect (±10 s) expressed as a broadcast_active_effects
+   // Each prank is a temporary effect (ï¿½10 s) expressed as a broadcast_active_effects
    // entry so the existing BroadcastAbilityEffects overlay can render it.
    type TrollPrank = {
      name: string
@@ -4617,7 +4621,7 @@ const handleLike = useCallback(async () => {
     stream?.is_battle === true &&
     (stream?.battle_status === 'ready' || stream?.battle_status === 'starting' || stream?.battle_status === 'active');
 
-  // PHASE 2: Derive stable battleId for BattleView key — prevents remount on stream state updates
+  // PHASE 2: Derive stable battleId for BattleView key ï¿½ prevents remount on stream state updates
    const activeBattleId = shouldShowRandomBattleArena ? stream?.battle_id ?? null : null;
 
    const sendSeatLeftEvent = useCallback(
@@ -4908,7 +4912,7 @@ const handleLike = useCallback(async () => {
               />
             )}
 
-            {/* Background layers — identical to Sidebar ShellBackdrop */}
+            {/* Background layers ï¿½ identical to Sidebar ShellBackdrop */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
@@ -4937,7 +4941,7 @@ const handleLike = useCallback(async () => {
                />
              )}
 
-             {/* Random Battle Banner — prominent notice for queue/active battle */}
+             {/* Random Battle Banner ï¿½ prominent notice for queue/active battle */}
              {stream && (
                <RandomBattleBanner
                  phase={randomBattleQueue.phase}
@@ -4961,6 +4965,7 @@ const handleLike = useCallback(async () => {
                     maxVisible={8}
                     className="relative z-0 hidden sm:flex pointer-events-none"
                     onGiftUser={onGift}
+                    onModerateUser={handleOpenUserAction}
                   />
                </div>
              </div>
@@ -4975,7 +4980,7 @@ const handleLike = useCallback(async () => {
                      <div>
                        <p className="text-sm font-black text-white">League: {myLeagues[0].name}</p>
                        <p className="text-xs text-slate-400">
-                         {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} • {myLeagues[0].member_count}/{myLeagues[0].max_members} members
+                         {myLeagues.length === 1 ? 'League membership active' : `${myLeagues.length} leagues joined`} ï¿½ {myLeagues[0].member_count}/{myLeagues[0].max_members} members
                        </p>
                      </div>
                    </div>
@@ -4994,7 +4999,7 @@ const handleLike = useCallback(async () => {
               {/* -- LEFT: Host Video Card -- */}
               <section className={cn('relative h-full min-h-0 overflow-hidden', theme.hostVideoPanel)}>
 
-                {/* Camera starting fallback — shows when no video track is available */}
+                {/* Camera starting fallback ï¿½ shows when no video track is available */}
                 {(() => {
                   const hostCamTrack = isHost
                     ? (localTracks?.[1] ?? null)
@@ -5028,12 +5033,12 @@ const handleLike = useCallback(async () => {
                         <Crown className="h-14 w-14 text-cyan-200/60" />
                       )}
                       <p className="mt-4 text-base font-black text-white">{broadcasterProfile?.username || 'Broadcaster'}</p>
-                      <p className="mt-1 text-sm text-cyan-200/60">Camera starting…</p>
+                      <p className="mt-1 text-sm text-cyan-200/60">Camera startingï¿½</p>
                     </div>
                   );
                 })()}
 
-                {/* Host video element — mounted via TrackAttach, covers card when track available */}
+                {/* Host video element ï¿½ mounted via TrackAttach, covers card when track available */}
                 <TrackAttach
                   track={isHost ? (localTracks?.[1] ?? null) : (() => {
                     const broadcasterUserId = stream?.user_id;
@@ -5053,16 +5058,16 @@ const handleLike = useCallback(async () => {
                   })()}
                   />
 
-                {/* Gradient overlay — sits above video/fallback */}
+                {/* Gradient overlay ï¿½ sits above video/fallback */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
 
-                {/* Host badge — top-left */}
+                {/* Host badge ï¿½ top-left */}
                 <div className="absolute left-5 top-5 z-10 flex flex-col gap-2">
                   <div className="flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/18 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(45,212,191,0.25)] backdrop-blur-xl">
                     <Crown className="h-4 w-4" />
                     Host
                   </div>
-                  {/* City Status Orb — compact inline (clickable for broadcaster) */}
+                  {/* City Status Orb ï¿½ compact inline (clickable for broadcaster) */}
                   {broadcasterCityStatus.data && (
                     <div className="pointer-events-auto">
                       <CityStatusOrb
@@ -5083,7 +5088,7 @@ const handleLike = useCallback(async () => {
                   )}
                 </div>
 
-                {/* Mic / Camera media pills — top-right */}
+                {/* Mic / Camera media pills ï¿½ top-right */}
                 <div className="absolute right-5 top-5 z-10 flex items-center gap-2">
                   <span className={cn(
                     theme.badge,
@@ -5397,14 +5402,14 @@ const handleLike = useCallback(async () => {
                      </div>
                    ) : chatTab === 'chat' ? (
                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
-                      {/* Floating messages area — newest on top, scrollable */}
+                      {/* Floating messages area ï¿½ newest on top, scrollable */}
 <div
   ref={floatingChatContainerRef}
   className="min-h-0 flex-1 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide overscroll-contain"
 >
                         {floatingMessages.length === 0 && (
                           <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
-                            No messages yet – say something!
+                            No messages yet ï¿½ say something!
                           </div>
                         )}
 {floatingMessages.map((msg) => (
@@ -5437,7 +5442,7 @@ const handleLike = useCallback(async () => {
                           if (!text) return
 
                           if (!user && !reserveAnonymousChatSlot()) {
-                            toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                            toast.error('Youï¿½ve used your 5 anonymous chats. Sign in to keep chatting.')
                             navigate('/auth?mode=login')
                             return
                           }
@@ -5489,7 +5494,7 @@ const handleLike = useCallback(async () => {
                           type="text"
                           value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Say something…"
+                          placeholder="Say somethingï¿½"
                           className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                           maxLength={280}
                         />
@@ -5634,7 +5639,7 @@ const handleLike = useCallback(async () => {
                 isCamOn={cameraEnabled}
                 isLive={stream.status === 'live'}
                 liveViewerCount={viewerCount}
-                liveTimer={'00:00'}
+                 liveTimer={liveTimer}
                 isGiftTrayOpen={isGiftModalOpen}
                 isOfficerModalOpen={false}
                 onToggleMic={toggleMicrophone}
@@ -5652,7 +5657,7 @@ const handleLike = useCallback(async () => {
 
           
 
-            {/* View mode toggle — desktop */}
+            {/* View mode toggle ï¿½ desktop */}
             {!isMobileViewer && (
               <div className="absolute top-3 right-3 z-50">
                 <button
@@ -5667,7 +5672,7 @@ const handleLike = useCallback(async () => {
               </div>
             )}
 
-            {/* View mode toggle — mobile */}
+            {/* View mode toggle ï¿½ mobile */}
             {isMobileViewer && (
               <div className="absolute bottom-3 left-3 z-50">
                 <button
@@ -5683,7 +5688,7 @@ const handleLike = useCallback(async () => {
             )}
           </div>
 
-            {/* OVERLAYS — absolutely positioned, renders above all grid content */}
+            {/* OVERLAYS ï¿½ absolutely positioned, renders above all grid content */}
             <div className="absolute inset-0 pointer-events-none">
               {isGiftModalOpen && (
                 <div className="pointer-events-auto">

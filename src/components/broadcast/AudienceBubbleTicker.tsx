@@ -3,7 +3,13 @@ import { motion } from 'framer-motion'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../lib/store'
 import { isStaffProfile } from '../../lib/staff'
-import UserActionModal from './UserActionModal'
+
+export interface ModerateUserInfo {
+  userId: string
+  username: string
+  role?: string
+  createdAt?: string
+}
 
 export interface StreamAudienceMember {
   id: string
@@ -30,6 +36,7 @@ interface AudienceBubbleTickerProps {
   maxVisible?: number
   className?: string
   onGiftUser?: (userId: string) => void
+  onModerateUser?: (info: ModerateUserInfo) => void
 }
 
 const LEAVE_ANIMATION_DURATION = 5000
@@ -42,13 +49,12 @@ export function AudienceBubbleTicker({
   maxVisible = 10,
   className = '',
   onGiftUser,
+  onModerateUser,
 }: AudienceBubbleTickerProps) {
   const { profile: currentProfile } = useAuthStore()
   const [leavingAudience, setLeavingAudience] = useState<
     Record<string, StreamAudienceMember & { expireAt: number }>
   >({})
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
-
   const previousActiveIdsRef = useRef<string[]>([])
 
   const activeAudience = useMemo(() => {
@@ -139,11 +145,6 @@ export function AudienceBubbleTicker({
 
   const overflowCount = Math.max(0, activeAudience.length - maxVisible)
 
-  const selectedMember = useMemo(
-    () => displayAudience.find((member) => member.user_id === selectedMemberId) ?? null,
-    [displayAudience, selectedMemberId]
-  )
-
   const canModerateMember = (member: StreamAudienceMember) => {
     if (!currentProfile) return false
     if (member.user_id === currentUserId) return false
@@ -189,7 +190,11 @@ export function AudienceBubbleTicker({
             title={isLeaving ? `${member.username} left the stream` : member.username}
             onClick={() => {
               if (!canModerateMember(member)) return
-              setSelectedMemberId(member.user_id)
+              onModerateUser?.({
+                userId: member.user_id,
+                username: member.username,
+                role: member.role,
+              })
             }}
             aria-label={canModerateMember(member) ? `Moderation actions for ${member.username}` : member.username}
           >
@@ -251,23 +256,6 @@ export function AudienceBubbleTicker({
         </div>
       )}
 
-      {selectedMember && (
-        <UserActionModal
-          streamId={streamId}
-          onClose={() => setSelectedMemberId(null)}
-          userId={selectedMember.user_id}
-          username={selectedMember.username}
-          role={selectedMember.role}
-          isHost={currentProfile?.id === hostUserId}
-          isModerator={false}
-          isOfficer={isStaffProfile(currentProfile)}
-          onGift={() => {
-            const uid = selectedMember.user_id
-            setSelectedMemberId(null)
-            onGiftUser?.(uid)
-          }}
-        />
-      )}
     </div>
   )
 }

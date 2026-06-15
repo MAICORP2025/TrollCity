@@ -7,6 +7,7 @@ import AgoraRTC, {
 } from 'agora-rtc-sdk-ng';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { useTickerStore } from '@/stores/tickerStore';
 
 /**
  * useAgoraScreenShare — Two-phase flow:
@@ -128,7 +129,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
       // Get display media for preview — request BOTH video and audio
       // audio: true captures game/system audio from the selected display source
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: 'monitor' } as MediaTrackConstraints,
+        video: { displaySurface: 'monitor', frameRate: { ideal: 20, max: 20 } } as MediaTrackConstraints,
         audio: true,
       });
       if (!isMountedRef.current) { displayStream.getTracks().forEach(t => t.stop()); return; }
@@ -246,6 +247,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
         setIsLive(true);
         setIsConnected(true);
         setIsConnecting(false);
+        useTickerStore.getState().setScreenshareActive(true);
       }
     } catch (err: any) {
       console.error('[AgoraScreenShare] Go live failed:', err);
@@ -335,6 +337,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
       setError(null);
       setCameraEnabled(false);
       setMicEnabled(true);
+      useTickerStore.getState().setScreenshareActive(false);
     }
     toast.success('Stream ended');
   }, [streamId]);
@@ -355,6 +358,7 @@ export function useAgoraScreenShare(): AgoraScreenShareState & AgoraScreenShareA
     setCameraEnabled(false);
     setMicEnabled(true);
     setError(null);
+    useTickerStore.getState().setScreenshareActive(false);
   }, []);
 
   // ── Toggle mic ──

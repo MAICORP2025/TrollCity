@@ -968,6 +968,10 @@ export default function TromailPage() {
               <Plus className="mr-2 h-4 w-4" />
               Compose
             </Button>
+            <Button onClick={() => navigate('/tromail/office')} variant="ghost" className="border border-cyan-500/20 text-cyan-200 hover:bg-cyan-500/20">
+              <FileText className="mr-2 h-4 w-4" />
+              Office
+            </Button>
           </div>
         </div>
 

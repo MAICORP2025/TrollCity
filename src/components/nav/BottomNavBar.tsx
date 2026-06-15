@@ -34,7 +34,6 @@ import {
   MonitorDot,
   Lock,
   Eye,
-  Siren,
   DollarSign,
   Bell,
   User,
@@ -51,6 +50,7 @@ import {
   Car,
   Briefcase,
   Receipt,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
@@ -337,14 +337,14 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Troll Match', icon: Heart, path: '/match' },
         ],
       },
-      {
-        category: 'Government',
-        items: [
-          { label: 'Troll Court', icon: Scale, path: '/troll-court' },
-          { label: 'Inmates', icon: Lock, path: '/inmates' },
-          { label: 'City Laws & Fees', icon: FileText_M, path: '/home' },
-          { label: 'President Candidates', icon: Vote, path: '/home' },
-          { label: 'Elections', icon: ClipboardList, path: '/government' },
+       {
+         category: 'Government',
+         items: [
+           { label: 'Troll Court', icon: Scale, path: '/troll-court' },
+           { label: 'Inmates', icon: Lock, path: '/inmates' },
+           { label: 'City Laws & Fees', icon: FileText_M, path: '/home?tab=laws-fees' },
+           { label: 'President Candidates', icon: Vote, path: '/home?tab=president' },
+           { label: 'Elections', icon: ClipboardList, path: '/government' },
           ...(isOfficer || isSecretary || isAdmin
             ? [{ label: 'City Government', icon: Landmark as any, path: '/government' }]
             : []),
@@ -352,6 +352,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
             ? [
                 { label: 'Officer Dashboard', icon: LayoutGrid as any, path: '/officer/dashboard' },
                 { label: 'Moderation', icon: Eye as any, path: '/officer/moderation' },
+                { label: 'Payroll', icon: DollarSign as any, path: '/officer/payroll' },
               ]
             : []),
           ...(isLead
@@ -389,7 +390,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
             {
               category: 'Analytics & Stats',
               items: [
-                { label: 'My Stats', icon: BarChart3, path: '/profile/stats' },
+                 { label: 'My Stats', icon: BarChart3, path: '/stats' },
                 { label: 'City Stats', icon: TrendingUp, path: '/admin' },
                 { label: 'Admin Panel', icon: Settings, path: '/admin' },
                 { label: 'Revenue Dashboard', icon: DollarSign, path: '/admin/earnings' },
@@ -398,7 +399,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
             },
           ]
         : []),
-      ...(isOfficer || isAdmin
+       ...(isAdmin
         ? [
             {
               category: 'Moderation Center',
@@ -583,6 +584,9 @@ export default function BottomNavBar() {
     return location.pathname.startsWith(path);
   };
 
+  // Hide bottom nav on Treelz pages
+  if (location.pathname.startsWith('/treelz')) return null;
+
   return (
     <>
       <style>{`
@@ -634,12 +638,13 @@ export default function BottomNavBar() {
 
             {/* CENTER: Nav buttons */}
             {isMobile ? (
-              /* MOBILE: 5 tiles — Home, Go Live, Coins, Chats, More */
+              /* MOBILE: 6 tiles — Home, Go Live, Coins, Chats, Treelz, More */
               <nav className="flex flex-1 items-center justify-around">
                 <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
                 <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
                 <NavButton
                   icon={LayoutGrid}
                   label="More"
@@ -654,6 +659,7 @@ export default function BottomNavBar() {
                 <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} />
                 <NavButton icon={Gavel} label="Auctions" to="/auctions" active={isActive('/auctions')} badge={badges.auctions} badgeKey="auctions" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Scale} label="Court" to="/troll-court" active={isActive('/troll-court')} badge={badges.court} badgeKey="court" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Map} label="Neighborhood" to="/neighborhood-map" active={isActive('/neighborhood-map')} badge={badges.neighborhood} badgeKey="neighborhood" onBadgeDismiss={badges.dismiss} />

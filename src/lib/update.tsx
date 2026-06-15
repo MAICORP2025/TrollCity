@@ -94,6 +94,29 @@ function GamingSetupPageInner() {
     return `${Math.round(health.bitrateKbps).toLocaleString()} kbps`
   }, [health.bitrateKbps, isObsConnected, isLive])
 
+  // Stream duration timer
+  useEffect(() => {
+    if (!isLive || !streamData?.started_at) {
+      setStreamDuration('00:00:00');
+      return;
+    }
+    const start = new Date(streamData.started_at).getTime();
+    if (!Number.isFinite(start)) {
+      setStreamDuration('00:00:00');
+      return;
+    }
+    const update = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - start) / 1000));
+      const h = Math.floor(elapsed / 3600);
+      const m = Math.floor((elapsed % 3600) / 60);
+      const s = elapsed % 60;
+      setStreamDuration([h, m, s].map((p) => String(p).padStart(2, '0')).join(':'));
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [isLive, streamData?.started_at])
+
   const streamHealthDisplay = useMemo(() => {
     if (isLive) return 'Good'
     if (isObsConnected) return health.bitrateKbps ? 'Good' : 'Fair'

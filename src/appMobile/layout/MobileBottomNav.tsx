@@ -4,11 +4,15 @@ import {
   ChevronDown,
   ChevronUp,
   Coins,
+  Home,
   LogOut,
+  MessageCircle,
   Radio,
   Sparkles,
+  Store,
+  User,
+  Upload,
   Wallet,
-  Zap,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -383,14 +387,46 @@ export default function MobileBottomNav() {
 
   return (
     <nav className={`tc-mobile-bottom-nav ${isOpen ? "tc-mobile-bottom-nav--open" : ""}`}>
+      {/* Always-visible bottom tab bar */}
+      <div className="flex w-full items-center justify-around border-t border-white/10 bg-[#050715]/95 px-1 py-1.5 backdrop-blur-xl">
+        <NavLink to="/" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+          <Home size={15} />
+          <span className="text-[7px] font-bold leading-none">Home</span>
+        </NavLink>
+        <NavLink to="/broadcast/setup" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+          <Radio size={15} />
+          <span className="text-[7px] font-bold leading-none">Go Live</span>
+        </NavLink>
+        <NavLink to="/store" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+          <Coins size={15} />
+          <span className="text-[7px] font-bold leading-none">Coins</span>
+        </NavLink>
+        <NavLink to="/utromail" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+          <MessageCircle size={15} />
+          <span className="text-[7px] font-bold leading-none">Chats</span>
+        </NavLink>
+        <NavLink to="/treelz" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+          <Sparkles size={15} />
+          <span className="text-[7px] font-bold leading-none">Treelz</span>
+        </NavLink>
+        <button
+          type="button"
+          className="flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 text-slate-500"
+          onClick={() => setIsOpen((value) => !value)}
+          aria-expanded={isOpen}
+        >
+          {isOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+          <span className="text-[7px] font-bold leading-none">More</span>
+        </button>
+      </div>
+
       <button
         type="button"
         className="tc-mobile-bottom-nav__handle"
         onClick={() => setIsOpen((value) => !value)}
         aria-expanded={isOpen}
       >
-        <span>City Menu</span>
-        {isOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+        <span className="sr-only">City Menu</span>
       </button>
 
       {isOpen && (
@@ -404,7 +440,7 @@ export default function MobileBottomNav() {
 
           <MobileGoLiveButton onClick={handleGoLive} />
 
-          <div className="tc-mobile-bottom-nav__primary-tabs">
+          <div className="flex w-full items-center justify-around px-1">
             {primaryRoutes.map((route) => {
               const Icon = route.icon;
 
@@ -415,15 +451,15 @@ export default function MobileBottomNav() {
                   onClick={() => setIsOpen(false)}
                   className={({ isActive }) =>
                     [
-                      "tc-mobile-bottom-nav__tab",
-                      isActive ? "tc-mobile-bottom-nav__tab--active" : "",
+                      "flex flex-col items-center gap-0.5 px-1 py-1",
+                      isActive ? "text-cyan-400" : "text-slate-400",
                     ]
                       .filter(Boolean)
                       .join(" ")
                   }
                 >
-                  <Icon size={18} />
-                  <span>{route.label}</span>
+                  <Icon size={16} />
+                  <span className="text-[9px] font-bold leading-none">{route.label}</span>
                 </NavLink>
               );
             })}

@@ -32,6 +32,10 @@ import MobileNotificationsPage from "./pages/MobileNotificationsPage";
 import MobileMessagesPage from "./pages/MobileMessagesPage";
 import MobileCoinStorePage from "./pages/MobileCoinStorePage";
 import MobileTreelzPage from "./pages/MobileTreelzPage";
+import MobileTreelzUpload from "./pages/MobileTreelzUpload";
+import MobileTreelzSettings from "./pages/MobileTreelzSettings";
+import MobileTreelzSaved from "./pages/MobileTreelzSaved";
+import MobilePrideChallenges from "./pages/MobilePrideChallenges";
 
 import MobilePlaceholder from "./components/MobilePlaceholder";
 
@@ -179,6 +183,47 @@ export const mobileRoutes: MobileRouteItem[] = [
     priority: 90,
     regular: true,
     showInBottomBubble: true,
+  },
+  {
+    key: "treelz-upload",
+    label: "Upload Treelz",
+    path: "/treelz/upload",
+    element: <MobileTreelzUpload />,
+    icon: Sparkles,
+    priority: 92,
+    regular: true,
+    showInBottomBubble: false,
+  },
+  {
+    key: "treelz-settings",
+    label: "Treelz Settings",
+    path: "/treelz/settings",
+    element: <MobileTreelzSettings />,
+    icon: Settings,
+    priority: 93,
+    regular: true,
+    showInBottomBubble: false,
+  },
+  {
+    key: "treelz-saved",
+    label: "Saved Treelz",
+    path: "/treelz/saved",
+    element: <MobileTreelzSaved />,
+    icon: Settings,
+    priority: 94,
+    regular: true,
+    showInBottomBubble: false,
+  },
+  {
+    key: "pride-challenges",
+    label: "Pride Challenges",
+    path: "/pride-challenges",
+    element: <MobilePrideChallenges />,
+    icon: Sparkles,
+    priority: 95,
+    regular: true,
+    public: true,
+    showInBottomBubble: false,
   },
 
   // Broadcast pages

@@ -924,7 +924,8 @@ Deno.serve(async (req) => {
       }
 
       case "approve_application": {
-        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const isAgencyHR = profile.role === "agency_hr" || profile.role === "agency_hr_manager" || profile.role === "agency_leader";
+        if (!isAdmin && !isSecretary && !isAgencyHR) throw new Error("Unauthorized");
         const { applicationId, type, userId, interviewDate, interviewTime } = params;
         if (!applicationId) throw new Error("Missing applicationId");
 
@@ -1042,6 +1043,43 @@ Deno.serve(async (req) => {
           result = { success: true };
         }
 
+        break;
+      }
+
+      case "get_stream_reports": {
+        const { limit } = params;
+        const { data: reports, error: reportsError } = await supabaseAdmin
+          .from("moderation_reports")
+          .select("*, reporter:user_profiles!moderation_reports_reporter_id_fkey(username), target_user:user_profiles!moderation_reports_target_user_id_fkey(username)")
+          .order("created_at", { ascending: false })
+          .limit(limit || 50);
+        if (reportsError) throw reportsError;
+        result = { reports: reports || [] };
+        break;
+      }
+
+      case "get_recent_chat_logs": {
+        const { limit } = params;
+        const { data: logs, error: logsError } = await supabaseAdmin
+          .from("stream_chat")
+          .select("*, user:user_profiles(username, avatar_url)")
+          .order("created_at", { ascending: false })
+          .limit(limit || 100);
+        if (logsError) throw logsError;
+        result = { logs: logs || [] };
+        break;
+      }
+
+      case "get_banned_users": {
+        const { limit } = params;
+        const { data: users, error: usersError } = await supabaseAdmin
+          .from("user_profiles")
+          .select("id, username, email, is_banned, banned_until")
+          .eq("is_banned", true)
+          .order("banned_until", { ascending: false })
+          .limit(limit || 100);
+        if (usersError) throw usersError;
+        result = { users: users || [] };
         break;
       }
 

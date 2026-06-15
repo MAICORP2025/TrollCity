@@ -13,6 +13,7 @@ import { DraggableCameraOverlay } from '../../components/broadcast/DraggableCame
 import UniverseModeSetup from '../../components/broadcast/UniverseModeSetup';
 import { toast } from 'sonner';
 import { useBroadcastLockdown } from '@/hooks/useBroadcastLockdown';
+import { useBroadcastViewerCap } from '@/hooks/useBroadcastViewerCap';
 import { generateUUID } from '../../lib/uuid';
 import ThemeEffectLayer from '../../components/themes/ThemeEffectLayer';
 import {
@@ -224,7 +225,7 @@ export default function SetupPage() {
   const [selectedTheme, setSelectedTheme] = useState<string>(DEFAULT_BROADCAST_THEME_ID);
   const [ownedThemes, setOwnedThemes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean } | null>(null);
+  const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean; unrestricted?: boolean; isStaffBypass?: boolean } | null>(null);
 const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
   const canUseCeoTheme = isCeoThemeEligible(user?.id, user?.email ?? null);
   const selectableThemes = useMemo(
@@ -245,6 +246,9 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
 
   // Broadcast lockdown check
   const { isLocked: isBroadcastLocked, canBroadcast, isAdmin: isUserAdmin } = useBroadcastLockdown();
+
+  // Broadcast restrictions from control panel
+  const { startCapEnabled, startCapMax, allRestrictionsDisabled } = useBroadcastViewerCap();
 
   useEffect(() => {
     try {
@@ -597,10 +601,53 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
     fetchFollowerCount();
   }, [user?.id]);
 
-  // Check weekly broadcaster limit (10 per week, first-come-first-served)
+  // Check broadcaster limit from control panel settings
   useEffect(() => {
     async function checkBroadcasterLimit() {
       if (!user?.id) return;
+
+      // If "Remove All Restrictions" is enabled, skip the cap entirely
+      if (allRestrictionsDisabled) {
+        setBroadcasterLimitInfo({
+          current: 0,
+          max: 0,
+          canStart: true,
+          unrestricted: true,
+        });
+        return;
+      }
+
+      // If start cap is not enabled in control panel, allow freely
+      if (!startCapEnabled) {
+        setBroadcasterLimitInfo({
+          current: 0,
+          max: 0,
+          canStart: true,
+          unrestricted: true,
+        });
+        return;
+      }
+
+      // Staff/admin roles bypass the cap entirely
+      const p: any = profile;
+      const isStaffOrAdmin =
+        p?.role === 'admin' || p?.is_admin ||
+        p?.role === 'superadmin' || p?.is_superadmin ||
+        p?.role === 'lead_troll_officer' || p?.is_lead_officer ||
+        p?.role === 'troll_officer' || p?.is_troll_officer ||
+        p?.role === 'secretary' || p?.role === 'moderator' ||
+        p?.role === 'agency_hr' || p?.role === 'agency_hr_manager' || p?.role === 'agency_leader';
+
+      if (isStaffOrAdmin) {
+        setBroadcasterLimitInfo({
+          current: 0,
+          max: startCapMax,
+          canStart: true,
+          unrestricted: true,
+          isStaffBypass: true,
+        });
+        return;
+      }
 
       // Get start of current week (Sunday)
       const now = new Date();
@@ -634,10 +681,10 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       }
       const currentCount = orderedBroadcasters.length;
 
-      // Max limit is 10 broadcasters per week
-      const maxLimit = 10;
+      // Use the max limit from control panel (default 10)
+      const maxLimit = startCapMax || 10;
 
-      // Check if current user is already in the first 10
+      // Check if current user is already in the allowed broadcasters
       const userPosition = orderedBroadcasters.indexOf(user.id);
       const hasUserBroadcasted = userPosition !== -1;
       const canStart = currentCount < maxLimit || (hasUserBroadcasted && userPosition < maxLimit);
@@ -649,7 +696,7 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       });
     }
     checkBroadcasterLimit();
-  }, [user?.id]);
+  }, [user?.id, startCapEnabled, startCapMax, allRestrictionsDisabled, profile]);
 
   // Check camera/mic permission state without prompting on mount
   useEffect(() => {
@@ -1563,7 +1610,7 @@ const handleStartStream = async () => {
     }
     if (!user) return;
     if (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) {
-      toast.error(`Weekly broadcaster limit reached (${broadcasterLimitInfo.current}/${broadcasterLimitInfo.max}). You are not in the first 10. Please try again next week.`);
+      toast.error(`Weekly broadcaster limit reached (${broadcasterLimitInfo.current}/${broadcasterLimitInfo.max}). You are not in the first ${broadcasterLimitInfo.max}. Please try again next week.`);
       return;
     }
     if (!inlineAgreementChecked) {
@@ -2113,12 +2160,22 @@ livekit_room_name: roomName,
               <h1 className="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Go Live</h1>
             </div>
           </div>
-          {broadcasterLimitInfo && (
+          {broadcasterLimitInfo && !broadcasterLimitInfo.unrestricted && (
             <div className={cn(
               "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold border",
               broadcasterLimitInfo.canStart ? "bg-blue-500/10 border-blue-500/20 text-blue-400" : "bg-red-500/10 border-red-500/20 text-red-400"
             )}>
               {broadcasterLimitInfo.current}/{broadcasterLimitInfo.max} this week
+            </div>
+          )}
+          {broadcasterLimitInfo?.unrestricted && broadcasterLimitInfo?.isStaffBypass && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+              Staff — No Cap
+            </div>
+          )}
+          {broadcasterLimitInfo?.unrestricted && !broadcasterLimitInfo?.isStaffBypass && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+              No Restrictions
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { supabase } from '@/lib/supabase'
 
 export interface LiveItem {
+  is_Live: import("react/jsx-runtime").JSX.Element
   id: string
   title: string
   type: 'stream' | 'podcast' | 'auction'

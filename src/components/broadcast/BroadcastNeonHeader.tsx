@@ -302,7 +302,15 @@ export default function BroadcastNeonHeader({
                 />
               </div>
             )}
-           <div className="flex items-center gap-2 rounded-2xl border border-yellow-400/25 bg-yellow-500/10 px-3 py-2 shadow-[0_0_18px_rgba(234,179,8,0.14)]">
+             {isLive && (
+               <span className="flex items-center gap-2 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-black text-red-400">
+                 <span className={LIVE_DOT_CLASS} />
+                 LIVE
+                 <span className="tabular-nums text-red-300/80">{timerStr}</span>
+               </span>
+             )}
+
+             <div className="flex items-center gap-2 rounded-2xl border border-yellow-400/25 bg-yellow-500/10 px-3 py-2 shadow-[0_0_18px_rgba(234,179,8,0.14)]">
               <Coins className="h-4 w-4 text-yellow-300" />
               <span className="text-sm font-black tabular-nums text-yellow-300">
                 {formattedCoins}

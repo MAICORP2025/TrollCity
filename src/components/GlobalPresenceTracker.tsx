@@ -23,11 +23,7 @@ export default function GlobalPresenceTracker() {
   const updateOnlineStatus = async (isOnline: boolean) => {
     if (!user?.id || !profile?.id) return;
     
-    // Debounce - don't update more than every 10 seconds if same status
     const now = Date.now();
-    if (now - lastOnlineUpdateRef.current < 10000 && isOnline === isVisibleRef.current) return;
-    
-    lastOnlineUpdateRef.current = now;
     isVisibleRef.current = isOnline;
 
     try {
@@ -52,9 +48,24 @@ export default function GlobalPresenceTracker() {
           .eq('user_id', user.id)
           .eq('session_id', sessionId);
       }
+
+      // Also upsert to user_presence for real-time presence tracking
+      if (isOnline) {
+        await supabase.from('user_presence').upsert(
+          {
+            user_id: user.id,
+            last_seen_at: new Date().toISOString(),
+            is_online: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' },
+        );
+      }
     } catch (error) {
       console.error('[GlobalPresenceTracker] Failed to update online status:', error);
     }
+    
+    lastOnlineUpdateRef.current = now;
   };
 
   useEffect(() => {
@@ -67,16 +78,16 @@ export default function GlobalPresenceTracker() {
       }
     }
 
-    // Heartbeat & Count fetch - debounced to prevent connection storms
-    const syncPresence = async () => {
-      if (document.hidden) return
+    // Heartbeat & Count fetch - fires immediately then on interval
+    const syncPresence = async (isInitial: boolean = false) => {
+      if (document.hidden && !isInitial) return
 
       try {
-        // 1. Send heartbeat - debounce to max once per 60 seconds per user
         const now = Date.now();
-        if (now - heartbeatRef.current >= 60000) {
+
+        // 1. Send heartbeat - immediate on mount, then every 30s
+        if (isInitial || now - heartbeatRef.current >= 30000) {
           heartbeatRef.current = now;
-          // Upsert directly to user_presence table (RPC doesn't exist)
           await supabase.from('user_presence').upsert(
             {
               user_id: user.id,
@@ -88,23 +99,21 @@ export default function GlobalPresenceTracker() {
           );
         }
 
-        // 2. Fetch total online count - debounce to max once per 45 seconds
-        if (now - onlineCountRef.current >= 45000) {
+        // 2. Fetch total online count - immediate on mount, then every 30s
+        if (isInitial || now - onlineCountRef.current >= 30000) {
           onlineCountRef.current = now;
           const twoMinutesAgo = new Date(Date.now() - 120000).toISOString();
-          const { data: presenceData, count, error } = await supabase
+          const { data: presenceData, error } = await supabase
             .from('user_presence')
             .select('user_id', { count: 'exact' })
             .gt('last_seen_at', twoMinutesAgo)
             .limit(1000);
 
-          if (!error) {
-            if (presenceData) {
-              const userIds = (presenceData as Array<{ user_id: string | null }>).map(p => p.user_id).filter(Boolean) as string[];
-              const uniqueUserIds = Array.from(new Set(userIds));
-              setOnlineCount(uniqueUserIds.length);
-              setOnlineUserIds(uniqueUserIds);
-            }
+          if (!error && presenceData) {
+            const userIds = (presenceData as Array<{ user_id: string | null }>).map(p => p.user_id).filter(Boolean) as string[];
+            const uniqueUserIds = Array.from(new Set(userIds));
+            setOnlineCount(uniqueUserIds.length);
+            setOnlineUserIds(uniqueUserIds);
           }
         }
       } catch (err) {
@@ -115,15 +124,16 @@ export default function GlobalPresenceTracker() {
     const startSyncLoop = () => {
       clearSyncInterval()
       if (document.hidden) return
-      syncPresence()
-      intervalRef.current = window.setInterval(syncPresence, 30000)
+      // Fire immediately so user shows online right away
+      syncPresence(true)
+      intervalRef.current = window.setInterval(() => syncPresence(false), 30000)
     }
 
     const stopSyncLoop = () => {
       clearSyncInterval()
     }
 
-    // Initial: user is online when app opens
+    // Initial: user is online when app opens — fire immediately
     updateOnlineStatus(true)
 
     if (!document.hidden) {

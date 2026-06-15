@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { Image, Send, Smile } from 'lucide-react'
+import { Image, Send, Smile, Video } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
+import { trackPrideWallAction } from '@/services/prideChallengeTracker'
 import { trollCityTheme } from '@/styles/trollCityTheme'
 import { WallPost } from '@/types/trollWall'
 import MentionTextarea from '../MentionTextarea'
@@ -56,8 +57,8 @@ export default function CreatePostComposer({ onPostCreated, onRequireAuth, class
       return
     }
 
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error('File must be under 50MB')
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error('File must be under 100MB')
       event.target.value = ''
       return
     }
@@ -74,8 +75,26 @@ export default function CreatePostComposer({ onPostCreated, onRequireAuth, class
           event.target.value = ''
           return
         }
-        setMediaFile(file)
-        setMediaType('video')
+        // Generate thumbnail from video
+        video.currentTime = Math.min(1, video.duration / 2)
+      }
+      video.onseeked = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(video, 0, 0)
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const thumbFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' })
+              setMediaFile(file)
+              setMediaType('video')
+              // Store thumbnail file for later upload
+              ;(file as any)._thumbnail = thumbFile
+            }
+          }, 'image/jpeg', 0.8)
+        }
       }
       video.onerror = () => {
         URL.revokeObjectURL(url)
@@ -116,6 +135,20 @@ export default function CreatePostComposer({ onPostCreated, onRequireAuth, class
 
         if (mediaType === 'video') {
           metadata.video_url = publicData.publicUrl
+          // Upload thumbnail if generated
+          const thumbFile = (mediaFile as any)?._thumbnail
+          if (thumbFile) {
+            const thumbName = `${user.id}/${Date.now()}_thumb.jpg`
+            const { error: thumbErr } = await supabase.storage
+              .from('post-media')
+              .upload(thumbName, thumbFile)
+            if (!thumbErr) {
+              const { data: thumbPub } = supabase.storage
+                .from('post-media')
+                .getPublicUrl(thumbName)
+              metadata.thumbnail_url = thumbPub.publicUrl
+            }
+          }
         } else {
           metadata.image_url = publicData.publicUrl
         }
@@ -152,6 +185,10 @@ export default function CreatePostComposer({ onPostCreated, onRequireAuth, class
       setMediaFile(null)
       setMediaType(null)
       toast.success('Post created')
+      if (user?.id) {
+        trackPrideWallAction(user.id, 'wall_posts')
+        trackPrideWallAction(user.id, 'share_moment')
+      }
     } catch (err: any) {
       console.error('Error creating post:', err)
       toast.error(err?.message || 'Failed to create post')
@@ -210,7 +247,11 @@ export default function CreatePostComposer({ onPostCreated, onRequireAuth, class
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70"
             title="Upload image or video"
           >
-            <Image className="h-3.5 w-3.5" />
+            {mediaType === 'video' ? (
+              <Video className="h-3.5 w-3.5" />
+            ) : (
+              <Image className="h-3.5 w-3.5" />
+            )}
           </button>
           <div className="relative">
             <button

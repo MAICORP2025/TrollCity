@@ -203,11 +203,20 @@ export default function PrideChallenges({ compact = false, className }: PrideCha
 
   const fetchChallenges = useCallback(async () => {
     try {
-      // Fetch all active challenges
+      if (!isPrideMonth()) {
+        setChallenges([]);
+        setLoading(false);
+        return;
+      }
+
+      const now = new Date().toISOString();
+
       const { data: challengeData, error: challengeError } = await supabase
         .from('pride_challenges')
         .select('*')
         .eq('is_active', true)
+        .gt('week_number', 0)
+        .lte('starts_at', now)
         .order('sort_order', { ascending: true });
 
       if (challengeError) throw challengeError;

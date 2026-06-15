@@ -3,10 +3,12 @@ import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { X, Send, Star, Users, ChevronDown } from 'lucide-react'
+import { X, Send, Users, ChevronDown, Paperclip, FileText, Sheet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { listUserOfficeFiles, shareOfficeFilesWithUsers } from '@/services/officeService'
+import type { OfficeFileListItem } from '@/types/office'
 
 interface TromailRecipient {
   user_id: string
@@ -32,6 +34,10 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
   const [isSending, setIsSending] = useState(false)
   const [showRecipientDropdown, setShowRecipientDropdown] = useState(false)
   const [searchRecipient, setSearchRecipient] = useState('')
+  const [showOfficePicker, setShowOfficePicker] = useState(false)
+  const [officeFiles, setOfficeFiles] = useState<OfficeFileListItem[]>([])
+  const [selectedOfficeFiles, setSelectedOfficeFiles] = useState<OfficeFileListItem[]>([])
+  const [isLoadingOfficeFiles, setIsLoadingOfficeFiles] = useState(false)
 
   // Load recipient directory
   React.useEffect(() => {
@@ -59,6 +65,16 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
         }
       })
   }, [user])
+
+  React.useEffect(() => {
+    if (!user || !showOfficePicker) return
+
+    setIsLoadingOfficeFiles(true)
+    listUserOfficeFiles(user.id)
+      .then(setOfficeFiles)
+      .catch(() => setOfficeFiles([]))
+      .finally(() => setIsLoadingOfficeFiles(false))
+  }, [showOfficePicker, user])
 
   const filteredRecipients = recipients.filter(
     (r) =>
@@ -104,10 +120,24 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
 
       if (error) throw error
 
+      if (selectedOfficeFiles.length > 0) {
+        await shareOfficeFilesWithUsers({
+          files: selectedOfficeFiles.map((file) => ({
+            file_id: file.id,
+            file_type: file.file_type,
+            owner_id: file.owner_id,
+            is_admin_document: file.is_admin_document,
+          })),
+          sharedWithUserIds: recipientUsers.map((r) => r.user_id),
+          permissionLevel: 'viewer',
+        })
+      }
+
       toast.success('Message sent!')
       setSubject('')
       setBody('')
       setSelectedRecipients([])
+      setSelectedOfficeFiles([])
       if (onSent) onSent()
     } catch (err: any) {
       toast.error(err?.message || 'Failed to send message')
@@ -221,6 +251,24 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
             />
           </div>
 
+          <div>
+            <label className="text-xs font-medium uppercase text-gray-400">Office Attachments</label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {selectedOfficeFiles.map((file) => (
+                <span key={file.id} className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-100">
+                  {file.file_type === 'document' ? <FileText className="h-3 w-3" /> : <Sheet className="h-3 w-3" />}
+                  {file.title}
+                  <button type="button" onClick={() => setSelectedOfficeFiles(selectedOfficeFiles.filter((item) => item.id !== file.id))}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowOfficePicker(true)} className="h-8 border border-cyan-500/20 text-cyan-200">
+                <Paperclip className="mr-1 h-4 w-4" /> Attach Office File
+              </Button>
+            </div>
+          </div>
+
           {/* Options */}
           {canSendAdminEmail(profile) && (
             <label className="flex items-center gap-2">
@@ -254,6 +302,42 @@ export default function TromailCompose({ onSent, onClose }: TromailComposeProps)
               {isSending ? 'Sending...' : 'Send'}
             </Button>
           </div>
+
+          {showOfficePicker && (
+            <div className="rounded-xl border border-cyan-500/20 bg-slate-800 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-bold">Choose Office File</h3>
+                <button type="button" onClick={() => setShowOfficePicker(false)} className="text-slate-400 hover:text-white">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {isLoadingOfficeFiles ? (
+                <p className="py-6 text-center text-sm text-slate-400">Loading Office files...</p>
+              ) : officeFiles.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-400">No Office files found.</p>
+              ) : (
+                <div className="max-h-60 space-y-2 overflow-y-auto">
+                  {officeFiles.map((file) => {
+                    const checked = selectedOfficeFiles.some((item) => item.id === file.id)
+                    return (
+                      <button
+                        key={file.id}
+                        type="button"
+                        onClick={() => setSelectedOfficeFiles(checked ? selectedOfficeFiles.filter((item) => item.id !== file.id) : [...selectedOfficeFiles, file])}
+                        className={`flex w-full items-center justify-between rounded-lg border p-3 text-left ${checked ? 'border-cyan-400/40 bg-cyan-500/20' : 'border-white/5 bg-white/5 hover:bg-white/10'}`}
+                      >
+                        <span>
+                          <span className="mr-2">{file.file_type === 'document' ? <FileText className="inline h-4 w-4 text-cyan-300" /> : <Sheet className="inline h-4 w-4 text-purple-300" />}</span>
+                          <span className="text-sm text-white">{file.title}</span>
+                        </span>
+                        <span className={`h-4 w-4 rounded border ${checked ? 'border-cyan-300 bg-cyan-500' : 'border-slate-500'}`} />
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </form>
       </motion.div>
     </div>
