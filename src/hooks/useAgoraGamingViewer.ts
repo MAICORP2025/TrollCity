@@ -12,7 +12,13 @@ import { toast } from 'sonner';
  * useAgoraGamingViewer
  *
  * Viewer-side hook for watching HytroGaming screen-share streams via Agora.
- * Subscribes to the broadcaster's screen + mic tracks.
+ *
+ * Track identification strategy (explicit UID-based):
+ *   - Broadcaster publishes screen share on UID = hash(channelName)
+ *   - Broadcaster publishes camera on UID = hash(channelName + "-camera")
+ *   - Viewer knows the channel name, so it can pre-compute both expected UIDs
+ *   - Any video track from the camera UID → camera overlay
+ *   - Any other video track → screen share (main)
  */
 
 export interface AgoraGamingViewerState {
@@ -32,6 +38,16 @@ export interface AgoraGamingViewerActions {
   leave: () => Promise<void>;
 }
 
+/** Deterministic string → UID hash matching the broadcaster's getUserUid() */
+function hashToUid(str: string): UID {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 4294967295;
+}
+
 export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingViewerActions {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -47,26 +63,16 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
   const joinedRef = useRef(false);
   const joiningRef = useRef(false);
   const mountedRef = useRef(true);
-  const screenUidRef = useRef<UID | null>(null);
-  const cameraUidRef = useRef<UID | null>(null);
-  const knownCameraUids = useRef<Set<UID>>(new Set());
   const audioSubscribedRef = useRef(false);
-  const pendingFirstVideoTrack = useRef<{ uid: UID; track: IRemoteVideoTrack } | null>(null);
-  const firstVideoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Pre-computed expected UIDs — set when join() is called
+  const expectedScreenUidRef = useRef<UID | null>(null);
+  const expectedCameraUidRef = useRef<UID | null>(null);
 
   const getAgoraAppId = () => import.meta.env.VITE_AGORA_APP_ID;
 
   const debug = (...args: unknown[]) => {
     if (import.meta.env.DEV) console.log('[AgoraGamingViewer]', ...args);
-  };
-
-  const getUserUid = (uid: string): UID => {
-    let hash = 0;
-    for (let i = 0; i < uid.length; i++) {
-      hash = (hash << 5) - hash + uid.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash) % 4294967295;
   };
 
   const fetchToken = useCallback(async (channel: string, uid: UID): Promise<string> => {
@@ -98,6 +104,12 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
 
     joiningRef.current = true;
 
+    // Pre-compute the expected UIDs for screen share and camera tracks.
+    // The broadcaster uses: screen UID = hash(channelName), camera UID = hash(channelName + "-camera")
+    expectedScreenUidRef.current = hashToUid(channelName);
+    expectedCameraUidRef.current = hashToUid(`${channelName}-camera`);
+    debug('Expected UIDs — screen:', expectedScreenUidRef.current, 'camera:', expectedCameraUidRef.current);
+
     setIsConnecting(true);
     setError(null);
 
@@ -109,10 +121,24 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
 
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
+
+      // ── UID-based track identification ──
+      // The broadcaster publishes:
+      //   Screen share video on UID = hashToUid(channelName)
+      //   Camera video on UID = hashToUid(channelName + "-camera")
+      // We pre-computed these in expectedScreenUidRef / expectedCameraUidRef.
+
+      const isCameraUid = (uid: UID): boolean => {
+        return expectedCameraUidRef.current !== null && uid === expectedCameraUidRef.current;
+      };
+
+      const isScreenUid = (uid: UID): boolean => {
+        return expectedScreenUidRef.current !== null && uid === expectedScreenUidRef.current;
+      };
+
       // Handle remote user publishing (broadcaster shares screen + camera)
       client.on('user-published', async (user, mediaType) => {
-        debug('Remote user published:', user.uid, mediaType);
-        // Skip if we've already left or are leaving
+        debug('Remote user published:', user.uid, mediaType, 'isCamera:', isCameraUid(user.uid), 'isScreen:', isScreenUid(user.uid));
         if (!joinedRef.current) {
           debug('Skipping subscribe — not joined');
           return;
@@ -123,76 +149,20 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
 
           if (mediaType === 'video') {
             const videoTrack = user.videoTrack;
-            console.log('[AgoraGamingViewer] After subscribe — videoTrack:', !!videoTrack, 'uid:', user.uid, 'screenAssigned:', !!screenUidRef.current, 'cameraAssigned:', !!cameraUidRef.current, 'pending:', !!pendingFirstVideoTrack.current);
             if (!videoTrack || !mountedRef.current) {
               debug('No video track available after subscribe');
               return;
             }
 
-            console.log('[AgoraGamingViewer] Processing video track:', user.uid, 'screenUid:', screenUidRef.current, 'cameraUid:', cameraUidRef.current, 'pending:', !!pendingFirstVideoTrack.current);
-
-            // The broadcaster publishes screen share on the primary Agora client
-            // and camera on a secondary client (different UID). First video track
-            // = screen share (main), second = camera (overlay).
-            if (!screenUidRef.current && !cameraUidRef.current) {
-              // First video track — hold pending to see if a second arrives
-              pendingFirstVideoTrack.current = { uid: user.uid, track: videoTrack };
-              firstVideoTimerRef.current = setTimeout(() => {
-                if (!mountedRef.current) return;
-                if (pendingFirstVideoTrack.current) {
-                  // No second track arrived — this is the screen share (main)
-                  screenUidRef.current = pendingFirstVideoTrack.current.uid;
-                  setRemoteVideoTrack(pendingFirstVideoTrack.current.track);
-                  setHasVideo(true);
-                  debug('Screen share video track set (sole track) from uid:', pendingFirstVideoTrack.current.uid);
-                  pendingFirstVideoTrack.current = null;
-                }
-              }, 3000);
-              debug('First video track held pending from uid:', user.uid);
-            } else if (pendingFirstVideoTrack.current && !screenUidRef.current && !cameraUidRef.current) {
-              // Second video track arrived within the window
-              // First = screen share (main), Second = camera (overlay)
-              if (firstVideoTimerRef.current) {
-                clearTimeout(firstVideoTimerRef.current);
-                firstVideoTimerRef.current = null;
-              }
-              screenUidRef.current = pendingFirstVideoTrack.current.uid;
-              setRemoteVideoTrack(pendingFirstVideoTrack.current.track);
-              setHasVideo(true);
-              debug('Screen share video track set (first arrived) from uid:', pendingFirstVideoTrack.current.uid);
-
-              cameraUidRef.current = user.uid;
+            if (isCameraUid(user.uid)) {
+              // This is the broadcaster's camera (secondary Agora client)
               setRemoteCameraTrack(videoTrack);
-              knownCameraUids.current.add(user.uid);
-              debug('Camera video track set (second arrived) from uid:', user.uid);
-              pendingFirstVideoTrack.current = null;
-            } else if (screenUidRef.current && !cameraUidRef.current && user.uid !== screenUidRef.current) {
-              // Screen already assigned, this is the camera
-              cameraUidRef.current = user.uid;
-              setRemoteCameraTrack(videoTrack);
-              knownCameraUids.current.add(user.uid);
               debug('Camera video track set from uid:', user.uid);
-            } else if (cameraUidRef.current && !screenUidRef.current && user.uid !== cameraUidRef.current) {
-              // Camera already assigned, this is the screen share
-              screenUidRef.current = user.uid;
+            } else {
+              // Everything else is treated as screen share (primary Agora client)
               setRemoteVideoTrack(videoTrack);
               setHasVideo(true);
               debug('Screen share video track set from uid:', user.uid);
-            } else {
-              // Replace existing track by UID
-              if (user.uid === screenUidRef.current) {
-                setRemoteVideoTrack(videoTrack);
-                debug('Screen share video track updated');
-              } else if (user.uid === cameraUidRef.current) {
-                setRemoteCameraTrack(videoTrack);
-                debug('Camera video track updated');
-              } else {
-                // Third+ video track — treat as camera replacement
-                cameraUidRef.current = user.uid;
-                setRemoteCameraTrack(videoTrack);
-                knownCameraUids.current.add(user.uid);
-                debug('Additional video track set as camera from uid:', user.uid);
-              }
             }
           }
 
@@ -204,7 +174,6 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
               // 2. Screen share / game audio (Track D)
               // First audio track = mic, second = screen audio
               if (!audioSubscribedRef.current) {
-                // First audio track — microphone
                 audioSubscribedRef.current = true;
                 setRemoteAudioTrack(audioTrack);
                 setHasAudio(true);
@@ -214,7 +183,6 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
                 } catch (e) { debug('Audio play failed:', e); }
                 debug('Mic audio track set from uid:', user.uid);
               } else {
-                // Second audio track — screen share / game audio
                 setRemoteScreenAudioTrack(audioTrack);
                 try {
                   const at = audioTrack as any;
@@ -232,18 +200,16 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       client.on('user-unpublished', (user, mediaType) => {
         debug('Remote user unpublished:', user.uid, mediaType);
         if (mediaType === 'video' && mountedRef.current) {
-          if (user.uid === screenUidRef.current) {
+          if (isCameraUid(user.uid)) {
+            setRemoteCameraTrack(null);
+            debug('Camera track cleared for uid:', user.uid);
+          } else {
             setRemoteVideoTrack(null);
             setHasVideo(false);
-            // Keep screenUidRef intact so this UID is never reassigned to camera
-          } else if (user.uid === cameraUidRef.current) {
-            setRemoteCameraTrack(null);
-            knownCameraUids.current.add(user.uid);
-            cameraUidRef.current = null;
+            debug('Screen share track cleared for uid:', user.uid);
           }
         }
         if (mediaType === 'audio' && mountedRef.current) {
-          // Clear both audio tracks — the broadcaster publishes mic + screen audio
           setRemoteAudioTrack(null);
           setRemoteScreenAudioTrack(null);
           setHasAudio(false);
@@ -252,18 +218,15 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       });
 
       client.on('user-joined', (user) => {
-        console.log('[AgoraGamingViewer] User joined:', user.uid, 'screenAssigned:', !!screenUidRef.current, 'cameraAssigned:', !!cameraUidRef.current);
-        debug('User joined:', user.uid);
+        debug('User joined:', user.uid, 'isCamera:', isCameraUid(user.uid), 'isScreen:', isScreenUid(user.uid));
 
-        // Auto-subscribe to the new user's media in case user-published
-        // fired before we were ready, or for the secondary camera client
         if (!joinedRef.current) return;
         (async () => {
           try {
             await client.subscribe(user, 'video');
-            console.log('[AgoraGamingViewer] user-joined auto-subscribe video for uid:', user.uid, 'hasTrack:', !!user.videoTrack);
+            debug('user-joined auto-subscribe video for uid:', user.uid, 'hasTrack:', !!user.videoTrack);
           } catch (e) {
-            console.log('[AgoraGamingViewer] user-joined subscribe failed:', e);
+            debug('user-joined subscribe failed:', e);
           }
           try {
             await client.subscribe(user, 'audio');
@@ -276,19 +239,15 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       client.on('user-left', (user) => {
         debug('User left:', user.uid);
         if (mountedRef.current) {
-          if (user.uid === screenUidRef.current) {
+          if (isCameraUid(user.uid)) {
+            setRemoteCameraTrack(null);
+          } else {
             setRemoteVideoTrack(null);
             setHasVideo(false);
-            // Keep screenUidRef intact so this UID is never reassigned to camera
           }
-          if (user.uid === cameraUidRef.current) {
-            setRemoteCameraTrack(null);
-            knownCameraUids.current.add(user.uid);
-            cameraUidRef.current = null;
-          }
-          // If all remote users left, clear all audio tracks too
-          const hasOtherUsers = screenUidRef.current !== null || cameraUidRef.current !== null;
-          if (!hasOtherUsers) {
+          // Check if any remote users remain
+          const remoteUsers = client.remoteUsers || [];
+          if (remoteUsers.length === 0) {
             setRemoteAudioTrack(null);
             setRemoteScreenAudioTrack(null);
             setHasAudio(false);
@@ -309,7 +268,7 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
 
       clientRef.current = client;
 
-      const uid = getUserUid(userId);
+      const uid = hashToUid(userId);
       debug('fetching agora token', { channelName, uid });
       const token = await fetchToken(channelName, uid);
       debug('fetched agora token', { channelName, uid, tokenLen: token?.length ?? 0 });
@@ -339,27 +298,16 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
           const uid = remoteUser.uid;
           const videoTrack = remoteUser.videoTrack;
           if (!videoTrack) continue;
-          const alreadyAssigned = (screenUidRef.current === uid) || (cameraUidRef.current === uid);
-          if (alreadyAssigned) continue;
-          // Never reassign a known camera UID as screen
-          if (knownCameraUids.current.has(uid)) {
-            cameraUidRef.current = uid;
-            setRemoteCameraTrack(videoTrack);
-            debug('Poll: known camera uid reassigned as camera:', uid);
-            continue;
-          }
 
-          // Found an unassigned video track
-          console.log('[AgoraGamingViewer] Poll found unassigned track from uid:', uid);
-          if (!screenUidRef.current) {
-            screenUidRef.current = uid;
+          if (isCameraUid(uid)) {
+            // This is the camera — update if not already set
+            setRemoteCameraTrack(videoTrack);
+            debug('Poll: camera track set from uid:', uid);
+          } else {
+            // Everything else is screen share
             setRemoteVideoTrack(videoTrack);
             setHasVideo(true);
             debug('Poll: screen share track set from uid:', uid);
-          } else if (!cameraUidRef.current) {
-            cameraUidRef.current = uid;
-            setRemoteCameraTrack(videoTrack);
-            debug('Poll: camera track set from uid:', uid);
           }
         }
       }, 2000);
@@ -409,15 +357,9 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
       setRemoteScreenAudioTrack(null);
       setHasVideo(false);
       setHasAudio(false);
-       screenUidRef.current = null;
-       cameraUidRef.current = null;
-       knownCameraUids.current.clear();
+      expectedScreenUidRef.current = null;
+      expectedCameraUidRef.current = null;
       audioSubscribedRef.current = false;
-      pendingFirstVideoTrack.current = null;
-      if (firstVideoTimerRef.current) {
-        clearTimeout(firstVideoTimerRef.current);
-        firstVideoTimerRef.current = null;
-      }
     }
   }, []);
 
@@ -425,10 +367,6 @@ export function useAgoraGamingViewer(): AgoraGamingViewerState & AgoraGamingView
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (firstVideoTimerRef.current) {
-        clearTimeout(firstVideoTimerRef.current);
-        firstVideoTimerRef.current = null;
-      }
       if (clientRef.current && joinedRef.current) {
         clientRef.current.leave().catch(() => {});
       }

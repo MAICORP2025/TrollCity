@@ -1051,7 +1051,7 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
             )}
           </form>
 
-        {/* Helper Links - HIDDEN FOR MAINTENANCE
+        {/* Helper Links */}
         <div className="space-y-3 mb-6">
           <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
             <Link
@@ -1075,7 +1075,6 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
             </button>
           </div>
         </div>
-        */}
 
         {/* Install Button */}
         <div className="mt-6">

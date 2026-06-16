@@ -9,6 +9,7 @@ import React, {
 import {
   Heart,
   MessageSquare,
+  MessageCircle,
   Sparkles,
   Radio,
   Flame,
@@ -26,6 +27,7 @@ import { WallPost } from '@/types/trollWall'
 import CreatePostComposer from './CreatePostComposer'
 import TrollWallGridCard from './TrollWallGridCard'
 import TrollWallPostModal from './TrollWallPostModal'
+import HorizontalScrollRow from './HorizontalScrollRow'
 import { cn } from '@/lib/utils'
 
 import '@/styles/rainbow-scroller.css'
@@ -69,7 +71,6 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   const isMountedRef = useRef(true)
   const latestRequestId = useRef(0)
   const postBufferRef = useRef<WallPost[]>([])
-  const gridRef = useRef<HTMLDivElement>(null)
 
   const [posts, setPosts] = useState<WallPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -498,30 +499,36 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         })}
       </div>
 
-      {/* Single row — scroll left/right */}
-      <div
-        ref={gridRef}
-        className="flex gap-3 overflow-x-auto pb-2"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-      >
-        {loading && posts.length === 0
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-[230px] w-[180px] shrink-0 animate-pulse rounded-2xl border border-white/[0.05] bg-white/[0.03]"
+      {/* Single row — scroll left/right with button nav */}
+      {loading && posts.length === 0 ? (
+        <HorizontalScrollRow
+          title="Troll Wall"
+          subtitle="Loading posts…"
+          icon={<MessageCircle className="h-3.5 w-3.5 text-cyan-400" />}
+        >
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[230px] w-[180px] shrink-0 animate-pulse rounded-2xl border border-white/[0.05] bg-white/[0.03]"
+            />
+          ))}
+        </HorizontalScrollRow>
+      ) : posts.length > 0 ? (
+        <HorizontalScrollRow
+          title="Troll Wall"
+          subtitle={`${posts.length} posts`}
+          icon={<MessageCircle className="h-3.5 w-3.5 text-cyan-400" />}
+        >
+          {posts.map((post) => (
+            <div key={post.id} className="shrink-0">
+              <TrollWallGridCard
+                post={post}
+                onClick={handleCardClick}
               />
-            ))
-          : posts.length === 0
-            ? null
-            : posts.map((post) => (
-                <div key={post.id} className="shrink-0">
-                  <TrollWallGridCard
-                    post={post}
-                    onClick={handleCardClick}
-                  />
-                </div>
-              ))}
-      </div>
+            </div>
+          ))}
+        </HorizontalScrollRow>
+      ) : null}
 
       {/* Empty state */}
       {!loading && posts.length === 0 && (

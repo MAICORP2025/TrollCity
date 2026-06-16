@@ -304,10 +304,10 @@ const Header = () => {
 
         <div className="flex-none relative z-10 flex items-center space-x-3 md:space-x-5">
           {!user && (
-            <div className="hidden md:flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => navigate('/auth?mode=login')}
-                className="px-4 py-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors duration-200"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-colors duration-200"
                 type="button"
               >
                 Log In
@@ -315,7 +315,7 @@ const Header = () => {
 
               <button
                 onClick={() => navigate('/auth?mode=signup')}
-                className="px-5 py-2 text-sm font-bold bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 rounded-xl shadow-[0_0_20px_rgba(147,51,234,0.2)] hover:shadow-[0_0_30px_rgba(147,51,234,0.35)] transition-all duration-300 hover:scale-[1.03] active:scale-95 text-white"
+                className="px-3 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 rounded-xl shadow-[0_0_20px_rgba(147,51,234,0.2)] hover:shadow-[0_0_30px_rgba(147,51,234,0.35)] transition-all duration-300 hover:scale-[1.03] active:scale-95 text-white"
                 type="button"
               >
                 Sign Up

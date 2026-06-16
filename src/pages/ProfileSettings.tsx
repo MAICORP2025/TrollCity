@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom'
 import { Settings, Boxes, Sparkles, KeyRound, Trash2, Ban } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { setResetPin } from '@/services/passwordManager'
 import UserInventory from './UserInventory'
 import { trollCityTheme } from '../styles/trollCityTheme'
 import FamilyMinorSettings from '../components/profile/FamilyMinorSettings'
@@ -14,9 +13,6 @@ import BatterySaverToggle from '@/components/BatterySaverToggle'
 export default function ProfileSettings() {
   const { user, profile, refreshProfile } = useAuthStore()
   const navigate = useNavigate()
-  const [pin, setPin] = useState('')
-  const [savingPin, setSavingPin] = useState(false)
-  
   // Profile Edit State
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
@@ -283,49 +279,14 @@ export default function ProfileSettings() {
           <UserInventory embedded />
         </div>
 
-        {/* Password Reset PIN */}
+        {/* Password Reset */}
         <div className={`${trollCityTheme.components.card}`}>
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             <KeyRound className="w-5 h-5 text-emerald-400" />
             <div>
-              <h2 className="text-lg font-semibold">Password Reset PIN</h2>
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>Set a 6-digit PIN used to reset your password.</p>
+              <h2 className="text-lg font-semibold">Password Reset</h2>
+              <p className={`text-xs ${trollCityTheme.text.muted}`}>Use the &quot;Forgot Password&quot; link on the sign-in page to reset your password via email.</p>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              inputMode="numeric"
-              pattern="\\d*"
-              maxLength={6}
-              value={pin}
-              onChange={(e) => {
-                const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 6)
-                setPin(v)
-              }}
-              placeholder="Enter 6-digit PIN"
-              className={`px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white w-48 tracking-widest`}
-            />
-            <button
-              disabled={savingPin || pin.length !== 6}
-              onClick={async () => {
-                if (pin.length !== 6) {
-                  toast.error('PIN must be exactly 6 digits')
-                  return
-                }
-                setSavingPin(true)
-                const { error } = await setResetPin(pin)
-                setSavingPin(false)
-                if (error) {
-                  toast.error('Failed to save PIN')
-                } else {
-                  toast.success('Password reset PIN saved')
-                  setPin('')
-                }
-              }}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold disabled:opacity-50"
-            >
-              {savingPin ? 'Saving...' : 'Save PIN'}
-            </button>
           </div>
         </div>
 

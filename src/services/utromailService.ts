@@ -151,8 +151,10 @@ export const getThreads = async (userId: string, folder: MailFolder = 'inbox'): 
     }
   }
 
-  // Debug: log profile resolution
-  console.log('[getThreads] userId:', userId, '| profiles fetched:', Object.keys(profileMap).length, '| threads:', (data || []).length);
+  // Debug: log profile resolution (only in dev)
+  if (import.meta.env.DEV) {
+    console.log('[getThreads] userId:', userId, '| profiles fetched:', Object.keys(profileMap).length, '| threads:', (data || []).length);
+  }
 
   // Build final result
   return (data || []).map((t: any) => {
@@ -178,8 +180,10 @@ export const getThreads = async (userId: string, folder: MailFolder = 'inbox'): 
     const lastMsg = sorted[0] || null;
     const senderProfile = lastMsg?.sender_id ? profileMap[lastMsg.sender_id] || null : null;
 
-    // Debug per-thread
-    console.log(`[getThreads] thread ${t.id}: otherUserId=${otherUserId}, otherUsername=${otherProfile?.username || otherProfile?.display_name || 'FALLBACK'}, lastMsgSender=${lastMsg?.sender_id}, lastMsgSenderName=${senderProfile?.username || senderProfile?.display_name || 'N/A'}`);
+    // Debug per-thread (only in dev)
+    if (import.meta.env.DEV) {
+      console.log(`[getThreads] thread ${t.id}: otherUserId=${otherUserId}, otherUsername=${otherProfile?.username || otherProfile?.display_name || 'FALLBACK'}`);
+    }
 
     return {
       ...t,
@@ -262,7 +266,7 @@ export const getThreadMessages = async (threadId: string): Promise<UtromailMessa
       sender_username: m.user_profiles?.username,
       sender_avatar: m.user_profiles?.avatar_url,
     };
-    console.log('[getThreadMessages] msg:', m.id, '| sender_id:', m.sender_id, '| recipient_id:', m.recipient_id, '| sender_name:', mapped.sender_name, '| sender_mail:', m.sender_mail_address);
+    if (import.meta.env.DEV) console.log('[getThreadMessages] msg:', m.id, '| sender_id:', m.sender_id, '| recipient_id:', m.recipient_id);
     return mapped;
   });
   return result;
@@ -279,12 +283,16 @@ export const sendMessage = async (params: {
   parentMessageId?: string;
   attachments?: { file_name: string; file_url: string; file_size?: number; mime_type?: string }[];
 }): Promise<UtromailMessage> => {
+
+  if (import.meta.env.DEV) console.log('[sendMessage] params:', { senderId: params.senderId, recipientId: params.recipientId });
+
   // Check permission
   if (params.recipientId) {
-    const { data: canSend } = await supabase.rpc('can_send_utromail', {
+    const { data: canSend, error: rpcError } = await supabase.rpc('can_send_utromail', {
       sender_id: params.senderId,
       recipient_id: params.recipientId,
     });
+    if (import.meta.env.DEV) console.log('[sendMessage] can_send_utromail result:', canSend);
     if (canSend === false) {
       throw new Error('You cannot send mail to this user. They may have blocked you or restricted their privacy settings.');
     }
@@ -311,28 +319,21 @@ export const sendMessage = async (params: {
         .single();
       if (threadError) throw threadError;
       threadId = newThread.id;
-
-      // Add members - sender gets BOTH 'sent' and 'inbox' so thread appears in their inbox view
-      await supabase.from('utromail_thread_members').insert([
-        { thread_id: threadId, user_id: params.senderId, folder: 'sent' },
-        { thread_id: threadId, user_id: params.senderId, folder: 'inbox' },
-        { thread_id: threadId, user_id: params.recipientId, folder: 'inbox' },
-      ]);
     }
 
-    // Ensure sender also has an 'inbox' membership for existing threads
-    // (handles case where thread was created before this fix)
-    const { data: existingMember } = await supabase
+    // Upsert thread members — use onConflict to handle duplicates gracefully.
+    // This covers both new threads and existing threads where memberships may already exist.
+    const memberRows = [
+      { thread_id: threadId, user_id: params.senderId, folder: 'sent' },
+      { thread_id: threadId, user_id: params.senderId, folder: 'inbox' },
+      { thread_id: threadId, user_id: params.recipientId, folder: 'inbox' },
+    ];
+    const { error: memberError } = await supabase
       .from('utromail_thread_members')
-      .select('id')
-      .eq('thread_id', threadId)
-      .eq('user_id', params.senderId)
-      .eq('folder', 'inbox')
-      .maybeSingle();
-    if (!existingMember) {
-      await supabase.from('utromail_thread_members').insert({
-        thread_id: threadId, user_id: params.senderId, folder: 'inbox',
-      });
+      .upsert(memberRows, { onConflict: 'thread_id,user_id,folder', ignoreDuplicates: true });
+    if (memberError && import.meta.env.DEV) {
+      console.warn('[sendMessage] Thread member upsert warning (non-fatal):', memberError);
+      // Don't throw — message can still be delivered even if member upsert has issues
     }
   } else {
     // System/broadcast message
@@ -350,7 +351,7 @@ export const sendMessage = async (params: {
   }
 
   // Insert message
-  console.log('[sendMessage] Inserting — threadId:', threadId, '| sender_id:', params.senderId, '| recipient_id:', params.recipientId, '| body:', params.body.substring(0, 50));
+  if (import.meta.env.DEV) console.log('[sendMessage] Inserting — threadId:', threadId, '| sender:', params.senderId, '| recipient:', params.recipientId);
   const { data: message, error: msgError } = await supabase
     .from('utromail_messages')
     .insert({
@@ -367,7 +368,7 @@ export const sendMessage = async (params: {
     .select()
     .single();
   if (msgError) throw msgError;
-  console.log('[sendMessage] Inserted — message.id:', message.id, '| sender_id:', message.sender_id, '| recipient_id:', message.recipient_id);
+  if (import.meta.env.DEV) console.log('[sendMessage] Inserted — message.id:', message.id);
 
   // Insert attachments
   if (params.attachments?.length) {
@@ -376,14 +377,19 @@ export const sendMessage = async (params: {
     );
   }
 
-  // Create notification
+  // Create notification — wrap in try/catch so it never blocks the message
   if (params.recipientId) {
-    await supabase.from('utromail_notifications').insert({
-      user_id: params.recipientId,
-      message_id: message.id,
-      notification_type: params.messageType === 'academy_notification' ? 'academy_mail' :
-                         params.messageType === 'government' ? 'government_mail' : 'new_message',
-    });
+    try {
+      await supabase.from('utromail_notifications').insert({
+        user_id: params.recipientId,
+        message_id: message.id,
+        notification_type: params.messageType === 'academy_notification' ? 'academy_mail' :
+                           params.messageType === 'government' ? 'government_mail' : 'new_message',
+      });
+      if (import.meta.env.DEV) console.log('[sendMessage] Notification created for recipient:', params.recipientId);
+    } catch (notifErr) {
+      if (import.meta.env.DEV) console.warn('[sendMessage] Notification creation failed (non-fatal):', notifErr);
+    }
   }
 
   return message;
@@ -571,4 +577,19 @@ export const deleteThread = async (threadId: string, userId: string): Promise<vo
 
 export const starMessage = async (messageId: string, starred: boolean): Promise<void> => {
   await supabase.from('utromail_messages').update({ is_starred: starred }).eq('id', messageId);
+};
+
+// ============================================================
+// REPORT
+// ============================================================
+export const reportMessage = async (reportedId: string, threadId: string, reason: string): Promise<void> => {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error('Not authenticated');
+  const { error } = await supabase.from('utromail_reports').insert({
+    reporter_id: auth.user.id,
+    reported_id: reportedId,
+    thread_id: threadId,
+    report_reason: reason,
+  });
+  if (error) throw error;
 };

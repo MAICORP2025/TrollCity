@@ -403,6 +403,36 @@ export default function Home() {
           </div>
         )}
 
+        {/* Sign In / Sign Up prompt for non-authenticated mobile/PWA users */}
+        {!user && isMobile && (
+          <div className="mb-4 rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-purple-900/40 via-slate-900/60 to-cyan-900/40 backdrop-blur-xl p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+              <div className="flex-1 text-center sm:text-left">
+                <h3 className="text-base sm:text-lg font-bold text-white">Welcome to Troll City!</h3>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                  Sign in to join the community, go live, send gifts, and more.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => navigate('/auth?mode=login')}
+                  className="px-4 py-2 text-sm font-semibold text-slate-200 border border-white/15 rounded-xl hover:bg-white/10 transition-all duration-200"
+                  type="button"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => navigate('/auth?mode=signup')}
+                  className="px-5 py-2 text-sm font-bold bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 rounded-xl shadow-[0_0_20px_rgba(147,51,234,0.25)] hover:shadow-[0_0_30px_rgba(147,51,234,0.4)] transition-all duration-300 hover:scale-[1.03] active:scale-95 text-white"
+                  type="button"
+                >
+                  Sign Up
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'wall' && (
           <section className="flex gap-4">
             <LeftNavSidebar
@@ -415,9 +445,9 @@ export default function Home() {
             />
             <div className="min-w-0 flex-1 space-y-4">
               <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" hideGrid />
-              <PodcastRow />
-              <HyTroGamingRow onItemClick={handleScrollItemClick} />
               <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
+              <HyTroGamingRow onItemClick={handleScrollItemClick} />
+              <PodcastRow />
             </div>
           </section>
         )}

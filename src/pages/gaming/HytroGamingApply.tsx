@@ -12,7 +12,11 @@ import {
   Loader2,
   Sparkles,
   XCircle,
+  AlertTriangle,
 } from 'lucide-react';
+import GamingLoanModal from '@/components/broadcast/GamingLoanModal';
+
+const REQUIRED_COINS = 5000;
 
 const CONTENT_CATEGORIES = [
   'FPS',
@@ -37,6 +41,9 @@ export default function HytroGamingApply() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [existingApp, setExistingApp] = useState<any>(null);
+  const [showLoanModal, setShowLoanModal] = useState(false);
+  const [hasLoan, setHasLoan] = useState(false);
+  const [insufficientBalance, setInsufficientBalance] = useState(false);
 
   const [displayName, setDisplayName] = useState('');
   const [primaryPlatform, setPrimaryPlatform] = useState('twitch');
@@ -73,6 +80,17 @@ export default function HytroGamingApply() {
     }
   }, [user]);
 
+  const checkBalanceAndLoan = useCallback(() => {
+    const balance = profile?.troll_coins ?? 0;
+    if (balance < REQUIRED_COINS) {
+      setInsufficientBalance(true);
+      setShowLoanModal(true);
+      return false;
+    }
+    setInsufficientBalance(false);
+    return true;
+  }, [profile?.troll_coins]);
+
   useEffect(() => {
     if (!user) {
       navigate('/auth');
@@ -93,6 +111,13 @@ export default function HytroGamingApply() {
     }
     if (!primaryPlatform) {
       toast.error('Select your primary platform');
+      return;
+    }
+
+    const balance = profile?.troll_coins ?? 0;
+    if (balance < REQUIRED_COINS) {
+      setInsufficientBalance(true);
+      setShowLoanModal(true);
       return;
     }
 
@@ -342,6 +367,29 @@ export default function HytroGamingApply() {
             </div>
           </div>
 
+          {/* Low Balance Warning */}
+          {(profile?.troll_coins ?? 0) < REQUIRED_COINS && (
+            <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-amber-200">Insufficient Balance</p>
+                  <p className="mt-1 text-xs text-amber-300/80">
+                    You need at least {REQUIRED_COINS.toLocaleString()} Troll Coins to apply for HytroGaming Agency.
+                    Your current balance is {(profile?.troll_coins ?? 0).toLocaleString()} TC.
+                    Shortfall: {(REQUIRED_COINS - (profile?.troll_coins ?? 0)).toLocaleString()} TC.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowLoanModal(true)}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-500/20 px-4 py-2 text-xs font-bold text-amber-100 transition hover:bg-amber-500/30"
+                  >
+                    Apply for Gaming Loan
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Loan Application Section */}
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <div className="flex items-start justify-between gap-4">
@@ -423,6 +471,16 @@ export default function HytroGamingApply() {
           </div>
         </div>
       </main>
+
+      <GamingLoanModal
+        isOpen={showLoanModal}
+        onClose={() => setShowLoanModal(false)}
+        currentBalance={profile?.troll_coins ?? 0}
+        onLoanApproved={() => {
+          setHasLoan(true);
+          setInsufficientBalance(false);
+        }}
+      />
     </div>
   );
 }

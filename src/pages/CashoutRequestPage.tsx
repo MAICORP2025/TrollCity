@@ -68,6 +68,8 @@ export default function CashoutRequestPage() {
   const [loading, setLoading] = useState(true);
   const [recentRequests, setRecentRequests] = useState<CashoutRequest[]>([]);
   const [monthlyCashoutCount, setMonthlyCashoutCount] = useState(0);
+  const [activeGamingLoan, setActiveGamingLoan] = useState<any>(null);
+  const [checkingLoan, setCheckingLoan] = useState(true);
 
   const hasRecentApprovedPayout = useMemo(() => {
     if (!lastApprovedAt) return false;
@@ -81,9 +83,10 @@ export default function CashoutRequestPage() {
    const netCoins = selectedTier ? calculateNetCoins(selectedTier.coins, feeCoins) : 0;
    const usdAmount = selectedTier ? selectedTier.usd : 0;
 
-    const isFriday = isCashoutWindowOpen();
-    const monthlyCapReached = monthlyCashoutCount >= MAX_MONTHLY_CASHOUTS;
-    const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim() && !monthlyCapReached;
+     const isFriday = isCashoutWindowOpen();
+     const monthlyCapReached = monthlyCashoutCount >= MAX_MONTHLY_CASHOUTS;
+     const hasActiveGamingLoan = activeGamingLoan?.has_active_loan === true;
+     const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
 
   // Load user's troll_coins balance and recent payout requests
   const getSavedPayoutUsername = useCallback((method: PayoutMethod) => {
@@ -170,11 +173,20 @@ export default function CashoutRequestPage() {
         // Auto-select highest eligible tier based on the loaded balance
         const eligibleTier = [...TIERS].reverse().find(t => t.coins <= eligibleTotal) || TIERS[0];
         if (eligibleTier) setSelectedTier(eligibleTier);
+
+        // Check for active gaming loan
+        const { data: loanData } = await supabase.rpc('has_active_gaming_loan');
+        if (loanData?.has_active_loan) {
+          setActiveGamingLoan(loanData);
+        } else {
+          setActiveGamingLoan(null);
+        }
       } catch (err: any) {
         console.error('Failed to load cashout data:', err);
         toast.error('Failed to load data');
       } finally {
         setLoading(false);
+        setCheckingLoan(false);
       }
     }
 
@@ -274,17 +286,22 @@ export default function CashoutRequestPage() {
       return;
     }
 
-     if (eligibleCoins < selectedTier.coins) {
-       toast.error('Insufficient eligible gift coins');
-       return;
-     }
+    if (eligibleCoins < selectedTier.coins) {
+      toast.error('Insufficient eligible gift coins');
+      return;
+    }
 
-     if (monthlyCapReached) {
-       toast.error(`Monthly cashout limit reached. You have used ${monthlyCashoutCount} of ${MAX_MONTHLY_CASHOUTS} cashouts this month.`);
-       return;
-     }
+    if (monthlyCapReached) {
+      toast.error(`Monthly cashout limit reached. You have used ${monthlyCashoutCount} of ${MAX_MONTHLY_CASHOUTS} cashouts this month.`);
+      return;
+    }
 
-     if (!providerUsername.trim()) {
+    if (activeGamingLoan?.has_active_loan) {
+      toast.error('Cashouts are blocked while you have an active gaming agency loan. Please pay off your loan first.');
+      return;
+    }
+
+    if (!providerUsername.trim()) {
       toast.error('Please enter your ' + getPayoutLabel(payoutMethod) + ' username/email');
       return;
     }
@@ -366,19 +383,38 @@ export default function CashoutRequestPage() {
              </div>
            )}
 
-           {/* Monthly Cashout Cap */}
-           {monthlyCapReached && (
-             <div className="mt-4 bg-amber-900/30 border border-amber-700 rounded-lg p-4 flex items-start gap-3">
-               <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
-               <div>
-                 <h4 className="font-bold text-amber-400">Monthly Cashout Limit Reached</h4>
-                 <p className="text-sm text-amber-300/80">
-                   You have used {monthlyCashoutCount} of {MAX_MONTHLY_CASHOUTS} cashouts this month.
-                   Your cap resets on the 1st of each month.
-                 </p>
-               </div>
-             </div>
-           )}
+            {/* Monthly Cashout Cap */}
+            {monthlyCapReached && (
+              <div className="mt-4 bg-amber-900/30 border border-amber-700 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="font-bold text-amber-400">Monthly Cashout Limit Reached</h4>
+                  <p className="text-sm text-amber-300/80">
+                    You have used {monthlyCashoutCount} of {MAX_MONTHLY_CASHOUTS} cashouts this month.
+                    Your cap resets on the 1st of each month.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Gaming Loan Block */}
+            {activeGamingLoan?.has_active_loan && (
+              <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
+                <Lock className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="font-bold text-red-400">Cashouts Blocked — Active Gaming Loan</h4>
+                  <p className="text-sm text-red-300/80">
+                    You have an active gaming agency loan with a remaining balance of{' '}
+                    <strong>{activeGamingLoan.balance?.toLocaleString()} TC</strong>.
+                    All cashouts are disabled until the loan is fully paid off.
+                    Principal: {activeGamingLoan.principal?.toLocaleString()} TC.
+                  </p>
+                  <p className="mt-2 text-xs text-red-400/70">
+                    Pay off your loan through the Gaming Dashboard to unlock cashouts.
+                  </p>
+                </div>
+              </div>
+            )}
 
            </div>
 
@@ -591,22 +627,27 @@ export default function CashoutRequestPage() {
                 : 'bg-gray-700 text-gray-400 cursor-not-allowed'
             }`}
           >
-             {submitting ? (
-               <>
-                 <div className="w-5 h-5 border-2 border-t-troll-purple-900 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
-                 Submitting...
-               </>
-             ) : !isFriday ? (
-               <>
-                 <Clock className="w-5 h-5" />
-                 Weekend Cashout Window Closed
-               </>
-             ) : monthlyCapReached ? (
-               <>
-                 <AlertCircle className="w-5 h-5" />
-                 Monthly Limit Reached ({monthlyCashoutCount}/{MAX_MONTHLY_CASHOUTS})
-               </>
-             ) : eligibleCoins < (selectedTier?.coins || 0) ? (
+              {submitting ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-t-troll-purple-900 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
+                  Submitting...
+                </>
+              ) : !isFriday ? (
+                <>
+                  <Clock className="w-5 h-5" />
+                  Weekend Cashout Window Closed
+                </>
+              ) : monthlyCapReached ? (
+                <>
+                  <AlertCircle className="w-5 h-5" />
+                  Monthly Limit Reached ({monthlyCashoutCount}/{MAX_MONTHLY_CASHOUTS})
+                </>
+              ) : activeGamingLoan?.has_active_loan ? (
+                <>
+                  <Lock className="w-5 h-5" />
+                  Cashouts Blocked — Gaming Loan Active
+                </>
+              ) : eligibleCoins < (selectedTier?.coins || 0) ? (
                <>
                  <AlertCircle className="w-5 h-5" />
                  Insufficient Eligible Coins

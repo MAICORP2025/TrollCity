@@ -8,7 +8,6 @@ import type { AvatarConfig } from '../lib/hooks/useAvatar'
 import { updateUserAvatarConfig } from '../lib/purchases'
 import CropPhotoModal from '../components/CropPhotoModal'
 import { KeyRound } from 'lucide-react'
-import { setResetPin } from '@/services/passwordManager'
 import { trollCityTheme } from '../styles/trollCityTheme'
 
 const ProfileSetup = () => {
@@ -45,8 +44,7 @@ const ProfileSetup = () => {
   const [usernameError, setUsernameError] = React.useState('')
   const [bannerUrl, setBannerUrl] = React.useState(profile?.banner_url || '')
   const [avatarUrl, setAvatarUrl] = React.useState(profile?.avatar_url || '')
-  const [pin, setPin] = React.useState('')
-  const [savingPin, setSavingPin] = React.useState(false)
+
   const [coverCropModalOpen, setCoverCropModalOpen] = React.useState(false)
   const [coverCropFile, setCoverCropFile] = React.useState<File | null>(null)
 
@@ -626,60 +624,17 @@ const ProfileSetup = () => {
               Payouts are sent to your PayPal account every Friday. Ensure your PayPal email is correct to avoid delays.
             </p>
           </div>
-        </details>
-
-        <details className={`${trollCityTheme.backgrounds.card} rounded-lg border ${trollCityTheme.borders.glass} mt-6`}>
-          <summary className="cursor-pointer px-6 py-4 flex items-center justify-between">
+        <div className={`${trollCityTheme.backgrounds.card} rounded-lg border ${trollCityTheme.borders.glass} mt-6 px-6 py-4`}>
+          <div className="flex items-center justify-between">
             <span className="font-semibold flex items-center gap-2">
               <KeyRound className="w-4 h-4 text-emerald-400" />
-              Password Reset PIN
+              Password Reset
             </span>
-            <span className="text-xs text-gray-400">Optional</span>
-          </summary>
-
-          <div className="px-6 pb-6 space-y-3">
-            <p className="text-xs text-gray-400">
-              Set a 6-digit PIN you can use later to reset your password.
-            </p>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <input
-                inputMode="numeric"
-                pattern="\\d*"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 6)
-                  setPin(v)
-                }}
-                placeholder="Enter 6-digit PIN"
-                className="px-4 py-2 bg-[#23232b] border border-gray-600 rounded-xl text-white w-48 tracking-widest"
-              />
-              <button
-                type="button"
-                disabled={savingPin || pin.length !== 6}
-                onClick={async () => {
-                  if (pin.length !== 6) {
-                    toast.error('PIN must be exactly 6 digits')
-                    return
-                  }
-                  setSavingPin(true)
-                  const { error } = await setResetPin(pin)
-                  setSavingPin(false)
-                  if (error) {
-                    toast.error('Failed to save PIN')
-                  } else {
-                    toast.success('Password reset PIN saved')
-                    setPin('')
-                  }
-                }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold disabled:opacity-50"
-              >
-                {savingPin ? 'Saving...' : 'Save PIN'}
-              </button>
-            </div>
           </div>
-        </details>
-
+          <p className="text-xs text-gray-400 mt-2">
+            Use the &quot;Forgot Password&quot; link on the sign-in page to reset your password via email.
+          </p>
+        </div>        </details>
 
           {/* 🆔 ID Verification Section */}
           <details className="bg-[#1A1A1A] rounded-lg border border-[#2C2C2C] mt-6">

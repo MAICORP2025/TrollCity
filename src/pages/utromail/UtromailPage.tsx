@@ -18,6 +18,10 @@ import {
   Video,
   X,
   CheckCheck,
+  Ban,
+  Flag,
+  Trash2,
+  MoreVertical,
 } from 'lucide-react';
 import {
   getThreads,
@@ -29,6 +33,8 @@ import {
   markAsRead,
   deleteThread,
   getUtromailAccount,
+  blockUser,
+  reportMessage,
 } from '@/services/utromailService';
 import type { UtromailThread, UtromailRequest, UtromailMessage } from '@/types/mail';
 import UtromailCompose from './UtromailCompose';
@@ -89,6 +95,7 @@ export default function UtromailPage() {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [userMailAddress, setUserMailAddress] = useState<string>('');
+  const [contextMenu, setContextMenu] = useState<{ threadId: string; otherUserId: string; otherUsername: string; x: number; y: number } | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<UtromailMessage[]>([]);
@@ -111,6 +118,8 @@ export default function UtromailPage() {
 
   const senderMail = userMailAddress || `${profile?.username || 'user'}@utromail`;
 
+  const fetchThreadsRef = useRef<() => Promise<void>>();
+
   const fetchThreads = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -128,6 +137,9 @@ export default function UtromailPage() {
       setLoading(false);
     }
   }, [user?.id, refreshKey]);
+
+  // Keep ref updated so realtime subscriptions always have latest version
+  fetchThreadsRef.current = fetchThreads;
 
   useEffect(() => {
     fetchThreads();
@@ -166,6 +178,38 @@ export default function UtromailPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Polling fallback: refresh active conversation messages every 30 seconds (reduced frequency)
+  useEffect(() => {
+    if (!activeConversationId || !user?.id) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const msgs = await getThreadMessages(activeConversationId);
+        setMessages(prev => {
+          if (msgs.length !== prev.length) return msgs;
+          const prevIds = new Set(prev.map(m => m.id));
+          const hasNew = msgs.some(m => !prevIds.has(m.id));
+          return hasNew ? msgs : prev;
+        });
+      } catch (err) {
+        console.error('Poll fetch error:', err);
+      }
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
+  }, [activeConversationId, user?.id]);
+
+  // Polling fallback: refresh thread list every 60 seconds (reduced frequency)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const pollInterval = setInterval(() => {
+      fetchThreadsRef.current?.();
+    }, 60000);
+
+    return () => clearInterval(pollInterval);
+  }, [user?.id]);
+
   const handleSend = async () => {
     if (!replyText.trim() || !activeConversationId || !user) return;
     const activeThread = threads.find(t => t.id === activeConversationId);
@@ -178,7 +222,6 @@ export default function UtromailPage() {
     try {
       const recipientId = lastMsg.sender_id === user.id ? lastMsg.recipient_id! : lastMsg.sender_id;
       const recipientMail = lastMsg.sender_id === user.id ? lastMsg.recipient_mail_address! : lastMsg.sender_mail_address;
-      console.log('[UtromailPage] Sending reply — authUser:', user.id, '| senderId:', user.id, '| recipientId:', recipientId, '| recipientMail:', recipientMail, '| lastMsg.sender_id:', lastMsg.sender_id, '| lastMsg.recipient_id:', lastMsg.recipient_id);
       await sendMessage({
         senderId: user.id,
         senderMail,
@@ -189,9 +232,36 @@ export default function UtromailPage() {
         parentMessageId: lastMsg.id,
       });
       setReplyText('');
-      const freshMsgs = await getThreadMessages(activeConversationId);
-      setMessages(freshMsgs);
-      await fetchThreads();
+      // Optimistically add the sender's message to the UI immediately
+      const optimisticMsg: UtromailMessage = {
+        id: `temp-${Date.now()}`,
+        thread_id: activeConversationId,
+        sender_id: user.id,
+        sender_mail_address: senderMail,
+        recipientId: recipientId,
+        recipientMail,
+        subject: 'Direct Message',
+        body: replyText.trim(),
+        message_type: 'normal',
+        is_starred: false,
+        is_draft: false,
+        parent_message_id: lastMsg.id,
+        sent_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sender_name: profile?.display_name || profile?.username || null,
+        sender_username: profile?.username || null,
+        sender_avatar: profile?.avatar_url || null,
+      };
+      setMessages(prev => [...prev, optimisticMsg]);
+      // Then fetch the real messages to replace the optimistic one
+      try {
+        const freshMsgs = await getThreadMessages(activeConversationId);
+        setMessages(freshMsgs);
+      } catch (err) {
+        console.error('Error refreshing messages after send:', err);
+      }
+      fetchThreadsRef.current?.();
       toast.success('Sent!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to send');
@@ -233,7 +303,7 @@ export default function UtromailPage() {
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          fetchThreads();
+          fetchThreadsRef.current?.();
         }
       )
       .subscribe();
@@ -241,7 +311,7 @@ export default function UtromailPage() {
     return () => {
       supabase.removeChannel(notifChannel);
     };
-  }, [user?.id, fetchThreads]);
+  }, [user?.id]);
 
   // Real-time: watch for new messages in the active thread
   useEffect(() => {
@@ -258,44 +328,57 @@ export default function UtromailPage() {
           filter: `thread_id=eq.${activeConversationId}`,
         },
         async (payload) => {
-          const newMsg = payload.new as any;
-          if (newMsg.sender_id === user.id) return;
+          try {
+            const newMsg = payload.new as any;
+            if (!newMsg || newMsg.sender_id === user.id) return;
 
-          const { data: senderProfile } = await supabase
-            .from('user_profiles')
-            .select('username, display_name, avatar_url')
-            .eq('id', newMsg.sender_id)
-            .maybeSingle();
+            // Fetch full message with all fields (realtime payload may not include all columns)
+            const { data: fullMsg } = await supabase
+              .from('utromail_messages')
+              .select('*')
+              .eq('id', newMsg.id)
+              .maybeSingle();
 
-          const mappedMsg: UtromailMessage = {
-            id: newMsg.id,
-            thread_id: newMsg.thread_id,
-            sender_id: newMsg.sender_id,
-            sender_mail_address: newMsg.sender_mail_address,
-            recipient_id: newMsg.recipient_id,
-            recipient_mail_address: newMsg.recipient_mail_address,
-            subject: newMsg.subject,
-            body: newMsg.body,
-            body_html: newMsg.body_html,
-            message_type: newMsg.message_type,
-            is_starred: false,
-            is_draft: false,
-            parent_message_id: newMsg.parent_message_id,
-            sent_at: newMsg.sent_at,
-            created_at: newMsg.created_at,
-            updated_at: newMsg.updated_at,
-            sender_name: (senderProfile as any)?.display_name || (senderProfile as any)?.username || null,
-            sender_username: (senderProfile as any)?.username || null,
-            sender_avatar: (senderProfile as any)?.avatar_url || null,
-          };
+            const msgData = fullMsg || newMsg;
 
-          setMessages(prev => {
-            if (prev.some(m => m.id === mappedMsg.id)) return prev;
-            return [...prev, mappedMsg];
-          });
+            const { data: senderProfile } = await supabase
+              .from('user_profiles')
+              .select('username, display_name, avatar_url')
+              .eq('id', msgData.sender_id)
+              .maybeSingle();
 
-          await markThreadAsRead(activeConversationId, user.id);
-          fetchThreads();
+            const mappedMsg: UtromailMessage = {
+              id: msgData.id,
+              thread_id: msgData.thread_id,
+              sender_id: msgData.sender_id,
+              sender_mail_address: msgData.sender_mail_address,
+              recipient_id: msgData.recipient_id,
+              recipient_mail_address: msgData.recipient_mail_address,
+              subject: msgData.subject,
+              body: msgData.body,
+              body_html: msgData.body_html,
+              message_type: msgData.message_type,
+              is_starred: false,
+              is_draft: false,
+              parent_message_id: msgData.parent_message_id,
+              sent_at: msgData.sent_at,
+              created_at: msgData.created_at,
+              updated_at: msgData.updated_at,
+              sender_name: (senderProfile as any)?.display_name || (senderProfile as any)?.username || null,
+              sender_username: (senderProfile as any)?.username || null,
+              sender_avatar: (senderProfile as any)?.avatar_url || null,
+            };
+
+            setMessages(prev => {
+              if (prev.some(m => m.id === mappedMsg.id)) return prev;
+              return [...prev, mappedMsg];
+            });
+
+            await markThreadAsRead(activeConversationId, user.id);
+            fetchThreadsRef.current?.();
+          } catch (err) {
+            console.error('[UtromailPage] Realtime message handler error:', err);
+          }
         }
       )
       .subscribe();
@@ -303,7 +386,7 @@ export default function UtromailPage() {
     return () => {
       supabase.removeChannel(msgChannel);
     };
-  }, [activeConversationId, user?.id, fetchThreads]);
+  }, [activeConversationId, user?.id]);
 
   const handleDeleteConversation = async () => {
     if (!activeConversationId || !user?.id) return;
@@ -398,11 +481,6 @@ export default function UtromailPage() {
           <div className="space-y-3">
             {messages.map((msg, idx) => {
               const isOwn = msg.sender_id === user?.id;
-              // Debug: verify sender identity
-              if (idx === 0) {
-                console.log('[UtromailPage] Auth User:', user?.id);
-                console.log('[UtromailPage] First msg — sender_id:', msg.sender_id, '| recipient_id:', msg.recipient_id, '| isOwn:', isOwn);
-              }
               const showAvatar = !isOwn && (idx === 0 || messages[idx - 1].sender_id !== msg.sender_id);
               const isLast = idx === messages.length - 1 || messages[idx + 1].sender_id !== msg.sender_id;
 
@@ -559,13 +637,40 @@ export default function UtromailPage() {
                   const displayName = thread.other_username || 'Unknown';
                   const avatarUrl = thread.other_avatar_url;
                   const avatarLetter = displayName !== 'Unknown' ? displayName[0].toUpperCase() : '?';
-                  // Debug: verify sidebar identity
-                  console.log('[UtromailPage] Sidebar thread:', thread.id, '| other_user_id:', thread.other_user_id, '| other_username:', thread.other_username, '| lastMsgSender:', lastMsg?.sender_id, '| lastMsgSenderName:', lastMsg?.sender_name);
-
                   return (
                     <button
                       key={thread.id}
                       onClick={() => openConversation(thread.id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (thread.other_user_id) {
+                          setContextMenu({
+                            threadId: thread.id,
+                            otherUserId: thread.other_user_id,
+                            otherUsername: thread.other_username || 'Unknown',
+                            x: e.clientX,
+                            y: e.clientY,
+                          });
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        // Long-press detection for mobile
+                        const touch = e.touches[0];
+                        const timer = setTimeout(() => {
+                          if (thread.other_user_id) {
+                            setContextMenu({
+                              threadId: thread.id,
+                              otherUserId: thread.other_user_id,
+                              otherUsername: thread.other_username || 'Unknown',
+                              x: touch.clientX,
+                              y: touch.clientY,
+                            });
+                          }
+                        }, 600);
+                        const cleanup = () => clearTimeout(timer);
+                        e.currentTarget.addEventListener('touchend', cleanup, { once: true });
+                        e.currentTarget.addEventListener('touchmove', cleanup, { once: true });
+                      }}
                       className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${
                         isActive
                           ? 'bg-emerald-500/15'
@@ -614,6 +719,80 @@ export default function UtromailPage() {
           {chatPanel}
         </div>
       </div>
+
+      {/* Thread Context Menu Modal */}
+      {contextMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-[999]"
+            onClick={() => setContextMenu(null)}
+          />
+          <div
+            className="fixed z-[1000] min-w-[200px] rounded-xl border border-white/10 bg-[#0d1117] py-1 shadow-2xl"
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 220),
+              top: Math.min(contextMenu.y, window.innerHeight - 200),
+            }}
+          >
+            <div className="border-b border-white/10 px-4 py-2">
+              <p className="text-xs font-bold text-slate-400">Thread with {contextMenu.otherUsername}</p>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await blockUser(user!.id, contextMenu.otherUserId);
+                  toast.success(`Blocked ${contextMenu.otherUsername}`);
+                  setContextMenu(null);
+                  fetchThreadsRef.current?.();
+                } catch (err: any) {
+                  toast.error(err.message || 'Failed to block user');
+                }
+              }}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+            >
+              <Ban className="h-4 w-4" />
+              Block User
+            </button>
+            <button
+              onClick={async () => {
+                const reason = prompt('Report reason:');
+                if (!reason?.trim()) return;
+                try {
+                  await reportMessage(contextMenu.otherUserId, contextMenu.threadId, reason.trim());
+                  toast.success('Report submitted');
+                  setContextMenu(null);
+                } catch (err: any) {
+                  toast.error(err.message || 'Failed to submit report');
+                }
+              }}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-amber-400 transition hover:bg-amber-500/10"
+            >
+              <Flag className="h-4 w-4" />
+              Report Thread
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  await deleteThread(contextMenu.threadId, user!.id);
+                  toast.success('Thread removed from inbox');
+                  setContextMenu(null);
+                  if (activeConversationId === contextMenu.threadId) {
+                    setActiveConversationId(null);
+                    setShowMobileChat(false);
+                  }
+                  fetchThreadsRef.current?.();
+                } catch (err: any) {
+                  toast.error(err.message || 'Failed to remove thread');
+                }
+              }}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5"
+            >
+              <Trash2 className="h-4 w-4" />
+              Remove from Inbox
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
