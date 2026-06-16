@@ -1,5 +1,4 @@
 import React from 'react'
-import { Suspense } from 'react'
 import {
   MessageCircle,
   Radio,
@@ -15,9 +14,6 @@ import { useLiveContent } from '@/contexts/LiveContentContext'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import FloatingPoster from './FloatingPoster'
 import LevelStatusCard from './LevelStatusCard'
-import { lazyWithRetry } from '@/utils/lazyImport'
-
-const PromoSlot = lazyWithRetry(() => import('@/components/promo/PromoSlot'))
 
 type TabType = 'wall' | 'live' | 'universe' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
@@ -92,11 +88,6 @@ export default function LeftNavSidebar({
 
       {/* Cashout / Floating Poster */}
       <FloatingPoster />
-
-      {/* Ad Slot */}
-      <Suspense fallback={<div className="h-[200px] bg-slate-900/50 rounded-2xl animate-pulse border border-slate-800" />}>
-        <PromoSlot placement="left_sidebar_screensaver" variant="sidebar" />
-      </Suspense>
     </aside>
   )
 }

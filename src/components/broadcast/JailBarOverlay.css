@@ -1,0 +1,340 @@
+/* ============================================================
+   JAIL TIME — Battle Overlay Effect
+   Realistic steel prison bars that rise/fall based on battle
+   score position. Pure CSS animations for 60fps performance.
+   ============================================================ */
+
+/* ---------- Root container ---------- */
+.jail-bar-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  overflow: hidden;
+  /* sits above video (z-10) but below name/mic badges (z-20) */
+}
+
+/* ---------- Bar group ---------- */
+.jail-bars {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: space-evenly;
+  align-items: flex-end;
+  /* Start fully below the frame (overridden by framer-motion initial) */
+  transform: translateY(100%);
+}
+
+/* ---------- Single bar ---------- */
+.jail-bar {
+  position: relative;
+  width: 6px;
+  height: 100%;
+  border-radius: 3px 3px 0 0;
+  /* Realistic steel gradient */
+  background: linear-gradient(
+    90deg,
+    #1a1a2e 0%,
+    #4a4a6a 12%,
+    #8a8aaa 30%,
+    #c0c0d8 45%,
+    #e8e8f0 50%,
+    #c0c0d8 55%,
+    #8a8aaa 70%,
+    #4a4a6a 88%,
+    #1a1a2e 100%
+  );
+  box-shadow:
+    inset 1px 0 2px rgba(255, 255, 255, 0.3),
+    inset -1px 0 2px rgba(0, 0, 0, 0.4),
+    0 0 8px rgba(0, 0, 0, 0.6);
+  flex-shrink: 0;
+}
+
+/* Metallic highlight stripe on each bar */
+.jail-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.45) 15%,
+    rgba(255, 255, 255, 0.6) 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0.1) 80%,
+    rgba(255, 255, 255, 0.0) 100%
+  );
+  border-radius: 1px;
+}
+
+/* Rivet / bolt on each bar */
+.jail-bar::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #d0d0e8, #505070 60%, #2a2a40);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* Extra rivets spaced down the bar */
+.jail-bar-rivet {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #c0c0d8, #404060 60%, #1a1a30);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- Horizontal cross-bars ---------- */
+.jail-crossbar {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  background: linear-gradient(
+    180deg,
+    #d0d0e0 0%,
+    #9090b0 30%,
+    #505070 70%,
+    #303050 100%
+  );
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+}
+
+/* ---------- Animation: bars rising (losing) ---------- */
+@keyframes jail-bars-rise {
+  0% {
+    transform: translateY(100%);
+  }
+  85% {
+    transform: translateY(-2%);
+  }
+  92% {
+    transform: translateY(1%);
+  }
+  100% {
+    transform: translateY(0%);
+  }
+}
+
+/* ---------- Animation: bars descending (winning / freed) ---------- */
+@keyframes jail-bars-descend {
+  0% {
+    transform: translateY(0%);
+  }
+  15% {
+    transform: translateY(-3%);
+  }
+  100% {
+    transform: translateY(105%);
+  }
+}
+
+.jail-bars.jail-bars--rising {
+  animation: jail-bars-rise 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.jail-bars.jail-bars--descending {
+  animation: jail-bars-descend 0.6s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+}
+
+/* ---------- Impact vibration when bars lock ---------- */
+@keyframes jail-impact-shake {
+  0%, 100% { transform: translateY(0%) translateX(0); }
+  10% { transform: translateY(0%) translateX(-2px); }
+  20% { transform: translateY(0%) translateX(2px); }
+  30% { transform: translateY(0%) translateX(-1.5px); }
+  40% { transform: translateY(0%) translateX(1.5px); }
+  50% { transform: translateY(0%) translateX(-1px); }
+  60% { transform: translateY(0%) translateX(1px); }
+  70% { transform: translateY(0%) translateX(-0.5px); }
+  80% { transform: translateY(0%) translateX(0.5px); }
+}
+
+.jail-bars.jail-bars--locked {
+  animation:
+    jail-bars-rise 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    jail-impact-shake 0.4s ease-out 0.75s;
+}
+
+/* ---------- Red warning lights ---------- */
+@keyframes jail-warning-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    box-shadow: 0 0 4px rgba(255, 0, 0, 0.3);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 16px rgba(255, 0, 0, 0.8), 0 0 32px rgba(255, 0, 0, 0.4);
+  }
+}
+
+.jail-warning-light {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ff4444, #cc0000 60%, #880000);
+  animation: jail-warning-pulse 1.2s ease-in-out infinite;
+}
+
+.jail-warning-light--top-left {
+  top: 6px;
+  left: 6px;
+}
+
+.jail-warning-light--top-right {
+  top: 6px;
+  right: 6px;
+}
+
+.jail-warning-light--bottom-left {
+  bottom: 6px;
+  left: 6px;
+}
+
+.jail-warning-light--bottom-right {
+  bottom: 6px;
+  right: 6px;
+}
+
+/* Stagger the warning light pulses */
+.jail-warning-light:nth-child(2) { animation-delay: 0.3s; }
+.jail-warning-light:nth-child(3) { animation-delay: 0.6s; }
+.jail-warning-light:nth-child(4) { animation-delay: 0.9s; }
+
+/* ---------- "JAIL TIME" text banner ---------- */
+@keyframes jail-text-appear {
+  0% {
+    opacity: 0;
+    transform: scale(1.5) rotate(-3deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05) rotate(1deg);
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.jail-text-banner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  font-size: clamp(1.2rem, 4vw, 2.5rem);
+  font-weight: 900;
+  color: #ff2222;
+  text-shadow:
+    0 0 10px rgba(255, 0, 0, 0.8),
+    0 0 30px rgba(255, 0, 0, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    2px 2px 0 #000;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 16;
+  animation: jail-text-appear 0.5s ease-out forwards;
+  text-transform: uppercase;
+}
+
+/* ---------- Dark vignette overlay when jailed ---------- */
+@keyframes jail-vignette-fade {
+  0% { opacity: 0; }
+  100% { opacity: 0.35; }
+}
+
+.jail-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 40%,
+    rgba(0, 0, 0, 0.6) 100%
+  );
+  pointer-events: none;
+  z-index: 14;
+  opacity: 0;
+}
+
+.jail-vignette.jail-vignette--active {
+  animation: jail-vignette-fade 0.8s ease-out forwards;
+}
+
+/* ---------- Chain links decoration (optional) ---------- */
+@keyframes jail-chain-rattle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(3deg); }
+  75% { transform: rotate(-3deg); }
+}
+
+.jail-chain {
+  position: absolute;
+  top: -4px;
+  width: 100%;
+  height: 8px;
+  display: flex;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  z-index: 1;
+}
+
+.jail-chain-link {
+  width: 8px;
+  height: 12px;
+  border: 1.5px solid #7070a0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  animation: jail-chain-rattle 0.3s ease-in-out infinite;
+}
+
+/* ---------- Responsive bar count ---------- */
+@media (max-width: 480px) {
+  .jail-bar { width: 4px; }
+  .jail-bar::after { width: 6px; height: 6px; }
+  .jail-crossbar { height: 3px; }
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .jail-bars.jail-bars--rising,
+  .jail-bars.jail-bars--descending,
+  .jail-bars.jail-bars--locked {
+    animation: none;
+    transform: translateY(0);
+  }
+  .jail-warning-light {
+    animation: none;
+    opacity: 0.7;
+  }
+  .jail-text-banner {
+    animation: none;
+  }
+}

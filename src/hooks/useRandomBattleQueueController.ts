@@ -79,10 +79,12 @@ export function useRandomBattleQueueController({
   }, []);
 
   const findMatch = useCallback(async (force: boolean = false) => {
+    console.log('[RandomBattleQueue] findMatch called:', { hasId: !!stream?.id, hasUserId: !!userId, matching: matchingRef.current, canUse: canUseRandomBattles, isBattleActive, status: stream?.status, isQueueEnabled, force });
     if (!stream?.id || !userId || matchingRef.current) return;
     if (!canUseRandomBattles || isBattleActive || stream.status !== 'live') return;
     if (!isQueueEnabled && !force) return;
 
+    console.log('[RandomBattleQueue] calling find_random_battle_match RPC');
     matchingRef.current = true;
     try {
       const { data, error } = await supabase.rpc('find_random_battle_match', {
@@ -93,12 +95,13 @@ export function useRandomBattleQueueController({
       if (error) throw error;
 
       if (data?.matched) {
+        console.log('[RandomBattleQueue] MATCH FOUND, battle_id:', data.battle_id, 'started_at:', data.battle_started_at);
         clearActivationTimer();
         onStreamUpdate?.({
           is_battle: true,
           battle_id: data.battle_id,
           battle_mode: 'random_queue' as any,
-          battle_status: 'active' as any,
+          battle_status: 'starting' as any,
           random_battle_queue_enabled: false,
           random_battle_queued_at: null,
           random_battle_cooldown_until: null,
@@ -143,9 +146,11 @@ export function useRandomBattleQueueController({
 
   const startQueue = useCallback(async () => {
     if (!canUseRandomBattles || !stream?.id) return;
+    console.log('[RandomBattleQueue] startQueue called, streamId:', stream.id);
     setIsBusy(true);
     try {
       const queuedAt = new Date().toISOString();
+      console.log('[RandomBattleQueue] setting random_battle_queue_enabled=true in DB');
       const { data, error } = await supabase
         .from('streams')
         .update({
@@ -214,11 +219,22 @@ export function useRandomBattleQueueController({
     return clearAutoQueueTimer;
   }, [canUseRandomBattles, clearAutoQueueTimer, hasActiveBattleRef, isQueueEnabled, startQueue, stream?.status]);
 
-  useEffect(() => {
-    clearActivationTimer();
-    if (!stream?.id || !stream.battle_id || !isRandomBattle || stream.battle_status !== 'starting') return;
+  // Track which battle_id we've already set an activation timer for
+  const activatedBattleIdRef = useRef<string | null>(null);
 
-    let cancelled = false;
+  useEffect(() => {
+    // Only proceed if this is a new battle that hasn't been activated yet
+    if (!stream?.id || !stream.battle_id || !isRandomBattle || stream.battle_status !== 'starting') {
+      return;
+    }
+    // Don't reset the timer if we already set it for this battle_id
+    if (activatedBattleIdRef.current === stream.battle_id) {
+      console.log('[RandomBattleQueue] activation timer already set for battle:', stream.battle_id);
+      return;
+    }
+
+    console.log('[RandomBattleQueue] starting activation countdown for battle:', stream.battle_id, 'battle_start_time:', stream.battle_start_time);
+    activatedBattleIdRef.current = stream.battle_id;
 
     const syncCountdownAndMaybeActivate = async () => {
       let startsAt = stream.battle_start_time ? new Date(stream.battle_start_time).getTime() : 0;
@@ -234,7 +250,6 @@ export function useRandomBattleQueueController({
           if (battleRow?.started_at) {
             startsAt = new Date(battleRow.started_at).getTime();
           } else if (battleRow?.created_at) {
-            // Deterministic fallback derived from server row time to keep clients in sync.
             startsAt = new Date(battleRow.created_at).getTime() + 5_000;
           }
         } catch (err) {
@@ -243,26 +258,27 @@ export function useRandomBattleQueueController({
       }
 
       if (!startsAt || Number.isNaN(startsAt)) {
-        // Avoid client clock-derived fallback where possible; short retry to fetch server time.
         startsAt = Date.now() + 1_000;
       }
 
-      if (cancelled) return;
       const delay = Math.max(0, startsAt - Date.now());
+      console.log('[RandomBattleQueue] activation delay:', delay, 'ms, startsAt:', new Date(startsAt).toISOString());
       setBattleStartsAt(startsAt);
 
       activationTimerRef.current = window.setTimeout(async () => {
-        if (cancelled || activatingRef.current || !stream.battle_id) return;
+        if (activatingRef.current) return;
 
-        // Only broadcasters should attempt activation RPC; everyone else just follows countdown.
+        // Only broadcasters should attempt activation RPC
         if (!isBroadcaster || !userId) return;
 
+        console.log('[RandomBattleQueue] calling activate_random_battle for', stream.battle_id);
         activatingRef.current = true;
         try {
           const { data, error } = await supabase.rpc('activate_random_battle', {
             p_battle_id: stream.battle_id,
           });
 
+          console.log('[RandomBattleQueue] activate_random_battle result:', { success: data?.success, error: error?.message });
           if (error) throw error;
           if (data?.success) {
             onStreamUpdate?.({ battle_status: 'active' as any } as Partial<Stream>);
@@ -278,8 +294,8 @@ export function useRandomBattleQueueController({
     void syncCountdownAndMaybeActivate();
 
     return () => {
-      cancelled = true;
       clearActivationTimer();
+      activatedBattleIdRef.current = null;
     };
   }, [clearActivationTimer, isBroadcaster, isRandomBattle, onStreamUpdate, stream?.battle_id, stream?.battle_start_time, stream?.battle_status, stream?.id, userId]);
 

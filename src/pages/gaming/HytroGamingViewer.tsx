@@ -1256,10 +1256,10 @@ function StreamPlayer({
         </div>
       )}
 
-      {/* Camera overlay */}
+      {/* Camera overlay — un-mirror front camera for remote viewers (browser mirrors facingMode=user locally) */}
       {agora.remoteCameraTrack && (isMobile ? (
         <div className="absolute left-3 top-3 z-20 w-28 overflow-hidden rounded-lg border-2 border-cyan-400/40 bg-black/60 shadow-xl backdrop-blur-sm">
-          <div ref={cameraRef} className="h-20 w-full bg-slate-900" />
+          <div ref={cameraRef} className="h-20 w-full bg-slate-900" style={{ transform: 'scaleX(-1)' }} />
           <div className="flex items-center gap-1 px-1.5 py-0.5">
             <span className="h-1 w-1 animate-pulse rounded-full bg-red-400" />
             <span className="text-[8px] font-bold text-white/70 truncate">{stream.broadcaster_name}</span>
@@ -1267,7 +1267,7 @@ function StreamPlayer({
         </div>
       ) : (
         <div className="absolute right-4 top-4 z-20 w-48 overflow-hidden rounded-xl border-2 border-white/15 bg-black/70 shadow-2xl backdrop-blur-sm">
-          <div ref={cameraRef} className="h-24 w-full bg-slate-900" />
+          <div ref={cameraRef} className="h-24 w-full bg-slate-900" style={{ transform: 'scaleX(-1)' }} />
           <div className="flex items-center gap-1.5 px-2 py-1">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
             <span className="text-[9px] font-bold text-white/70">{stream.broadcaster_name}</span>

@@ -73,7 +73,7 @@ BEGIN
   VALUES (
     p_stream_id,
     v_opponent.id,
-    'pending',
+    'active',
     v_started_at,
     v_ends_at,
     0,

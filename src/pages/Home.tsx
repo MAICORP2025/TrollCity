@@ -42,7 +42,9 @@ import LeftNavSidebar from '@/components/home/LeftNavSidebar'
 import FeaturedBroadcastersRow from '@/components/home/FeaturedBroadcastersRow'
 import HyTroGamingRow from '@/components/home/HyTroGamingRow'
 import PodcastRow from '@/components/home/PodcastRow'
-import { WallPost } from '@/types/trollWall'
+import NewStreamersRow from '@/components/home/NewStreamersRow'
+import BestTrollersRow from '@/components/home/BestTrollersRow'
+import PromoSlot from '@/components/promo/PromoSlot'
 
 type TabType = 'wall' | 'live' | 'universe' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
@@ -446,9 +448,11 @@ export default function Home() {
             <div className="min-w-0 flex-1 space-y-4">
               <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" hideGrid />
               <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
-              <HyTroGamingRow onItemClick={handleScrollItemClick} />
               <PodcastRow />
             </div>
+            <aside className="hidden xl:flex xl:flex-col xl:gap-3 xl:w-[320px] xl:shrink-0 xl:sticky xl:top-3 xl:self-start">
+              <PromoSlot placement="home_right_sidebar" variant="featured" />
+            </aside>
           </section>
         )}
 
@@ -462,15 +466,10 @@ export default function Home() {
               presidentTabLabel={presidentTabLabel}
               showPresidentTab={showPresidentTab}
             />
-            <div className="min-w-0 flex-1">
-              <LiveGrid
-                liveItems={allLiveItems}
-                loadingLive={loadingLive}
-                totalViewers={totalViewers}
-                showLiveGrid={showLiveGrid}
-                setShowLiveGrid={setShowLiveGrid}
-                onClickItem={handleLiveItemClick}
-              />
+            <div className="min-w-0 flex-1 space-y-4">
+              <NewStreamersRow onClickItem={handleLiveItemClick} />
+              <BestTrollersRow onClickItem={handleLiveItemClick} />
+              <HyTroGamingRow onItemClick={handleLiveItemClick} />
             </div>
           </div>
         )}

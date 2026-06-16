@@ -268,33 +268,30 @@ export function useStreamSeats(
     [streamId, applySeatRows],
   )
 
-  // SAFETY: dedupe guard � if the same reason fires within 200ms, skip the
-  // duplicate to prevent 3-5 rapid fetches for a single seat_joined/seat_live.
-  const lastRefreshReasonRef = useRef<Record<string, number>>({})
+  // Dedupe guard: skip duplicate refreshes within 500ms window
+  const lastRefreshAtRef = useRef(0)
+  const pendingRefreshTimerRef = useRef<number | null>(null)
 
   const scheduleRefresh = useCallback(
-    (reason: string, delays: number[] = [0, 300, 800]) => {
+    (reason: string, delay = 400) => {
       if (!streamId) return
 
       const now = Date.now()
-      const lastFired = lastRefreshReasonRef.current[reason] || 0
-      if (now - lastFired < 200) {
+      if (now - lastRefreshAtRef.current < 300) {
+        // Already refreshed recently — schedule one debounced refresh if not already pending
+        if (pendingRefreshTimerRef.current !== null) {
+          window.clearTimeout(pendingRefreshTimerRef.current)
+        }
+        pendingRefreshTimerRef.current = window.setTimeout(() => {
+          pendingRefreshTimerRef.current = null
+          lastRefreshAtRef.current = Date.now()
+          void fetchSeats(reason)
+        }, delay)
         return
       }
-      lastRefreshReasonRef.current[reason] = now
 
-      for (const delay of delays) {
-        if (delay <= 0) {
-          void fetchSeats(reason)
-          continue
-        }
-
-        const timerId = window.setTimeout(() => {
-          void fetchSeats(`${reason}:${delay}ms`)
-        }, delay)
-
-        refreshTimersRef.current.push(timerId)
-      }
+      lastRefreshAtRef.current = now
+      void fetchSeats(reason)
     },
     [streamId, fetchSeats],
   )
@@ -361,6 +358,43 @@ export function useStreamSeats(
         }
       }
 
+      // ✅ Optimistic update: show seat immediately before RPC completes
+      const optimisticSeat: SeatSession = {
+        id: `optimistic-${Date.now()}`,
+        stream_id: streamId,
+        seat_index: seatIndex,
+        user_id: effectiveUserId,
+        guest_id: null,
+        status: 'reserved',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        joined_at: new Date().toISOString(),
+        left_at: null,
+        livekit_participant_identity: effectiveUserId,
+        livekit_identity: effectiveUserId,
+        participant_identity: effectiveUserId,
+        seat_price_paid: finalPrice,
+        price_paid: finalPrice,
+        user_profile: {
+          id: effectiveUserId,
+          username: user?.user_metadata?.username || null,
+          display_name: user?.user_metadata?.display_name || null,
+          avatar_url: null,
+        },
+        profile: {
+          id: effectiveUserId,
+          username: user?.user_metadata?.username || null,
+          display_name: user?.user_metadata?.display_name || null,
+          avatar_url: null,
+        },
+      }
+
+      setSeats(prev => ({ ...prev, [seatIndex]: optimisticSeat }))
+      setMySeat(optimisticSeat)
+      seatsRef.current = { ...seatsRef.current, [seatIndex]: optimisticSeat }
+      mySeatRef.current = optimisticSeat
+      setSeatVersion(v => v + 1)
+
       try {
         const { data, error } = await supabase.rpc('join_seat_atomic', {
           p_stream_id: streamId,
@@ -371,6 +405,12 @@ export function useStreamSeats(
 
         if (error) {
           console.warn('[useStreamSeats] joinSeat rpc error:', error)
+          // Rollback optimistic update on error
+          setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+          setMySeat(null)
+          seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+          mySeatRef.current = null
+          setSeatVersion(v => v + 1)
           toast.error(error.message || 'Failed to join seat')
           return false
         }
@@ -378,11 +418,25 @@ export function useStreamSeats(
         const payload = data as any
 
         if (!payload?.success) {
+          // Rollback optimistic update on failure
+          setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+          setMySeat(null)
+          seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+          mySeatRef.current = null
+          setSeatVersion(v => v + 1)
           toast.error(payload?.message || 'Failed to join seat')
           return false
         }
 
-        await fetchSeats('joinSeat:success')
+        // Replace optimistic seat with real data
+        const realSeat = normalizeSeatSession(payload?.seat || payload)
+        if (realSeat) {
+          setSeats(prev => ({ ...prev, [seatIndex]: realSeat }))
+          setMySeat(realSeat)
+          seatsRef.current = { ...seatsRef.current, [seatIndex]: realSeat }
+          mySeatRef.current = realSeat
+          setSeatVersion(v => v + 1)
+        }
 
         await sendSeatEvent('seat_joined', {
           seat_index: seatIndex,
@@ -390,13 +444,18 @@ export function useStreamSeats(
           price_paid: finalPrice,
         })
 
-        // Re-fetch shortly after join because ViewerPage may publish LiveKit
-        // and call markSeatLive right after this.
-        scheduleRefresh('joinSeat:post-event', [300, 800, 1500])
+        // Single debounced refresh to sync state
+        scheduleRefresh('joinSeat:post-event')
 
         return true
       } catch (err) {
         console.warn('[useStreamSeats] joinSeat failed:', err)
+        // Rollback optimistic update on exception
+        setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+        setMySeat(null)
+        seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+        mySeatRef.current = null
+        setSeatVersion(v => v + 1)
         toast.error('Failed to join seat')
         return false
       } finally {
@@ -423,6 +482,19 @@ export function useStreamSeats(
 
     setLeavingSeatId(seatIndex)
 
+    // ✅ Optimistic update: remove seat immediately
+    const previousSeat = { ...seatsRef.current }
+    const previousMySeat = mySeatRef.current
+
+    setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+    if (mySeatRef.current?.seat_index === seatIndex) {
+      setMySeat(null)
+      mySeatRef.current = null
+    }
+    seatsRef.current = { ...seatsRef.current }
+    delete seatsRef.current[seatIndex]
+    setSeatVersion(v => v + 1)
+
     try {
       const { data, error } = await supabase.rpc('leave_seat_atomic', {
         p_session_id: currentSeat.id,
@@ -430,16 +502,26 @@ export function useStreamSeats(
 
       if (error) {
         console.warn('[useStreamSeats] leaveSeat rpc error:', error)
+        // Rollback on error
+        setSeats(previousSeat)
+        setMySeat(previousMySeat)
+        seatsRef.current = previousSeat
+        mySeatRef.current = previousMySeat
+        setSeatVersion(v => v + 1)
         toast.error(error.message || 'Failed to leave seat')
         return
       }
 
       if (data && (data as any).success === false) {
+        // Rollback on failure
+        setSeats(previousSeat)
+        setMySeat(previousMySeat)
+        seatsRef.current = previousSeat
+        mySeatRef.current = previousMySeat
+        setSeatVersion(v => v + 1)
         toast.error((data as any).message || 'Failed to leave seat')
         return
       }
-
-      await fetchSeats('leaveSeat:success')
 
       await sendSeatEvent('seat_left', {
         seat_index: seatIndex,
@@ -447,9 +529,16 @@ export function useStreamSeats(
         session_id: currentSeat.id,
       })
 
-      scheduleRefresh('leaveSeat:post-event', [300, 800])
+      // Single debounced refresh to sync
+      scheduleRefresh('leaveSeat:post-event')
     } catch (err) {
       console.warn('[useStreamSeats] leaveSeat failed:', err)
+      // Rollback on exception
+      setSeats(previousSeat)
+      setMySeat(previousMySeat)
+      seatsRef.current = previousSeat
+      mySeatRef.current = previousMySeat
+      setSeatVersion(v => v + 1)
       toast.error('Failed to leave seat')
     } finally {
       setLeavingSeatId(null)
@@ -468,7 +557,7 @@ export function useStreamSeats(
           user_id: effectiveUserId,
           livekit_participant_identity: livekitParticipantIdentity || effectiveUserId,
         })
-        scheduleRefresh('markSeatLive:already-live', [0, 300, 800])
+        scheduleRefresh('markSeatLive:already-live')
         return
       }
 
@@ -498,7 +587,7 @@ export function useStreamSeats(
           livekit_participant_identity: livekitParticipantIdentity || effectiveUserId,
         })
 
-        scheduleRefresh('markSeatLive:post-event', [300, 800, 1500])
+        scheduleRefresh('markSeatLive:post-event')
       } catch (err) {
         console.warn('[useStreamSeats] markSeatLive failed:', err)
         await fetchSeats('markSeatLive:catch-refetch')
@@ -651,72 +740,66 @@ export function useStreamSeats(
           filter: `stream_id=eq.${streamId}`,
         },
          (payload) => {
+           // Handle DELETE: remove seat locally
            if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as any
             const seatIndex = Number(oldRow?.seat_index)
-
             if (Number.isFinite(seatIndex)) {
-              setSeats((prev) => {
-                const next = { ...prev }
-                delete next[seatIndex]
-                return next
-              })
-
-              setMySeat((prev) => {
-                if (!prev) return prev
-                return prev.seat_index === seatIndex ? null : prev
-              })
-
-              seatsRef.current = { ...seatsRef.current }
-              delete seatsRef.current[seatIndex]
-              if (mySeatRef.current?.seat_index === seatIndex) {
-                mySeatRef.current = null
-              }
-
-              setSeatVersion((v) => v + 1)
+              setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+              setMySeat(prev => prev?.seat_index === seatIndex ? null : prev)
+              seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+              if (mySeatRef.current?.seat_index === seatIndex) mySeatRef.current = null
+              setSeatVersion(v => v + 1)
             }
-
-            scheduleRefresh('postgres-delete', [300, 800])
             return
           }
 
+          // Handle INSERT: add/update seat locally from payload
           if (payload.eventType === 'INSERT') {
-            scheduleRefresh('postgres-insert', [0, 300, 800, 1500])
+            const newRow = payload.new as any
+            const session = normalizeSeatSession(newRow)
+            if (session && isActiveSeatStatus(session.status)) {
+              setSeats(prev => ({ ...prev, [session.seat_index]: session }))
+              seatsRef.current = { ...seatsRef.current, [session.seat_index]: session }
+              if (effectiveUserId && (session.user_id === effectiveUserId || session.guest_id === effectiveUserId)) {
+                setMySeat(session)
+                mySeatRef.current = session
+              }
+              setSeatVersion(v => v + 1)
+            }
             return
           }
 
+          // Handle UPDATE: update seat locally from payload
            if (payload.eventType === 'UPDATE') {
              const newRow = payload.new as any
              const oldRow = payload.old as any
              const newStatus = newRow?.status
-             const oldStatus = oldRow?.status
 
              if (newStatus === 'left' || newStatus === 'kicked') {
                const seatIndex = Number(oldRow?.seat_index ?? newRow?.seat_index)
                if (Number.isFinite(seatIndex)) {
-                 setSeats((prev) => {
-                   const next = { ...prev }
-                   delete next[seatIndex]
-                   return next
-                 })
-                 setMySeat((prev) => {
-                   if (!prev) return prev
-                   return prev.seat_index === seatIndex ? null : prev
-                 })
-                 seatsRef.current = { ...seatsRef.current }
-                 delete seatsRef.current[seatIndex]
-                 if (mySeatRef.current?.seat_index === seatIndex) {
-                   mySeatRef.current = null
+                 setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+                 setMySeat(prev => prev?.seat_index === seatIndex ? null : prev)
+                 seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+                 if (mySeatRef.current?.seat_index === seatIndex) mySeatRef.current = null
+                 setSeatVersion(v => v + 1)
+               }
+             } else {
+               // Update seat data in place
+               const session = normalizeSeatSession(newRow)
+               if (session) {
+                 setSeats(prev => ({ ...prev, [session.seat_index]: session }))
+                 seatsRef.current = { ...seatsRef.current, [session.seat_index]: session }
+                 if (effectiveUserId && (session.user_id === effectiveUserId || session.guest_id === effectiveUserId)) {
+                   setMySeat(session)
+                   mySeatRef.current = session
                  }
-                 setSeatVersion((v) => v + 1)
+                 setSeatVersion(v => v + 1)
                }
              }
-
-             scheduleRefresh('postgres-update', [300, 800])
              return
            }
-
-          scheduleRefresh('postgres-any', [0, 500])
         },
       )
       .subscribe((status) => {
@@ -734,16 +817,17 @@ export function useStreamSeats(
     const channel = supabase
       .channel(`stream-seat-events:${streamId}`)
        .on('broadcast', { event: 'seat_joined' }, () => {
-         scheduleRefresh('broadcast-seat_joined', [0, 300, 800, 1500])
+         // Postgres changes handler already updates state — just do a single sync refresh
+         scheduleRefresh('broadcast-seat_joined')
        })
        .on('broadcast', { event: 'seat_live' }, () => {
-         scheduleRefresh('broadcast-seat_live', [0, 300, 800])
+         scheduleRefresh('broadcast-seat_live')
        })
        .on('broadcast', { event: 'seat_left' }, () => {
-         scheduleRefresh('broadcast-seat_left', [0, 300, 800])
+         scheduleRefresh('broadcast-seat_left')
        })
        .on('broadcast', { event: 'seat_refreshed' }, () => {
-         scheduleRefresh('broadcast-seat_refreshed', [0, 500])
+         scheduleRefresh('broadcast-seat_refreshed')
        })
        .subscribe()
 

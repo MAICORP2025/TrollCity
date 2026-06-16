@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BattleSounds } from '../../lib/battleSounds';
+import { useJailTime } from '../../hooks/useJailTime';
+import JailBarOverlay from './JailBarOverlay';
 
 // --- Safe Helper Functions ---
 function safeValues<T>(mapLike: Map<any, T> | undefined | null): T[] {
@@ -706,6 +708,39 @@ const BattleParticipantTile = ({
 };
 
 /**
+ * JailTimeHostTile — Wraps a host BattleParticipantTile with the JAIL TIME
+ * overlay when that side is losing. Used inside BattleArena render.
+ */
+const JailTimeHostTile = ({
+  children,
+  side,
+  isLosing,
+  onJailLock,
+   onJailUnlock,
+}: {
+  children: React.ReactNode;
+  side: 'challenger' | 'opponent';
+  isLosing: boolean;
+  onJailLock?: () => void;
+  onJailUnlock?: () => void;
+}) => {
+  if (!isLosing) return <>{children}</>;
+  return (
+    <div className="relative w-full h-full">
+      {children}
+      <JailBarOverlay
+        side={side}
+        isLosing={true}
+        onBarsLocked={onJailLock}
+        onBarsFreed={onJailUnlock}
+        showWarningLights={true}
+        showTextBanner={true}
+      />
+    </div>
+  );
+};
+
+/**
  * The main split arena component
  */
 interface BattleArenaProps {
@@ -740,6 +775,12 @@ interface BattleArenaProps {
   isBroadcaster?: boolean;
   timeLeft?: number;
   battleStatus?: string;
+  /** Enable JAIL TIME overlay effect (default: true for random battles) */
+  jailTimeEnabled?: boolean;
+  /** Enable JAIL TIME sound effects */
+  jailTimeSoundEnabled?: boolean;
+  /** Enable JAIL TIME ambient background audio */
+  jailTimeAmbientEnabled?: boolean;
 }
 
 const BattleArena = ({
@@ -774,8 +815,28 @@ const BattleArena = ({
   isBroadcaster = false,
   timeLeft,
   battleStatus,
+  jailTimeEnabled = true,
+  jailTimeSoundEnabled = true,
+  jailTimeAmbientEnabled = true,
 }: BattleArenaProps) => {
   const { user } = useAuthStore();
+
+  // ── JAIL TIME effect ──
+  const battleActive = battleStatus === 'active' || battleStatus === 'starting' || battleStatus === 'ready';
+  const {
+    challengerLosing,
+    opponentLosing,
+    onChallengerJailLock,
+    onChallengerJailUnlock,
+    onOpponentJailLock,
+    onOpponentJailUnlock,
+  } = useJailTime({
+    challengerScore,
+    opponentScore,
+    battleActive: battleActive && jailTimeEnabled !== false,
+    soundEnabled: jailTimeSoundEnabled !== false,
+    ambientEnabled: jailTimeAmbientEnabled !== false,
+  });
   const lastKnownTrackRef = useRef<Record<string, { video?: RemoteVideoTrack; audio?: RemoteAudioTrack }>>({});
   const [battleParticipants, setBattleParticipants] = useState<BattleParticipant[]>([]);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean>(() => {
@@ -1604,16 +1665,18 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <BattleParticipantTile 
-                          {...slot.participant} 
-                          side="challenger" 
-                          crownInfo={challengerCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'opponent'}
-                          onTroll={() => handleTrollClick('challenger')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={true}
-                        />
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="challenger"
+                            crownInfo={challengerCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'opponent'}
+                            onTroll={() => handleTrollClick('challenger')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={true}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
                           <User className="text-purple-500/50" size={48} />
@@ -1694,16 +1757,18 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <BattleParticipantTile 
-                          {...slot.participant} 
-                          side="opponent" 
-                          crownInfo={opponentCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'challenger'}
-                          onTroll={() => handleTrollClick('opponent')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={true}
-                        />
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="opponent"
+                            crownInfo={opponentCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'challenger'}
+                            onTroll={() => handleTrollClick('opponent')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={true}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
                           <User className="text-emerald-500/50" size={48} />
@@ -1755,16 +1820,18 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <BattleParticipantTile
-                          {...slot.participant}
-                          side="challenger"
-                          crownInfo={challengerCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'opponent'}
-                          onTroll={() => handleTrollClick('challenger')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={challengerIsSingleHost}
-                        />
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="challenger"
+                            crownInfo={challengerCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'opponent'}
+                            onTroll={() => handleTrollClick('challenger')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={challengerIsSingleHost}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
                           <User className="text-purple-500/50" size={48} />
@@ -1841,16 +1908,18 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <BattleParticipantTile
-                          {...slot.participant}
-                          side="opponent"
-                          crownInfo={opponentCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'challenger'}
-                          onTroll={() => handleTrollClick('opponent')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={opponentIsSingleHost}
-                        />
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="opponent"
+                            crownInfo={opponentCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'challenger'}
+                            onTroll={() => handleTrollClick('opponent')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={opponentIsSingleHost}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
                           <User className="text-emerald-500/50" size={48} />
@@ -1909,16 +1978,18 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <BattleParticipantTile 
-                          {...slot.participant} 
-                          side="challenger" 
-                          crownInfo={challengerCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'opponent'}
-                          onTroll={() => handleTrollClick('challenger')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={challengerIsSingleHost}
-                        />
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="challenger"
+                            crownInfo={challengerCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'opponent'}
+                            onTroll={() => handleTrollClick('challenger')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={challengerIsSingleHost}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         false ? (
                           <BattleParticipantTile
@@ -2033,16 +2104,18 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <BattleParticipantTile 
-                          {...slot.participant} 
-                          side="opponent" 
-                          crownInfo={opponentCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'challenger'}
-                          onTroll={() => handleTrollClick('opponent')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={opponentIsSingleHost}
-                        />
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="opponent"
+                            crownInfo={opponentCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'challenger'}
+                            onTroll={() => handleTrollClick('opponent')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={opponentIsSingleHost}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         false ? (
                           <BattleParticipantTile
@@ -2129,16 +2202,18 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <BattleParticipantTile
-                          {...slot.participant}
-                          side="challenger"
-                          crownInfo={challengerCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'opponent'}
-                          onTroll={() => handleTrollClick('challenger')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={challengerIsSingleHost}
-                        />
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="challenger"
+                            crownInfo={challengerCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'opponent'}
+                            onTroll={() => handleTrollClick('challenger')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={challengerIsSingleHost}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
                           <User className="text-purple-500/50" size={48} />
@@ -2218,16 +2293,18 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <BattleParticipantTile
-                          {...slot.participant}
-                          side="opponent"
-                          crownInfo={opponentCrownInfo}
-                          isSuddenDeath={isSuddenDeath}
-                          canTroll={canTroll && currentUserTeam === 'challenger'}
-                          onTroll={() => handleTrollClick('opponent')}
-                          onTileClick={() => handleParticipantBoxClick(slot.participant!)}
-                          isSingleHost={opponentIsSingleHost}
-                        />
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                          <BattleParticipantTile
+                            {...slot.participant}
+                            side="opponent"
+                            crownInfo={opponentCrownInfo}
+                            isSuddenDeath={isSuddenDeath}
+                            canTroll={canTroll && currentUserTeam === 'challenger'}
+                            onTroll={() => handleTrollClick('opponent')}
+                            onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                            isSingleHost={opponentIsSingleHost}
+                          />
+                        </JailTimeHostTile>
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
                           <User className="text-emerald-500/50" size={48} />

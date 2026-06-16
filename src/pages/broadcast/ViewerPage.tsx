@@ -304,12 +304,22 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
   const videoTrack = getVideoTrackFromParticipant(participant)
   const audioTrack = getAudioTrackFromParticipant(participant)
 
+  const shouldMirror = useMemo(() => {
+    if (!mirror) return false
+    const stream = videoTrack?.mediaStreamTrack || (videoTrack as any)?._mediaStreamTrack
+    const settings = stream?.getSettings?.() || {}
+    const facing = (settings as any).facingMode
+    if (facing && facing !== 'environment') return false
+    return true
+  }, [videoTrack, mirror])
+
   // Dev logging for track detection on mobile/PWA
   if (import.meta.env.DEV && trackTick > 0 && trackTick % 5 === 0) {
     console.debug('[RemoteVideoSurface] track check:', {
       participantIdentity: getParticipantIdentity(participant),
       hasVideo: !!videoTrack,
       hasAudio: !!audioTrack,
+      shouldMirror,
       trackTick,
     })
   }
@@ -343,7 +353,7 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
       if (videoTrack) {
         try {
           videoTrack.attach(videoEl)
-          videoEl.style.transform = mirror ? 'scaleX(-1)' : 'none'
+          videoEl.style.transform = shouldMirror ? 'scaleX(-1)' : 'none'
           videoEl.play().catch(() => {})
         } catch (err) {
           console.warn('[ViewerPage] Failed to attach remote video track:', err)
@@ -351,7 +361,7 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
       }
       attachedVideoIdRef.current = videoTrackId
     }
-  }, [videoTrack, videoTrackId, trackTick, mirror])
+  }, [videoTrack, videoTrackId, trackTick, shouldMirror])
 
   useEffect(() => {
     const audioEl = audioRef.current
@@ -394,7 +404,7 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
             muted={false}
             className={cn(
               'h-full w-full object-cover',
-              mirror && '-scale-x-100',
+              shouldMirror && '-scale-x-100',
             )}
           />
           <audio ref={audioRef} autoPlay />

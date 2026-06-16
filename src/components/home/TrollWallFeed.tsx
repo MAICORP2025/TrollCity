@@ -71,6 +71,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   const isMountedRef = useRef(true)
   const latestRequestId = useRef(0)
   const postBufferRef = useRef<WallPost[]>([])
+  const postsRef = useRef<WallPost[]>([])
 
   const [posts, setPosts] = useState<WallPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -253,13 +254,18 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         )
 
         setPosts((prev) => {
-          if (!append) return newPosts
+          if (!append) {
+            postsRef.current = newPosts
+            return newPosts
+          }
           const existingIds = new Set(prev.map((p) => p.id))
           const toAdd = newPosts.filter((p) => !existingIds.has(p.id))
-          return [...prev, ...toAdd]
+          const merged = [...prev, ...toAdd]
+          postsRef.current = merged
+          return merged
         })
 
-        const allLoaded = [...(append ? posts : []), ...newPosts]
+        const allLoaded = [...(append ? postsRef.current : []), ...newPosts]
         const oldestPost = allLoaded[allLoaded.length - 1]
         setOldestCreatedAt(oldestPost?.created_at || null)
         setHasMore(((data as any[]) || []).length === PAGE_SIZE)
@@ -273,7 +279,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         setLoadingMore(false)
       }
     },
-    [user, oldestCreatedAt, activeFilter, buildQuery, posts]
+    [user, oldestCreatedAt, activeFilter, buildQuery]
   )
 
   // Initial load & real-time subscription
@@ -475,29 +481,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         />
       </div>
 
-      {/* Filter tabs */}
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {FILTER_TABS.map((tab) => {
-          const Icon = tab.icon
-          const isActive = activeFilter === tab.id
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveFilter(tab.id)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-bold transition-all duration-200',
-                isActive
-                  ? 'border border-cyan-400/25 bg-cyan-400/10 text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.15)]'
-                  : 'border border-white/[0.07] bg-white/[0.03] text-white/50 hover:border-white/15 hover:text-white/80'
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
+      {/* Filter tabs removed */}
 
       {/* Single row — scroll left/right with button nav */}
       {loading && posts.length === 0 ? (
