@@ -122,9 +122,9 @@ const TrollJumpScare: React.FC<TrollJumpScareProps> = ({ rarity }) => {
     return () => {
       clearTimeout(timer);
       // Cleanup audio on unmount
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+      if (sourceRef.current) {
+        try { sourceRef.current.stop(); } catch { /* already stopped */ }
+        sourceRef.current = null;
       }
     };
   }, []);

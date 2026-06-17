@@ -488,6 +488,14 @@ interface BattleParticipantTileProps extends BattleParticipant {
   canTroll?: boolean;
   onTileClick?: () => void;
   isSingleHost?: boolean;
+  /** State battle: state code to display (e.g. "CA") */
+  stateCode?: string | null;
+  /** State battle: state name to display (e.g. "California") */
+  stateName?: string | null;
+  /** State battle: total battle points for this state */
+  statePoints?: number | null;
+  /** Whether this is a state battle */
+  isStateBattle?: boolean;
 }
 
 const BattleVideoRenderer = ({
@@ -571,6 +579,10 @@ const BattleParticipantTile = ({
   canTroll,
   onTileClick,
   isSingleHost = false,
+  stateCode = null,
+  stateName = null,
+  statePoints = null,
+  isStateBattle = false,
 }: BattleParticipantTileProps) => {
   const isHost = role === 'host' || metadata?.role === 'host';
   const micMuted = !isMicrophoneEnabled;
@@ -703,6 +715,24 @@ const BattleParticipantTile = ({
           {isHost ? "Tap to gift 🎁" : "Tap for actions"}
         </div>
       )}
+
+      {/* State battle: show state name + points at bottom middle of broadcaster box */}
+      {isStateBattle && stateCode && stateName && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className={cn(
+            "flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-lg backdrop-blur-md border whitespace-nowrap",
+            side === 'challenger'
+              ? "bg-emerald-950/80 border-emerald-400/40 text-emerald-200"
+              : "bg-fuchsia-950/80 border-fuchsia-400/40 text-fuchsia-200"
+          )}>
+            <span>🏛️</span>
+            <span>{stateName}</span>
+            {statePoints !== null && statePoints !== undefined && (
+              <span className="ml-1 opacity-70">• {statePoints.toLocaleString()} pts</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -781,6 +811,20 @@ interface BattleArenaProps {
   jailTimeSoundEnabled?: boolean;
   /** Enable JAIL TIME ambient background audio */
   jailTimeAmbientEnabled?: boolean;
+  /** State battle: challenger state code (e.g. "CA") */
+  challengerStateCode?: string | null;
+  /** State battle: challenger state name (e.g. "California") */
+  challengerStateName?: string | null;
+  /** State battle: challenger state total battle points */
+  challengerStatePoints?: number | null;
+  /** State battle: opponent state code */
+  opponentStateCode?: string | null;
+  /** State battle: opponent state name */
+  opponentStateName?: string | null;
+  /** State battle: opponent state total battle points */
+  opponentStatePoints?: number | null;
+  /** Whether this is a state battle */
+  isStateBattle?: boolean;
 }
 
 const BattleArena = ({
@@ -818,6 +862,13 @@ const BattleArena = ({
   jailTimeEnabled = true,
   jailTimeSoundEnabled = true,
   jailTimeAmbientEnabled = true,
+  challengerStateCode = null,
+  challengerStateName = null,
+  challengerStatePoints = null,
+  opponentStateCode = null,
+  opponentStateName = null,
+  opponentStatePoints = null,
+  isStateBattle = false,
 }: BattleArenaProps) => {
   const { user } = useAuthStore();
 

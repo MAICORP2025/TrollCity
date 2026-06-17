@@ -23,6 +23,9 @@ import {
   isCeoThemeEligible,
 } from '../../lib/broadcastThemes';
 import { RANDOM_BATTLE_ENABLED } from '../../config/featureFlags';
+import { US_STATES, getStateName } from '../../config/usStates';
+import type { BattleModeType } from '../../types/stateBattle';
+import { getUserStateRPC, assignUserToState } from '../../services/stateBattleService';
 import {
   BROADCAST_CATEGORIES,
   getCategoryConfig,
@@ -227,6 +230,10 @@ export default function SetupPage() {
   const [loading, setLoading] = useState(false);
   const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean; unrestricted?: boolean; isStaffBypass?: boolean } | null>(null);
 const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
+  const [battleMode, setBattleMode] = useState<BattleModeType>('world');
+  const [userState, setUserState] = useState<string | null>(null);
+  const [showStateDropdown, setShowStateDropdown] = useState(false);
+  const [isAssigningState, setIsAssigningState] = useState(false);
   const canUseCeoTheme = isCeoThemeEligible(user?.id, user?.email ?? null);
   const selectableThemes = useMemo(
     () => getSelectableBroadcastThemes({ includeCeoTheme: canUseCeoTheme }),
@@ -307,6 +314,22 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       isCancelled = true;
     };
   }, [user?.id, selectableThemeIds]);
+
+  // Load user's assigned state
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const loadState = async () => {
+      try {
+        const state = await getUserStateRPC(user.id);
+        if (!cancelled) setUserState(state);
+      } catch (err) {
+        console.error('[SetupPage] Failed to load user state:', err);
+      }
+    };
+    loadState();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   // Category-specific state
   const [selectedReligion, setSelectedReligion] = useState('');
@@ -1752,8 +1775,10 @@ const handleStartStream = async () => {
            layout_mode: layoutMode,
            active_theme_url: selectedThemeUrl,
            broadcast_theme_slug: normalizedSelectedTheme,
-           random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' ? randomBattleQueueEnabled : false,
+           random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' && battleMode === 'world' ? randomBattleQueueEnabled : false,
            random_battle_queued_at: null,
+           state_battle_mode: RANDOM_BATTLE_ENABLED && category === 'general' && battleMode === 'state' && randomBattleQueueEnabled ? 'state' : 'none',
+           state_battle_state_code: battleMode === 'state' ? userState : null,
 livekit_room_name: roomName,
             agora_channel: roomName,
             broadcast_disclaimer_accepted: true,
@@ -1766,7 +1791,8 @@ livekit_room_name: roomName,
              universe_mode: true,
              battle_status: 'waiting'
            }),
-            ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? { battle_mode: 'random_queue' } : {}),
+            ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? { battle_mode: battleMode === 'state' ? 'random_queue' : 'random_queue' } : {}),
+            ...(battleMode === 'state' && randomBattleQueueEnabled && category === 'general' ? { state_battle_mode: 'state' } : {}),
           };
 
       // Add password protection if enabled
@@ -1847,7 +1873,11 @@ livekit_room_name: roomName,
              started_at: new Date().toISOString(),
              ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? {
                random_battle_queued_at: new Date().toISOString(),
-               battle_mode: 'random_queue'
+               battle_mode: 'random_queue',
+               ...(battleMode === 'state' ? {
+                 state_battle_mode: 'state',
+                 state_battle_state_code: userState,
+               } : {}),
              } : {}),
            })
            .eq('id', data.id);
@@ -2390,14 +2420,69 @@ livekit_room_name: roomName,
 
             {/* Random Battle Queue Card */}
             {RANDOM_BATTLE_ENABLED && category === 'general' && (
-              <div className="flex-1 bg-zinc-900/80 rounded-xl border border-fuchsia-500/20 p-3 flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 mb-2">
+              <div className="flex-1 bg-zinc-900/80 rounded-xl border border-fuchsia-500/20 p-3 flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
                   <Swords size={13} className="text-fuchsia-400" />
                   <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Random Battle Queue</span>
                 </div>
+
+                {/* Battle Mode Dropdown */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Battle Mode</label>
+                  <select
+                    value={battleMode}
+                    onChange={(e) => {
+                      const mode = e.target.value as BattleModeType;
+                      setBattleMode(mode);
+                      if (mode === 'state' && !userState) {
+                        setShowStateDropdown(true);
+                      }
+                    }}
+                    className="w-full rounded-lg bg-black/50 border border-white/10 text-[11px] text-white px-2 py-1.5 outline-none focus:border-fuchsia-500/50 transition-colors"
+                  >
+                    <option value="world">🌎 World Battle</option>
+                    <option value="state">🏛️ State Battle</option>
+                  </select>
+                </div>
+
+                {/* State Battle: show current state or prompt to select */}
+                {battleMode === 'state' && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">Your State</label>
+                    {userState ? (
+                      <div className="flex items-center justify-between rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/20 px-2 py-1.5">
+                        <span className="text-[11px] font-bold text-fuchsia-200">🏛️ {getStateName(userState)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowStateDropdown(true)}
+                          className="text-[9px] text-fuchsia-400 hover:text-fuchsia-300 font-semibold uppercase"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowStateDropdown(true)}
+                        className="w-full rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 px-2 py-1.5 font-semibold hover:bg-amber-500/20 transition-colors"
+                      >
+                        ⚠️ Select Your State
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Enable Toggle */}
                 <button
                   type="button"
-                  onClick={() => setRandomBattleQueueEnabled((value) => !value)}
+                  onClick={() => {
+                    if (battleMode === 'state' && !userState) {
+                      toast.error('Please select your state first');
+                      setShowStateDropdown(true);
+                      return;
+                    }
+                    setRandomBattleQueueEnabled((value) => !value);
+                  }}
                   className={cn(
                     "w-full py-1.5 rounded-lg text-[10px] font-bold transition-all border",
                     randomBattleQueueEnabled
@@ -2407,9 +2492,65 @@ livekit_room_name: roomName,
                 >
                   {randomBattleQueueEnabled ? 'ON' : 'OFF'}
                 </button>
-                <p className="mt-2 text-[10px] text-slate-400 leading-4">
-                  Enable this before you go live to join the random battle queue automatically when your broadcast starts.
+                <p className="text-[10px] text-slate-400 leading-4">
+                  {battleMode === 'state'
+                    ? 'Represent your state! You will be matched against creators from other states.'
+                    : 'Enable this before you go live to join the random battle queue automatically.'}
                 </p>
+              </div>
+            )}
+
+            {/* State Selection Dropdown Modal */}
+            {showStateDropdown && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                <div className="bg-zinc-900 border border-fuchsia-500/30 rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      🏛️ Select Your State
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowStateDropdown(false)}
+                      className="text-slate-400 hover:text-white transition-colors text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mb-3">
+                    Choose the state you represent. This determines which state earns points when you win battles.
+                  </p>
+                  <div className="max-h-60 overflow-y-auto rounded-lg border border-white/10 bg-black/30">
+                    {US_STATES.map((s) => (
+                      <button
+                        key={s.code}
+                        type="button"
+                        disabled={isAssigningState}
+                        onClick={async () => {
+                          if (!user?.id) return;
+                          setIsAssigningState(true);
+                          try {
+                            await assignUserToState(user.id, s.code);
+                            setUserState(s.code);
+                            setShowStateDropdown(false);
+                            toast.success(`You now represent ${s.name}!`);
+                          } catch (err) {
+                            toast.error('Failed to assign state');
+                          } finally {
+                            setIsAssigningState(false);
+                          }
+                        }}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-[11px] transition-colors border-b border-white/5 last:border-b-0",
+                          userState === s.code
+                            ? "bg-fuchsia-500/20 text-fuchsia-200 font-bold"
+                            : "text-slate-300 hover:bg-white/5 hover:text-white"
+                        )}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 

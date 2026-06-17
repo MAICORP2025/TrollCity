@@ -213,6 +213,9 @@ const ExecutiveSecretaries = lazyWithRetry(() => import("./pages/admin/Executive
 const ExecutiveReports = lazyWithRetry(() => import("./pages/admin/ExecutiveReports"));
 const AdminTrollTownDeeds = lazyWithRetry(() => import("./pages/admin/AdminTrollTownDeeds"));
 const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersTournament"));
+const StateRankings = lazyWithRetry(() => import("./pages/StateRankings"));
+const StateDetail = lazyWithRetry(() => import("./pages/StateDetail"));
+import VerifiedBadgePage from "./pages/VerifiedBadgePage";
 const TMFamilyInviteHandler = lazyWithRetry(() => import("./components/trollmatch/TMFamilyInviteHandler"));
 const EmbedPage = lazyWithRetry(() => import("./pages/broadcast/EmbedPage"));
 const HomepageBackgroundShowcase = lazyWithRetry(() => import("./pages/dev/HomepageBackgroundShowcase"));
@@ -1501,6 +1504,13 @@ const handleVisibilityChange = async () => {
                 <Route path="/live/:streamId" element={<BroadcastRouter />} />
                 <Route path="/stream/:id" element={<BroadcastRouter />} />
 
+                {/* 🏛️ State Battle Routes */}
+                <Route path="/state-rankings" element={<StateRankings />} />
+                <Route path="/state/:stateCode" element={<StateDetail />} />
+
+                {/* ✅ Verified Badge */}
+                <Route path="/verified-badge" element={<VerifiedBadgePage />} />
+
                 {/* 🎓 Troll City Academy */}
                 <Route path="/academy" element={<AcademyHomePage />} />
                 <Route path="/academy/courses" element={<CourseCatalogPage />} />
@@ -1602,8 +1612,28 @@ const handleVisibilityChange = async () => {
 
 <Route path="/mobile" element={<Navigate to="/home" replace />} />
                    <Route path="/messages" element={<Navigate to="/utromail" replace />} />
-                  <Route path="/tcps" element={<Navigate to="/utromail" replace />} />
-                  <Route path="/match" element={<MatchPage />} />
+                   <Route path="/tcps" element={<Navigate to="/utromail" replace />} />
+
+                   {/* Dashboard redirects — commonly expected paths */}
+                   <Route path="/auction/dashboard" element={<Navigate to="/auctions/studio" replace />} />
+                   <Route path="/auction/studio" element={<Navigate to="/auctions/studio" replace />} />
+                   <Route path="/auction/studio/lots" element={<Navigate to="/auctions/studio/lots" replace />} />
+                   <Route path="/auction/my-shows" element={<Navigate to="/auctions/my-shows" replace />} />
+                   <Route path="/auction/bidders" element={<Navigate to="/auctions/bidders" replace />} />
+                   <Route path="/auction/sales" element={<Navigate to="/auctions/sales" replace />} />
+                   <Route path="/auction/reports" element={<Navigate to="/auctions/reports" replace />} />
+                   <Route path="/auction/analytics" element={<Navigate to="/auctions/analytics" replace />} />
+                   <Route path="/auction/settings" element={<Navigate to="/auctions/settings" replace />} />
+                   <Route path="/auction/inventory" element={<Navigate to="/auctions/inventory" replace />} />
+                   <Route path="/auction/orders" element={<Navigate to="/auctions/orders" replace />} />
+                   <Route path="/auction/packing" element={<Navigate to="/auctions/packing" replace />} />
+                   <Route path="/auction/devices" element={<Navigate to="/auctions/devices" replace />} />
+                   <Route path="/tcnn/chief" element={<Navigate to="/tcnn/dashboard" replace />} />
+                   <Route path="/officer" element={<Navigate to="/officer/dashboard" replace />} />
+                   <Route path="/agency-hr" element={<Navigate to="/agency-hr-dashboard" replace />} />
+                   <Route path="/pastor" element={<Navigate to="/church/pastor" replace />} />
+
+                   <Route path="/match" element={<MatchPage />} />
           <Route path="/city-hall" element={<Navigate to="/home" replace />} />
                   <Route path="/city-registry" element={<CityRegistry />} />
                   <Route path="/city-registry/advertise" element={<AdvertisePage />} />

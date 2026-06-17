@@ -22,6 +22,7 @@ interface LeftNavSidebarProps {
   setActiveTab: (tab: TabType) => void
   liveCount: number
   battleCount: number
+  followersLiveCount: number
   presidentTabLabel: string
   showPresidentTab: boolean
 }
@@ -31,6 +32,7 @@ export default function LeftNavSidebar({
   setActiveTab,
   liveCount,
   battleCount,
+  followersLiveCount,
   showPresidentTab,
 }: LeftNavSidebarProps) {
   const { liveAuctions } = useLiveContent()
@@ -43,8 +45,8 @@ export default function LeftNavSidebar({
     count?: number
   }> = [
     { id: 'wall', label: 'Wall', icon: MessageCircle, activeGradient: 'from-pink-500 to-purple-600' },
-    { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount },
-    { id: 'universe', label: 'Universe', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: battleCount },
+    { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount + battleCount },
+    { id: 'universe', label: 'Universe', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
     { id: 'laws-fees', label: 'City Laws', icon: FileText, activeGradient: 'from-cyan-500 to-blue-600' },
     { id: 'leagues', label: 'Leagues', icon: Trophy, activeGradient: 'from-purple-500 to-indigo-600' },
     { id: 'academy', label: 'Academy', icon: BookOpen, activeGradient: 'from-emerald-500 to-teal-600' },

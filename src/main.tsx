@@ -70,7 +70,11 @@ const shouldIgnoreBugCenterError = (errorLike: unknown) => {
     text.includes('googletagmanager.com') ||
     text.includes('google-analytics.com') ||
     text.includes('/g/collect') ||
-    text.includes('/collect?v=2')
+    text.includes('/collect?v=2') ||
+    // Auth token expiration is normal — not a bug
+    text.includes('refresh_token_not_found') ||
+    text.includes('invalid refresh token') ||
+    text.includes('refresh token not found')
   )
 }
 

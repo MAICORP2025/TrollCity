@@ -210,6 +210,14 @@ const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer',
   const [showSignupFlash, setShowSignupFlash] = useState(false);
   const prevTotalUsersRef = useRef<number | null>(null);
 
+  // State to track error flash (red)
+  const [showErrorFlash, setShowErrorFlash] = useState(false);
+
+  // State to track new non-admin user coming online (white flash)
+  const [showOnlineFlash, setShowOnlineFlash] = useState(false);
+  const prevOnlineUserIdsRef = useRef<Set<string>>(new Set());
+  const isFirstOnlineCheckRef = useRef(true);
+
   const [actionTarget, setActionTarget] = useState<UserListItem | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [actionReason, setActionReason] = useState('');
@@ -387,6 +395,9 @@ const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
     } catch (err) {
       console.error('[RTC Monitor] Error:', err);
       toast.error('Failed to refresh RTC monitor');
+      // Trigger red error flash
+      setShowErrorFlash(true);
+      setTimeout(() => setShowErrorFlash(false), 5000);
     } finally {
       setIsLoading(false);
     }
@@ -1135,6 +1146,68 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     return () => clearInterval(interval);
   }, [isStaff]);
 
+  // Monitor for new non-admin users coming online to trigger white flash
+  useEffect(() => {
+    if (!isStaff) return;
+
+    const checkNewOnlineUsers = async () => {
+      try {
+        const twoMinutesAgo = new Date(Date.now() - 120000).toISOString();
+        const { data: presenceData, error } = await supabase
+          .from('user_presence')
+          .select('user_id')
+          .gt('last_seen_at', twoMinutesAgo)
+          .limit(1000);
+
+        if (error || !presenceData) return;
+
+        const currentUserIds = new Set(
+          (presenceData as Array<{ user_id: string | null }>)
+            .map(p => p.user_id)
+            .filter(Boolean) as string[]
+        );
+
+        // Skip comparison on first run — just seed the ref
+        if (isFirstOnlineCheckRef.current) {
+          prevOnlineUserIdsRef.current = currentUserIds;
+          isFirstOnlineCheckRef.current = false;
+          return;
+        }
+
+        // Find newly online user IDs
+        const newUserIds = [...currentUserIds].filter(id => !prevOnlineUserIdsRef.current.has(id));
+
+        if (newUserIds.length === 0) {
+          prevOnlineUserIdsRef.current = currentUserIds;
+          return;
+        }
+
+        // Check if any of the new users are non-admin
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('id, role, is_admin')
+          .in('id', newUserIds.slice(0, 20)); // batch check
+
+        const hasNonAdmin = (profiles || []).some(
+          (p: any) => !p.is_admin && !['admin', 'superadmin', 'ceo'].includes(p.role)
+        );
+
+        if (hasNonAdmin) {
+          setShowOnlineFlash(true);
+          setTimeout(() => setShowOnlineFlash(false), 3000);
+        }
+
+        prevOnlineUserIdsRef.current = currentUserIds;
+      } catch (err) {
+        // Silent fail for background polling
+      }
+    };
+
+    checkNewOnlineUsers();
+    const interval = setInterval(checkNewOnlineUsers, 15000); // Check every 15s
+    return () => clearInterval(interval);
+  }, [isStaff]);
+
    useEffect(() => {
      if (isOpen && isStaff) {
        timerRef.current = window.setInterval(() => setNow(Date.now()), 1000);
@@ -1213,19 +1286,30 @@ const renderFloatingButton = () => {
       const badgePy = isOpen ? 'py-0.5' : 'py-1';
       const badgeTextSize = isOpen ? 'text-[9px]' : 'text-[18px]';
 
-       return (
+      // Determine flash styling — priority: error (red) > signup (dark blue) > online (white)
+      const flashClass = showErrorFlash
+        ? 'ring-4 ring-red-500 ring-offset-2 animate-pulse shadow-[0_0_24px_rgba(239,68,68,0.7)]'
+        : showSignupFlash
+          ? 'ring-4 ring-blue-800 ring-offset-2 animate-pulse shadow-[0_0_24px_rgba(30,58,138,0.7)]'
+          : showOnlineFlash
+            ? 'ring-4 ring-white ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(255,255,255,0.5)]'
+            : '';
+
+      return (
          <div className="fixed bottom-[160px] right-4 z-[100] flex flex-col gap-2 md:bottom-[200px]">
            <button
              type="button"
              onClick={() => setIsOpen((open) => !open)}
-             className={`flex ${buttonSize} items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${
-               showSignupFlash ? 'ring-4 ring-blue-500 ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.6)]' : ''
-             }`}
+             className={`flex ${buttonSize} items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${flashClass}`}
              style={{
-               backgroundColor: stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
-               boxShadow: `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
+               backgroundColor: showErrorFlash
+                 ? '#ef4444'
+                 : stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
+               boxShadow: showErrorFlash
+                 ? '0 4px 24px rgba(239,68,68,0.5)'
+                 : `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
              }}
-             title={`RTC Monitor - ${stats.liveStreams} live streams`}
+             title={`RTC Monitor - ${stats.liveStreams} live streams${showErrorFlash ? ' ⚠ ERROR' : ''}`}
            >
              <Monitor className={`${iconSize} text-white`} />
              <span className={`inline-flex items-center justify-center rounded-full bg-emerald-300 ${badgePx} ${badgePy} ${badgeTextSize} font-bold leading-none text-black`}>

@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import ProfileFrame from '@/components/profile/ProfileFrame';
+import { useProfileFrameStore } from '@/stores/useProfileFrameStore';
 import {
   Home,
   Video,
@@ -51,6 +53,7 @@ import {
   Briefcase,
   Receipt,
   Sparkles,
+  Radio,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
@@ -108,9 +111,62 @@ function useRoleChecks(profile: any) {
   const isAgencyHR =
     role === String(UserRole.AGENCY_HR_MANAGER) ||
     trollRole === String(UserRole.AGENCY_HR_MANAGER) ||
-    !!(profile as any)?.is_agency_hr;
+    !!(profile as any)?.is_agency_hr ||
+    !!(profile as any)?.is_agency_hr_manager
 
-  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, role, trollRole };
+  const isAgencyLeader =
+    role === 'agency_leader' ||
+    trollRole === 'agency_leader' ||
+    !!(profile as any)?.is_agency_leader ||
+    isAgencyHR ||
+    isAdmin
+
+  const isAttorney =
+    role === 'attorney' ||
+    trollRole === 'attorney' ||
+    !!(profile as any)?.is_attorney
+
+  const isProsecutor =
+    role === 'prosecutor' ||
+    trollRole === 'prosecutor' ||
+    !!(profile as any)?.is_prosecutor
+
+  const isPastor =
+    role === 'pastor' ||
+    trollRole === 'pastor' ||
+    !!(profile as any)?.is_pastor
+
+  const isJournalist =
+    role === 'journalist' ||
+    trollRole === 'journalist' ||
+    !!(profile as any)?.is_journalist
+
+  const isNewsCaster =
+    role === 'tcnn_news_caster' ||
+    trollRole === 'tcnn_news_caster' ||
+    !!(profile as any)?.is_news_caster
+
+  const isChiefNewsCaster =
+    role === 'tcnn_chief_news_caster' ||
+    trollRole === 'tcnn_chief_news_caster' ||
+    !!(profile as any)?.is_chief_news_caster
+
+  const isCEOAssistant =
+    role === 'ceo_assistant' ||
+    trollRole === 'ceo_assistant' ||
+    !!(profile as any)?.is_ceo_assistant
+
+  const isNoahAssistant =
+    role === 'noah_assistant' ||
+    trollRole === 'noah_assistant' ||
+    !!(profile as any)?.is_noah_assistant
+
+  const isAuctioneer =
+    role === 'auctioneer' ||
+    trollRole === 'auctioneer' ||
+    !!(profile as any)?.is_auctioneer
+
+  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster, isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer, role, trollRole };
 }
 
 /* ─── Format helpers ─── */
@@ -147,13 +203,14 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   const displayName = profile?.display_name || profile?.username || 'Citizen';
   const avatarUrl = profile?.avatar_url;
   const prideActive = isPrideMonth();
+  const equippedFrame = useProfileFrameStore((s) => s.equippedFrame);
 
   if (collapsed) {
     return (
       <div className="flex items-center gap-2 px-2">
-        <div className="relative">
+        <div className="relative h-9 w-9">
           {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-9 w-9 rounded-full border-2 border-cyan-400/50 object-cover" />
+            <ProfileFrame frame={equippedFrame} avatarUrl={avatarUrl} username={displayName} size="xs" fillParent />
           ) : (
             <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-cyan-400/50 bg-gradient-to-br from-purple-600 to-cyan-500 text-xs font-black text-white">
               {displayName.charAt(0).toUpperCase()}
@@ -170,12 +227,14 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex items-center gap-2 px-2 py-1.5">
       {/* Avatar */}
-      <div className="relative shrink-0">
+      <div className="relative shrink-0 h-10 w-10 md:h-11 md:w-11">
         {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt=""
-            className={`h-10 w-10 rounded-full object-cover ring-2 md:h-11 md:w-11 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}
+          <ProfileFrame
+            frame={equippedFrame}
+            avatarUrl={avatarUrl}
+            username={displayName}
+            size="xs"
+            fillParent
           />
         ) : (
           <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-11 md:w-11 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}>
@@ -296,7 +355,11 @@ interface PageEntry {
 function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
   const { user, profile, logout } = useAuthStore();
   const navigate = useNavigate_fixed();
-  const { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR } = useRoleChecks(profile);
+  const {
+    isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR,
+    isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster,
+    isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer,
+  } = useRoleChecks(profile);
   const [search, setSearch] = useState('');
   const prideActive = isPrideMonth();
 
@@ -364,8 +427,35 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           ...(isPresident || isAdmin
             ? [{ label: 'President', icon: Crown as any, path: '/president' }]
             : []),
-          ...(isAgencyHR || isAdmin
+          ...(isAttorney || isAdmin
+            ? [{ label: 'Attorney Dashboard', icon: Scale as any, path: '/attorney' }]
+            : []),
+          ...(isProsecutor || isAdmin
+            ? [{ label: 'Prosecutor Dashboard', icon: Gavel as any, path: '/prosecutor' }]
+            : []),
+          ...(isPastor || isAdmin
+            ? [{ label: 'Pastor Dashboard', icon: Users as any, path: '/church/pastor' }]
+            : []),
+          ...(isAgencyHR || isAgencyLeader || isAdmin
             ? [{ label: 'Agency HR', icon: Briefcase as any, path: '/agency-hr-dashboard' }]
+            : []),
+          ...(isJournalist || isAdmin
+            ? [{ label: 'Journalist', icon: Newspaper as any, path: '/tcnn' }]
+            : []),
+          ...(isNewsCaster || isAdmin
+            ? [{ label: 'News Caster', icon: Radio as any, path: '/tcnn/broadcaster' }]
+            : []),
+          ...(isChiefNewsCaster || isAdmin
+            ? [{ label: 'Chief Caster', icon: Star as any, path: '/tcnn/dashboard' }]
+            : []),
+          ...(isCEOAssistant || isAdmin
+            ? [{ label: 'CEO Assistant', icon: Briefcase as any, path: '/ceo-assistant-dashboard' }]
+            : []),
+          ...(isNoahAssistant || isAdmin
+            ? [{ label: 'Noah Assistant', icon: Briefcase as any, path: '/noah-assistant-dashboard' }]
+            : []),
+          ...(isAuctioneer || isAdmin
+            ? [{ label: 'Auctioneer', icon: Gavel as any, path: '/auctions/studio' }]
             : []),
         ],
       },

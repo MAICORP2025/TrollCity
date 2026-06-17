@@ -43,6 +43,8 @@ export type MobileUserRole =
   | "user"
   | "staff"
   | "officer"
+  | "troll_officer"
+  | "lead_troll_officer"
   | "broadofficer"
   | "secretary"
   | "president"
@@ -62,6 +64,9 @@ export type MobileUserRole =
   | "troller"
   | "agency_hr"
   | "agency_hr_manager"
+  | "agency_leader"
+  | "ceo_assistant"
+  | "noah_assistant"
   | string;
 
 export interface MobileRouteItem {
@@ -267,7 +272,7 @@ export const mobileRoutes: MobileRouteItem[] = [
     element: <MobilePlaceholder title="Staff Dashboard" />,
     icon: Shield,
     priority: 100,
-    roles: ["staff", "officer", "broadofficer", "secretary", "president", "ceo", "admin"],
+    roles: ["staff", "officer", "troll_officer", "lead_troll_officer", "broadofficer", "secretary", "president", "ceo", "admin"],
     showInBottomBubble: true,
   },
   {
@@ -277,7 +282,7 @@ export const mobileRoutes: MobileRouteItem[] = [
     element: <MobilePlaceholder title="Officer Dashboard" />,
     icon: Shield,
     priority: 110,
-    roles: ["officer", "broadofficer", "president", "ceo", "admin"],
+    roles: ["officer", "troll_officer", "lead_troll_officer", "broadofficer", "president", "ceo", "admin"],
     showInBottomBubble: true,
   },
   {
@@ -287,7 +292,7 @@ export const mobileRoutes: MobileRouteItem[] = [
     element: <MobilePlaceholder title="Night Watch" />,
     icon: Radio,
     priority: 120,
-    roles: ["staff", "officer", "broadofficer", "president", "ceo", "admin"],
+    roles: ["staff", "officer", "troll_officer", "lead_troll_officer", "broadofficer", "president", "ceo", "admin"],
     showInBottomBubble: true,
   },
   {
@@ -331,6 +336,8 @@ export const mobileRoutes: MobileRouteItem[] = [
       "troll_court_attorney",
       "troll_court_prosecutor",
       "officer",
+      "troll_officer",
+      "lead_troll_officer",
       "broadofficer",
       "president",
       "ceo",
@@ -395,7 +402,27 @@ export const mobileRoutes: MobileRouteItem[] = [
     element: <MobilePlaceholder title="Agency HR" />,
     icon: Briefcase,
     priority: 220,
-    roles: ["agency_hr", "agency_hr_manager", "org_admin", "president", "ceo", "admin"],
+    roles: ["agency_hr", "agency_hr_manager", "agency_leader", "org_admin", "president", "ceo", "admin"],
+    showInBottomBubble: true,
+  },
+  {
+    key: "ceo-assistant",
+    label: "CEO Assistant",
+    path: "/ceo-assistant-dashboard",
+    element: <MobilePlaceholder title="CEO Assistant" />,
+    icon: Briefcase,
+    priority: 230,
+    roles: ["ceo_assistant", "ceo", "admin"],
+    showInBottomBubble: true,
+  },
+  {
+    key: "noah-assistant",
+    label: "Noah Assistant",
+    path: "/noah-assistant-dashboard",
+    element: <MobilePlaceholder title="Noah Assistant" />,
+    icon: Briefcase,
+    priority: 240,
+    roles: ["noah_assistant", "ceo", "admin"],
     showInBottomBubble: true,
   },
 

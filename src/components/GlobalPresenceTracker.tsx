@@ -51,7 +51,7 @@ export default function GlobalPresenceTracker() {
 
       // Also upsert to user_presence for real-time presence tracking
       if (isOnline) {
-        await supabase.from('user_presence').upsert(
+        const { error: presenceError } = await supabase.from('user_presence').upsert(
           {
             user_id: user.id,
             last_seen_at: new Date().toISOString(),
@@ -60,6 +60,16 @@ export default function GlobalPresenceTracker() {
           },
           { onConflict: 'user_id' },
         );
+        if (presenceError) {
+          // RLS errors (42501) can occur if the user's session is expired
+          // or the RLS migration hasn't been applied. Don't spam the console.
+          const code = (presenceError as any)?.code;
+          if (code === '42501') {
+            if (import.meta.env.DEV) console.warn('[GlobalPresenceTracker] RLS blocked user_presence upsert — session may be expired');
+          } else {
+            console.error('[GlobalPresenceTracker] Failed to upsert user_presence:', presenceError);
+          }
+        }
       }
     } catch (error) {
       console.error('[GlobalPresenceTracker] Failed to update online status:', error);
@@ -88,7 +98,7 @@ export default function GlobalPresenceTracker() {
         // 1. Send heartbeat - immediate on mount, then every 30s
         if (isInitial || now - heartbeatRef.current >= 30000) {
           heartbeatRef.current = now;
-          await supabase.from('user_presence').upsert(
+          const { error: heartbeatError } = await supabase.from('user_presence').upsert(
             {
               user_id: user.id,
               last_seen_at: new Date().toISOString(),
@@ -97,6 +107,14 @@ export default function GlobalPresenceTracker() {
             },
             { onConflict: 'user_id' },
           );
+          if (heartbeatError) {
+            const code = (heartbeatError as any)?.code;
+            if (code === '42501') {
+              if (import.meta.env.DEV) console.warn('[GlobalPresenceTracker] RLS blocked user_presence heartbeat — session may be expired');
+            } else {
+              console.error('[GlobalPresenceTracker] Failed to upsert user_presence heartbeat:', heartbeatError);
+            }
+          }
         }
 
         // 2. Fetch total online count - immediate on mount, then every 30s

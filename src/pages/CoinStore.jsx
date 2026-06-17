@@ -23,6 +23,7 @@ import ManualPaymentModal from '@/components/broadcast/ManualPaymentModal';
 import PayPalPaymentModal from '@/components/broadcast/PayPalPaymentModal';
 import TrollPassBanner from '@/components/ui/TrollPassBanner';
 import { toast } from 'sonner';
+import VerifiedBadgeCard from '@/components/ui/VerifiedBadgeCard';
 
 const MANUAL_PROVIDERS = [
   { id: 'venmo', name: 'Venmo', icon: '📱', color: 'bg-[#008CFF]' },
@@ -1764,6 +1765,10 @@ useEffect(() => {
           {/* COINS TAB (Original coin purchase) */}
           {tab === 'coins' && (
             <>
+              <div className="mb-6">
+                <VerifiedBadgeCard />
+              </div>
+
               <div className="mb-6">
                 <TrollPassBanner
                   onPurchase={async () => {

@@ -19,7 +19,7 @@ export default function EmptyStateLiveNow() {
             No one is live right now—start the vibe!
           </h3>
           <p className="text-gray-400 text-sm">
-            The stage is empty. Be the first to go live or explore our amazing community of creators.
+            The stage is empty. Follow creators to see them here when they go live, or explore the community.
           </p>
         </div>
 

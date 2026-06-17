@@ -672,7 +672,7 @@ export default function CashoutRequestPage() {
 
           <p className="text-xs text-gray-500 text-center">
             By requesting a cashout, you confirm that the payout information is correct.
-            Cashout requests are manually reviewed by our admin team. Processing time: 1-3 business days.
+            Cashout requests are manually reviewed by our admin team. Processing time: 30 minutes
           </p>
         </div>
 

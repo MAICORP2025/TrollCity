@@ -208,6 +208,13 @@ export default function BottomNavigation() {
     !!(profile as any)?.is_agency_hr ||
     !!(profile as any)?.is_agency_hr_manager
 
+  const isAgencyLeader =
+    profileRole === 'agency_leader' ||
+    profileTrollRole === 'agency_leader' ||
+    !!(profile as any)?.is_agency_leader ||
+    isAgencyHR ||
+    isAdmin
+
   const isCEOAssistant =
     profileRole === 'ceo_assistant' ||
     profileTrollRole === 'ceo_assistant' ||
@@ -232,6 +239,11 @@ export default function BottomNavigation() {
     profileRole === 'tcnn_chief_news_caster' ||
     profileTrollRole === 'tcnn_chief_news_caster' ||
     !!(profile as any)?.is_chief_news_caster
+
+  const isPastorCheck =
+    profileRole === 'pastor' ||
+    profileTrollRole === 'pastor' ||
+    !!(profile as any)?.is_pastor
 
   const canSeeCourt = !!user && !!profile
 
@@ -725,30 +737,43 @@ export default function BottomNavigation() {
       )
     }
 
+    if (isAttorney || isProsecutor || isAdmin) {
+      if (isAttorney || isAdmin) {
+        pages.push({ category: 'Government', label: 'Attorney Dashboard', icon: Scale, path: '/attorney' })
+      }
+      if (isProsecutor || isAdmin) {
+        pages.push({ category: 'Government', label: 'Prosecutor Dashboard', icon: Gavel, path: '/prosecutor' })
+      }
+    }
+
+    if (isAdmin && isPastorCheck) {
+      pages.push({ category: 'Government', label: 'Pastor Dashboard', icon: Users, path: '/church/pastor' })
+    }
+
     if (!!profile && canAccessTromail(profile)) {
       pages.push({ category: 'Government', label: 'Tromail', icon: Mail, path: '/tromail' })
     }
 
     return pages
-  }, [isOfficer, isSecretary, isAdmin, isLead, isPresident, canSeeCourt, profile])
+  }, [isOfficer, isSecretary, isAdmin, isLead, isPresident, isAttorney, isProsecutor, canSeeCourt, profile])
 
   const auctioneerPages: MenuOption[] = useMemo(() => {
     if (!isAuctioneer && !isAdmin) return []
     return [
-      { category: 'Auctioneer', label: 'Auction Dashboard', icon: LayoutDashboard, path: '/auction/dashboard' },
-      { category: 'Auctioneer', label: 'Auction Studio', icon: Video, path: '/auction/studio' },
-      { category: 'Auctioneer', label: 'My Shows', icon: Radio, path: '/auction/my-shows' },
+      { category: 'Auctioneer', label: 'Auction Dashboard', icon: LayoutDashboard, path: '/auctions/studio' },
+      { category: 'Auctioneer', label: 'Auction Studio', icon: Video, path: '/auctions/studio' },
+      { category: 'Auctioneer', label: 'My Shows', icon: Radio, path: '/auctions/my-shows' },
       { category: 'Auctioneer', label: 'Scanner', icon: Scan, path: '/auctioneer/scanner' },
-      { category: 'Auctioneer', label: 'Lots', icon: Package, path: '/auction/studio/lots' },
-      { category: 'Auctioneer', label: 'Bidders', icon: Users, path: '/auction/bidders' },
-      { category: 'Auctioneer', label: 'Sales', icon: DollarSign, path: '/auction/sales' },
-      { category: 'Auctioneer', label: 'Reports', icon: BarChart3, path: '/auction/reports' },
-      { category: 'Auctioneer', label: 'Analytics', icon: TrendingUp, path: '/auction/analytics' },
-      { category: 'Auctioneer', label: 'Settings', icon: Settings, path: '/auction/settings' },
-      { category: 'Auctioneer', label: 'Inventory', icon: Warehouse, path: '/auction/inventory' },
-      { category: 'Auctioneer', label: 'Orders', icon: ClipboardList, path: '/auction/orders' },
-      { category: 'Auctioneer', label: 'Packing', icon: Package, path: '/auction/packing' },
-      { category: 'Auctioneer', label: 'Devices', icon: Smartphone, path: '/auction/devices' },
+      { category: 'Auctioneer', label: 'Lots', icon: Package, path: '/auctions/studio/lots' },
+      { category: 'Auctioneer', label: 'Bidders', icon: Users, path: '/auctions/bidders' },
+      { category: 'Auctioneer', label: 'Sales', icon: DollarSign, path: '/auctions/sales' },
+      { category: 'Auctioneer', label: 'Reports', icon: BarChart3, path: '/auctions/reports' },
+      { category: 'Auctioneer', label: 'Analytics', icon: TrendingUp, path: '/auctions/analytics' },
+      { category: 'Auctioneer', label: 'Settings', icon: Settings, path: '/auctions/settings' },
+      { category: 'Auctioneer', label: 'Inventory', icon: Warehouse, path: '/auctions/inventory' },
+      { category: 'Auctioneer', label: 'Orders', icon: ClipboardList, path: '/auctions/orders' },
+      { category: 'Auctioneer', label: 'Packing', icon: Package, path: '/auctions/packing' },
+      { category: 'Auctioneer', label: 'Devices', icon: Smartphone, path: '/auctions/devices' },
     ]
   }, [isAuctioneer, isAdmin])
 
@@ -770,17 +795,16 @@ export default function BottomNavigation() {
       { category: 'Broadcaster', label: 'Creator Dashboard', icon: LayoutDashboard, path: '/creator/dashboard' },
       { category: 'Broadcaster', label: 'Creator Onboarding', icon: Sparkles, path: '/creator/onboarding' },
       { category: 'Broadcaster', label: 'My Earnings', icon: DollarSign, path: '/creator/earnings' },
-      { category: 'Broadcaster', label: 'Shop', icon: Store, path: '/shop' },
     ]
   }, [isBroadcaster, isAdmin])
 
   const agencyHRPages: MenuOption[] = useMemo(() => {
-    if (!isAgencyHR && !isAdmin) return []
+    if (!isAgencyHR && !isAgencyLeader && !isAdmin) return []
     return [
       { category: 'Agency HR', label: 'HR Dashboard', icon: Users, path: '/agency-hr-dashboard' },
       { category: 'Agency HR', label: 'My Agency', icon: Building2, path: '/agency-dashboard' },
     ]
-  }, [isAgencyHR, isAdmin])
+  }, [isAgencyHR, isAgencyLeader, isAdmin])
 
   const ceoAssistantPages: MenuOption[] = useMemo(() => {
     const pages: MenuOption[] = []
@@ -803,7 +827,7 @@ export default function BottomNavigation() {
       pages.push({ category: 'News', label: 'News Caster', icon: Radio, path: '/tcnn/broadcaster' })
     }
     if (isChiefNewsCaster || isAdmin) {
-      pages.push({ category: 'News', label: 'Chief Caster', icon: Star, path: '/tcnn/chief' })
+      pages.push({ category: 'News', label: 'Chief Caster', icon: Star, path: '/tcnn/dashboard' })
     }
     return pages
   }, [isJournalist, isNewsCaster, isChiefNewsCaster, isAdmin])

@@ -62,6 +62,9 @@ export interface Stream {
   side_b_score?: number;
   team_a_members?: string[];
   team_b_members?: string[];
+  // State battle fields
+  state_battle_mode?: 'none' | 'state' | null;
+  state_battle_state_code?: string | null;
   // Recording/VOD fields
   thumbnail_url?: string | null;
   recording_url?: string | null;
