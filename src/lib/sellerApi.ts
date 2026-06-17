@@ -3,6 +3,7 @@
 // ==========================================
 
 import { supabase } from './supabase';
+import { validateFile, FILE_VALIDATION } from './fileValidation';
 import type { 
   SellerTier, 
   MarketplaceReview, 
@@ -260,6 +261,9 @@ export async function uploadReviewImage(
   file: File,
   userId: string
 ): Promise<{ url: string; metadata: MediaMetadata }> {
+  const validation = validateFile(file, FILE_VALIDATION.image.types, FILE_VALIDATION.image.maxSize, 'Review image')
+  if (!validation.valid) throw new Error(validation.error)
+
   const fileExt = file.name.split('.').pop();
   const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
   
@@ -298,7 +302,11 @@ export async function uploadAppealMedia(
   file: File,
   userId: string
 ): Promise<{ url: string; metadata: MediaMetadata }> {
-  const isVideo = file.type.startsWith('video/');
+  const isVideo = file.type.startsWith('video/')
+  const allowedTypes = isVideo ? FILE_VALIDATION.videoShort.types : FILE_VALIDATION.image.types
+  const maxSize = isVideo ? FILE_VALIDATION.videoShort.maxSize : FILE_VALIDATION.image.maxSize
+  const validation = validateFile(file, allowedTypes, maxSize, isVideo ? 'Appeal video' : 'Appeal image')
+  if (!validation.valid) throw new Error(validation.error)
   const bucket = isVideo ? 'appeal-media' : 'appeal-media';
   
   const fileExt = file.name.split('.').pop();

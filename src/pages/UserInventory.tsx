@@ -6,17 +6,18 @@ import { toast } from 'sonner'
 import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone, X, Car, Home, ChevronDown, ChevronUp } from 'lucide-react'
 import { trollCityTheme } from '../styles/trollCityTheme'
 import { PERK_CONFIG } from '../lib/perkSystem'
-import { ENTRANCE_EFFECTS_MAP } from '../lib/entranceEffects'
 import { PERKS as LEVEL_PERKS } from '@/config/levelSystem'
 import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPicker'
 import TitleDeedModal from '../components/TitleDeedModal'
 import ShopConsumablesSection from '../components/ShopConsumablesSection'
+import ProfileFrame from '../components/profile/ProfileFrame'
+import { RARITY_COLORS, RARITY_LABELS } from '../config/profileFrames'
+import { useProfileFrameStore } from '../stores/useProfileFrameStore'
 
 export default function UserInventory({ embedded = false }: { embedded?: boolean }) {
   const { user, refreshProfile } = useAuthStore()
   const navigate = useNavigate()
   const [inventory, setInventory] = useState<any[]>([])
-  const [entranceEffects, setEntranceEffects] = useState<any[]>([])
   const [perks, setPerks] = useState<any[]>([])
   const [insurances, setInsurances] = useState<any[]>([])
   const [callSounds, setCallSounds] = useState<any[]>([])
@@ -31,10 +32,19 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
     perks: true,
     insurance: true,
     roleBonus: true,
-    entranceEffects: true,
     callSounds: true,
+    profileFrames: true,
     items: true
   });
+
+  const {
+    catalog: frameCatalog,
+    ownedFrames: userOwnedFrames,
+    equippedFrame,
+    loadUserFrames: loadFrames,
+    equipFrame: equipProfileFrame,
+    isFrameOwned,
+  } = useProfileFrameStore();
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
@@ -67,6 +77,11 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
         supabase.from('vehicles_catalog').select('*')
       ]);
 
+      // Load profile frames
+      if (user!.id) {
+        loadFrames(user!.id);
+      }
+
       const inventoryRes = results[0];
       const effectsRes = results[1];
       const perksRes = results[2];
@@ -97,15 +112,6 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
           }
         }
         setInventory(inventoryData)
-      }
-
-      // Handle effects
-      if (effectsRes.data) {
-        const enrichedEffects = effectsRes.data.map((e: any) => ({
-          ...e,
-          config: ENTRANCE_EFFECTS_MAP[e.effect_id] || null
-        }));
-        setEntranceEffects(enrichedEffects)
       }
 
       // Handle perks
@@ -393,39 +399,6 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
     } catch (err) {
       console.error('Error deleting item:', err);
       toast.error('Failed to delete item');
-    }
-  };
-
-  const toggleEntranceEffect = async (effectId: string, isActive: boolean) => {
-    try {
-      // If we are deactivating, just set active effect to null
-      const newEffectId = isActive ? null : effectId;
-      
-      const { error } = await supabase.rpc('set_active_entrance_effect', { 
-        p_effect_id: newEffectId,
-        p_item_type: 'effect'
-      });
-
-      if (error) throw error;
-
-      // Update local state
-      setActiveItems(prev => {
-        const newSet = new Set(prev);
-        // Remove all entrance effects from active set (since DB deactivates all)
-        entranceEffects.forEach(e => newSet.delete(e.effect_id));
-
-        // Add new one if activating
-        if (newEffectId) {
-          newSet.add(newEffectId);
-        }
-        return newSet;
-      });
-
-      toast.success(isActive ? 'Effect deactivated' : 'Effect activated');
-      loadInventory(); // Reload to be sure
-    } catch (err) {
-      console.error('Error toggling effect:', err);
-      toast.error('Failed to toggle effect');
     }
   };
 
@@ -806,7 +779,7 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
               ))
             )}
           </div>
-        ) : (inventory.length === 0 && entranceEffects.length === 0 && perks.length === 0 && insurances.length === 0 && callSounds.length === 0) ? (
+        ) : (inventory.length === 0 && perks.length === 0 && insurances.length === 0 && callSounds.length === 0) ? (
           <div className="text-center py-12">
             <Package className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">Your Inventory is Empty</h2>
@@ -957,108 +930,51 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
               </div>
             )}
 
-            {/* Entrance Effects Section */}
-            {entranceEffects.length > 0 && (
+            {/* Entrance Effects removed */}
+
+            {/* Profile Frames Section */}
+            {userOwnedFrames.length > 0 && (
               <div>
-                <div 
+                <div
                   className="flex items-center justify-between cursor-pointer mb-4"
-                  onClick={() => toggleSection('entranceEffects')}
+                  onClick={() => toggleSection('profileFrames')}
                 >
                   <h2 className="text-2xl font-bold flex items-center gap-2">
-                    <Sparkles className="w-6 h-6 text-yellow-400" />
-                    Entrance Effects
+                    <Sparkles className="w-6 h-6 text-pink-400" />
+                    Profile Frames
                   </h2>
-                  {expandedSections.entranceEffects ? <ChevronUp className="w-6 h-6" /> : <ChevronDown className="w-6 h-6" />}
+                  {expandedSections.profileFrames ? <ChevronUp className="w-6 h-6" /> : <ChevronDown className="w-6 h-6" />}
                 </div>
-                {expandedSections.entranceEffects && (
+                {expandedSections.profileFrames && (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                  {entranceEffects.map((effect) => {
-                    const isActive = activeItems.has(effect.effect_id);
-                    const config = effect.config || {};
-                    
-                    const rarityColor = (() => {
-                      switch (config.rarity?.toLowerCase()) {
-                        case 'legendary': return 'border-yellow-500/50 hover:border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.15)]';
-                        case 'epic': return 'border-purple-500/50 hover:border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.15)]';
-                        case 'rare': return 'border-blue-500/50 hover:border-blue-400';
-                        case 'uncommon': return 'border-green-500/50 hover:border-green-400';
-                        default: return `${trollCityTheme.borders.glass} hover:border-white/30`;
-                      }
-                    })();
-
+                  {userOwnedFrames.map((uf) => {
+                    const frame = frameCatalog.find(f => f.id === uf.frame_id);
+                    if (!frame) return null;
+                    const isEquipped = uf.is_equipped;
+                    const rarity = RARITY_COLORS[frame.rarity];
                     return (
-                      <div key={effect.id} className={`relative ${trollCityTheme.backgrounds.card} rounded-xl p-6 border transition-all group ${rarityColor}`}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm('Delete this effect?')) {
-                              deleteItem(effect.id, effect.effect_id, 'user_entrance_effects', setEntranceEffects);
-                            }
-                          }}
-                          className="absolute top-4 right-4 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Delete Effect"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                        <div className="mb-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-2xl">{config.icon || <Zap className="w-5 h-5 text-yellow-400" />}</span>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                              config.rarity === 'Legendary' ? 'text-yellow-400' :
-                              config.rarity === 'Epic' ? 'text-purple-400' :
-                              config.rarity === 'Rare' ? 'text-blue-400' :
-                              config.rarity === 'Uncommon' ? 'text-green-400' :
-                              trollCityTheme.text.muted
-                            }`}>
-                              {config.rarity || 'Common'} Effect
-                            </span>
-                            {isActive && (
-                              <span className="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto">
-                                ACTIVE
-                              </span>
-                            )}
-                          </div>
-                          <h3 className="text-xl font-bold text-white mb-1">
-                            {config.name || effect.effect_id}
-                          </h3>
-                          <p className={`${trollCityTheme.text.muted} text-sm mb-3 min-h-[40px] line-clamp-2`}>
-                            {config.description || 'No description available'}
-                          </p>
-                          
-                          {config.category && (
-                             <div className="mb-3">
-                                <span className={`inline-block ${trollCityTheme.backgrounds.input} ${trollCityTheme.text.muted} text-[10px] uppercase font-bold px-2 py-1 rounded ${trollCityTheme.borders.glass} border`}>
-                                  {config.category.replace(/_/g, ' ')}
-                                </span>
-                             </div>
-                          )}
-
-                          <p className={`text-xs ${trollCityTheme.text.secondary}`}>
-                            Acquired: {new Date(effect.purchased_at || effect.acquired_at).toLocaleDateString()}
-                          </p>
+                      <div key={uf.id} className={`${trollCityTheme.components.card} rounded-xl p-5 border transition-all ${isEquipped ? 'border-purple-400/40 bg-purple-500/10' : 'border-white/10 hover:border-white/20'}`}>
+                        <div className="flex justify-center mb-3">
+                          <ProfileFrame frame={frame} avatarUrl={user?.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id}`} size="md" showBadge />
+                        </div>
+                        <div className="text-center mb-2">
+                          <h3 className="font-bold text-white text-sm">{frame.name}</h3>
+                          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: rarity.text }}>
+                            {RARITY_LABELS[frame.rarity]}
+                          </span>
                         </div>
                         <button
-                          onClick={() => toggleEntranceEffect(effect.effect_id, isActive)}
-                          className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                            isActive
-                              ? 'bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-600/50'
-                              : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700'
+                          onClick={() => equipProfileFrame(isEquipped ? null : frame.id)}
+                          className={`w-full py-2 rounded-lg text-xs font-bold transition-all ${
+                            isEquipped
+                              ? 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30'
+                              : 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30'
                           }`}
                         >
-                          {isActive ? (
-                            <>
-                              <XCircle className="w-4 h-4" />
-                              Deactivate
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="w-4 h-4" />
-                              Activate
-                            </>
-                          )}
+                          {isEquipped ? '✓ Equipped' : 'Equip'}
                         </button>
                       </div>
-                    )
+                    );
                   })}
                 </div>
                 )}

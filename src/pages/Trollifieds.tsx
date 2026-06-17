@@ -31,6 +31,7 @@ import { toast } from 'sonner'
 
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import { validateFile, FILE_VALIDATION } from '../lib/fileValidation'
 
 const PREMIUM_FEATURES = {
   featured: {
@@ -722,6 +723,12 @@ export default function Trollifieds() {
       const imageUrls: string[] = []
 
       for (const image of createForm.images.slice(0, 5)) {
+        const validation = validateFile(image, FILE_VALIDATION.image.types, FILE_VALIDATION.image.maxSize, 'Listing image')
+        if (!validation.valid) {
+          toast.error(validation.error!)
+          setCreating(false)
+          return
+        }
         const fileExt = image.name.split('.').pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`
         const filePath = `marketplace/${user.id}/${fileName}`

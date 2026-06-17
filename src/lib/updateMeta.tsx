@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
@@ -63,6 +64,7 @@ export default function ArticleReader() {
   const { hasAnyRole } = useTCNNRoles(user?.id);
   
   const [article, setArticle] = useState<TCNNArticle | null>(null);
+  const sanitizedContent = article?.content ? DOMPurify.sanitize(article.content) : '';
   const [journalist, setJournalist] = useState<TCNNJournalistProfile | null>(null);
   const [relatedArticles, setRelatedArticles] = useState<RelatedArticle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -434,7 +436,7 @@ export default function ArticleReader() {
             <div className="prose prose-invert prose-lg max-w-none">
               <div 
                 className="text-gray-300 leading-relaxed whitespace-pre-wrap"
-                dangerouslySetInnerHTML={{ __html: article.content }}
+                dangerouslySetInnerHTML={{ __html: sanitizedContent }}
               />
             </div>
 

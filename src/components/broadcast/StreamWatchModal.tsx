@@ -3,7 +3,6 @@ import { X, AlertTriangle } from 'lucide-react';
 import Hls from 'hls.js';
 
 import { useAuthStore } from '../../lib/store';
-import { ListenerEntranceEffect } from '../../hooks/useListenerEntranceEffect';
 import LiveKitViewerPlayer from './LiveKitViewerPlayer';
 
 
@@ -129,14 +128,6 @@ function HLSPlayer({ stream, hlsUrl, onClose, userId, username, isGuest }: HLSPl
           className="w-full h-full"
         />
 
-        <ListenerEntranceEffect
-          streamId={stream.id}
-          isHost={false}
-          isGuest={isGuest}
-          canPublish={false}
-          userId={userId}
-          username={username}
-        />
       </div>
     </div>
   );
@@ -175,14 +166,6 @@ export default function StreamWatchModal({ stream, onClose }: StreamWatchModalPr
           roomName={livekitRoomName}
         />
 
-        <ListenerEntranceEffect
-            streamId={stream.id}
-            isHost={false}
-            isGuest={isGuest}
-            canPublish={false}
-            userId={userId}
-            username={username}
-        />
       </div>
     </div>
   );

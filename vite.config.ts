@@ -45,7 +45,8 @@ export default defineConfig(({ mode }) => {
       __BUILD_TIME__: JSON.stringify(buildTime),
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
-      'import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY': JSON.stringify(env.VITE_SUPABASE_SERVICE_ROLE_KEY),
+      // NOTE: VITE_SUPABASE_SERVICE_ROLE_KEY is intentionally NOT exposed to the client.
+      // It should only be used in server-side code and edge functions.
     },
     plugins: [
       react(),

@@ -2,6 +2,7 @@ import React, {useRef, useState, useEffect} from 'react'
 import Tesseract from 'tesseract.js'
 import * as faceapi from 'face-api.js'
 import {supabase} from '../lib/supabase'
+import {validateFile, FILE_VALIDATION} from '../lib/fileValidation'
 import {sendNotification} from '../lib/sendNotification'
 
 type Result = {
@@ -47,7 +48,15 @@ export default function IdVerifyClient({onComplete}:{onComplete:(r:Result)=>void
 
   function handleIdFileChange(e:React.ChangeEvent<HTMLInputElement>){
     const f = e.target.files && e.target.files[0]
-    if(f) setIdFile(f)
+    if(f) {
+      const validation = validateFile(f, FILE_VALIDATION.imageStrict.types, FILE_VALIDATION.imageStrict.maxSize, 'ID document')
+      if (!validation.valid) {
+        alert(validation.error)
+        e.target.value = ''
+        return
+      }
+      setIdFile(f)
+    }
   }
 
   async function captureSelfie():Promise<Blob|null>{

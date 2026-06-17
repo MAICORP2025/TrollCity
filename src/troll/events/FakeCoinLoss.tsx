@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Rarity } from '../useTrollEngine';
+import { playSoundBuffer } from '../soundUtils';
 
 interface FakeCoinLossProps {
   rarity: Rarity;
@@ -9,11 +10,17 @@ const FakeCoinLoss: React.FC<FakeCoinLossProps> = ({ rarity }) => {
   const [coinCount, setCoinCount] = useState<number>(1000); // Fake initial coin count
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [showRecovery, setShowRecovery] = useState<boolean>(false);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     // Start animation after a short delay
     const timer = setTimeout(() => {
       setIsAnimating(true);
+      // Play coin loss sound
+      if (!hasPlayedRef.current) {
+        hasPlayedRef.current = true;
+        playSoundBuffer('/sounds/entrance/coins.mp3', 0.5);
+      }
     }, 100);
 
     // Simulate coin loss
@@ -27,6 +34,7 @@ const FakeCoinLoss: React.FC<FakeCoinLossProps> = ({ rarity }) => {
           // Show recovery after a delay
           setTimeout(() => {
             setShowRecovery(true);
+            playSoundBuffer('/sounds/entrance/coins.mp3', 0.6);
           }, 1000);
         }
 

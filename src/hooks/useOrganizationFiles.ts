@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { validateFile, FILE_VALIDATION } from '@/lib/fileValidation'
 import { useAuthStore } from '@/lib/store'
 import { toast } from 'sonner'
 
@@ -68,6 +69,13 @@ export function useOrganizationFiles(orgId?: string | null) {
     description = ''
   ) => {
     if (!orgId || !profile?.id) return false
+
+    const validation = validateFile(file, [...FILE_VALIDATION.image.types, ...FILE_VALIDATION.audio.types, ...FILE_VALIDATION.pdf.types, 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/plain', 'text/csv'], 50 * 1024 * 1024, 'File')
+    if (!validation.valid) {
+      toast.error(validation.error!)
+      return false
+    }
+
     setUploading(true)
     try {
       const safeFolder = cleanSegment(folder || 'General')

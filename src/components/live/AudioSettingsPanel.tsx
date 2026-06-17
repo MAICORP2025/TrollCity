@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
+import { validateFile, FILE_VALIDATION } from '../../lib/fileValidation';
 import {
   Mic,
   Upload,
@@ -160,6 +161,13 @@ export default function AudioSettingsPanel({ userId, userLevel }: AudioSettingsP
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const validation = validateFile(file, FILE_VALIDATION.audio.types, FILE_VALIDATION.audio.maxSize, 'Audio file')
+    if (!validation.valid) {
+      setUploadError(validation.error!)
+      setUploading(false)
+      return
+    }
 
     setUploadError(null);
     setUploading(true);

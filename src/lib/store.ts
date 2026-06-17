@@ -263,7 +263,7 @@ function isDev() {
 }
 
 function getAdminEmail() {
-  return String((import.meta as any).env?.VITE_ADMIN_EMAIL || 'trollcity2025@gmail.com').toLowerCase()
+  return String((import.meta as any).env?.VITE_ADMIN_EMAIL || '').toLowerCase()
 }
 
 function getAuthEmail(state: AuthState) {

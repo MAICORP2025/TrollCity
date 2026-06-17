@@ -3,6 +3,7 @@ import { X, MessageSquare, Video, Sword, Users, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
+import { validateFile, FILE_VALIDATION } from '../../lib/fileValidation'
 import { WallPostType } from '../../types/trollWall'
 import { useNavigate } from 'react-router-dom'
 import MentionTextarea from '../MentionTextarea'
@@ -67,8 +68,12 @@ export default function CreatePostModal({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
-      if (file.size > 50 * 1024 * 1024) { // 50MB limit
-        toast.error('File size must be less than 50MB')
+      const allowedTypes = postType === 'video' ? FILE_VALIDATION.videoShort.types : FILE_VALIDATION.image.types
+      const maxSize = postType === 'video' ? FILE_VALIDATION.videoShort.maxSize : FILE_VALIDATION.image.maxSize
+      const validation = validateFile(file, allowedTypes, maxSize, postType === 'video' ? 'Video' : 'Image')
+      if (!validation.valid) {
+        toast.error(validation.error!)
+        e.target.value = ''
         return
       }
       setVideoFile(file)

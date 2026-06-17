@@ -237,39 +237,317 @@ export default function SpreadsheetEditor({
     }
   }, [canEdit, cells, mergedCells, spreadsheet?.id])
 
-  function evaluateFormula(formula: string, cellMap: Record<string, OfficeSpreadsheetCell>, resolve: (ref: string, stack?: string[]) => string, stack: string[] = []) {
-    let expression = formula.trim()
-    expression = expression.replace(/TODAY\(\)/g, `'${new Date().toLocaleDateString()}'`)
-    expression = expression.replace(/NOW\(\)/g, `'${new Date().toLocaleString()}'`)
-    expression = expression.replace(/AND\(([^)]+)\)/g, '($1)')
-    expression = expression.replace(/OR\(([^)]+)\)/g, '($1)')
-    expression = expression.replace(/IF\(([^,]+),([^,]+),([^)]+)\)/g, '($1 ? $2 : $3)')
-    expression = expression.replace(/([A-Z]+[0-9]+):([A-Z]+[0-9]+)/gi, 'RANGE("$1:$2")')
-    expression = expression.replace(/([A-Z]+[0-9]+)(?![A-Z0-9_])/gi, 'CELL("$1")')
-    expression = expression.replace(/RANGE\("([^"]+)"\)/g, (_, range: string) => parseRange(range).map((ref) => resolve(ref, stack)).join(','))
-    expression = expression.replace(/CELL\("([^"]+)"\)/g, (_, ref: string) => resolve(ref, stack))
-    expression = expression.replace(/SUM\(([^)]+)\)/g, (_, values: string) => `sum(${values})`)
-    expression = expression.replace(/AVERAGE\(([^)]+)\)/g, (_, values: string) => `avg(${values})`)
-    expression = expression.replace(/COUNT\(([^)]+)\)/g, (_, values: string) => `count(${values})`)
-    expression = expression.replace(/MIN\(([^)]+)\)/g, (_, values: string) => `min(${values})`)
-    expression = expression.replace(/MAX\(([^)]+)\)/g, (_, values: string) => `max(${values})`)
-    expression = expression.replace(/ROUND\(([^,]+),\s*([0-9]+)\)/g, 'round($1, $2)')
+function evaluateFormula(formula: string, cellMap: Record<string, OfficeSpreadsheetCell>, resolve: (ref: string, stack?: string[]) => string, stack: string[] = []) {
+    let expr = formula.trim()
 
-    const fn = new Function('sum', 'avg', 'count', 'min', 'max', 'round', 'CELL', 'RANGE', `return (${expression})`)
-    const values = (list: string) => String(list).split(',').map((item) => item.trim()).filter(Boolean)
-    return String(fn(
-      (...items: string[]) => values(items.join(',')).reduce((total, item) => total + toNumber(item), 0),
-      (...items: string[]) => {
-        const nums = values(items.join(',')).map(toNumber)
-        return nums.length ? nums.reduce((total, item) => total + item, 0) / nums.length : 0
-      },
-      (...items: string[]) => values(items.join(',')).filter((item) => item !== '').length,
-      (...items: string[]) => Math.min(...values(items.join(',')).map(toNumber)),
-      (...items: string[]) => Math.max(...values(items.join(',')).map(toNumber)),
-      (value: number, digits: number) => Number(value).toFixed(Number(digits)),
-      (ref: string) => resolve(ref, stack),
-      (range: string) => parseRange(range).map((ref) => resolve(ref, stack)),
-    ))
+    // Handle string literals first
+    const strings: string[] = []
+    expr = expr.replace(/"([^"]*)"/g, (_, s) => {
+      strings.push(s)
+      return `__STR_${strings.length - 1}__`
+    })
+
+    // Replace cell references and ranges with resolved numeric values
+    expr = expr.replace(/([A-Z]+[0-9]+):([A-Z]+[0-9]+)/gi, (_, start: string, end: string) => {
+      const refs = parseRange(`${start}:${end}`)
+      const vals = refs.map(ref => {
+        const raw = resolve(ref, stack)
+        const n = toNumber(raw)
+        return String(n)
+      })
+      return vals.join(',')
+    })
+
+    expr = expr.replace(/([A-Z]+[0-9]+)(?![A-Z0-9_])/gi, (_, ref: string) => {
+      const raw = resolve(ref.toUpperCase(), stack)
+      return String(toNumber(raw))
+    })
+
+    // Restore string literals
+    expr = expr.replace(/__STR_(\d+)__/g, (_, i) => `"${strings[Number(i)]}"`)
+
+    // Tokenize
+    const tokens = tokenize(expr)
+    const pos = { value: 0 }
+    const result = parseExpression(tokens, pos)
+
+    if (typeof result === 'number') {
+      return String(Number.isFinite(result) ? result : 0)
+    }
+    return String(result)
+  }
+
+  // Token types for the safe formula parser
+  type Token = { type: 'NUM'; value: number }
+    | { type: 'STR'; value: string }
+    | { type: 'OP'; value: string }
+    | { type: 'LPAREN' }
+    | { type: 'RPAREN' }
+    | { type: 'COMMA' }
+    | { type: 'FUNC'; name: string }
+    | { type: 'BOOL'; value: boolean }
+    | { type: 'COMP'; value: string }
+
+  function tokenize(input: string): Token[] {
+    const tokens: Token[] = []
+    let i = 0
+    const s = input.trim()
+
+    while (i < s.length) {
+      const ch = s[i]
+
+      // Whitespace
+      if (/\s/.test(ch)) { i++; continue }
+
+      // String literal
+      if (ch === '"') {
+        let str = ''
+        i++
+        while (i < s.length && s[i] !== '"') {
+          if (s[i] === '\\' && i + 1 < s.length) { i++; str += s[i] }
+          else str += s[i]
+          i++
+        }
+        i++ // skip closing quote
+        tokens.push({ type: 'STR', value: str })
+        continue
+      }
+
+      // Number (including negative handled by operator)
+      if (/[0-9.]/.test(ch)) {
+        let num = ''
+        while (i < s.length && /[0-9.]/.test(s[i])) { num += s[i]; i++ }
+        tokens.push({ type: 'NUM', value: parseFloat(num) })
+        continue
+      }
+
+      // Comparison operators
+      if (ch === '=' && i + 1 < s.length && s[i + 1] === '=') { tokens.push({ type: 'COMP', value: '==' }); i += 2; continue }
+      if (ch === '<' && i + 1 < s.length && s[i + 1] === '=') { tokens.push({ type: 'COMP', value: '<=' }); i += 2; continue }
+      if (ch === '>' && i + 1 < s.length && s[i + 1] === '=') { tokens.push({ type: 'COMP', value: '>=' }); i += 2; continue }
+      if (ch === '<' && i + 1 < s.length && s[i + 1] === '>') { tokens.push({ type: 'COMP', value: '<>' }); i += 2; continue }
+      if (ch === '<') { tokens.push({ type: 'COMP', value: '<' }); i++; continue }
+      if (ch === '>') { tokens.push({ type: 'COMP', value: '>' }); i++; continue }
+
+      // Two-character operators
+      if (ch === '&' && i + 1 < s.length && s[i + 1] === '&') { tokens.push({ type: 'OP', value: '&&' }); i += 2; continue }
+      if (ch === '|' && i + 1 < s.length && s[i + 1] === '|') { tokens.push({ type: 'OP', value: '||' }); i += 2; continue }
+
+      // Single-character operators
+      if ('+-*/^%'.includes(ch)) { tokens.push({ type: 'OP', value: ch }); i++; continue }
+
+      // Parentheses and comma
+      if (ch === '(') { tokens.push({ type: 'LPAREN' }); i++; continue }
+      if (ch === ')') { tokens.push({ type: 'RPAREN' }); i++; continue }
+      if (ch === ',') { tokens.push({ type: 'COMMA' }); i++; continue }
+
+      // Boolean literals
+      if (s.substring(i, i + 4).toUpperCase() === 'TRUE' && (i + 4 >= s.length || !/[A-Z0-9]/.test(s[i + 4]))) {
+        tokens.push({ type: 'BOOL', value: true }); i += 4; continue
+      }
+      if (s.substring(i, i + 5).toUpperCase() === 'FALSE' && (i + 5 >= s.length || !/[A-Z0-9]/.test(s[i + 5]))) {
+        tokens.push({ type: 'BOOL', value: false }); i += 5; continue
+      }
+
+      // Function names and identifiers
+      if (/[A-Z_]/i.test(ch)) {
+        let name = ''
+        while (i < s.length && /[A-Z0-9_]/i.test(s[i])) { name += s[i]; i++ }
+        const upper = name.toUpperCase()
+        const funcs = new Set(['SUM', 'AVG', 'AVERAGE', 'COUNT', 'MIN', 'MAX', 'ROUND', 'IF', 'AND', 'OR', 'NOT', 'ABS', 'SQRT', 'POWER', 'MOD', 'CEILING', 'FLOOR', 'CONCATENATE', 'LEN', 'UPPER', 'LOWER', 'TRIM', 'LEFT', 'RIGHT', 'MID', 'FIND', 'SUBSTITUTE', 'VALUE', 'TEXT', 'ISNUMBER', 'ISBLANK', 'TODAY', 'NOW'])
+        if (funcs.has(upper)) {
+          tokens.push({ type: 'FUNC', name: upper })
+        } else {
+          // Unknown identifier — treat as 0
+          tokens.push({ type: 'NUM', value: 0 })
+        }
+        continue
+      }
+
+      // Skip unknown characters
+      i++
+    }
+
+    return tokens
+  }
+
+  // Recursive descent parser
+  // Precedence (lowest to highest): comparison, addition/subtraction, multiplication/division, unary, power, functions/parens/values
+
+  function parseExpression(tokens: Token[], pos: { value: number }): number | string {
+    return parseComparison(tokens, pos)
+  }
+
+  function parseComparison(tokens: Token[], pos: { value: number }): number | string {
+    let left = parseAddSub(tokens, pos)
+    while (pos.value < tokens.length && tokens[pos.value].type === 'COMP') {
+      const op = (tokens[pos.value] as { type: 'COMP'; value: string }).value
+      pos.value++
+      const right = parseAddSub(tokens, pos)
+      const l = typeof left === 'string' ? left : Number(left)
+      const r = typeof right === 'string' ? right : Number(right)
+      let result: boolean
+      switch (op) {
+        case '==': result = l === r; break
+        case '<>': result = l !== r; break
+        case '<': result = Number(l) < Number(r); break
+        case '>': result = Number(l) > Number(r); break
+        case '<=': result = Number(l) <= Number(r); break
+        case '>=': result = Number(l) >= Number(r); break
+        default: result = false
+      }
+      left = result ? 1 : 0
+    }
+    return left
+  }
+
+  function parseAddSub(tokens: Token[], pos: { value: number }): number | string {
+    let left = parseMulDiv(tokens, pos)
+    while (pos.value < tokens.length && tokens[pos.value].type === 'OP' && ((tokens[pos.value] as any).value === '+' || (tokens[pos.value] as any).value === '-')) {
+      const op = (tokens[pos.value] as { type: 'OP'; value: string }).value
+      pos.value++
+      const right = parseMulDiv(tokens, pos)
+      if (op === '+') {
+        if (typeof left === 'string' || typeof right === 'string') {
+          left = String(left) + String(right)
+        } else {
+          left = Number(left) + Number(right)
+        }
+      } else {
+        left = (typeof left === 'number' ? left : toNumber(left)) - (typeof right === 'number' ? right : toNumber(right))
+      }
+    }
+    return left
+  }
+
+  function parseMulDiv(tokens: Token[], pos: { value: number }): number | string {
+    let left = parsePower(tokens, pos)
+    while (pos.value < tokens.length && tokens[pos.value].type === 'OP') {
+      const op = (tokens[pos.value] as { type: 'OP'; value: string }).value
+      if (op !== '*' && op !== '/' && op !== '%') break
+      pos.value++
+      const right = parsePower(tokens, pos)
+      const l = typeof left === 'number' ? left : toNumber(left)
+      const r = typeof right === 'number' ? right : toNumber(right)
+      if (op === '*') left = l * r
+      else if (op === '/') left = r !== 0 ? l / r : 0
+      else left = r !== 0 ? l % r : 0
+    }
+    return left
+  }
+
+  function parsePower(tokens: Token[], pos: { value: number }): number | string {
+    let left = parseUnary(tokens, pos)
+    while (pos.value < tokens.length && tokens[pos.value].type === 'OP' && (tokens[pos.value] as any).value === '^') {
+      pos.value++
+      const right = parseUnary(tokens, pos)
+      left = Math.pow(typeof left === 'number' ? left : toNumber(left), typeof right === 'number' ? right : toNumber(right))
+    }
+    return left
+  }
+
+  function parseUnary(tokens: Token[], pos: { value: number }): number | string {
+    if (pos.value < tokens.length && tokens[pos.value].type === 'OP' && ((tokens[pos.value] as any).value === '+' || (tokens[pos.value] as any).value === '-')) {
+      const op = (tokens[pos.value] as { type: 'OP'; value: string }).value
+      pos.value++
+      const val = parseUnary(tokens, pos)
+      return op === '-' ? -(typeof val === 'number' ? val : toNumber(val)) : val
+    }
+    return parsePrimary(tokens, pos)
+  }
+
+  function parsePrimary(tokens: Token[], pos: { value: number }): number | string {
+    if (pos.value >= tokens.length) return 0
+
+    const token = tokens[pos.value]
+
+    // Number literal
+    if (token.type === 'NUM') {
+      pos.value++
+      return token.value
+    }
+
+    // String literal
+    if (token.type === 'STR') {
+      pos.value++
+      return token.value
+    }
+
+    // Boolean
+    if (token.type === 'BOOL') {
+      pos.value++
+      return token.value ? 1 : 0
+    }
+
+    // Function call
+    if (token.type === 'FUNC') {
+      return parseFunction(tokens, pos)
+    }
+
+    // Parenthesized expression
+    if (token.type === 'LPAREN') {
+      pos.value++
+      const val = parseExpression(tokens, pos)
+      if (pos.value < tokens.length && tokens[pos.value].type === 'RPAREN') pos.value++
+      return val
+    }
+
+    // Skip unknown
+    pos.value++
+    return 0
+  }
+
+  function parseFunction(tokens: Token[], pos: { value: number }): number | string {
+    const name = (tokens[pos.value] as { type: 'FUNC'; name: string }).name
+    pos.value++ // consume func name
+    if (pos.value < tokens.length && tokens[pos.value].type === 'LPAREN') pos.value++
+
+    const args: (number | string)[] = []
+    while (pos.value < tokens.length && tokens[pos.value].type !== 'RPAREN') {
+      args.push(parseExpression(tokens, pos))
+      if (pos.value < tokens.length && tokens[pos.value].type === 'COMMA') pos.value++
+    }
+    if (pos.value < tokens.length && tokens[pos.value].type === 'RPAREN') pos.value++
+
+    const nums = args.map(a => typeof a === 'number' ? a : toNumber(a))
+    const strs = args.map(a => String(a))
+
+    switch (name) {
+      case 'SUM': return nums.reduce((s, n) => s + n, 0)
+      case 'AVG':
+      case 'AVERAGE': return nums.length ? nums.reduce((s, n) => s + n, 0) / nums.length : 0
+      case 'COUNT': return nums.length
+      case 'MIN': return nums.length ? Math.min(...nums) : 0
+      case 'MAX': return nums.length ? Math.max(...nums) : 0
+      case 'ROUND': return nums.length ? Number(nums[0].toFixed(Math.max(0, Math.floor(nums[1] || 0)))) : 0
+      case 'IF': return (typeof args[0] === 'number' ? args[0] !== 0 : toNumber(args[0]) !== 0) ? args[1] : args[2]
+      case 'AND': return args.every(a => (typeof a === 'number' ? a !== 0 : toNumber(a) !== 0)) ? 1 : 0
+      case 'OR': return args.some(a => (typeof a === 'number' ? a !== 0 : toNumber(a) !== 0)) ? 1 : 0
+      case 'NOT': return (typeof args[0] === 'number' ? args[0] === 0 : toNumber(args[0]) === 0) ? 1 : 0
+      case 'ABS': return Math.abs(nums[0] || 0)
+      case 'SQRT': return Math.sqrt(Math.max(0, nums[0] || 0))
+      case 'POWER': return Math.pow(nums[0] || 0, nums[1] || 0)
+      case 'MOD': return (nums[1] || 1) !== 0 ? (nums[0] || 0) % (nums[1] || 1) : 0
+      case 'CEILING': return Math.ceil(nums[0] || 0)
+      case 'FLOOR': return Math.floor(nums[0] || 0)
+      case 'CONCATENATE': return strs.join('')
+      case 'LEN': return strs[0].length
+      case 'UPPER': return strs[0].toUpperCase()
+      case 'LOWER': return strs[0].toLowerCase()
+      case 'TRIM': return strs[0].trim()
+      case 'LEFT': return strs[0].substring(0, nums[1] || 1)
+      case 'RIGHT': return strs[0].substring(Math.max(0, strs[0].length - (nums[1] || 1)))
+      case 'MID': return strs[0].substring(Math.max(0, (nums[1] || 1) - 1), Math.max(0, (nums[1] || 1) - 1) + (nums[2] || 1))
+      case 'FIND': return strs[1].indexOf(strs[0]) + 1
+      case 'SUBSTITUTE': return strs[0].split(strs[1]).join(strs[2])
+      case 'VALUE': return toNumber(strs[0])
+      case 'TEXT': return strs[0]
+      case 'ISNUMBER': return typeof args[0] === 'number' && Number.isFinite(args[0]) ? 1 : 0
+      case 'ISBLANK': return (args[0] === '' || args[0] === 0 || args[0] === undefined || args[0] === null) ? 1 : 0
+      case 'TODAY': return new Date().toLocaleDateString()
+      case 'NOW': return new Date().toLocaleString()
+      default: return 0
+    }
   }
 
   function getCellDisplay(ref: string) {

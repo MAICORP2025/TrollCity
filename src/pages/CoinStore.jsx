@@ -7,15 +7,16 @@ import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { useAllCreditScores } from '../lib/hooks/useAllCreditScores';
 import { useStockMarket } from '../lib/hooks/useStockMarket';
 // import { toast } from 'sonner';
-import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, BarChart3, Wallet, Briefcase, Crown, Flame, RefreshCw, HardDrive } from 'lucide-react';
+import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, BarChart3, Wallet, Briefcase, Crown, Flame, RefreshCw, HardDrive, Sparkles } from 'lucide-react';
 import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
-import { ENTRANCE_EFFECTS_DATA, purchaseEntranceEffect } from '../lib/entranceEffects';
 import { getBroadcastTheme } from '../lib/broadcastThemes';
 import { deductCoins } from '@/lib/coinTransactions';
 import { purchaseCallMinutes } from '../lib/callMinutes';
 import { useLiveContextStore } from '../lib/liveContextStore';
 import { PERKS as LEVEL_PERKS } from '@/config/levelSystem';
 import { trollCityTheme } from '@/styles/trollCityTheme';
+import ProfileFrame from '../components/profile/ProfileFrame';
+import { LAUNCH_FRAMES, RARITY_COLORS, RARITY_LABELS } from '../config/profileFrames';
 
 const LEVEL_PERK_IDS = new Set(LEVEL_PERKS.map((perk) => perk.id));
 import ManualPaymentModal from '@/components/broadcast/ManualPaymentModal';
@@ -34,7 +35,7 @@ const coinPackages = COIN_PACKAGES.map(p => ({
   price: `$${p.usdPrice.toFixed(2)}` // Generate price string from usdPrice
 }));
 
-const SAMPLE_EFFECTS = ENTRANCE_EFFECTS_DATA;
+const SAMPLE_EFFECTS = [];
 
 const SAMPLE_PERKS = [
   { id: 'perk_rgb_username', name: 'RGB Username (24h)', description: 'Rainbow glow visible to everyone', cost: 450, duration_minutes: 24 * 60, perk_type: 'cosmetic' },
@@ -443,6 +444,165 @@ function PortfolioCard({ item, onSell, refreshCoins }) {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Profile Frames Store Embed — Compact view inside CoinStore
+ */
+function ProfileFramesStoreEmbed() {
+  const { user, profile } = useAuthStore();
+  const { troll_coins } = useCoins();
+  const [purchasing, setPurchasing] = useState(null);
+  const [ownedIds, setOwnedIds] = useState(() => new Set());
+  const [equippedId, setEquippedId] = useState(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('user_profile_frames')
+      .select('frame_id, is_equipped')
+      .eq('user_id', user.id)
+      .then(({ data }) => {
+        if (data) {
+          setOwnedIds(new Set(data.map((r) => r.frame_id)));
+          const equipped = data.find((r) => r.is_equipped);
+          if (equipped) setEquippedId(equipped.frame_id);
+        }
+      });
+  }, [user?.id]);
+
+  const avatarUrl =
+    profile?.avatar_url ||
+    `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id || 'default'}`;
+
+  const handlePurchase = async (frame) => {
+    if (!user) return;
+    if (ownedIds.has(frame.id)) return;
+    if ((troll_coins || 0) < frame.coinCost) {
+      toast.error(`Need ${frame.coinCost.toLocaleString()} coins`);
+      return;
+    }
+    setPurchasing(frame.id);
+    try {
+      const { data: prof } = await supabase
+        .from('user_profiles')
+        .select('troll_coins')
+        .eq('id', user.id)
+        .single();
+      if (!prof || (prof.troll_coins || 0) < frame.coinCost) throw new Error('Not enough coins');
+
+      await supabase
+        .from('user_profiles')
+        .update({ troll_coins: (prof.troll_coins || 0) - frame.coinCost })
+        .eq('id', user.id);
+
+      await supabase.from('user_profile_frames').insert({
+        user_id: user.id,
+        frame_id: frame.id,
+        is_equipped: false,
+      });
+
+      setOwnedIds((prev) => new Set(prev).add(frame.id));
+      toast.success(`🎉 Purchased ${frame.name}!`);
+    } catch (err) {
+      toast.error('Purchase failed');
+    } finally {
+      setPurchasing(null);
+    }
+  };
+
+  const handleEquip = async (frameId) => {
+    if (!user) return;
+    try {
+      await supabase.from('user_profile_frames').update({ is_equipped: false }).eq('user_id', user.id).eq('is_equipped', true);
+      if (frameId) {
+        await supabase.from('user_profile_frames').update({ is_equipped: true }).eq('user_id', user.id).eq('frame_id', frameId);
+      }
+      await supabase.from('user_profiles').update({ active_frame_id: frameId }).eq('id', user.id);
+      setEquippedId(frameId);
+      toast.success(frameId ? 'Frame equipped!' : 'Frame unequipped');
+    } catch {
+      toast.error('Failed to equip');
+    }
+  };
+
+  return (
+    <div className="animate-fadeIn">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink-500/10 border border-pink-400/30">
+          <Sparkles className="h-6 w-6 text-pink-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white">Profile Frames</h2>
+          <p className="text-sm text-slate-400">Premium animated frames for your avatar</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {LAUNCH_FRAMES.map((frame) => {
+          const owned = ownedIds.has(frame.id);
+          const isEquipped = equippedId === frame.id;
+          const canAfford = (troll_coins || 0) >= frame.coinCost;
+          const rarity = RARITY_COLORS[frame.rarity];
+
+          return (
+            <div
+              key={frame.id}
+              className={`relative rounded-2xl border overflow-hidden transition-all ${
+                isEquipped
+                  ? 'border-purple-400/50 bg-purple-500/10'
+                  : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
+              }`}
+            >
+              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: rarity.text }} />
+              <div className="p-4">
+                <div className="flex justify-center mb-3">
+                  <ProfileFrame frame={frame} avatarUrl={avatarUrl} size="md" username={profile?.username || ''} showBadge />
+                </div>
+                <div className="text-center mb-2">
+                  <h3 className="font-bold text-white text-sm">{frame.name}</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{frame.description}</p>
+                </div>
+                <div className="flex items-center justify-between mb-3">
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                    style={{ color: rarity.text, backgroundColor: rarity.bg, border: `1px solid ${rarity.border}` }}
+                  >
+                    {RARITY_LABELS[frame.rarity]}
+                  </span>
+                  <span className="text-xs font-bold text-yellow-400">🪙 {frame.coinCost.toLocaleString()}</span>
+                </div>
+                {owned ? (
+                  <button
+                    onClick={() => handleEquip(isEquipped ? null : frame.id)}
+                    className={`w-full py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      isEquipped
+                        ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                        : 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30'
+                    }`}
+                  >
+                    {isEquipped ? '✓ Equipped' : 'Equip'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handlePurchase(frame)}
+                    disabled={purchasing === frame.id || !canAfford}
+                    className={`w-full py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      canAfford
+                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500'
+                        : 'bg-white/5 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {purchasing === frame.id ? '⏳' : !canAfford ? '🔒 Need more coins' : '🛒 Purchase'}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -862,27 +1022,7 @@ useEffect(() => {
     }
   };
 
-  const buyEffect = async (effect) => {
-   try {
-     const { success, error } = await purchaseEntranceEffect(user.id, effect.id);
-     
-     if (!success) {
-       throw new Error(error || 'Purchase failed');
-     }
-
-     await supabase
-        .from('user_profiles')
-        .update({ active_entrance_effect: effect.id })
-        .eq('id', user.id);
-     
-      toast.success('Entrance effect purchased and activated!')
-     showPurchaseCompleteOverlay()
-     await loadWalletData(false)
-   } catch (err) {
-     console.error('Effect purchase error:', err)
-     toast.error(err.message || 'Purchase failed')
-   }
-  }
+  // Entrance effects removed
 
 
 
@@ -1225,7 +1365,7 @@ useEffect(() => {
               <div className="relative">
                  <button 
                      type="button" 
-                     className={`px-3 py-2 rounded flex items-center gap-2 ${['perks', 'calls', 'insurance', 'themes'].includes(tab) ? 'bg-purple-600' : trollCityTheme.backgrounds.card}`}
+                     className={`px-3 py-2 rounded flex items-center gap-2 ${['perks', 'calls', 'insurance', 'themes', 'frames'].includes(tab) ? 'bg-purple-600' : trollCityTheme.backgrounds.card}`}
                      onClick={() => setShowStoreDropdown(!showStoreDropdown)}
                  >
                      Store Items
@@ -1238,6 +1378,7 @@ useEffect(() => {
                            <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
                            <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='insurance' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('insurance'); setShowStoreDropdown(false); }}>Insurance</button>
                            <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='storage' ? 'text-cyan-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('storage'); setShowStoreDropdown(false); }}>Storage</button>
+                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='frames' ? 'text-pink-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('frames'); setShowStoreDropdown(false); }}>✨ Profile Frames</button>
                       </div>
                   )}
                </div>
@@ -2229,6 +2370,11 @@ useEffect(() => {
                 ))}
               </div>
             </>
+          )}
+
+          {/* Profile Frames Tab */}
+          {tab === 'frames' && (
+            <ProfileFramesStoreEmbed />
           )}
 
         </div>

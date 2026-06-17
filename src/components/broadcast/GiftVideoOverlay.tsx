@@ -19,7 +19,7 @@ type ResolvedOverlayMedia = {
   source: string
 }
 
-const DEFAULT_DURATION_MS = 4500
+const DEFAULT_DURATION_MS = 15000
 
 async function logGiftAnimationTest({
   gift,
@@ -227,10 +227,12 @@ function GiftPreview({
   gift,
   visual,
   label,
+  onVideoEnd,
 }: {
   gift: BroadcastGift
   visual: GiftVisualConfig
   label: string
+  onVideoEnd?: () => void
 }) {
   const resolved = useMemo(() => resolveOverlayUrl(gift, visual), [gift, visual])
   const [videoFailed, setVideoFailed] = useState(false)
@@ -330,6 +332,16 @@ function GiftPreview({
             resolvedSource: resolved.source,
             status: 'loaded',
           })
+        }}
+        onEnded={() => {
+          if (import.meta.env.DEV) {
+            console.info('[GiftVideoOverlay] video ended naturally', {
+              giftId: gift.id,
+              giftName: label,
+              resolvedUrl: resolved.url,
+            })
+          }
+          onVideoEnd?.()
         }}
         onError={(event) => {
           const videoEl = event.currentTarget
@@ -453,7 +465,7 @@ export default function GiftVideoOverlay({
       timersRef.current[gift.id] = window.setTimeout(() => {
         onFinish(gift.id)
         delete timersRef.current[gift.id]
-      }, durationMs + 150)
+      }, Math.max(durationMs + 150, 15000))
     })
 
     return () => {
@@ -546,7 +558,14 @@ export default function GiftVideoOverlay({
               className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-black/80 shadow-[0_0_40px_rgba(15,23,42,0.55)] backdrop-blur-xl"
             >
               <div className="relative aspect-[16/9] bg-slate-950">
-                <GiftPreview gift={gift} visual={visual} label={label} />
+                <GiftPreview gift={gift} visual={visual} label={label} onVideoEnd={() => {
+                  const timerId = timersRef.current[gift.id]
+                  if (timerId) {
+                    window.clearTimeout(timerId)
+                    delete timersRef.current[gift.id]
+                  }
+                  onFinish(gift.id)
+                }} />
 
                 <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center gap-1 bg-gradient-to-t from-black/90 to-transparent px-4 py-3 text-center">
                   <span className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-white/90 sm:text-sm">

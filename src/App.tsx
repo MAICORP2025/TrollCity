@@ -509,6 +509,7 @@ import PackingStation from "./pages/auction/PackingStation.js";
 import DeviceManagement from "./pages/auction/DeviceManagement.js";
 import AuctioneerScanner from "./pages/auction/AuctioneerScanner.js";
 import CoinStore from "./pages/CoinStore.jsx";
+import ProfileFrameStore from "./pages/ProfileFrameStore";
 import SellOnTrollCity from "./pages/SellOnTrollCity.js";
 import SellerOrders from "./pages/SellerOrders.js";
 import MyOrders from "./pages/MyOrders.js";
@@ -1883,6 +1884,7 @@ const handleVisibilityChange = async () => {
                     {/* 💰 Earnings & Coins */}
                     <Route path="/store" element={<CoinStore />} />
                     <Route path="/coins" element={<CoinStore />} />
+                    <Route path="/profile-frames" element={<ProfileFrameStore />} />
                     <Route path="/coins/complete" element={<CoinsComplete />} />
                     <Route path="/crowns/redeem" element={<CrownRedemption />} />
                     <Route path="/wallet" element={<WalletPage />} />

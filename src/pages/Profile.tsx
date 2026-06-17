@@ -42,7 +42,6 @@ import CreditScoreBadge from '../components/CreditScoreBadge';
 import UserBadge from '../components/UserBadge';
 import BackgroundCheckView from '../components/broadcast/BackgroundCheckView';
 import { useCreditScore } from '../lib/hooks/useCreditScore';
-import { ENTRANCE_EFFECTS_MAP } from '../lib/entranceEffects';
 import { getLevelName } from '../lib/xp';
 import { useXPStore } from '@/stores/useXPStore';
 import { PERK_CONFIG } from '@/lib/perkSystem';
@@ -226,9 +225,8 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
   const fetchInventory = useCallback(async (uid: string) => {
     try {
       // SAFETY: narrowed select columns to avoid fetching unnecessary data
-      const [perksRes, effectsRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes, marketplaceItemsRes, vehiclesRes, inventoryRes] = await Promise.all([
+      const [perksRes, insuranceUserRes, callRes, homesRes, vehicleListingsRes, marketplaceItemsRes, vehiclesRes, inventoryRes] = await Promise.all([
         supabase.from('user_perks').select('id,user_id,perk_id,purchased_at,metadata').eq('user_id', uid).order('purchased_at', { ascending: false }),
-        supabase.from('user_entrance_effects').select('id,user_id,effect_id,metadata').eq('user_id', uid),
         supabase.from('user_insurances').select('id,user_id,insurance_id,is_active,expires_at,purchased_at,metadata').eq('user_id', uid).order('purchased_at', { ascending: false }),
         supabase.from('call_minutes').select('id,user_id,audio_minutes,video_minutes').eq('user_id', uid).maybeSingle(),
         supabase.from('properties').select('id,owner_user_id,title,price,created_at').eq('owner_user_id', uid).eq('is_listed', true).order('created_at', { ascending: false }),
@@ -289,7 +287,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
 
       setInventory({
         perks: perksRes.data || [],
-        effects: effectsRes.data || [],
+        effects: [],
         insurance: insuranceList,
         callMinutes: callRes.data || null,
         homeListings: homesRes.data || [],
@@ -741,19 +739,6 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
     }
   };
 
-  const handleSetEntranceEffect = async (effectId: string | null) => {
-    if (!currentUser || currentUser.id !== profile.id) return;
-    try {
-      const { error } = await supabase.from('user_profiles').update({ active_entrance_effect: effectId }).eq('id', currentUser.id);
-      if (error) throw error;
-      setProfile((prev: any) => ({ ...prev, active_entrance_effect: effectId }));
-      toast.success(effectId ? `Equipped ${ENTRANCE_EFFECTS_MAP[effectId]?.name || 'Effect'}` : 'Entrance effect unequipped');
-    } catch (e: any) {
-      console.error('Error setting entrance effect:', e);
-      toast.error('Failed to update entrance effect');
-    }
-  };
-
   const handleRepurchasePerk = async (perk: any) => {
     if (!currentUser || currentUser.id !== profile.id) return;
     const config = PERK_CONFIG[perk.perk_id as keyof typeof PERK_CONFIG];
@@ -987,28 +972,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
         </div>
       </section>
 
-      <section>
-        <SectionHeader icon={Sparkles} title="Entrance Effects" subtitle="Profile arrival effects and city animations" />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {inventory.effects.map((effect) => {
-            const effectData = ENTRANCE_EFFECTS_MAP[effect.effect_id] || {};
-            const isActive = profile.active_entrance_effect === effect.effect_id;
-            return (
-              <div key={effect.id} className={`${innerPanel} flex items-center justify-between gap-4 p-5 ${isActive ? 'border-cyan-300/40 bg-cyan-400/10' : ''}`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{effectData.icon || '✨'}</span>
-                  <div>
-                    <p className="font-black text-white">{effectData.name || effect.effect_id}</p>
-                    <p className="text-sm text-zinc-400">{effectData.description || 'Owned entrance effect'}</p>
-                  </div>
-                </div>
-                {isOwnProfile && <button onClick={() => handleSetEntranceEffect(isActive ? null : effect.effect_id)} className={isActive ? dangerButton : secondaryButton}>{isActive ? 'Unequip' : 'Equip'}</button>}
-              </div>
-            );
-          })}
-          {inventory.effects.length === 0 && <EmptyState icon={Sparkles} title="No effects found" body="Entrance effects will appear after purchase." />}
-        </div>
-      </section>
+      {/* Entrance Effects removed */}
 
       <section>
         <SectionHeader icon={Shield} title="Troll Protection" subtitle="Insurance and protection plans" />

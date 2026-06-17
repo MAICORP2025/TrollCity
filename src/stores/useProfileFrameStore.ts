@@ -1,0 +1,232 @@
+/**
+ * Profile Frame Store (Zustand)
+ * Manages user's owned frames, equipped frame, and frame catalog
+ */
+
+import { create } from 'zustand';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
+import { LAUNCH_FRAMES, type ProfileFrame } from '../config/profileFrames';
+
+interface UserFrameRecord {
+  id: string;
+  user_id: string;
+  frame_id: string;
+  is_equipped: boolean;
+  purchased_at: string;
+}
+
+interface ProfileFrameState {
+  // Catalog (all available frames)
+  catalog: ProfileFrame[];
+  catalogLoading: boolean;
+
+  // User's owned frames
+  ownedFrames: UserFrameRecord[];
+  ownedLoading: boolean;
+
+  // Currently equipped frame
+  equippedFrameId: string | null;
+  equippedFrame: ProfileFrame | null;
+
+  // Actions
+  loadCatalog: () => Promise<void>;
+  loadUserFrames: (userId: string) => Promise<void>;
+  purchaseFrame: (frameId: string) => Promise<boolean>;
+  equipFrame: (frameId: string | null) => Promise<boolean>;
+  getEquippedFrame: () => ProfileFrame | null;
+  isFrameOwned: (frameId: string) => boolean;
+}
+
+export const useProfileFrameStore = create<ProfileFrameState>((set, get) => ({
+  catalog: LAUNCH_FRAMES,
+  catalogLoading: false,
+  ownedFrames: [],
+  ownedLoading: false,
+  equippedFrameId: null,
+  equippedFrame: null,
+
+  loadCatalog: async () => {
+    set({ catalogLoading: true });
+    try {
+      const { data, error } = await supabase
+        .from('profile_frames')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const frames: ProfileFrame[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          icon: row.icon,
+          animationType: row.animation_type,
+          frameStyle: row.frame_style,
+          borderColor: row.border_color,
+          borderGradient: row.border_gradient,
+          glowColor: row.glow_color,
+          glowIntensity: row.glow_intensity,
+          animationSpeed: row.animation_speed,
+          hasParticles: row.has_particles,
+          particleColor: row.particle_color,
+          particleCount: row.particle_count,
+          hasSparkles: row.has_sparkles,
+          hasEnergyRings: row.has_energy_rings,
+          rarity: row.rarity,
+          coinCost: row.coin_cost,
+          isActive: row.is_active,
+          isLimited: row.is_limited,
+          limitedQuantity: row.limited_quantity,
+          sortOrder: row.sort_order,
+        }));
+        set({ catalog: frames });
+      }
+    } catch (err) {
+      console.warn('[ProfileFrameStore] Failed to load catalog, using defaults', err);
+    } finally {
+      set({ catalogLoading: false });
+    }
+  },
+
+  loadUserFrames: async (userId: string) => {
+    set({ ownedLoading: true });
+    try {
+      const { data, error } = await supabase
+        .from('user_profile_frames')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (!error && data) {
+        const owned: UserFrameRecord[] = data.map((row: any) => ({
+          id: row.id,
+          user_id: row.user_id,
+          frame_id: row.frame_id,
+          is_equipped: row.is_equipped,
+          purchased_at: row.purchased_at,
+        }));
+
+        const equipped = owned.find(f => f.is_equipped);
+        const equippedFrame = equipped
+          ? get().catalog.find(f => f.id === equipped.frame_id) || null
+          : null;
+
+        set({
+          ownedFrames: owned,
+          equippedFrameId: equipped?.frame_id || null,
+          equippedFrame,
+        });
+      }
+    } catch (err) {
+      console.warn('[ProfileFrameStore] Failed to load user frames', err);
+    } finally {
+      set({ ownedLoading: false });
+    }
+  },
+
+  purchaseFrame: async (frameId: string): Promise<boolean> => {
+    const { user } = useAuthStore.getState();
+    if (!user) return false;
+
+    const frame = get().catalog.find(f => f.id === frameId);
+    if (!frame) return false;
+    if (get().isFrameOwned(frameId)) return false;
+
+    try {
+      // Deduct coins
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('troll_coins')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile || (profile.troll_coins || 0) < frame.coinCost) {
+        return false;
+      }
+
+      const { error: deductError } = await supabase
+        .from('user_profiles')
+        .update({ troll_coins: (profile.troll_coins || 0) - frame.coinCost })
+        .eq('id', user.id);
+
+      if (deductError) throw deductError;
+
+      // Add to user's collection
+      const { error: insertError } = await supabase
+        .from('user_profile_frames')
+        .insert({
+          user_id: user.id,
+          frame_id: frameId,
+          is_equipped: false,
+        });
+
+      if (insertError) throw insertError;
+
+      // Reload user frames
+      await get().loadUserFrames(user.id);
+      return true;
+    } catch (err) {
+      console.error('[ProfileFrameStore] Purchase failed:', err);
+      return false;
+    }
+  },
+
+  equipFrame: async (frameId: string | null): Promise<boolean> => {
+    const { user } = useAuthStore.getState();
+    if (!user) return false;
+
+    try {
+      // Unequip all current frames
+      await supabase
+        .from('user_profile_frames')
+        .update({ is_equipped: false })
+        .eq('user_id', user.id)
+        .eq('is_equipped', true);
+
+      if (frameId) {
+        // Verify ownership
+        if (!get().isFrameOwned(frameId)) return false;
+
+        // Equip the selected frame
+        const { error } = await supabase
+          .from('user_profile_frames')
+          .update({ is_equipped: true })
+          .eq('user_id', user.id)
+          .eq('frame_id', frameId);
+
+        if (error) throw error;
+      }
+
+      // Update profile's active_frame_id
+      await supabase
+        .from('user_profiles')
+        .update({ active_frame_id: frameId })
+        .eq('id', user.id);
+
+      // Update local state
+      const equippedFrame = frameId
+        ? get().catalog.find(f => f.id === frameId) || null
+        : null;
+
+      set({
+        equippedFrameId: frameId,
+        equippedFrame,
+        ownedFrames: get().ownedFrames.map(f => ({
+          ...f,
+          is_equipped: f.frame_id === frameId,
+        })),
+      });
+
+      return true;
+    } catch (err) {
+      console.error('[ProfileFrameStore] Equip failed:', err);
+      return false;
+    }
+  },
+
+  getEquippedFrame: () => get().equippedFrame,
+
+  isFrameOwned: (frameId: string) => {
+    return get().ownedFrames.some(f => f.frame_id === frameId);
+  },
+}));

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "../../../lib/supabase";
+import { validateFile, FILE_VALIDATION } from "../../../lib/fileValidation";
 import { toast } from "sonner";
 
 interface ReceiptUploadModalProps {
@@ -18,6 +19,12 @@ const ReceiptUploadModal: React.FC<ReceiptUploadModalProps> = ({
 
   const handleUpload = async () => {
     if (!file) return toast.error("Upload receipt before confirming.");
+
+    const validation = validateFile(file, FILE_VALIDATION.imageOrPdf.types, FILE_VALIDATION.imageOrPdf.maxSize, 'Receipt')
+    if (!validation.valid) {
+      toast.error(validation.error!)
+      return
+    }
 
     try {
       setUploading(true);

@@ -5,10 +5,37 @@ interface TrollJumpScareProps {
   rarity: Rarity;
 }
 
+// ─── Shared AudioContext for reliable playback ──────────────────
+let _sharedAudioCtx: AudioContext | null = null;
+function getAudioCtx(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (!_sharedAudioCtx) {
+    _sharedAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  if (_sharedAudioCtx.state === 'suspended') {
+    _sharedAudioCtx.resume();
+  }
+  return _sharedAudioCtx;
+}
+
+// ─── Fetch + decode an MP3 via Web Audio API ────────────────────
+async function fetchAudioBuffer(url: string): Promise<AudioBuffer | null> {
+  const ctx = getAudioCtx();
+  if (!ctx) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const arrayBuf = await res.arrayBuffer();
+    return await ctx.decodeAudioData(arrayBuf);
+  } catch {
+    return null;
+  }
+}
+
 const TrollJumpScare: React.FC<TrollJumpScareProps> = ({ rarity }) => {
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [scaryImageIndex, setScaryImageIndex] = useState<number>(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   // Scary images - local jumpscare images
   const scaryImages = [
@@ -40,51 +67,39 @@ const TrollJumpScare: React.FC<TrollJumpScareProps> = ({ rarity }) => {
     '/sounds/entrance/curtain-open.mp3',
   ];
 
-  // Play scary sound based on index with volume based on rarity
-  const playScarySound = (index: number, volume: number) => {
+  // Play scary sound using Web Audio API (bypasses autoplay restrictions)
+  const playScarySound = async (index: number, volume: number) => {
     try {
-      // Clean up previous audio
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.removeAttribute('src');
-        audioRef.current.load();
-        audioRef.current = null;
+      // Stop any previous sound
+      if (sourceRef.current) {
+        try { sourceRef.current.stop(); } catch { /* already stopped */ }
+        sourceRef.current = null;
       }
 
       const soundIndex = index % scarySounds.length;
       const soundPath = scarySounds[soundIndex];
 
-      const audio = new Audio();
-      audioRef.current = audio;
+      const ctx = getAudioCtx();
+      if (!ctx) return;
 
-      audio.volume = Math.min(volume, 1.0);
-      audio.preload = 'auto';
+      const buffer = await fetchAudioBuffer(soundPath);
+      if (!buffer) {
+        console.warn('[JumpScare] Could not load sound:', soundPath);
+        return;
+      }
 
-      // Set up error handling before setting src
-      audio.onerror = () => {
-        console.warn('[JumpScare] Audio load error:', audio.error?.message || 'unknown', 'src:', soundPath);
-        // Clean up failed audio
-        if (audioRef.current === audio) {
-          audioRef.current = null;
-        }
-      };
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
 
-      // Set src after error handler is registered
-      audio.src = soundPath;
+      const gain = ctx.createGain();
+      gain.gain.value = Math.min(volume, 1.0);
 
-      // Wait for the audio to be ready before playing
-      const onCanPlay = () => {
-        audio.removeEventListener('canplaythrough', onCanPlay);
-        audio.play().catch(err => {
-          console.warn('[JumpScare] Audio play failed:', err);
-        });
-      };
-      audio.addEventListener('canplaythrough', onCanPlay);
+      source.connect(gain);
+      gain.connect(ctx.destination);
 
-      // Also try playing immediately in case the audio is already cached
-      audio.play().catch(() => {
-        // Ignore — the canplaythrough handler will retry
-      });
+      sourceRef.current = source;
+      source.onended = () => { sourceRef.current = null; };
+      source.start(0);
     } catch (err) {
       console.warn('[JumpScare] Sound error:', err);
     }

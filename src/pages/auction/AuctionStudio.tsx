@@ -37,6 +37,7 @@ import { toast } from 'sonner'
 
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
+import { validateFile, FILE_VALIDATION } from '../../lib/fileValidation'
 import { cn } from '../../lib/utils'
 
 interface AuctionShow {
@@ -377,6 +378,12 @@ export default function AuctionStudio() {
 
   const uploadLotImage = async (file: File) => {
     if (!user?.id) return
+
+    const validation = validateFile(file, FILE_VALIDATION.image.types, FILE_VALIDATION.image.maxSize, 'Image')
+    if (!validation.valid) {
+      toast.error(validation.error!)
+      return
+    }
 
     setUploadingImage(true)
 

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Rarity } from '../useTrollEngine';
+import { playSoundBuffer } from '../soundUtils';
 
 interface FakeBanScreenProps {
   rarity: Rarity;
@@ -8,16 +9,24 @@ interface FakeBanScreenProps {
 const FakeBanScreen: React.FC<FakeBanScreenProps> = ({ rarity }) => {
   const [isTrolling, setIsTrolling] = useState<boolean>(true);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     // Start animation after a short delay
     const timer = setTimeout(() => {
       setIsAnimating(true);
+      // Play alarm/siren sound on reveal
+      if (!hasPlayedRef.current) {
+        hasPlayedRef.current = true;
+        playSoundBuffer('/sounds/entrance/police_siren.mp3', 0.6);
+      }
     }, 100);
 
     // Show the fake ban message for 2 seconds, then reveal the joke
     const trollingTimer = setTimeout(() => {
       setIsTrolling(false);
+      // Play laugh sound on reveal
+      playSoundBuffer('/sounds/evil_laugh.mp3', 0.5);
     }, 2000);
 
     return () => {

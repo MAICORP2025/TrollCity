@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useAuthStore } from '@/lib/store'
 import { supabase, UserRole, hasRole } from '@/lib/supabase'
+import { validateFile, FILE_VALIDATION } from '@/lib/fileValidation'
 import { Music, Play, Pause, Trash2, Coins, Upload, AlertCircle, FileText, CheckCircle } from 'lucide-react'
 
 interface Track {
@@ -89,7 +90,13 @@ export default function MusicTab() {
 
   const handleUpload = async (file: File, title: string) => {
     if (!user || !canUpload || !file) return
-    
+
+    const validation = validateFile(file, FILE_VALIDATION.audio.types, FILE_VALIDATION.audio.maxSize, 'Audio file')
+    if (!validation.valid) {
+      setError(validation.error!)
+      return
+    }
+
     setUploading(true)
     setError(null)
     

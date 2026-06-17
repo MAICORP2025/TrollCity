@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { validateFile, FILE_VALIDATION } from '../lib/fileValidation'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
 import { Users, Crown, UploadCloud, Star } from 'lucide-react'
@@ -241,6 +242,13 @@ export default function FamilyProfilePage() {
       if (!family) return
       const file = event.target.files?.[0]
       if (!file) return
+
+      const validation = validateFile(file, FILE_VALIDATION.image.types, FILE_VALIDATION.image.maxSize, 'Banner image')
+      if (!validation.valid) {
+        toast.error(validation.error!)
+        event.target.value = ''
+        return
+      }
 
       setUploadingBanner(true)
 

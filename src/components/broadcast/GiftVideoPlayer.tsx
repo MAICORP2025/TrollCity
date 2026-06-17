@@ -70,11 +70,13 @@ export function GiftVideoPlayer({ giftName, giftIcon, giftValue, duration, onCom
     };
   }, [entry]);
 
-  // Phase transitions
+  // Phase transitions — use video onEnded as primary completion, timeout as safety net
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('active'), 50);
-    const t2 = setTimeout(() => setPhase('exit'), (duration - 0.5) * 1000);
-    const t3 = setTimeout(handleComplete, duration * 1000);
+    // Safety-net timeout: use the provided duration or 15s max, whichever is larger
+    const maxDuration = Math.max(duration, 15) * 1000;
+    const t2 = setTimeout(() => setPhase('exit'), maxDuration - 500);
+    const t3 = setTimeout(handleComplete, maxDuration);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [duration, handleComplete]);
 

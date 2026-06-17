@@ -8,6 +8,7 @@ import {
   Facebook
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { validateFile, FILE_VALIDATION } from '../../lib/fileValidation';
 import { toast } from 'sonner';
 
 type ContentSourceType = 
@@ -377,6 +378,12 @@ export default function XAdsStudio() {
   };
 
   const handleImageUpload = async (assetId: string, file: File) => {
+    const validation = validateFile(file, FILE_VALIDATION.image.types, FILE_VALIDATION.image.maxSize, 'Ad image')
+    if (!validation.valid) {
+      toast.error(validation.error!)
+      return
+    }
+
     setUploadingAsset(assetId);
     try {
       const arrayBuffer = await file.arrayBuffer();

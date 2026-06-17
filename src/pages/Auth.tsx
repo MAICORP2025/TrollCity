@@ -19,7 +19,7 @@ interface AuthProps {
 }
 
 
-const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL as string | undefined) || 'the configured admin email'
+const ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL as string | undefined) || ''
 
 const trackMobileError = (error: Error, context: string, userId?: string) => {
   if (import.meta.env.DEV) {

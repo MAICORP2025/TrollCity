@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Rarity } from '../useTrollEngine';
+import { playSoundBuffer } from '../soundUtils';
 
 interface FakeVirusScanProps {
   rarity: Rarity;
@@ -10,11 +11,17 @@ const FakeVirusScan: React.FC<FakeVirusScanProps> = ({ rarity }) => {
   const [isScanning, setIsScanning] = useState<boolean>(true);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [showAlert, setShowAlert] = useState<boolean>(false);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     // Start animation after a short delay
     const timer = setTimeout(() => {
       setIsAnimating(true);
+      // Play scanning beep
+      if (!hasPlayedRef.current) {
+        hasPlayedRef.current = true;
+        playSoundBuffer('/sounds/calls/dialtone-neon.mp3', 0.4);
+      }
     }, 100);
 
     // Simulate scan progress
@@ -29,6 +36,7 @@ const FakeVirusScan: React.FC<FakeVirusScanProps> = ({ rarity }) => {
           // Show alert after scan completes
           setTimeout(() => {
             setShowAlert(true);
+            playSoundBuffer('/sounds/troll.mp3', 0.5);
           }, 500);
         }
 

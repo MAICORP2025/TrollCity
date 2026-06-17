@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Rarity } from '../useTrollEngine';
+import { playSoundBuffer } from '../soundUtils';
 
 interface TrollCourtSummonsProps {
   rarity: Rarity;
@@ -8,11 +9,17 @@ interface TrollCourtSummonsProps {
 const TrollCourtSummons: React.FC<TrollCourtSummonsProps> = ({ rarity }) => {
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [showDetails, setShowDetails] = useState<boolean>(false);
+  const hasPlayedRef = useRef(false);
 
   useEffect(() => {
     // Start animation after a short delay
     const timer = setTimeout(() => {
       setIsAnimating(true);
+      // Play dramatic sound on reveal
+      if (!hasPlayedRef.current) {
+        hasPlayedRef.current = true;
+        playSoundBuffer('/sounds/entrance/royal_fanfare.mp3', 0.6);
+      }
     }, 100);
 
     // Show details after a delay

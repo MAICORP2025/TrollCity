@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import { validateFile, FILE_VALIDATION } from '../lib/fileValidation'
 import { toast } from 'sonner'
 import useSEO from '@/hooks/useSEO';
 import { Store, ShoppingCart, ShoppingBag, Car, Coins, DollarSign, Truck, FileText, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Plus, Edit, Trash, Package, Wrench, Eye, EyeOff } from 'lucide-react'
@@ -227,6 +228,10 @@ export default function SellOnTrollCity() {
       if (maybeFile && typeof (maybeFile as any).name === 'string') {
         try {
           const file = maybeFile
+          const validation = validateFile(file, FILE_VALIDATION.image.types, FILE_VALIDATION.image.maxSize, 'Product image')
+          if (!validation.valid) {
+            return toast.error(validation.error!)
+          }
           const ext = file.name.includes('.') ? file.name.substring(file.name.lastIndexOf('.')) : ''
           const path = `shop-items/${user!.id}/${Date.now()}${ext}`
           const { error: uploadErr } = await supabase.storage

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAvatar } from '../lib/hooks/useAvatar'
 import type { AvatarConfig } from '../lib/hooks/useAvatar'
-import { updateUserAvatarConfig } from '../lib/purchases'
+import { validateFile, FILE_VALIDATION } from '../lib/fileValidation'
 import CropPhotoModal from '../components/CropPhotoModal'
 import { KeyRound } from 'lucide-react'
 import { trollCityTheme } from '../styles/trollCityTheme'
@@ -665,6 +665,13 @@ const ProfileSetup = () => {
                     onChange={async (e) => {
                       const file = e.target.files?.[0]
                       if (!file || !user) return
+
+                      const validation = validateFile(file, FILE_VALIDATION.imageOrPdf.types, FILE_VALIDATION.imageOrPdf.maxSize, 'ID document')
+                      if (!validation.valid) {
+                        toast.error(validation.error!)
+                        e.target.value = ''
+                        return
+                      }
 
                       try {
                         setLoading(true)
