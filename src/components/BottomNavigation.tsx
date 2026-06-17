@@ -1256,13 +1256,15 @@ export default function BottomNavigation() {
             onClick={handleMessageBubbleClick}
           >
             <div className="flex items-start gap-3">
-              <div className="relative shrink-0">
-                <img
-                  src={recentMessage.sender_avatar_url || `https://ui-avatars.com/api/?name=${recentMessage.sender_username}&background=random`}
-                  alt={recentMessage.sender_username}
-                  className="h-12 w-12 rounded-full border-2 border-purple-500/30"
+              <div className="relative shrink-0 h-12 w-12">
+                <ProfileFrame
+                  frame={null}
+                  avatarUrl={recentMessage.sender_avatar_url || `https://ui-avatars.com/api/?name=${recentMessage.sender_username}&background=random`}
+                  username={recentMessage.sender_username}
+                  size="xs"
+                  fillParent
                 />
-                <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-[#1A1A2E] bg-green-500" />
+                <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-[#1A1A2E] bg-green-500 z-10" />
               </div>
 
               <div className="min-w-0 flex-1">

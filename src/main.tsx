@@ -358,14 +358,10 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
     };
 
 
-   // Register service worker for PWA — MUST come BEFORE root element render
-   // VitePWA injectManifest produces dist/service-worker.js (all push/cache handlers).
-   // VitePWA virtual:pwa-register (import() below) handles future updates.
-   // We register eagerly here so the PWA SW is live on first page visit.
-   if ('serviceWorker' in navigator) {
+   // Register service worker for PWA (only when PWA plugin is enabled)
+   // @ts-ignore — PWA disabled during build
+   if (false && 'serviceWorker' in navigator) {
      navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(() => {});
-
-     // Unregister any stale /sw.js (dev stub) from earlier deploys silently
      navigator.serviceWorker.getRegistrations().then((regs) => {
        for (const r of regs) {
          if (r.active?.scriptURL.endsWith('/sw.js')) {
@@ -399,10 +395,9 @@ if (typeof window !== 'undefined') {
   const enableDevSw = env.DEV && localStorage.getItem('enable_sw_dev') === '1'
   const enableProdSw = env.PROD && (isHttps && (!isLocalhost || forceLocalhostSw))
 
-  // Always register SW in dev mode if force_sw is set, or in prod on HTTPS
-  if (enableDevSw || enableProdSw || forceLocalhostSw) {
-    // We use vite-plugin-pwa's virtual module to handle registration and updates
-    // @ts-expect-error - Virtual module
+  // PWA disabled — skip service worker registration
+  if (false && (enableDevSw || enableProdSw || forceLocalhostSw)) {
+    // @ts-expect-error - Virtual module (PWA disabled)
     import('virtual:pwa-register').then(({ registerSW }) => {
       const updateSW = registerSW({
         onNeedRefresh() {

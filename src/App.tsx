@@ -8,6 +8,7 @@ import TreelzUploadPage from "./pages/TreelzUploadPage";
 import { useAuthStore } from "./lib/store";
 import { GlobalEventProvider } from "./contexts/GlobalEventContext";
 import { BatterySaverProvider } from "./contexts/BatterySaverContext";
+import { ProfileFrameProvider } from "./contexts/ProfileFrameContext";
 
 import { useEligibilityStore } from "./lib/eligibilityStore";
 import { useJailMode } from "./hooks/useJailMode";
@@ -2586,11 +2587,13 @@ function App() {
         <BatterySaverProvider>
           <EffectsProvider>
             <TrollProvider>
-              <TabSwitchHandler>
-                <AppContent />
-              </TabSwitchHandler>
-              {/* TM Family Invite Handler - shows pending invites as notifications */}
-              <TMFamilyInviteHandler />
+              <ProfileFrameProvider>
+                <TabSwitchHandler>
+                  <AppContent />
+                </TabSwitchHandler>
+                {/* TM Family Invite Handler - shows pending invites as notifications */}
+                <TMFamilyInviteHandler />
+              </ProfileFrameProvider>
             </TrollProvider>
           </EffectsProvider>
         </BatterySaverProvider>

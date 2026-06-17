@@ -3,6 +3,7 @@ import { Send, Smile } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatMessage } from "../../types/broadcast";
 import ProfileFrame from "../live/ProfileFrame";
+import AvatarWithFrame from "../profile/AvatarWithFrame";
 import { getDiamondForLevel } from "../../types/liveStreaming";
 import { resolveUsername as resolveUsernameUtil, DEFAULT_USERNAME } from "../../lib/chatUtils";
 
@@ -249,19 +250,17 @@ function ChatDiamondAvatar({
     </div>
   );
 
+  // Use AvatarWithFrame for premium profile frames, fallback to level-based
   if (showFrame) {
     return (
       <div className="relative" style={{ width: 32, height: 32 }}>
-        <div className="absolute inset-0 scale-[0.67]" style={{ zIndex: 1 }}>
-          <ProfileFrame
-            level={level}
-            avatarUrl={avatarUrl}
-            size="sm"
-            username={username}
-            showLevel={false}
-          />
-        </div>
-
+        <AvatarWithFrame
+          userId={userId}
+          avatarUrl={avatarUrl}
+          username={username}
+          size="xs"
+          className="absolute inset-0"
+        />
         {diamondContent}
       </div>
     );

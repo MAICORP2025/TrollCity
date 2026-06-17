@@ -52,6 +52,9 @@ import { GlowingUsernameColorPicker } from '../components/GlowingUsernameColorPi
 import { cars } from '../data/vehicles';
 import ProfileFeed from '../components/profile/ProfileFeed';
 import ProfileWatchlist from '../components/profile/ProfileWatchlist';
+import ProfileFrame from '../components/profile/ProfileFrame';
+import { useProfileFrameStore } from '../stores/useProfileFrameStore';
+import type { ProfileFrame as ProfileFrameType } from '../config/profileFrames';
 
 type InventoryState = {
   perks: any[];
@@ -194,6 +197,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
 
   const [isFollowing, setIsFollowing] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [equippedFrame, setEquippedFrame] = useState<ProfileFrameType | null>(null);
   const tabDropdownRef = useRef<HTMLDivElement | null>(null);
   const initialLoadRef = useRef(true);
   const prevProfileIdRef = useRef<string | null>(null);
@@ -404,6 +408,23 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
         } else {
           setInventory(emptyInventory);
         }
+
+        // Load user's equipped profile frame
+        try {
+          const { data: frameData } = await supabase
+            .from('user_profile_frames')
+            .select('frame_id, is_equipped')
+            .eq('user_id', data.id)
+            .eq('is_equipped', true)
+            .maybeSingle();
+          if (frameData?.frame_id) {
+            const { LAUNCH_FRAMES } = await import('../config/profileFrames');
+            const frame = LAUNCH_FRAMES.find(f => f.id === frameData.frame_id);
+            if (frame) {
+              setEquippedFrame(frame);
+            }
+          }
+        } catch { /* ignore frame load errors */ }
 
         setLoading(false);
       }
@@ -1221,9 +1242,9 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
           <div className="relative px-5 pb-6 md:px-8">
             <div className="-mt-20 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
-                <button type="button" onClick={() => isProfileLive && liveStreamId && navigate(`/watch/${liveStreamId}`)} className={`relative h-36 w-36 shrink-0 rounded-[2rem] border-4 bg-black p-1 shadow-[0_0_50px_rgba(0,0,0,0.8)] ${isProfileLive ? 'border-red-400 cursor-pointer' : 'border-cyan-300/40'}`}>
-                  <img src={avatarUrl} alt={profile.username} className="h-full w-full rounded-[1.65rem] object-cover" onError={(e) => { e.currentTarget.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`; }} />
-                  {isProfileLive && <span className="absolute -right-2 -top-2 rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white shadow-[0_0_24px_rgba(239,68,68,0.8)] animate-pulse">LIVE</span>}
+                <button type="button" onClick={() => isProfileLive && liveStreamId && navigate(`/watch/${liveStreamId}`)} className={`relative h-44 w-44 shrink-0 rounded-[2rem] border-4 bg-black p-1 shadow-[0_0_50px_rgba(0,0,0,0.8)] ${isProfileLive ? 'border-red-400 cursor-pointer' : 'border-cyan-300/40'}`}>
+                  <ProfileFrame frame={equippedFrame} avatarUrl={avatarUrl} size="xxl" username={profile.username} fillParent />
+                  {isProfileLive && <span className="absolute -right-2 -top-2 z-10 rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white shadow-[0_0_24px_rgba(239,68,68,0.8)] animate-pulse">LIVE</span>}
                 </button>
 
                 <div className="pb-1">

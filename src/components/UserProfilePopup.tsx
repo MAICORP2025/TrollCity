@@ -11,6 +11,7 @@ import ModActionsPopup from './broadcast/ModActionsPopup'
 import { toast } from 'sonner'
 import { isStaffProfile } from '../lib/staff'
 import { getUserAffiliation, UserAffiliation } from '../lib/userAffiliations'
+import AvatarWithFrame from './profile/AvatarWithFrame'
 
 interface UserProfilePopupProps {
   userId: string
@@ -203,12 +204,19 @@ export default function UserProfilePopup({ userId, username, onClose, onOpenChat
 
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-16 h-16 rounded-full bg-purple-600 flex items-center justify-center text-2xl font-bold overflow-hidden">
-                {profile?.avatar_url ? (
-                  <img src={profile.avatar_url} alt={username} className="w-full h-full object-cover" />
-                ) : (
-                  username.charAt(0).toUpperCase()
-                )}
+              <div className="w-16 h-16 overflow-hidden">
+                <AvatarWithFrame
+                  userId={userId}
+                  avatarUrl={profile?.avatar_url}
+                  username={username}
+                  size="md"
+                  className="w-16 h-16"
+                  fallback={
+                    <div className="w-16 h-16 rounded-full bg-purple-600 flex items-center justify-center text-2xl font-bold">
+                      {username.charAt(0).toUpperCase()}
+                    </div>
+                  }
+                />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-white">

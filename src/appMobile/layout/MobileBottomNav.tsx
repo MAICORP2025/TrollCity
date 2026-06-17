@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
+import ProfileFrame from "@/components/profile/ProfileFrame";
+import { useProfileFrameStore } from "@/stores/useProfileFrameStore";
 import {
   getMobileBubbleRoutes,
   normalizeMobileRole,
@@ -151,13 +153,20 @@ function MobileUserPanel({
   const xpPercent = getXpPercent(user.xp, user.xpToNextLevel);
   const coinsToNextPayout = getCoinsToNextPayout(user.trollCoins);
   const payoutValue = coinsToNextPayout === 0 ? "Eligible" : numberFormat(coinsToNextPayout);
+  const equippedFrame = useProfileFrameStore((s) => s.equippedFrame);
 
   return (
     <section className="tc-mobile-bottom-nav__user-card">
       <div className="tc-mobile-bottom-nav__user-top">
         <div className="tc-mobile-bottom-nav__avatar">
           {user.avatarUrl ? (
-            <img src={user.avatarUrl} alt={user.username} />
+            <ProfileFrame
+              frame={equippedFrame}
+              avatarUrl={user.avatarUrl}
+              username={user.username}
+              size="xs"
+              fillParent
+            />
           ) : (
             user.username.slice(0, 2).toUpperCase()
           )}

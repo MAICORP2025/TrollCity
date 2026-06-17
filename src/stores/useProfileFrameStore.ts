@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { LAUNCH_FRAMES, type ProfileFrame } from '../config/profileFrames';
+import { deductCoins } from '../lib/coinTransactions';
 
 interface UserFrameRecord {
   id: string;
@@ -133,23 +134,20 @@ export const useProfileFrameStore = create<ProfileFrameState>((set, get) => ({
     if (get().isFrameOwned(frameId)) return false;
 
     try {
-      // Deduct coins
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('troll_coins')
-        .eq('id', user.id)
-        .single();
+      // Deduct coins using the secure RPC
+      const { success, error: deductError } = await deductCoins({
+        userId: user.id,
+        amount: frame.coinCost,
+        type: 'frame_purchase',
+        description: `Purchased Profile Frame: ${frame.name}`,
+        metadata: { frame_id: frameId, frame_name: frame.name },
+        supabaseClient: supabase,
+      });
 
-      if (!profile || (profile.troll_coins || 0) < frame.coinCost) {
+      if (!success) {
+        console.error('[ProfileFrameStore] Coin deduction failed:', deductError);
         return false;
       }
-
-      const { error: deductError } = await supabase
-        .from('user_profiles')
-        .update({ troll_coins: (profile.troll_coins || 0) - frame.coinCost })
-        .eq('id', user.id);
-
-      if (deductError) throw deductError;
 
       // Add to user's collection
       const { error: insertError } = await supabase

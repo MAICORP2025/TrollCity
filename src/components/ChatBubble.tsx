@@ -25,6 +25,7 @@ import MessageInput from '../pages/tcps/components/MessageInput'
 import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../lib/utils'
+import AvatarWithFrame from './profile/AvatarWithFrame'
 
 interface Message {
   id: string
@@ -669,17 +670,17 @@ export default function ChatBubble() {
             return (
               <div key={msg.id} className={cn('flex w-full', isMe ? 'justify-end' : 'justify-start')}>
                 <div className={cn('flex max-w-[88%] gap-2', isMe ? 'flex-row-reverse' : 'flex-row')}>
-                  <img
-                    src={
+                  <AvatarWithFrame
+                    userId={isMe ? user?.id : msg.sender_id}
+                    avatarUrl={
                       isMe
-                        ? profile?.avatar_url ||
-                          `https://ui-avatars.com/api/?name=${profile?.username}&background=020617&color=67e8f9`
-                        : msg.sender_avatar_url ||
-                          `https://ui-avatars.com/api/?name=${msg.sender_username}&background=020617&color=67e8f9`
+                        ? profile?.avatar_url
+                        : msg.sender_avatar_url
                     }
-                    alt={isMe ? 'You' : msg.sender_username || 'User'}
+                    username={isMe ? profile?.username : msg.sender_username}
+                    size="xs"
                     className={cn(
-                      'h-8 w-8 shrink-0 rounded-2xl border object-cover',
+                      'h-8 w-8 shrink-0 rounded-2xl border',
                       isMe ? 'border-cyan-300/25' : 'border-fuchsia-300/20',
                       msg.isPending && 'opacity-50'
                     )}

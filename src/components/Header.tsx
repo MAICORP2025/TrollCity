@@ -5,6 +5,9 @@ import { toast } from 'sonner'
 
 import { useAuthStore } from '../lib/store'
 import { doesUserProfileExist, supabase } from '../lib/supabase'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useProfileFrameStore } from '@/stores/useProfileFrameStore'
+import { getFrameById } from '@/config/profileFrames'
 
 import ProfileDropdown from './ui/ProfileDropdown'
 import PresidentialToolsModal from './PresidentialToolsModal'
@@ -15,6 +18,8 @@ import GlobalTicker from './header/GlobalTicker'
 
 const Header = () => {
   const { user, profile } = useAuthStore()
+  const { equippedFrame: storeFrame } = useProfileFrameStore()
+  const headerFrame = storeFrame || (profile?.active_frame_id ? getFrameById(profile.active_frame_id) : null)
   const navigate = useNavigate()
 
   const [unreadNotifications, setUnreadNotifications] = useState(0)
@@ -407,19 +412,13 @@ const Header = () => {
                 aria-label="Open profile"
                 type="button"
               >
-                {profile?.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt={profile.username || 'Profile'}
-                    className="h-full w-full object-cover"
-                  />
-                ) : profile?.username ? (
-                  <span className="text-sm font-bold">
-                    {profile.username[0]?.toUpperCase()}
-                  </span>
-                ) : (
-                  <UserCircle className="h-6 w-6" />
-                )}
+                <ProfileFrame
+                  frame={headerFrame}
+                  avatarUrl={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.username || 'user'}`}
+                  size="xs"
+                  username={profile?.username || ''}
+                  fillParent
+                />
               </button>
             </>
           )}

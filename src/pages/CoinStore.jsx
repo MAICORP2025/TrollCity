@@ -485,17 +485,20 @@ function ProfileFramesStoreEmbed() {
     }
     setPurchasing(frame.id);
     try {
-      const { data: prof } = await supabase
-        .from('user_profiles')
-        .select('troll_coins')
-        .eq('id', user.id)
-        .single();
-      if (!prof || (prof.troll_coins || 0) < frame.coinCost) throw new Error('Not enough coins');
+      // Use secure coin deduction RPC
+      const { success, error: deductError } = await deductCoins({
+        userId: user.id,
+        amount: frame.coinCost,
+        type: 'frame_purchase',
+        description: `Purchased Profile Frame: ${frame.name}`,
+        metadata: { frame_id: frame.id, frame_name: frame.name },
+        supabaseClient: supabase,
+      });
 
-      await supabase
-        .from('user_profiles')
-        .update({ troll_coins: (prof.troll_coins || 0) - frame.coinCost })
-        .eq('id', user.id);
+      if (!success) {
+        toast.error(deductError || 'Insufficient coins');
+        return;
+      }
 
       await supabase.from('user_profile_frames').insert({
         user_id: user.id,
