@@ -235,7 +235,7 @@ export const SafetyAlertsPanel: React.FC<SafetyAlertsPanelProps> = ({
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [fetchAlerts, isRealtimeEnabled]);
 

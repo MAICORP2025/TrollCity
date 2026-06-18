@@ -322,7 +322,7 @@ export default function RecognitionPanel({
     }
   };
 
-  // ── Polling ──
+  // ── Initial fetch ──
   useEffect(() => {
     fetchSpotlight();
     fetchEnergy();
@@ -331,16 +331,6 @@ export default function RecognitionPanel({
     fetchAwards();
     fetchFanMemory();
     fetchContracts();
-
-    const spotlightInterval = setInterval(fetchSpotlight, 30000);
-    const energyInterval = setInterval(fetchEnergy, 5000);
-    const leaderboardInterval = setInterval(fetchLeaderboard, 15000);
-
-    return () => {
-      clearInterval(spotlightInterval);
-      clearInterval(energyInterval);
-      clearInterval(leaderboardInterval);
-    };
   }, [
     fetchSpotlight,
     fetchEnergy,
@@ -350,6 +340,20 @@ export default function RecognitionPanel({
     fetchFanMemory,
     fetchContracts,
   ]);
+
+  // ── Realtime subscriptions ──
+  useEffect(() => {
+    const channel = supabase
+      .channel(`recognition-panel:${streamId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_energy_meters', filter: `stream_id=eq.${streamId}` }, () => fetchEnergy())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_fan_tiers', filter: `stream_id=eq.${streamId}` }, () => { fetchSpotlight(); fetchLeaderboard(); fetchRoles(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_awards', filter: `stream_id=eq.${streamId}` }, () => fetchAwards())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [streamId, fetchEnergy, fetchSpotlight, fetchLeaderboard, fetchRoles, fetchAwards]);
 
   // ── Render ──
   return (

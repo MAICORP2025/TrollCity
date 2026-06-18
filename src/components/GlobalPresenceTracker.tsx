@@ -4,187 +4,112 @@ import { supabase } from '../lib/supabase';
 import { usePresenceStore } from '../lib/presenceStore';
 
 /**
- * GlobalPresenceTracker - tracks user presence and visibility
- * - Sends heartbeat every 30 seconds to keep user "online"
- * - Updates is_online status based on visibility (visible = online, hidden = offline)
- * - Does NOT log out users - just tracks presence
+ * GlobalPresenceTracker - tracks user presence using Supabase Realtime Presence.
+ *
+ * REPLACED: Previous version used 30s REST polling (upsert to user_presence table
+ * + SELECT count) which caused O(N²) broadcast storm. Now uses Supabase Realtime
+ * Presence channels which are WebSocket-based and scale without DB writes.
+ *
+ * - Tracks user online/offline via presence sync (no DB writes for heartbeat)
+ * - Fetches online count via presence state (no DB query for count)
+ * - Falls back to DB only for initial online status and visibility changes
+ * - Does NOT log out users — just tracks presence
  */
 export default function GlobalPresenceTracker() {
   const { user, profile } = useAuthStore();
   const setOnlineCount = usePresenceStore(state => state.setOnlineCount);
   const setOnlineUserIds = usePresenceStore(state => state.setOnlineUserIds);
   const isVisibleRef = useRef<boolean>(!document.hidden);
-  const lastOnlineUpdateRef = useRef<number>(0);
-  const heartbeatRef = useRef<number>(0);
-  const onlineCountRef = useRef<number>(0);
-  const intervalRef = useRef<number | null>(null);
-
-  // Update user's online status in database
-  const updateOnlineStatus = async (isOnline: boolean) => {
-    if (!user?.id || !profile?.id) return;
-    
-    const now = Date.now();
-    isVisibleRef.current = isOnline;
-
-    try {
-      // Update user_profiles is_online status
-      await supabase
-        .from('user_profiles')
-        .update({
-          is_online: isOnline,
-          last_active: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      // Also update active_sessions if we have a session ID
-      const sessionId = localStorage.getItem('current_device_session_id');
-      if (sessionId) {
-        await supabase
-          .from('active_sessions')
-          .update({
-            is_active: isOnline,
-            last_active: new Date().toISOString()
-          })
-          .eq('user_id', user.id)
-          .eq('session_id', sessionId);
-      }
-
-      // Also upsert to user_presence for real-time presence tracking
-      if (isOnline) {
-        const { error: presenceError } = await supabase.from('user_presence').upsert(
-          {
-            user_id: user.id,
-            last_seen_at: new Date().toISOString(),
-            is_online: true,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id' },
-        );
-        if (presenceError) {
-          // RLS errors (42501) can occur if the user's session is expired
-          // or the RLS migration hasn't been applied. Don't spam the console.
-          const code = (presenceError as any)?.code;
-          if (code === '42501') {
-            if (import.meta.env.DEV) console.warn('[GlobalPresenceTracker] RLS blocked user_presence upsert — session may be expired');
-          } else {
-            console.error('[GlobalPresenceTracker] Failed to upsert user_presence:', presenceError);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[GlobalPresenceTracker] Failed to update online status:', error);
-    }
-    
-    lastOnlineUpdateRef.current = now;
-  };
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     if (!user?.id || !profile?.id) return;
 
-    const clearSyncInterval = () => {
-      if (intervalRef.current !== null) {
-        window.clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    }
+    // Use a single global presence channel — Supabase Presence handles
+    // join/leave/sync without any DB writes.
+    const channel = supabase.channel('global-presence-tracker', {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+    });
 
-    // Heartbeat & Count fetch - fires immediately then on interval
-    const syncPresence = async (isInitial: boolean = false) => {
-      if (document.hidden && !isInitial) return
+    channelRef.current = channel;
 
-      try {
-        const now = Date.now();
+    // On sync, derive online users from presence state — zero DB queries
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState();
+      const userIds = Object.keys(state);
+      setOnlineCount(userIds.length);
+      setOnlineUserIds(userIds);
+    });
 
-        // 1. Send heartbeat - immediate on mount, then every 30s
-        if (isInitial || now - heartbeatRef.current >= 30000) {
-          heartbeatRef.current = now;
-          const { error: heartbeatError } = await supabase.from('user_presence').upsert(
-            {
-              user_id: user.id,
-              last_seen_at: new Date().toISOString(),
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        // Track this user as online — no DB write needed
+        await channel.track({
+          user_id: user.id,
+          online_at: new Date().toISOString(),
+        });
+
+        // Set initial DB online status (one-time write on connect)
+        try {
+          await supabase
+            .from('user_profiles')
+            .update({
               is_online: true,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'user_id' },
-          );
-          if (heartbeatError) {
-            const code = (heartbeatError as any)?.code;
-            if (code === '42501') {
-              if (import.meta.env.DEV) console.warn('[GlobalPresenceTracker] RLS blocked user_presence heartbeat — session may be expired');
-            } else {
-              console.error('[GlobalPresenceTracker] Failed to upsert user_presence heartbeat:', heartbeatError);
-            }
-          }
+              last_active: new Date().toISOString()
+            })
+            .eq('id', user.id);
+        } catch {
+          // Silently fail — presence tracking is non-critical
         }
-
-        // 2. Fetch total online count - immediate on mount, then every 30s
-        if (isInitial || now - onlineCountRef.current >= 30000) {
-          onlineCountRef.current = now;
-          const twoMinutesAgo = new Date(Date.now() - 120000).toISOString();
-          const { data: presenceData, error } = await supabase
-            .from('user_presence')
-            .select('user_id', { count: 'exact' })
-            .gt('last_seen_at', twoMinutesAgo)
-            .limit(1000);
-
-          if (!error && presenceData) {
-            const userIds = (presenceData as Array<{ user_id: string | null }>).map(p => p.user_id).filter(Boolean) as string[];
-            const uniqueUserIds = Array.from(new Set(userIds));
-            setOnlineCount(uniqueUserIds.length);
-            setOnlineUserIds(uniqueUserIds);
-          }
-        }
-      } catch (err) {
-        console.error('Presence sync failed:', err);
       }
-    };
+    });
 
-    const startSyncLoop = () => {
-      clearSyncInterval()
-      if (document.hidden) return
-      // Fire immediately so user shows online right away
-      syncPresence(true)
-      intervalRef.current = window.setInterval(() => syncPresence(false), 30000)
-    }
-
-    const stopSyncLoop = () => {
-      clearSyncInterval()
-    }
-
-    // Initial: user is online when app opens — fire immediately
-    updateOnlineStatus(true)
-
-    if (!document.hidden) {
-      startSyncLoop()
-    }
-
-    // Handle visibility changes - update online status when tab becomes visible/hidden
-    const handleVisibilityChange = () => {
+    // Handle visibility changes — update DB is_online only on transitions
+    const handleVisibilityChange = async () => {
       const isVisible = !document.hidden;
       isVisibleRef.current = isVisible;
-      console.log('[GlobalPresenceTracker] Visibility changed:', isVisible ? 'visible' : 'hidden');
 
       if (!isVisible) {
-        stopSyncLoop()
-        void updateOnlineStatus(false)
-        return
+        // Mark offline in DB (single write on hide)
+        try {
+          await supabase
+            .from('user_profiles')
+            .update({
+              is_online: false,
+              last_active: new Date().toISOString()
+            })
+            .eq('id', user.id);
+        } catch {
+          // Silently fail
+        }
+        return;
       }
 
-      void updateOnlineStatus(true)
-      startSyncLoop()
+      // Mark online in DB (single write on show)
+      try {
+        await supabase
+          .from('user_profiles')
+          .update({
+            is_online: true,
+            last_active: new Date().toISOString()
+          })
+          .eq('id', user.id);
+      } catch {
+        // Silently fail
+      }
     };
 
-    // Handle beforeunload - mark as offline but don't logout
+    // Handle beforeunload — mark as offline
     const handleBeforeUnload = () => {
-      // Use sendBeacon for reliable async update on page close
-      const sessionId = localStorage.getItem('current_device_session_id');
       if (user?.id) {
-        // Mark as offline in user_profiles
         const payload = JSON.stringify({
           is_online: false,
           last_active: new Date().toISOString()
         });
-
         navigator.sendBeacon(
           `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/user_profiles?id=eq.${user.id}`,
           payload
@@ -192,21 +117,34 @@ export default function GlobalPresenceTracker() {
       }
     };
 
-    // Listen for visibility changes
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Listen for page close
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      stopSyncLoop()
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
 
-      // Mark as offline when component unmounts (e.g., user navigates away or logs out)
-      updateOnlineStatus(false);
+      // Untrack presence and remove channel
+      if (channelRef.current) {
+        channelRef.current.untrack();
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+
+      // Mark as offline on unmount
+      if (user?.id) {
+        supabase
+          .from('user_profiles')
+          .update({
+            is_online: false,
+            last_active: new Date().toISOString()
+          })
+          .eq('id', user.id)
+          .then(() => {})
+          .catch(() => {});
+      }
     };
-  }, [user?.id, setOnlineCount, setOnlineUserIds]);
+  }, [user?.id, profile?.id, setOnlineCount, setOnlineUserIds]);
 
   return null;
 }

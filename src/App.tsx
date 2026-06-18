@@ -40,6 +40,9 @@ import { LiveContentProvider } from "./contexts/LiveContentContext";
 import TabSwitchHandler from "./components/TabSwitchHandler";
 import { initTelemetry } from "./lib/telemetry";
 import GlobalPresenceTracker from "./components/GlobalPresenceTracker";
+import ChatBubble from "./components/ChatBubble";
+import { useDoubleTap } from "./hooks/useDoubleTap";
+import { useChatStore } from "./lib/chatStore";
 import { useUserPresenceRoute } from "./hooks/useUserPresenceRoute";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { reportBug } from "./lib/bugReporter";
@@ -1404,6 +1407,7 @@ const handleVisibilityChange = async () => {
 <AppLayout showSidebar={!isMobileUI || isStandalone} showHeader={true} showBottomNav={true}>
            <GlobalPresenceTracker />
            {user && <AdminOfficerQuickMenu />}
+           {user && <ChatBubble />}
            <StaffWalkieTalkieProvider>
              <RTCAdminMonitor />
              <ErrorBoundary>
@@ -1616,7 +1620,6 @@ const handleVisibilityChange = async () => {
 
 <Route path="/mobile" element={<Navigate to="/home" replace />} />
                    <Route path="/messages" element={<Navigate to="/utromail" replace />} />
-                   <Route path="/tcps" element={<Navigate to="/utromail" replace />} />
 
                    {/* Dashboard redirects — commonly expected paths */}
                    <Route path="/auction/dashboard" element={<Navigate to="/auctions/studio" replace />} />
@@ -2617,6 +2620,14 @@ function App() {
     return cleanup;
   }, []);
 
+  // Global double-tap / double-click to open chat bubble
+  useDoubleTap(() => {
+    const { user } = useAuthStore.getState();
+    if (!user) return;
+    // Open bubble in inbox view — user picks a conversation
+    useChatStore.getState().toggleChatBubble();
+  });
+
   return (
     <PageVisibilityProvider>
       <GlobalEventProvider>
@@ -2658,7 +2669,7 @@ function UsernameRedirect() {
       'explore', 'leaderboard', 'marketplace', 'pool', 'map', 'settings', 'notifications',
       'following', 'trollifications', 'trollifieds', 'garage', 'ktauto', 'district', 'living',
       'insurance', 'neighborhood', 'driver-test', 'inbox', 'shop', 'inventory', 'troting',
-      'tcps', 'match', 'city-hall', 'city-registry', 'universe-event', 'events', 'terms',
+      'match', 'city-hall', 'city-registry', 'universe-event', 'events', 'terms',
       'access-denied', 'reset-password', 'tax-onboarding', 'verification', 'founding-officer-trial',
       'under-construction', 'jail', 'inmates', 'wall', 'crowns', 'credit-scores', 'search',
       'blocked-users', 'pool', 'troll-games', 'troll-wheel', 'decree', 'executive', 'noah'];

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, memo } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
@@ -18,7 +17,7 @@ interface ViewerBubblesProps {
   viewers?: Viewer[];
 }
 
-function ViewerBubbles({ streamId, maxVisible = 10, className, viewers: viewerOverride }: ViewerBubblesProps) {
+function ViewerBubbles({ streamId, maxVisible = 50, className, viewers: viewerOverride }: ViewerBubblesProps) {
   const [fallbackViewers, setFallbackViewers] = useState<Viewer[]>([]);
   const [isHovered, setIsHovered] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,18 +97,13 @@ function ViewerBubbles({ streamId, maxVisible = 10, className, viewers: viewerOv
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Viewer bubbles */}
+      {/* Viewer bubbles — CSS-only transitions for 50+ viewer capacity */}
       <div className="flex items-center -space-x-2">
-        <AnimatePresence initial={false}>
         {visibleViewers.map((viewer) => (
-          <motion.div
+          <div
             key={viewer.id}
-            initial={{ opacity: 0, scale: 0.35, y: 14 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 1.35, y: -14, filter: 'blur(2px)' }}
-            transition={{ duration: 0.22 }}
             className={cn(
-              'relative rounded-full border-2 border-black overflow-hidden transition-all duration-200 hover:scale-110 hover:z-10 hover:-translate-y-1',
+              'relative rounded-full border-2 border-black overflow-hidden transition-all duration-200 ease-out hover:scale-110 hover:z-10 hover:-translate-y-1 opacity-100',
               isHovered && 'opacity-80'
             )}
             title={viewer.username}
@@ -127,7 +121,7 @@ function ViewerBubbles({ streamId, maxVisible = 10, className, viewers: viewerOv
             )}
             {/* Active indicator dot */}
             <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border border-black" />
-          </motion.div>
+          </div>
         ))}
         </AnimatePresence>
       </div>

@@ -111,9 +111,7 @@ export default function BottomNavigation() {
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
-  const [tcpsUnreadCount, setTcpsUnreadCount] = useState(0)
   const [notificationCount, setNotificationCount] = useState(0)
-  const totalUnreadCount = tcpsUnreadCount + notificationCount
 
   const [isBubbleVisible, setIsBubbleVisible] = useState(true)
   const [showHighlight, setShowHighlight] = useState(false)
@@ -358,98 +356,47 @@ export default function BottomNavigation() {
     setIsMenuOpen(true)
   }, [navigate, showHighlight])
 
+  // ─── Utromail unread count ─────────────────────────────────────────────────
+
   useEffect(() => {
     if (!user?.id || isMobile) return
 
     let isMounted = true
-    let lastFetchTime = 0
-    const MIN_FETCH_INTERVAL = 5000
 
     const fetchUnreadCount = async () => {
-      const now = Date.now()
-      if (now - lastFetchTime < MIN_FETCH_INTERVAL) return
       if (!isMounted) return
-
-      lastFetchTime = now
-
-      const { data } = await supabase
-        .from('conversation_members')
-        .select('conversation_id')
-        .eq('user_id', user.id)
-
-      if (!isMounted) return
-
-      if (!data || data.length === 0) {
-        setTcpsUnreadCount(0)
-        return
-      }
-
-      const convIds = data.map((d) => d.conversation_id)
-      const BATCH_SIZE = 50
-      let totalCount = 0
-
-      for (let i = 0; i < convIds.length; i += BATCH_SIZE) {
-        const batch = convIds.slice(i, i + BATCH_SIZE)
-
-        const { count } = await supabase
-          .from('conversation_messages')
-          .select('*', { count: 'exact', head: true })
-          .in('conversation_id', batch)
-          .neq('sender_id', user.id)
-          .is('read_at', null)
-
-        totalCount += count || 0
-      }
-
-      if (isMounted) setTcpsUnreadCount(totalCount)
-    }
-
-    const fetchUserConvs = async () => {
-      const { data } = await supabase
-        .from('conversation_members')
-        .select('conversation_id')
-        .eq('user_id', user.id)
-
-      return data?.map((d) => d.conversation_id) || []
-    }
-
-    const setupSubscription = async () => {
-      const userConvIds = await fetchUserConvs()
-      if (!isMounted || userConvIds.length === 0) return null
-
-      return supabase
-        .channel(`nav-unread-count:${user.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'conversation_messages',
-            filter: `conversation_id=in.(${userConvIds.join(',')})`,
-          },
-          () => fetchUnreadCount(),
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'conversation_messages',
-            filter: `conversation_id=in.(${userConvIds.join(',')})`,
-          },
-          () => fetchUnreadCount(),
-        )
-        .subscribe()
+      // Use Utromail's getUnreadCount from the service
+      try {
+        const { getUnreadCount } = await import('../services/utromailService')
+        const count = await getUnreadCount(user.id)
+        if (isMounted) setNotificationCount(prev => {
+          // Merge: notification count already has notifications, add utromail unread
+          // We store utromail unread separately in the total
+          return (count || 0) + (prev || 0)
+        })
+      } catch { /* ignore */ }
     }
 
     fetchUnreadCount()
-    const channelPromise = setupSubscription()
+
+    // Subscribe to new utromail messages for unread count updates
+    const channel = supabase
+      .channel(`nav-utromail-unread:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'utromail_messages',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        () => fetchUnreadCount(),
+      )
+      .subscribe()
 
     return () => {
       isMounted = false
-      channelPromise.then((channel) => {
-        if (channel) supabase.removeChannel(channel)
-      })
+      supabase.removeChannel(channel)
     }
   }, [user?.id])
 
@@ -498,72 +445,57 @@ export default function BottomNavigation() {
     }
   }, [user?.id])
 
+  // ─── Utromail message bubble popup ─────────────────────────────────────────
+
   useEffect(() => {
     if (!user?.id || isMobile) return
 
-    const subscribeToMessages = async () => {
-      const { data: memberships } = await supabase
-        .from('conversation_members')
-        .select('conversation_id')
-        .eq('user_id', user.id)
+    const channel = supabase
+      .channel(`mobile-utromail-bubble:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'utromail_messages',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          const newMsg = payload.new as any
+          if (newMsg.sender_id === user.id) return
 
-      if (!memberships || memberships.length === 0) return null
+          const { data: sender } = await supabase
+            .from('user_profiles')
+            .select('username, avatar_url')
+            .eq('id', newMsg.sender_id)
+            .maybeSingle()
 
-      const conversationIds = memberships.map((m) => m.conversation_id)
+          if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
 
-      return supabase
-        .channel(`mobile-message-bubble:${user.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'conversation_messages',
-          },
-          async (payload) => {
-            const newMsg = payload.new as any
+          setRecentMessage({
+            id: newMsg.id,
+            sender_id: newMsg.sender_id,
+            sender_username: sender?.username || 'Unknown',
+            sender_avatar_url: sender?.avatar_url || null,
+            content: newMsg.body,
+            conversation_id: newMsg.thread_id,
+            created_at: newMsg.sent_at,
+          })
 
-            if (newMsg.sender_id === user.id) return
-            if (!conversationIds.includes(newMsg.conversation_id)) return
+          setShowMessageBubble(true)
 
-            const { data: sender } = await supabase
-              .from('user_profiles')
-              .select('username, avatar_url')
-              .eq('id', newMsg.sender_id)
-              .maybeSingle()
-
-            if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
-
-            setRecentMessage({
-              id: newMsg.id,
-              sender_id: newMsg.sender_id,
-              sender_username: sender?.username || 'Unknown',
-              sender_avatar_url: sender?.avatar_url || null,
-              content: newMsg.body,
-              conversation_id: newMsg.conversation_id,
-              created_at: newMsg.created_at,
-            })
-
-            setShowMessageBubble(true)
-
-            messageTimeoutRef.current = setTimeout(() => {
-              setShowMessageBubble(false)
-            }, 8000)
-          },
-        )
-        .subscribe()
-    }
-
-    let channel: any
-    subscribeToMessages().then((ch) => {
-      channel = ch
-    })
+          messageTimeoutRef.current = setTimeout(() => {
+            setShowMessageBubble(false)
+          }, 8000)
+        },
+      )
+      .subscribe()
 
     return () => {
-      if (channel) supabase.removeChannel(channel)
+      supabase.removeChannel(channel)
       if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
     }
-  }, [user?.id])
+  }, [user?.id, isMobile])
 
   const handleMessagesClick = async () => {
     if (user?.id && notificationCount > 0) {
@@ -575,7 +507,6 @@ export default function BottomNavigation() {
     }
 
     setNotificationCount(0)
-    setTcpsUnreadCount(0)
     setIsMenuOpen(false)
   }
 
@@ -655,7 +586,7 @@ export default function BottomNavigation() {
   const handleMessageBubbleClick = () => {
     if (!recentMessage) return
 
-    navigate(`/tcps?user=${recentMessage.sender_id}`)
+    navigate(`/utromail?user=${recentMessage.sender_id}`)
     setShowMessageBubble(false)
   }
 
@@ -704,14 +635,14 @@ export default function BottomNavigation() {
 
       { category: 'Social', label: 'Search', icon: Search, path: '/search' },
       { category: 'Social', label: 'Notifications', icon: Bell, path: '/notifications', badge: notificationCount, onClick: handleMessagesClick },
-      { category: 'Social', label: 'TCPS', icon: MessageSquare, path: '/tcps', badge: totalUnreadCount, onClick: handleMessagesClick },
+      { category: 'Social', label: 'Mail', icon: MessageSquare, path: '/utromail', badge: notificationCount, onClick: handleMessagesClick },
       { category: 'Social', label: 'Profile', icon: User, path: profile?.username ? `/profile/${profile.username}` : '/profile/setup' },
 
       { category: 'Support', label: 'Safety', icon: Shield, path: '/safety' },
       { category: 'Support', label: 'Policies', icon: FileText, path: '/legal' },
       { category: 'Support', label: 'Support', icon: LifeBuoy, path: '/support' },
     ],
-    [user, profile, notificationCount, totalUnreadCount, isBroadcastLockedDown],
+    [user, profile, notificationCount, isBroadcastLockedDown],
   )
 
   const governmentPages: MenuOption[] = useMemo(() => {

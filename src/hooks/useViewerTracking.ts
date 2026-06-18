@@ -125,21 +125,13 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
         }
       })
 
-    // Heartbeat for stream_viewers table every 60s (reduced from 30s to reduce DB load)
-    // Pauses when tab is hidden to reduce unnecessary writes
-    const heartbeatInterval = setInterval(async () => {
-      if (document.hidden) return;
-      if (streamId && isValidUUID(user?.id)) {
-        await supabase.from('stream_viewers').upsert({
-          stream_id: streamId,
-          user_id: user.id,
-          last_seen: new Date().toISOString()
-        }, { onConflict: 'stream_id,user_id' });
-      }
-    }, 60000);
+    // REPLACED: 60s DB heartbeat interval removed.
+    // Supabase Realtime Presence (channel.track/untrack) already handles viewer
+    // join/leave via WebSocket. The stream_viewers table is only written to on
+    // initial join (above) and cleanup (below) — no periodic upsert needed.
+    // This eliminates N × 1 DB write per minute across all viewers.
 
     return () => {
-      clearInterval(heartbeatInterval);
       if (updateTimerRef.current) clearTimeout(updateTimerRef.current);
       channel.untrack();
       supabase.removeChannel(channel);
@@ -163,8 +155,12 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
 }
 
 /**
- * Hook to get live viewer count for a stream from the Database.
+ * Hook to get live viewer count for a stream.
  * Used for listing pages (Home, Sidebar) where we don't need real-time presence.
+ *
+ * REPLACED: Previous version polled streams table every 30s. Now uses a Supabase
+ * Realtime postgres_changes subscription — viewer count updates are pushed
+ * instantly when the host updates it, with zero polling.
  */
 export function useLiveViewerCount(streamId: string | null) {
   const [viewerCount, setViewerCount] = useState(0)
@@ -183,13 +179,13 @@ export function useLiveViewerCount(streamId: string | null) {
     const getCount = async () => {
       // Thundering Herd Prevention: Jitter on fetch (0-500ms)
       await new Promise(resolve => setTimeout(resolve, Math.random() * 500));
-      
+
       const { data } = await supabase
         .from('streams')
         .select('current_viewers')
         .eq('id', streamId)
         .single()
-      
+
       if (mounted && data) {
         setViewerCount(data.current_viewers || 0)
         setLoading(false)
@@ -197,26 +193,30 @@ export function useLiveViewerCount(streamId: string | null) {
     }
     getCount()
 
-    // Subscribe to DB updates (debounced by the host's 5s update interval)
-    // REFACTOR: Changed from Realtime subscription to Polling to reduce DB connection costs
-    // Reduced from 5s to 30s to reduce disk I/O on Supabase
-    const interval = setInterval(async () => {
-        if (!mounted) return;
-        if (document.hidden) return;
-        const { data } = await supabase
-            .from('streams')
-            .select('current_viewers')
-            .eq('id', streamId)
-            .single();
-        
-        if (mounted && data) {
-            setViewerCount(data.current_viewers || 0);
+    // Subscribe to realtime updates on the streams table — no polling needed.
+    // The host updates current_viewers via update_stream_viewer_count RPC,
+    // and this subscription receives the change instantly.
+    const channel = supabase
+      .channel(`stream-viewer-count:${streamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+          filter: `id=eq.${streamId}`,
+        },
+        (payload) => {
+          if (mounted && payload.new) {
+            setViewerCount((payload.new as any).current_viewers || 0)
+          }
         }
-    }, 30000); // Poll every 30s (reduced from 5s)
+      )
+      .subscribe()
 
     return () => {
       mounted = false
-      clearInterval(interval);
+      supabase.removeChannel(channel)
     }
   }, [streamId])
 

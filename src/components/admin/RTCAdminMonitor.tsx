@@ -1070,7 +1070,7 @@ const openAction = useCallback((user: UserListItem, action: string) => {
 
     if (activeMainTab === 'rtc') {
       fetchRTCStats();
-      const interval = window.setInterval(fetchRTCStats, 10000);
+      const interval = window.setInterval(fetchRTCStats, 30000);
       return () => window.clearInterval(interval);
     }
 
@@ -1118,32 +1118,25 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     }
   }, [activeMainTab, fetchCashoutBonusData, fetchClickStats, fetchRTCStats, fetchSignupData, fetchStreamAnalytics, isStaff]);
 
-  // Monitor for new user signups to trigger the flashing blue ring notification
+  // Monitor for new user signups via realtime instead of polling
   useEffect(() => {
     if (!isStaff) return;
 
-    const checkNewUsers = async () => {
-      try {
-        const { count, error } = await supabase
-          .from('user_profiles')
-          .select('id', { count: 'exact', head: true });
+    const channel = supabase
+      .channel('admin-signup-monitor')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'user_profiles',
+      }, () => {
+        setShowSignupFlash(true);
+        setTimeout(() => setShowSignupFlash(false), 15000);
+      })
+      .subscribe();
 
-        if (error) return;
-        
-        const currentCount = count || 0;
-        if (prevTotalUsersRef.current !== null && currentCount > prevTotalUsersRef.current) {
-          setShowSignupFlash(true);
-          setTimeout(() => setShowSignupFlash(false), 15000); // Pulse for 15 seconds
-        }
-        prevTotalUsersRef.current = currentCount;
-      } catch (err) {
-        // Silent fail for background polling
-      }
+    return () => {
+      supabase.removeChannel(channel);
     };
-
-    checkNewUsers();
-    const interval = setInterval(checkNewUsers, 20000); // Check every 20s
-    return () => clearInterval(interval);
   }, [isStaff]);
 
   // Monitor for new non-admin users coming online to trigger white flash
@@ -1204,7 +1197,7 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     };
 
     checkNewOnlineUsers();
-    const interval = setInterval(checkNewOnlineUsers, 15000); // Check every 15s
+    const interval = setInterval(checkNewOnlineUsers, 30000); // Check every 30s
     return () => clearInterval(interval);
   }, [isStaff]);
 

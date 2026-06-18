@@ -5,6 +5,12 @@ import { useLocation } from "react-router-dom";
 
 /**
  * Tracks the user's current route/page and writes it to user_presence_routes.
+ *
+ * REPLACED: Previous version used 30s setInterval heartbeat to upsert
+ * user_presence_routes. Now the 30s timer is removed — route changes and
+ * visibility transitions are sufficient triggers. The periodic heartbeat was
+ * redundant since the route only changes on navigation.
+ *
  * Should be used once at the app level for authenticated users.
  */
 export function useUserPresenceRoute() {
@@ -22,7 +28,6 @@ export function useUserPresenceRoute() {
 
   const updatePresence = useCallback(
     async (path: string, title: string) => {
-      const storeUserId = storeUser?.id;
       const authUserId = await getAuthUserId();
 
       if (!authUserId) {
@@ -69,7 +74,7 @@ export function useUserPresenceRoute() {
         });
       }
     },
-    [storeUser?.id, getAuthUserId]
+    [getAuthUserId]
   );
 
   // Update on route change
@@ -77,14 +82,9 @@ export function useUserPresenceRoute() {
     updatePresence(location.pathname, document.title);
   }, [location.pathname, updatePresence]);
 
-  // Periodic heartbeat while active
-  useEffect(() => {
-    const interval = setInterval(() => {
-      updatePresence(location.pathname, document.title);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [location.pathname, updatePresence]);
+  // REMOVED: 30s periodic heartbeat — route changes are event-driven.
+  // The periodic upsert was causing unnecessary DB writes every 30s per user
+  // with no new data (same route, same title).
 
   // Update on visibility change (tab becomes active)
   useEffect(() => {

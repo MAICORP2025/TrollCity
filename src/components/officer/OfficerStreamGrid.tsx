@@ -64,8 +64,19 @@ export default function OfficerStreamGrid() {
 
   useEffect(() => {
     fetchStreams();
-    const interval = setInterval(fetchStreams, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel('officer-streams-monitor')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'streams',
+      }, () => fetchStreams())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   if (loading && streams.length === 0) {

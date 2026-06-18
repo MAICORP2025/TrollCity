@@ -2080,6 +2080,18 @@ useEffect(() => {
     const confirmed = confirm(isHost ? 'End this broadcast?' : 'Leave this broadcast?')
     if (!confirmed) return
 
+    // If host is in an active random battle, forfeit first so the other broadcaster wins
+    if (isHost && stream?.is_battle && stream?.battle_id && stream?.battle_mode === 'random_queue' && user?.id) {
+      try {
+        await supabase.rpc('forfeit_random_battle', {
+          p_stream_id: stream.id,
+          p_broadcaster_id: user.id,
+        });
+      } catch (forfeitErr) {
+        console.warn('[handleLeave] forfeit_random_battle failed:', forfeitErr);
+      }
+    }
+
     // Stop local and published media
     cleanupLocalMedia()
 
@@ -2089,9 +2101,54 @@ useEffect(() => {
     // Clear PreflightStore
     PreflightStore.clear()
 
+    // If host, mark stream as ended in the database
+    if (isHost && stream) {
+      let backendStopped = false
+      try {
+        const stopResponse = await fetch('/api/broadcasts/stop-streaming', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ streamId: stream.id })
+        })
+        if (stopResponse.ok) backendStopped = true
+      } catch {}
+
+      if (!backendStopped) {
+        await supabase
+          .from('streams')
+          .update({
+            is_live: false,
+            status: 'ended',
+            ended_at: new Date().toISOString()
+          })
+          .eq('id', stream.id)
+      }
+
+      try {
+        const endTime = new Date().toISOString()
+        const { data: session } = await supabase
+          .from('rtc_sessions')
+          .select('id, started_at')
+          .eq('room_name', `stream-${stream.id}`)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (session) {
+          const startTime = new Date(session.started_at)
+          const durationSeconds = Math.floor((new Date(endTime).getTime() - startTime.getTime()) / 1000)
+          await supabase
+            .from('rtc_sessions')
+            .update({ is_active: false, ended_at: endTime, duration_seconds: durationSeconds })
+            .eq('id', session.id)
+        }
+      } catch {}
+
+      setStream((prev: any) => prev ? { ...prev, status: 'ended', is_live: false } : null)
+    }
+
     // Navigate away
     navigate('/home', { replace: true })
-  }, [isHost, navigate, disconnectLiveKitRoom])
+  }, [isHost, navigate, disconnectLiveKitRoom, stream, user?.id])
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
 const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
     const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
@@ -4120,6 +4177,22 @@ const handleLike = useCallback(async () => {
       const confirmed = window.confirm('Are you sure you want to end this stream? This cannot be undone.');
       if (!confirmed) return;
     }
+
+    // If in an active random battle, forfeit first so the other broadcaster wins
+    if (stream?.is_battle && stream?.battle_id && stream?.battle_mode === 'random_queue' && user?.id) {
+      try {
+        const { data: forfeitData, error: forfeitError } = await supabase.rpc('forfeit_random_battle', {
+          p_stream_id: stream.id,
+          p_broadcaster_id: user.id,
+        });
+        if (forfeitError) {
+          console.warn('[handleStreamEnd] forfeit_random_battle error:', forfeitError);
+        }
+      } catch (forfeitErr) {
+        console.warn('[handleStreamEnd] forfeit_random_battle failed:', forfeitErr);
+      }
+    }
+
     // Stop local and published media first
     cleanupLocalMedia()
 
@@ -4217,7 +4290,7 @@ const handleLike = useCallback(async () => {
     } else {
       navigate(`/broadcast/summary/${stream?.id}`);
     }
-  }, [cleanupLocalMedia, isStaff, navigate, stream?.id, stream?.status]);
+  }, [cleanupLocalMedia, isStaff, navigate, stream?.id, stream?.status, stream?.is_battle, stream?.battle_id, stream?.battle_mode, user?.id]);
 
   const handleStartBattle = useCallback(async () => {
     if (!stream || !isHost) return

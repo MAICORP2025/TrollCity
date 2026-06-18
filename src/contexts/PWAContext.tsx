@@ -239,7 +239,7 @@ const isLocalhost =
         });
         
         // Listen for messages from SW
-        navigator.serviceWorker.addEventListener('message', (event) => {
+        const handleSWMessage = (event: MessageEvent) => {
           const { type, payload } = event.data || {};
           
           switch (type) {
@@ -274,7 +274,6 @@ const isLocalhost =
               break;
               
             case 'PUSH_RECEIVED':
-              // Handle push notification in app context
               window.dispatchEvent(new CustomEvent('pwa-push-received', { detail: payload }));
               break;
               
@@ -282,7 +281,9 @@ const isLocalhost =
               window.dispatchEvent(new CustomEvent('pwa-notification-action', { detail: payload }));
               break;
           }
-        });
+        };
+
+        navigator.serviceWorker.addEventListener('message', handleSWMessage);
         
         // Get SW version
         if (registration.active) {
@@ -304,7 +305,10 @@ const isLocalhost =
       swRegistrationRef.current?.update();
     }, 60 * 60 * 1000);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+    };
   }, []);
   
   // ===== NETWORK STATE MONITORING =====

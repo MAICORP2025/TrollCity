@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Send, User, Shield, Crown, Sparkles, Gift, Swords, Trash2 } from 'lucide-react';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { PreflightStore } from '../../lib/preflightStore';
@@ -93,9 +94,185 @@ interface BroadcastChatProps {
     onMessageSent?: () => void;
 }
 
-export default function BroadcastChat({ 
-  streamId, 
-  hostId, 
+// ── Extracted message item component for Virtuoso virtualization ──
+// Each message is memoized to prevent re-render of all items when one changes.
+
+interface ChatMessageItemProps {
+  msg: Message;
+  isHost?: boolean;
+  isOfficer?: boolean;
+  user: any;
+  showGoldenBanner?: boolean;
+  disappearingMessages: Set<string>;
+  openModActionsForUser: (userId: string, username: string, avatarUrl?: string, role?: string, trollRole?: string) => void;
+  openGiftForUser: (userId: string) => void;
+  deleteMessage: (id: string) => void;
+  onAcceptChallenge?: (challengeId: string, challengerId: string) => void;
+  onDenyChallenge?: (challengeId: string) => void;
+}
+
+function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disappearingMessages, openModActionsForUser, openGiftForUser, deleteMessage, onAcceptChallenge, onDenyChallenge }: ChatMessageItemProps) {
+  const isSystem = msg.type === 'system';
+  const isGift = msg.type === 'gift' || msg.content?.startsWith('GIFT_EVENT:');
+  const isChallenge = msg.type === 'challenge';
+
+  if (isSystem) {
+    return (
+      <div className="flex items-center gap-2 text-zinc-400 text-xs italic bg-transparent p-1.5 rounded-lg border border-white/5">
+        <Sparkles size={12} className="text-yellow-500 flex-shrink-0" />
+        <button
+          type="button"
+          onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+          className="font-bold text-zinc-300 hover:text-yellow-300 transition-colors flex items-center gap-1 truncate"
+          title="Send gift"
+        >
+          {msg.user_profiles?.username || 'User'}
+        </button>
+        <span className="truncate">{msg.content}</span>
+      </div>
+    );
+  }
+
+  if (isChallenge) {
+    return (
+      <div className="flex items-center gap-2 bg-purple-900/40 border border-purple-500/30 p-2 rounded-lg">
+        <Swords size={14} className="text-purple-400 flex-shrink-0" />
+        <div className="flex-1">
+          <div className="flex items-center gap-1">
+            <span className="font-bold text-purple-400 text-xs">
+              {msg.user_profiles?.username || msg.challenger_username || 'Someone'}
+            </span>
+            <span className="text-zinc-400 text-xs">sent a challenge!</span>
+          </div>
+          {isHost && msg.challenge_id && (
+            <div className="flex items-center gap-1 mt-1">
+              <button
+                type="button"
+                onClick={() => onAcceptChallenge?.(msg.challenge_id!, msg.challenger_id!)}
+                className="px-2 py-0.5 bg-green-500/20 hover:bg-green-500/40 text-green-400 text-xs rounded transition-colors"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                onClick={() => onDenyChallenge?.(msg.challenge_id!)}
+                className="px-2 py-0.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 text-xs rounded transition-colors"
+              >
+                Deny
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (isGift) {
+    if (msg.content && !msg.content.startsWith('GIFT_EVENT:') && msg.content.includes('coins back')) {
+      return (
+        <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg">
+          <Gift size={14} className="text-yellow-400 flex-shrink-0" />
+          <span className="text-xs text-yellow-100">{msg.content}</span>
+        </div>
+      );
+    }
+
+    let giftType = msg.gift_type || 'gift';
+    let giftAmount = msg.gift_amount || 1;
+    let parsedGiftValue = 0;
+    let parsedCoinsBack = 0;
+    const senderName = msg.sender_name || msg.user_profiles?.username || 'Someone';
+    const receiverName = msg.receiver_name || 'user';
+    const parsedTrollmondsTransferred = msg.trollmonds_transferred || (msg.content ? (parseGiftMessage(msg.content)?.trollmondsTransferred || 0) : 0);
+
+    if (!msg.gift_type && msg.content) {
+      const parsed = parseGiftMessage(msg.content);
+      if (parsed) {
+        giftType = parsed.giftName;
+        giftAmount = parsed.quantity;
+        parsedGiftValue = parsed.giftValue;
+        parsedCoinsBack = parsed.coinsBack;
+      }
+    }
+
+    const formattedGiftName = giftType.charAt(0).toUpperCase() + giftType.slice(1).toLowerCase();
+    const giftText = giftAmount > 1 ? `sent ${formattedGiftName}s` : `sent a ${formattedGiftName}`;
+
+    return (
+      <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg">
+        <Gift size={14} className="text-yellow-400 flex-shrink-0" />
+        <span className="text-xs">
+          <button
+            type="button"
+            onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+            className="font-bold text-yellow-400 hover:text-yellow-300 transition-colors"
+            title="Send gift"
+          >
+            {senderName}
+          </button>
+          <span className="text-zinc-400"> {giftText}</span>
+          {giftAmount > 1 && <span className="text-yellow-400 ml-1">x{giftAmount}</span>}
+          {msg.receiver_name && (
+            <span className="text-blue-400">
+              {' '}to <button
+                type="button"
+                onClick={() => openGiftForUser(msg.receiver_id)}
+                className="font-bold text-blue-400 hover:text-blue-300 transition-colors"
+                title="Send gift"
+              >
+                {receiverName}
+              </button>
+            </span>
+          )}
+          {parsedTrollmondsTransferred > 0 && (
+            <span className="text-purple-300 ml-1">(+{parsedTrollmondsTransferred} 💎)</span>
+          )}
+        </span>
+      </div>
+    );
+  }
+
+  // Regular chat message
+  return (
+    <div className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm p-2 rounded-lg ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''}`}>
+      {showGoldenBanner && msg.user_id === user?.id && (
+        <span className="text-yellow-400 text-xs">👑</span>
+      )}
+      <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-zinc-700 overflow-hidden flex-shrink-0">
+        {msg.user_profiles?.avatar_url ? (
+          <img src={msg.user_profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <User size={8} className="md:w-[10px] md:h-[10px] m-0.5 text-zinc-400" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
+          className="font-bold text-xs truncate hover:text-yellow-300 transition-colors text-yellow-400"
+          title="Send gift"
+        >
+          {msg.user_profiles?.username || 'User'}:
+        </button>
+        <span className="text-white text-xs truncate">{msg.content}</span>
+      </div>
+      {isOfficer && (
+        <button
+          type="button"
+          onClick={() => deleteMessage(msg.id)}
+          className="p-1 rounded text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors"
+          title="Delete chat message"
+        >
+          <Trash2 size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function BroadcastChat({
+  streamId,
+  hostId,
   isModerator, 
   isHost, 
   isViewer = false, 
@@ -116,6 +293,18 @@ export default function BroadcastChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [disappearingMessages, setDisappearingMessages] = useState<Set<string>>(new Set());
   const [input, setInput] = useState('');
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+
+  // Cap total messages in memory to prevent unbounded growth
+  const MAX_MESSAGES = 500;
+
+  // Reverse messages once for virtual list (newest first)
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+
+  // Scroll to bottom (index 0 in reversed list) when new messages arrive
+  const scrollToBottom = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({ index: 0, behavior: 'smooth' });
+  }, []);
   const [streamMods, setStreamMods] = useState<string[]>([]);
   const { user, profile } = useAuthStore();
   const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
@@ -655,7 +844,7 @@ const fetchMessages = async () => {
                       return true
                   })
 
-                  return [...newHistory, ...prev]
+                  return [...newHistory, ...prev].slice(-MAX_MESSAGES)
               })
           }
       }
@@ -669,30 +858,31 @@ const fetchMessages = async () => {
         })
   }, [streamId, isChatOpen]);
 
-  // Auto-delete messages after 1 minute
+  // Auto-delete messages after 1 minute + enforce memory cap
   useEffect(() => {
     const MESSAGE_LIFETIME_MS = 60000; // 1 minute
     const autoDeleteInterval = setInterval(() => {
         const now = Date.now();
         setMessages(prev => {
-            const filtered = prev.filter(msg => {
+            let filtered = prev.filter(msg => {
                 const msgTime = new Date(msg.created_at).getTime();
-                const age = now - msgTime;
-                // Keep messages younger than 1 minute
-                return age < MESSAGE_LIFETIME_MS;
+                return (now - msgTime) < MESSAGE_LIFETIME_MS;
             });
-            // Only update state if messages were actually removed
+            // Hard cap: keep only the most recent MAX_MESSAGES
+            if (filtered.length > MAX_MESSAGES) {
+                filtered = filtered.slice(-MAX_MESSAGES);
+            }
             if (filtered.length !== prev.length) {
                 return filtered;
             }
             return prev;
         });
-    }, 3000); // Check every 3 seconds
+    }, 10000); // Check every 10s (reduced from 3s to cut re-renders)
 
     return () => {
         clearInterval(autoDeleteInterval);
     };
-  }, []); // Empty deps - only run on mount/unmount for message cleanup
+  }, []);
 
   // Setup Realtime Broadcast Channel (singleton per streamId)
   useEffect(() => {
@@ -1394,210 +1584,24 @@ const fetchMessages = async () => {
                 </div>
             )}
             
-{/* Chat Message History */}
-              <div className="absolute left-0 right-0 top-0 flex flex-col gap-1 p-2 overflow-y-auto">
-                  {[...messages].reverse().map((msg, index) => {
-                    // Calculate animation delay based on index (newer messages appear on top)
-                    const isSystem = msg.type === 'system';
-                    
-                    // Check if this is a gift message
-                    const isGift = msg.type === 'gift' || msg.content?.startsWith('GIFT_EVENT:');
-                    
-                    if (isSystem) {
-                        return (
-                            <div 
-                                key={msg.id}
-                                className="flex items-center gap-2 text-zinc-400 text-xs italic bg-transparent p-1.5 rounded-lg border border-white/5 animate-in slide-in-from-bottom-2 fade-in duration-300"
-                            >
-                                <Sparkles size={12} className="text-yellow-500 flex-shrink-0" />
-                                <button
-                                    type="button"
-                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
-                                    className="font-bold text-zinc-300 hover:text-yellow-300 transition-colors flex items-center gap-1 truncate"
-                                    title="Send gift"
-                                >
-                                    {msg.user_profiles?.username || 'User'}
-                                </button>
-                                <span className="truncate">{msg.content}</span>
-                            </div>
-                        );
-                    }
-                    
-                    // Check if this is a challenge message
-                    if (msg.type === 'challenge') {
-                        return (
-                            <div 
-                                key={msg.id}
-                                className="flex items-center gap-2 bg-purple-900/40 border border-purple-500/30 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
-                            >
-                                <Swords size={14} className="text-purple-400 flex-shrink-0" />
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-1">
-                                        <span className="font-bold text-purple-400 text-xs">
-                                            {msg.user_profiles?.username || msg.challenger_username || 'Someone'}
-                                        </span>
-                                        <span className="text-zinc-400 text-xs">sent a challenge!</span>
-                                    </div>
-                                    {isHost && msg.challenge_id && (
-                                        <div className="flex items-center gap-1 mt-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (onAcceptChallenge) {
-                                                        onAcceptChallenge(msg.challenge_id!, msg.challenger_id!);
-                                                    }
-                                                }}
-                                                className="px-2 py-0.5 bg-green-500/20 hover:bg-green-500/40 text-green-400 text-xs rounded transition-colors"
-                                            >
-                                                Accept
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (onDenyChallenge) {
-                                                        onDenyChallenge(msg.challenge_id!);
-                                                    }
-                                                }}
-                                                className="px-2 py-0.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 text-xs rounded transition-colors"
-                                            >
-                                                Deny
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    }
-                    
-                    if (isGift) {
-                        if (msg.content && !msg.content.startsWith('GIFT_EVENT:') && msg.content.includes('coins back')) {
-                            return (
-                                <div
-                                    key={msg.id}
-                                    className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
-                                >
-                                    <Gift size={14} className="text-yellow-400 flex-shrink-0" />
-                                    <span className="text-xs text-yellow-100">{msg.content}</span>
-                                </div>
-                            );
-                        }
-
-                        // Parse gift info from message - check for GIFT_EVENT format or gift_type field
-                        let giftType = msg.gift_type || 'gift';
-                        let giftAmount = msg.gift_amount || 1;
-                        let parsedGiftValue = 0;
-                        let parsedCurrencyUsed: string | undefined;
-                        let parsedCoinsBack = 0;
-                        // Use sender_name from message data, user_profiles, or enriched data
-                        const senderName = msg.sender_name || msg.user_profiles?.username || 'Someone';
-                        // Use receiver_name from message data
-                        const receiverName = msg.receiver_name || 'user';
-                        
-                        // If not already parsed, try to parse from content
-                        if (!msg.gift_type && msg.content) {
-                            const parsed = parseGiftMessage(msg.content);
-                            if (parsed) {
-                                giftType = parsed.giftName;
-                                giftAmount = parsed.quantity;
-                                parsedGiftValue = parsed.giftValue;
-                                parsedCurrencyUsed = parsed.currencyUsed;
-                                parsedCoinsBack = parsed.coinsBack;
-                            }
-                        }
-
-                        // Parse trollmonds transferred from message content
-                        const parsedTrollmondsTransferred = msg.trollmonds_transferred
-                          || (msg.content ? (parseGiftMessage(msg.content)?.trollmondsTransferred || 0) : 0);
-
-                        // Format the gift name (capitalize first letter)
-                        const formattedGiftName = giftType.charAt(0).toUpperCase() + giftType.slice(1).toLowerCase();
-                        const giftText = giftAmount > 1 ? `sent ${formattedGiftName}s` : `sent a ${formattedGiftName}`;
-
-                        return (
-                            <div
-                                key={msg.id}
-                                className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300"
-                            >
-                                <Gift size={14} className="text-yellow-400 flex-shrink-0" />
-                                <span className="text-xs">
-                                    <button
-                                        type="button"
-                                        onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
-                                        className="font-bold text-yellow-400 hover:text-yellow-300 transition-colors"
-                                        title="Send gift"
-                                    >
-                                        {senderName}
-                                    </button>
-                                    <span className="text-zinc-400"> {giftText}</span>
-                                    {giftAmount > 1 && (
-                                        <span className="text-yellow-400 ml-1">x{giftAmount}</span>
-                                    )}
-                                    {msg.receiver_name && (
-                                        <span className="text-blue-400">
-                                            {' '}to <button
-                                                type="button"
-                                                onClick={() => openGiftForUser(msg.receiver_id)}
-                                                className="font-bold text-blue-400 hover:text-blue-300 transition-colors"
-                                                title="Send gift"
-                                            >
-                                                {receiverName}
-                                            </button>
-                                        </span>
-                                    )}
-                                    {parsedTrollmondsTransferred > 0 && (
-                                        <span className="text-purple-300 ml-1">(+{parsedTrollmondsTransferred} 💎)</span>
-                                    )}
-                                </span>
-                            </div>
-                        );
-                    }
-
-                    return (
-                        <div 
-                            key={msg.id}
-                            className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm p-2 rounded-lg animate-in slide-in-from-bottom-2 fade-in duration-300 ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''}`}
-                        >
-                            {/* Golden Flex Banner indicator */}
-                            {showGoldenBanner && msg.user_id === user?.id && (
-                                <span className="text-yellow-400 text-xs">👑</span>
-                            )}
-                            <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-zinc-700 overflow-hidden flex-shrink-0">
-                                {msg.user_profiles?.avatar_url ? (
-                                    <img src={msg.user_profiles.avatar_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <User size={8} className="md:w-[10px] md:h-[10px] m-0.5 text-zinc-400" />
-                                )}
-                            </div>
-                            <div className="flex-1 min-w-0 flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => isOfficer ? openModActionsForUser(msg.user_id, msg.user_profiles?.username || 'User', msg.user_profiles?.avatar_url, msg.user_profiles?.role, msg.user_profiles?.troll_role) : openGiftForUser(msg.user_id)}
-                                    className={`font-bold text-xs truncate hover:text-yellow-300 transition-colors ${showGoldenBanner && msg.user_id === user?.id ? 'text-yellow-400' : 'text-yellow-400'}`}
-                                    title="Send gift"
-                                >
-                                    {msg.user_profiles?.username || 'User'}:
-                                </button>
-                                <span className="text-white text-xs truncate">{msg.content}</span>
-                            </div>
-                            {isOfficer && (
-                                <button
-                                    type="button"
-                                    onClick={() => deleteMessage(msg.id)}
-                                    className="p-1 rounded text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors"
-                                    title="Delete chat message"
-                                >
-                                    <Trash2 size={12} />
-                                </button>
-                            )}
-                        </div>
-                    );
-                })}
-                {messages.length === 0 && (
-                    <div className="text-center text-zinc-500 text-xs italic">
-                        Send a message...
+{/* Chat Message History — virtualized with Virtuoso for 10k+ message capacity */}
+              <div className="absolute left-0 right-0 top-0 flex flex-col gap-1 p-2 overflow-hidden">
+                  <Virtuoso
+                    ref={virtuosoRef}
+                    data={reversedMessages}
+                    itemContent={(index, msg) => <ChatMessageItem msg={msg} isHost={isHost} isOfficer={isOfficer} user={user} showGoldenBanner={showGoldenBanner} disappearingMessages={disappearingMessages} openModActionsForUser={openModActionsForUser} openGiftForUser={openGiftForUser} deleteMessage={deleteMessage} onAcceptChallenge={onAcceptChallenge} onDenyChallenge={onDenyChallenge} />}
+                    style={{ height: '100%', width: '100%' }}
+                    overscan={20}
+                    alignToBottom
+                    followOutput="smooth"
+                    totalCount={reversedMessages.length}
+                  />
+                  {messages.length === 0 && (
+                    <div className="text-center text-zinc-500 text-xs italic py-4">
+                      Send a message...
                     </div>
-                )}
-            </div>
+                  )}
+              </div>
         </div>
 
         <form onSubmit={sendMessage} className="p-4 border-t border-white/10 bg-transparent relative">

@@ -376,8 +376,7 @@ export function useStreamAudiencePresence(
               return dedupeAudienceMembers(next)
             })
 
-            void fetchAudience()
-
+            // Update myPresence from the realtime payload directly — no DB refetch needed
             if (effectiveUserId) {
               setMyPresence((prev) => {
                 if (!newRow && !oldRow) return prev
@@ -425,8 +424,6 @@ export function useStreamAudiencePresence(
             )
             return dedupeAudienceMembers(next)
           })
-
-          void fetchAudience()
         }
       )
       .subscribe()
@@ -438,21 +435,22 @@ export function useStreamAudiencePresence(
     }
   }, [streamId, effectiveUserId, fetchAudience, cleanupChannels])
 
+  // REPLACED: 30s DB heartbeat interval removed.
+  // The postgres_changes subscription on stream_audience_presence (above) already
+  // pushes all changes in real-time. The heartbeat was redundant — any update to
+  // last_seen_at, is_active, or gift_total is already received via the realtime
+  // channel without polling.
   useEffect(() => {
     if (!effectiveUserId || !streamId) return
 
-    heartbeatRef.current = setInterval(() => {
-      if (document.hidden) return
-      void heartbeatAudience()
-    }, 30 * 1000)
-
+    // No interval needed — realtime subscription handles all updates
     return () => {
       if (heartbeatRef.current) {
         clearInterval(heartbeatRef.current)
         heartbeatRef.current = null
       }
     }
-  }, [effectiveUserId, streamId, heartbeatAudience])
+  }, [effectiveUserId, streamId])
 
   useEffect(() => {
     if (!effectiveUserId || !streamId) return

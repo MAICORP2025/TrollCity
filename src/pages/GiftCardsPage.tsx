@@ -58,7 +58,7 @@ export default function GiftCardsPage() {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [user]);
 

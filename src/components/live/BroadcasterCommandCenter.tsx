@@ -920,7 +920,7 @@ export default function BroadcasterCommandCenter({
     }
   }, [streamId])
 
-  // ── Initial fetch + polling ──
+  // ── Initial fetch + realtime subscription ──
   useEffect(() => {
     fetchIdentity()
     fetchGoals()
@@ -932,18 +932,6 @@ export default function BroadcasterCommandCenter({
     fetchAwards()
     fetchAudioSettings()
     fetchStats()
-
-    const energyInterval = setInterval(fetchEnergy, 5000)
-    const statsInterval = setInterval(fetchStats, 10000)
-    const fansInterval = setInterval(fetchFans, 15000)
-    const pollsInterval = setInterval(fetchPolls, 10000)
-
-    return () => {
-      clearInterval(energyInterval)
-      clearInterval(statsInterval)
-      clearInterval(fansInterval)
-      clearInterval(pollsInterval)
-    }
   }, [fetchIdentity, fetchGoals, fetchMissions, fetchFans, fetchMilestones, fetchPolls, fetchEnergy, fetchAwards, fetchAudioSettings, fetchStats])
 
   // ── Realtime subscription ──
@@ -959,6 +947,8 @@ export default function BroadcasterCommandCenter({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_polls', filter: `stream_id=eq.${streamId}` }, () => fetchPolls())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_energy_meters', filter: `stream_id=eq.${streamId}` }, () => fetchEnergy())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_awards', filter: `stream_id=eq.${streamId}` }, () => fetchAwards())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams', filter: `id=eq.${streamId}` }, () => fetchStats())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'broadcast_audio_settings', filter: `stream_id=eq.${streamId}` }, () => fetchAudioSettings())
       .subscribe((status) => {
         setConnected(status === 'SUBSCRIBED')
       })
@@ -969,7 +959,7 @@ export default function BroadcasterCommandCenter({
       supabase.removeChannel(channel)
       channelRef.current = null
     }
-  }, [streamId, fetchGoals, fetchMissions, fetchFans, fetchMilestones, fetchPolls, fetchEnergy, fetchAwards])
+  }, [streamId, fetchGoals, fetchMissions, fetchFans, fetchMilestones, fetchPolls, fetchEnergy, fetchAwards, fetchStats, fetchAudioSettings])
 
   // ── Module toggle/expand handlers ──
   const toggleModule = (type: string, enabled: boolean) => {

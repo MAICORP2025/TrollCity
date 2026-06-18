@@ -171,7 +171,7 @@ export default function PublicPool() {
 
     return () => {
       mounted = false
-      channel.unsubscribe()
+      supabase.removeChannel(channel)
     }
   }, [])
 

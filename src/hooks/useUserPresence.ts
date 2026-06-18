@@ -2,22 +2,28 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 
-const isValidUUID = (id: any): id is string => 
+const isValidUUID = (id: any): id is string =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 /**
- * Hook to track user presence/visibility for online status
+ * Hook to track user presence/visibility for online status.
+ *
+ * REPLACED: Previous version used 30s setInterval to upsert user_profiles and
+ * active_sessions on every heartbeat. Now uses Supabase Realtime Presence
+ * channel for online tracking — zero DB writes for heartbeats.
+ *
  * - User is "active" when viewing a page (document is visible)
  * - User is "inactive" when app is background/closed
+ * - DB writes only happen on visibility transitions (visible↔hidden), not on timer
  * - This does NOT log out the user, just updates their presence status
  */
 export function useUserPresence() {
   const { user, session } = useAuthStore()
-  const intervalRef = useRef<number | null>(null)
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const lastUpdateRef = useRef<number>(0)
   const isVisibleRef = useRef<boolean>(true)
 
-  // Update presence in the database
+  // Update DB presence only on visibility transitions (not on timer)
   const updatePresence = useCallback(async (isActive: boolean) => {
     if (!isValidUUID(user?.id) || !session?.access_token) {
       const path = window.location.pathname;
@@ -28,19 +34,16 @@ export function useUserPresence() {
     }
 
     const now = Date.now()
-    // Keep database presence writes at a launch-safe cadence. Status changes
-    // still write immediately; unchanged heartbeats wait at least 30 seconds.
+    // Debounce DB writes: status changes write immediately; unchanged writes wait 30s
     if (now - lastUpdateRef.current < 30000 && isActive === isVisibleRef.current) return
-    
+
     lastUpdateRef.current = now
     isVisibleRef.current = isActive
 
     try {
-      // Use the session ID from localStorage (set during login)
       const sessionId = localStorage.getItem('current_device_session_id')
 
       if (sessionId) {
-        // Update the active_sessions table
         await supabase
           .from('active_sessions')
           .update({
@@ -51,8 +54,7 @@ export function useUserPresence() {
           .eq('session_id', sessionId)
       }
 
-      // Check if user profile exists before updating presence (FK constraint).
-      // The profile may not exist for newly created users until the trigger fires.
+      // Check if user profile exists before updating (FK constraint)
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('id')
@@ -60,7 +62,6 @@ export function useUserPresence() {
         .maybeSingle()
 
       if (profile) {
-        // Update the user_profiles table for is_online status
         await supabase
           .from('user_profiles')
           .update({
@@ -69,7 +70,7 @@ export function useUserPresence() {
           })
           .eq('id', user.id)
       }
-    } catch (error) {
+    } catch {
       // Silently fail — presence tracking is non-critical
     }
   }, [user?.id, session?.access_token])
@@ -77,13 +78,11 @@ export function useUserPresence() {
   // Handle visibility change
   const handleVisibilityChange = useCallback(() => {
     const isVisible = !document.hidden
-    console.log('[useUserPresence] Visibility changed:', isVisible ? 'visible' : 'hidden')
     updatePresence(isVisible)
   }, [updatePresence])
 
   // Handle beforeunload - mark as inactive (but don't logout)
   const handleBeforeUnload = useCallback(() => {
-    // Use sendBeacon for reliable async update on page close
     const sessionId = localStorage.getItem('current_device_session_id')
     if (isValidUUID(user?.id) && sessionId) {
       const payload = JSON.stringify({
@@ -92,7 +91,7 @@ export function useUserPresence() {
         is_active: false,
         last_active: new Date().toISOString()
       })
-      
+
       navigator.sendBeacon(
         `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/active_sessions?user_id=eq.${user.id}&session_id=eq.${sessionId}`,
         payload
@@ -106,25 +105,44 @@ export function useUserPresence() {
     // Initial presence - user is active when they log in
     updatePresence(true)
 
+    // Set up a Realtime Presence channel for this user.
+    // This replaces the 30s DB heartbeat — presence is tracked via WebSocket
+    // without any DB writes.
+    const channel = supabase.channel(`user-presence:${user.id}`, {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+    })
+    channelRef.current = channel
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.track({
+          user_id: user.id,
+          online_at: new Date().toISOString(),
+        })
+      }
+    })
+
     // Listen for visibility changes
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    
+
     // Listen for page close
     window.addEventListener('beforeunload', handleBeforeUnload)
 
-    // Periodic heartbeat to keep presence updated (every 30 seconds)
-    intervalRef.current = window.setInterval(() => {
-      if (!document.hidden) {
-        updatePresence(true)
-      }
-    }, 30000)
+    // NO setInterval heartbeat — Realtime Presence handles this via WebSocket
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+
+      // Untrack presence and remove channel
+      if (channelRef.current) {
+        channelRef.current.untrack()
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
       }
 
       // Mark as inactive on cleanup

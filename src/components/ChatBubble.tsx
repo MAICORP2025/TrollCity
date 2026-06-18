@@ -1,780 +1,519 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+/**
+ * ChatBubble — Floating quick-chat powered by Utromail.
+ *
+ * Features:
+ * - Inbox sidebar: shows up to 10 recent threads with unread badges
+ * - Click a thread to open the chat panel
+ * - Send/receive messages in real-time via Utromail tables
+ * - Real-time message subscription (postgres_changes)
+ * - Optimistic message insertion
+ * - Virtualized message list (react-virtuoso)
+ * - Online status indicators
+ * - Minimize / close support
+ *
+ * Triggered globally via double-tap/click anywhere on any page.
+ */
+
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   X,
   Minus,
   CheckCheck,
-  Shield,
   Clock,
-  Phone,
-  Video,
+  Send,
   MessageCircle,
-  Sparkles,
+  ArrowLeft,
+  Loader2,
+  Search,
 } from 'lucide-react'
-import {
-  supabase,
-  createConversation,
-  getConversationMessages,
-  markConversationRead,
-  OFFICER_GROUP_CONVERSATION_ID,
-} from '../lib/supabase'
+import { Virtuoso } from 'react-virtuoso'
+import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { useChatStore } from '../lib/chatStore'
 import { usePresenceStore } from '../lib/presenceStore'
-import UserNameWithAge from './UserNameWithAge'
-import MessageInput from '../pages/tcps/components/MessageInput'
-import { toast } from 'sonner'
-import { useNavigate } from 'react-router-dom'
+import {
+  getThreads,
+  getThreadMessages,
+  sendMessage,
+  markThreadAsRead,
+} from '../services/utromailService'
+import type { UtromailThread } from '../types/mail'
 import { cn } from '../lib/utils'
 import AvatarWithFrame from './profile/AvatarWithFrame'
 
-interface Message {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface ChatBubbleMessage {
   id: string
-  conversation_id: string
+  thread_id: string
   sender_id: string
-  content: string
-  created_at: string
+  body: string
+  sent_at: string
   read_at?: string | null
   sender_username?: string
-  sender_avatar_url?: string | null
-  sender_rgb_expires_at?: string | null
-  sender_glowing_username_color?: string | null
-  sender_created_at?: string
+  sender_avatar?: string | null
+  sender_name?: string
   isPending?: boolean
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatTime(dateStr: string): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  if (diff < 60000) return 'Now'
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`
+  if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function formatMessageTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function getOtherParticipant(thread: UtromailThread, userId: string) {
+  if (thread.other_user_id) {
+    return {
+      user_id: thread.other_user_id,
+      username: thread.other_username || 'Unknown',
+      display_name: thread.other_display_name || thread.other_username || 'Unknown',
+      avatar_url: thread.other_avatar_url || null,
+    }
+  }
+  const members = thread.members || []
+  const seen = new Set<string>()
+  const unique = members.filter(m => {
+    if (seen.has(m.user_id)) return false
+    seen.add(m.user_id)
+    return true
+  })
+  return unique.find(m => m.user_id !== userId) || unique[0] || null
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 export default function ChatBubble() {
   const { user, profile } = useAuthStore()
-  const {
-    isOpen,
-    isMinimized,
-    activeUserId,
-    activeUsername,
-    activeUserAvatar,
-    closeChatBubble,
-    toggleMinimize,
-  } = useChatStore()
-  const { onlineUserIds } = usePresenceStore()
-  const navigate = useNavigate()
+  const { isOpen, isMinimized, activeUserId, activeUsername, activeUserAvatar, closeChatBubble, toggleMinimize } = useChatStore()
+  const onlineUserIds = usePresenceStore(s => s.onlineUserIds)
 
-  const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [view, setView] = useState<'inbox' | 'chat'>('inbox')
+  const [threads, setThreads] = useState<UtromailThread[]>([])
+  const [threadsLoading, setThreadsLoading] = useState(false)
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatBubbleMessage[]>([])
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [inputText, setInputText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  const [messages, setMessages] = useState<Message[]>([])
-  const [loading, setLoading] = useState(false)
-  const [actualConversationId, setActualConversationId] = useState<string | null>(null)
-  const [isTyping, _setIsTyping] = useState(false)
-  const [isOpsConversation, setIsOpsConversation] = useState(false)
-  const [activeUserCreatedAt, setActiveUserCreatedAt] = useState<string | undefined>(undefined)
-  const [activeUserGlowingColor, setActiveUserGlowingColor] = useState<string | null>(null)
-  const [callMinutes, setCallMinutes] = useState({ audio: 0, video: 0 })
-  const [isInitiatingCall, setIsInitiatingCall] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-  const activeIsOnline = Boolean(activeUserId && onlineUserIds.includes(activeUserId))
+  const activeIsOnline = Boolean(activeUserId && onlineUserIds.has(activeUserId))
+  const activeThread = useMemo(
+    () => threads.find(t => t.id === activeThreadId) || null,
+    [threads, activeThreadId]
+  )
+  const otherParticipant = activeThread ? getOtherParticipant(activeThread, user?.id || '') : null
 
-  useEffect(() => {
-    if (!isOpen || !user?.id) return
+  const filteredThreads = useMemo(() => {
+    if (!searchQuery.trim()) return threads.slice(0, 10)
+    const q = searchQuery.toLowerCase()
+    return threads
+      .filter(t =>
+        (t.other_username || '').toLowerCase().includes(q) ||
+        (t.other_display_name || '').toLowerCase().includes(q) ||
+        (t.last_message?.body || '').toLowerCase().includes(q)
+      )
+      .slice(0, 10)
+  }, [threads, searchQuery])
 
-    const loadMinutes = async () => {
-      try {
-        const { data, error } = await supabase.rpc('get_call_balances', {
-          p_user_id: user.id,
-        })
+  // ─── Load inbox threads ─────────────────────────────────────────────────────
 
-        if (error) throw error
+  const loadThreads = useCallback(async () => {
+    if (!user?.id) return
+    setThreadsLoading(true)
+    try {
+      const data = await getThreads(user.id, 'inbox')
+      setThreads(data.slice(0, 10))
+    } catch (err) {
+      console.error('[ChatBubble] loadThreads error:', err)
+    } finally {
+      setThreadsLoading(false)
+    }
+  }, [user?.id])
 
-        setCallMinutes({
-          audio: data?.audio_minutes || 0,
-          video: data?.video_minutes || 0,
-        })
-      } catch (err) {
-        console.error('Error loading call minutes:', err)
-      }
+  // ─── Open a thread ──────────────────────────────────────────────────────────
+
+  const openThread = useCallback(async (thread: UtromailThread) => {
+    setActiveThreadId(thread.id)
+    setView('chat')
+    setMessagesLoading(true)
+
+    try {
+      await markThreadAsRead(thread.id, user!.id)
+    } catch { /* ignore */ }
+
+    try {
+      const msgs = await getThreadMessages(thread.id)
+      setMessages(msgs.map((m: any) => ({
+        id: m.id,
+        thread_id: m.thread_id,
+        sender_id: m.sender_id,
+        body: m.body,
+        sent_at: m.sent_at,
+        read_at: (m as any).is_read ? m.sent_at : null,
+        sender_username: m.sender_username,
+        sender_avatar: m.sender_avatar,
+        sender_name: m.sender_name,
+      })))
+    } catch (err) {
+      console.error('[ChatBubble] loadMessages error:', err)
+    } finally {
+      setMessagesLoading(false)
     }
 
-    void loadMinutes()
-  }, [isOpen, user?.id])
+    const other = getOtherParticipant(thread, user!.id)
+    if (other) {
+      useChatStore.getState().openChatBubble(other.user_id, other.display_name || other.username, other.avatar_url)
+    }
+  }, [user])
 
-  const initiateCall = async (callType: 'audio' | 'video') => {
-    if (!user?.id || !activeUserId || isInitiatingCall) return
+  const findThreadWithUser = useCallback(async (targetUserId: string) => {
+    if (!user?.id) return
+    try {
+      const data = await getThreads(user.id, 'inbox')
+      const thread = data.find(t => t.other_user_id === targetUserId)
+      if (thread) {
+        setThreads(prev => {
+          const exists = prev.some(t => t.id === thread.id)
+          return exists ? prev : [thread, ...prev].slice(0, 10)
+        })
+        setTimeout(() => openThread(thread), 0)
+      }
+    } catch { /* ignore */ }
+  }, [user?.id, openThread])
 
-    const requiredMinutes = callType === 'audio' ? 1 : 2
-    const hasMinutes =
-      callType === 'audio'
-        ? callMinutes.audio >= requiredMinutes
-        : callMinutes.video >= requiredMinutes
+  useEffect(() => {
+    if (isOpen && user?.id) {
+      loadThreads()
+      if (activeUserId && activeUserId !== user.id) {
+        findThreadWithUser(activeUserId)
+      }
+    }
+  }, [isOpen, user?.id, loadThreads, activeUserId, findThreadWithUser])
 
-    if (!hasMinutes) {
-      toast.error(`You don't have enough ${callType} minutes. Please purchase a package.`)
+  // ─── Real-time message subscription ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
       return
     }
 
-    setIsInitiatingCall(true)
+    const channel = supabase.channel(`chatbubble:${activeThreadId}`)
+    channelRef.current = channel
 
-    try {
-      const roomId = crypto.randomUUID()
-
-      const { error: roomError } = await supabase.from('call_rooms').insert({
-        id: roomId,
-        caller_id: user.id,
-        receiver_id: activeUserId,
-        type: callType,
-        status: 'pending',
-      })
-
-      if (roomError) throw roomError
-
-      const { error: notifError } = await supabase.from('notifications').insert({
-        user_id: activeUserId,
-        type: 'call',
-        title: 'Incoming Call',
-        message: `${profile?.username || 'Someone'} is calling you`,
-        metadata: {
-          caller_id: user.id,
-          caller_username: profile?.username,
-          caller_avatar: profile?.avatar_url,
-          call_type: callType,
-          room_id: roomId,
-        },
-      })
-
-      if (notifError) throw notifError
-
-      navigate(`/call/${roomId}/${callType}/${activeUserId}`)
-      closeChatBubble()
-    } catch (err) {
-      console.error('Error initiating call:', err)
-      toast.error('Failed to start call. Please try again.')
-    } finally {
-      setIsInitiatingCall(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!isOpen) {
-      setMessages([])
-      setLoading(false)
-      setActualConversationId(null)
-      setIsOpsConversation(false)
-      setActiveUserCreatedAt(undefined)
-      setActiveUserGlowingColor(null)
-    }
-  }, [isOpen])
-
-  const handleLocalTyping = (_typing: boolean) => {}
-
-  const scrollToBottom = useCallback(() => {
-    if (!messagesContainerRef.current) return
-    messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-  }, [])
-
-  useEffect(() => {
-    if (!isOpen || !user?.id || !activeUserId) return
-
-    let mounted = true
-
-    const initChat = async () => {
-      if (activeUserId === OFFICER_GROUP_CONVERSATION_ID) {
-        setIsOpsConversation(true)
-        setActualConversationId(OFFICER_GROUP_CONVERSATION_ID)
-        return
-      }
-
-      setIsOpsConversation(false)
-
-      const { data: userData } = await supabase
-        .from('user_profiles')
-        .select('created_at, glowing_username_color')
-        .eq('id', activeUserId)
-        .maybeSingle()
-
-      if (mounted && userData) {
-        setActiveUserCreatedAt(userData.created_at)
-        setActiveUserGlowingColor(userData.glowing_username_color)
-      }
-
-      const { data: foundConvId } = await supabase.rpc('find_shared_conversation', {
-        p_user_id: user.id,
-        p_other_user_id: activeUserId,
-      })
-
-      let targetConvId: string | null = foundConvId || null
-
-      if (!targetConvId) {
-        try {
-          const newConv = await createConversation([activeUserId])
-          targetConvId = newConv.id
-        } catch (err) {
-          console.error('Failed to create conversation', err)
-          toast.error('Failed to start chat')
-          return
-        }
-      }
-
-      if (mounted) setActualConversationId(targetConvId)
-    }
-
-    void initChat()
-
-    return () => {
-      mounted = false
-    }
-  }, [isOpen, activeUserId, user?.id])
-
-  useEffect(() => {
-    if (!actualConversationId || !isOpen) return
-
-    let mounted = true
-
-    const loadMessages = async () => {
-      setLoading(true)
-
-      try {
-        const rows = await getConversationMessages(actualConversationId, { limit: 5000 })
-        if (!mounted) return
-
-        if (!rows || rows.length === 0) {
-          setMessages([])
-          return
-        }
-
-        const senderIds = Array.from(new Set(rows.map((m) => m.sender_id)))
-
-        const { data: senders } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url, rgb_username_expires_at, glowing_username_color, created_at')
-          .in('id', senderIds)
-
-        const senderMap: Record<string, any> = {}
-        senders?.forEach((sender) => {
-          senderMap[sender.id] = sender
-        })
-
-        const mapped = rows
-          .map((message) => ({
-            id: message.id,
-            conversation_id: message.conversation_id,
-            sender_id: message.sender_id,
-            content: message.body,
-            created_at: message.created_at,
-            read_at: (message as any).read_at ?? null,
-            sender_username: senderMap[message.sender_id]?.username,
-            sender_avatar_url: senderMap[message.sender_id]?.avatar_url,
-            sender_rgb_expires_at: senderMap[message.sender_id]?.rgb_username_expires_at,
-            sender_glowing_username_color: senderMap[message.sender_id]?.glowing_username_color,
-            sender_created_at: senderMap[message.sender_id]?.created_at,
-          }))
-          .reverse()
-
-        setMessages(mapped)
-        await markConversationRead(actualConversationId)
-        window.setTimeout(scrollToBottom, 100)
-      } catch (error) {
-        console.error('Error loading messages:', error)
-        setMessages([])
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-
-    void loadMessages()
-
-    return () => {
-      mounted = false
-    }
-  }, [actualConversationId, isOpen, scrollToBottom])
-
-  useEffect(() => {
-    if (!actualConversationId || !profile?.id || !isOpen) return
-
-    const channel = supabase
-      .channel(`tcps:${actualConversationId}`)
+    channel
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'conversation_messages',
-          filter: `conversation_id=eq.${actualConversationId}`,
+          table: 'utromail_messages',
+          filter: `thread_id=eq.${activeThreadId}`,
         },
-        async (payload) => {
-          const newMsgRaw = payload.new
-
-          let senderInfo = {
-            username: 'Unknown',
-            avatar_url: null,
-            rgb_username_expires_at: null,
-            glowing_username_color: null,
-          }
-
-          if (newMsgRaw.sender_id === user?.id) {
-            senderInfo = {
-              username: profile?.username || 'You',
-              avatar_url: profile?.avatar_url || null,
-              rgb_username_expires_at: profile?.rgb_username_expires_at || null,
-              glowing_username_color: profile?.glowing_username_color || null,
-            }
-          } else if (newMsgRaw.sender_id === activeUserId) {
-            senderInfo = {
-              username: activeUsername || 'Unknown',
-              avatar_url: activeUserAvatar || null,
-              rgb_username_expires_at: null,
-              glowing_username_color: activeUserGlowingColor || null,
-            }
-          } else {
-            const { data } = await supabase
-              .from('user_profiles')
-              .select('username,avatar_url,rgb_username_expires_at,glowing_username_color,created_at')
-              .eq('id', newMsgRaw.sender_id)
-              .maybeSingle()
-
-            if (data) senderInfo = data as any
-          }
-
-          const newMsg: Message = {
-            id: newMsgRaw.id,
-            conversation_id: newMsgRaw.conversation_id,
-            sender_id: newMsgRaw.sender_id,
-            content: newMsgRaw.body,
-            created_at: newMsgRaw.created_at,
-            read_at: newMsgRaw.read_at,
-            sender_username: senderInfo.username,
-            sender_avatar_url: senderInfo.avatar_url,
-            sender_rgb_expires_at: senderInfo.rgb_username_expires_at,
-            sender_glowing_username_color: (senderInfo as any).glowing_username_color,
-          }
-
-          setMessages((prev) => {
-            const withoutPending = prev.filter((msg) => {
-              if (!msg.isPending) return true
-              return !(msg.content === newMsg.content && msg.sender_id === newMsg.sender_id)
-            })
-
-            return [...withoutPending, newMsg]
+        (payload) => {
+          const msg = payload.new as any
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev
+            return [...prev, {
+              id: msg.id,
+              thread_id: msg.thread_id,
+              sender_id: msg.sender_id,
+              body: msg.body,
+              sent_at: msg.sent_at,
+              read_at: (msg as any).is_read ? msg.sent_at : null,
+              sender_username: msg.sender_username,
+              sender_avatar: msg.sender_avatar,
+              sender_name: msg.sender_name,
+            }]
           })
-
-          if (newMsgRaw.sender_id !== user?.id) {
-            if (audioRef.current) {
-              audioRef.current.src = '/sounds/pop.mp3'
-              audioRef.current.play().catch((err) => console.log('Audio play blocked:', err))
-            }
-
-            void markConversationRead(actualConversationId)
-          }
-
-          window.setTimeout(scrollToBottom, 100)
         }
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
-  }, [
-    actualConversationId,
-    profile?.id,
-    profile?.username,
-    profile?.avatar_url,
-    profile?.rgb_username_expires_at,
-    profile?.glowing_username_color,
-    isOpen,
-    user?.id,
-    activeUserId,
-    activeUsername,
-    activeUserAvatar,
-    activeUserGlowingColor,
-    scrollToBottom,
-  ])
+  }, [activeThreadId])
+
+  // ─── Send message ───────────────────────────────────────────────────────────
+
+  const handleSend = useCallback(async () => {
+    const text = inputText.trim()
+    if (!text || !activeThreadId || !user?.id || sending) return
+
+    setInputText('')
+    setSending(true)
+
+    const optimisticId = `pending-${Date.now()}`
+    const now = new Date().toISOString()
+
+    setMessages(prev => [...prev, {
+      id: optimisticId,
+      thread_id: activeThreadId,
+      sender_id: user.id,
+      body: text,
+      sent_at: now,
+      sender_username: profile?.username,
+      sender_avatar: profile?.avatar_url,
+      sender_name: profile?.display_name || profile?.username,
+      isPending: true,
+    }])
+
+    try {
+      const sent = await sendMessage({
+        senderId: user.id,
+        senderMail: `${profile?.username || 'user'}@utromail`,
+        body: text,
+      })
+
+      setMessages(prev =>
+        prev.map(m => m.id === optimisticId ? {
+          id: sent.id,
+          thread_id: sent.thread_id,
+          sender_id: sent.sender_id,
+          body: sent.body,
+          sent_at: sent.sent_at,
+          read_at: (sent as any).is_read ? sent.sent_at : null,
+          sender_username: profile?.username,
+          sender_avatar: profile?.avatar_url,
+          sender_name: profile?.display_name || profile?.username,
+        } : m)
+      )
+
+      loadThreads()
+    } catch (err: any) {
+      console.error('[ChatBubble] send error:', err)
+      setMessages(prev =>
+        prev.map(m => m.id === optimisticId ? { ...m, isPending: false } : m)
+      )
+    } finally {
+      setSending(false)
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+  }, [inputText, activeThreadId, user, profile, sending, loadThreads])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 
   useEffect(() => {
-    if (!actualConversationId || !isOpen) return
-
-    const pollReadStatus = async () => {
-      try {
-        const { data } = await supabase
-          .from('conversation_messages')
-          .select('id, read_at')
-          .eq('conversation_id', actualConversationId)
-          .neq('sender_id', user?.id || '')
-          .not('read_at', 'is', null)
-          .limit(100)
-
-        if (!data) return
-
-        setMessages((prev) => {
-          const readMap = new Map(data.map((message) => [message.id, message.read_at]))
-          let changed = false
-
-          const updated = prev.map((message) => {
-            const newReadAt = readMap.get(message.id)
-
-            if (newReadAt && message.read_at !== newReadAt) {
-              changed = true
-              return { ...message, read_at: newReadAt }
-            }
-
-            return message
-          })
-
-          return changed ? updated : prev
-        })
-      } catch {
-        // silent fail
-      }
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-
-    pollIntervalRef.current = setInterval(pollReadStatus, 5000)
-
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-    }
-  }, [actualConversationId, isOpen, user?.id])
-
-  const handleLocalNewMessage = (newMsg: any) => {
-    const pendingMsg: Message = {
-      id: newMsg.id || `temp-${Date.now()}`,
-      conversation_id: newMsg.conversation_id || actualConversationId || '',
-      sender_id: newMsg.sender_id || user?.id || '',
-      content: newMsg.content || newMsg.body,
-      created_at: newMsg.created_at || new Date().toISOString(),
-      read_at: newMsg.read_at ?? null,
-      sender_username: newMsg.sender_username || profile?.username,
-      sender_avatar_url: newMsg.sender_avatar_url || profile?.avatar_url,
-      sender_rgb_expires_at: newMsg.sender_rgb_expires_at || profile?.rgb_username_expires_at,
-      sender_glowing_username_color: newMsg.sender_glowing_username_color || profile?.glowing_username_color,
-      isPending: Boolean(newMsg.isPending),
-    }
-
-    setMessages((prev) => {
-      if (!pendingMsg.isPending) {
-        const withoutPending = prev.filter((msg) => {
-          if (msg.id === pendingMsg.id) return false
-          if (!msg.isPending) return true
-          return !(msg.content === pendingMsg.content && msg.sender_id === pendingMsg.sender_id)
-        })
-        return [...withoutPending, pendingMsg]
-      }
-
-      return [...prev, pendingMsg]
-    })
-    scrollToBottom()
-  }
+  }, [messages.length])
 
   if (!isOpen) return null
 
-  if (isMinimized) {
-    return (
-      <div className="fixed bottom-4 right-4 z-50">
-        <button
-          onClick={toggleMinimize}
-          className="group relative flex h-16 w-16 items-center justify-center rounded-3xl border border-cyan-300/30 bg-slate-950/85 shadow-[0_0_34px_rgba(34,211,238,0.28)] backdrop-blur-2xl transition hover:scale-105 hover:border-fuchsia-300/40"
-          title="Open chat"
-        >
-          <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.22),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.2),transparent_45%)]" />
-
-          {isOpsConversation ? (
-            <Shield className="relative h-7 w-7 text-cyan-200" />
-          ) : (
-            <img
-              src={activeUserAvatar || `https://ui-avatars.com/api/?name=${activeUsername}&background=020617&color=67e8f9`}
-              alt={activeUsername || ''}
-              className="relative h-11 w-11 rounded-2xl border border-cyan-300/30 object-cover"
-            />
-          )}
-
-          <span
-            className={cn(
-              'absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-slate-950',
-              activeIsOnline ? 'bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.8)]' : 'bg-slate-500'
-            )}
-          />
-        </button>
-
-        <button
-          onClick={closeChatBubble}
-          className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full border border-red-300/30 bg-red-500/20 text-red-100 shadow-lg backdrop-blur-xl transition hover:bg-red-500/35"
-          title="Close chat"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    )
-  }
-
   return (
-    <div className="fixed bottom-0 right-3 z-50 flex h-[560px] w-[360px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-t-[2rem] border border-cyan-300/20 bg-slate-950/90 text-white shadow-[0_0_55px_rgba(34,211,238,0.22)] backdrop-blur-2xl animate-in slide-in-from-bottom-10 duration-200">
-      <audio ref={audioRef} className="hidden" />
+    <div
+      className={cn(
+        'fixed bottom-4 right-4 z-[9999] flex flex-col overflow-hidden rounded-3xl border border-cyan-300/20 bg-slate-950/95 shadow-[0_0_60px_rgba(45,212,191,0.15)] backdrop-blur-2xl transition-all duration-300',
+        isMinimized ? 'h-14 w-72' : 'h-[520px] w-[380px]',
+      )}
+    >
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-cyan-300/10 bg-slate-950/80 px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          {view === 'chat' && (
+            <button
+              onClick={() => { setView('inbox'); setActiveThreadId(null); }}
+              className="mr-1 rounded-lg p-1 text-zinc-400 hover:bg-white/5 hover:text-white"
+            >
+              <ArrowLeft size={16} />
+            </button>
+          )}
+          <MessageCircle size={16} className="text-cyan-400" />
+          <span className="text-sm font-bold text-white">
+            {view === 'chat'
+              ? (otherParticipant?.display_name || otherParticipant?.username || activeUsername || 'Chat')
+              : 'Inbox'}
+          </span>
+          {view === 'chat' && activeIsOnline && (
+            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={toggleMinimize} className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white">
+            <Minus size={14} />
+          </button>
+          <button onClick={closeChatBubble} className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white">
+            <X size={14} />
+          </button>
+        </div>
+      </div>
 
-      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.16),transparent_36%)]" />
-      <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:34px_34px] opacity-15" />
-
-      <div className="relative z-10 flex shrink-0 items-center justify-between border-b border-cyan-300/15 bg-slate-950/85 p-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="relative shrink-0">
-            {isOpsConversation ? (
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10 shadow-[0_0_24px_rgba(34,211,238,0.18)]">
-                <Shield className="h-6 w-6 text-cyan-200" />
+      {/* Body */}
+      {isMinimized ? (
+        <div className="flex flex-1 items-center justify-center">
+          <span className="text-xs text-zinc-500">
+            {threads.reduce((sum, t) => sum + (t.unread_count || 0), 0) > 0
+              ? `${threads.reduce((sum, t) => sum + (t.unread_count || 0), 0)} new`
+              : 'Tap to chat'}
+          </span>
+        </div>
+      ) : view === 'inbox' ? (
+        /* Inbox View */
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-white/5 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5">
+              <Search size={14} className="text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search conversations..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {threadsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-zinc-500" />
+              </div>
+            ) : filteredThreads.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <MessageCircle size={32} className="mb-2 text-zinc-700" />
+                <p className="text-sm text-zinc-500">No conversations yet</p>
+                <p className="mt-1 text-xs text-zinc-600">Double-tap anywhere to chat</p>
               </div>
             ) : (
-              <>
-                <img
-                  src={activeUserAvatar || `https://ui-avatars.com/api/?name=${activeUsername}&background=020617&color=67e8f9`}
-                  alt={activeUsername || ''}
-                  className="h-11 w-11 rounded-2xl border border-cyan-300/25 object-cover shadow-[0_0_20px_rgba(34,211,238,0.12)]"
-                />
-                <span
-                  className={cn(
-                    'absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-slate-950',
-                    activeIsOnline ? 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]' : 'bg-slate-500'
-                  )}
-                />
-              </>
+              filteredThreads.map(thread => {
+                const other = getOtherParticipant(thread, user?.id || '')
+                const isOnline = other?.user_id ? onlineUserIds.has(other.user_id) : false
+                const unread = thread.unread_count || 0
+                return (
+                  <button
+                    key={thread.id}
+                    onClick={() => openThread(thread)}
+                    className="flex w-full items-center gap-3 border-b border-white/5 px-3 py-2.5 text-left transition-colors hover:bg-white/5"
+                  >
+                    <div className="relative shrink-0">
+                      <AvatarWithFrame avatarUrl={other?.avatar_url || null} username={other?.username || 'U'} size="sm" className="h-10 w-10 rounded-xl" />
+                      {isOnline && (
+                        <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-950 bg-emerald-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="truncate text-sm font-bold text-white">
+                          {other?.display_name || other?.username || 'Unknown'}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-zinc-500">
+                          {thread.last_message?.sent_at ? formatTime(thread.last_message.sent_at) : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="truncate text-xs text-zinc-400">
+                          {thread.last_message?.body || 'No messages yet'}
+                        </p>
+                        {unread > 0 && (
+                          <span className="ml-2 shrink-0 rounded-full bg-cyan-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                            {unread}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })
             )}
           </div>
-
-          <div className="min-w-0">
-            {isOpsConversation ? (
-              <>
-                <div className="flex items-center gap-1.5 text-sm font-black text-white">
-                  <Shield className="h-3.5 w-3.5 text-cyan-300" />
-                  Officer Operations
-                </div>
-                <div className="text-[11px] font-semibold text-cyan-300/75">
-                  Secure officer group chat
-                </div>
-              </>
+        </div>
+      ) : (
+        /* Chat View */
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            {messagesLoading ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 size={20} className="animate-spin text-zinc-500" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                No messages yet. Say hello!
+              </div>
             ) : (
-              <>
-                {activeUsername && (
-                  <UserNameWithAge
-                    user={{
-                      username: activeUsername,
-                      created_at: activeUserCreatedAt,
-                      glowing_username_color: activeUserGlowingColor || undefined,
-                    }}
-                    className="truncate text-sm font-black text-white transition hover:text-cyan-200"
-                  />
-                )}
-
-                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold">
-                  <span
-                    className={cn(
-                      'h-1.5 w-1.5 rounded-full',
-                      activeIsOnline ? 'animate-pulse bg-emerald-400' : 'bg-slate-500'
-                    )}
-                  />
-                  <span className={activeIsOnline ? 'text-emerald-300' : 'text-slate-500'}>
-                    {activeIsOnline ? 'Online now' : 'Offline'}
-                  </span>
-                </div>
-              </>
+              <Virtuoso
+                className="h-full"
+                totalCount={messages.length}
+                itemContent={(index) => {
+                  const msg = messages[index]
+                  const isMe = msg.sender_id === user?.id
+                  return (
+                    <div className={cn('flex gap-2 px-3 py-1.5', isMe ? 'flex-row-reverse' : 'flex-row')}>
+                      {!isMe && (
+                        <AvatarWithFrame avatarUrl={msg.sender_avatar || null} username={msg.sender_username || 'U'} size="xs" className="h-7 w-7 shrink-0 rounded-lg" />
+                      )}
+                      <div className={cn('flex max-w-[75%] flex-col', isMe ? 'items-end' : 'items-start')}>
+                        <div className={cn(
+                          'break-words rounded-2xl border px-3 py-2 text-sm leading-relaxed',
+                          isMe ? 'rounded-tr-md border-cyan-300/20 bg-cyan-400/15 text-cyan-50' : 'rounded-tl-md border-fuchsia-300/15 bg-white/7 text-slate-200',
+                          msg.isPending && 'opacity-60',
+                        )}>
+                          {msg.body}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1 px-1">
+                          <span className="text-[10px] text-zinc-600">{formatMessageTime(msg.sent_at)}</span>
+                          {isMe && msg.isPending && <Clock size={10} className="animate-pulse text-zinc-500" />}
+                          {isMe && !msg.isPending && msg.read_at && <CheckCheck size={10} className="text-cyan-400" />}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }}
+                followOutput="smooth"
+              />
             )}
+            <div ref={messagesEndRef} />
           </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          {!isOpsConversation && activeUserId && (
-            <>
+          <div className="shrink-0 border-t border-cyan-300/10 bg-slate-950/80 p-2.5">
+            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Type a message..."
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
+              />
               <button
-                onClick={() => initiateCall('audio')}
-                disabled={isInitiatingCall}
-                className="rounded-xl border border-emerald-300/15 bg-emerald-400/5 p-2 text-emerald-200 transition hover:bg-emerald-400/15 disabled:opacity-45"
-                title={`Audio call (${callMinutes.audio} min available)`}
+                onClick={handleSend}
+                disabled={!inputText.trim() || sending}
+                className="shrink-0 rounded-xl bg-cyan-500/20 p-1.5 text-cyan-400 transition hover:bg-cyan-500/30 disabled:opacity-30"
               >
-                <Phone className="h-4 w-4" />
+                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               </button>
-
-              <button
-                onClick={() => initiateCall('video')}
-                disabled={isInitiatingCall}
-                className="rounded-xl border border-cyan-300/15 bg-cyan-400/5 p-2 text-cyan-200 transition hover:bg-cyan-400/15 disabled:opacity-45"
-                title={`Video call (${callMinutes.video} min available)`}
-              >
-                <Video className="h-4 w-4" />
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={toggleMinimize}
-            className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
-            title="Minimize"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-
-          <button
-            onClick={closeChatBubble}
-            className="rounded-xl border border-red-300/20 bg-red-500/10 p-2 text-red-200 transition hover:bg-red-500/20"
-            title="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {!isOpsConversation && (
-        <div className="relative z-10 flex shrink-0 items-center justify-between border-b border-white/10 bg-slate-950/55 px-4 py-2">
-          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-200/80">
-            <MessageCircle className="h-3.5 w-3.5" />
-            TCPS Chat
-          </div>
-
-          <div className="flex items-center gap-2 text-[10px] text-slate-400">
-            <span>Audio: {callMinutes.audio}m</span>
-            <span className="text-slate-700">•</span>
-            <span>Video: {callMinutes.video}m</span>
+            </div>
           </div>
         </div>
       )}
-
-      <div
-        ref={messagesContainerRef}
-        className="relative z-10 flex-1 space-y-3 overflow-y-auto bg-slate-950/35 p-4 no-scrollbar"
-      >
-        {loading ? (
-          <div className="flex h-full min-h-[260px] items-center justify-center">
-            <div className="text-center">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-200/70">
-                Loading chat
-              </p>
-            </div>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex h-full min-h-[260px] items-center justify-center">
-            <div className="max-w-[230px] text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border border-cyan-300/15 bg-cyan-400/5">
-                {isOpsConversation ? (
-                  <Shield className="h-8 w-8 text-cyan-200/70" />
-                ) : (
-                  <Sparkles className="h-8 w-8 text-cyan-200/70" />
-                )}
-              </div>
-
-              <p className="text-sm font-black text-white">
-                {isOpsConversation ? 'Officer chat is ready' : `Start a conversation`}
-              </p>
-
-              <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                {isOpsConversation
-                  ? 'Use this space for officer coordination and operations.'
-                  : `Send a TCPS message to ${activeUsername || 'this user'}.`}
-              </p>
-            </div>
-          </div>
-        ) : (
-          messages.map((msg) => {
-            const isMe = msg.sender_id === user?.id
-
-            return (
-              <div key={msg.id} className={cn('flex w-full', isMe ? 'justify-end' : 'justify-start')}>
-                <div className={cn('flex max-w-[88%] gap-2', isMe ? 'flex-row-reverse' : 'flex-row')}>
-                  <AvatarWithFrame
-                    userId={isMe ? user?.id : msg.sender_id}
-                    avatarUrl={
-                      isMe
-                        ? profile?.avatar_url
-                        : msg.sender_avatar_url
-                    }
-                    username={isMe ? profile?.username : msg.sender_username}
-                    size="xs"
-                    className={cn(
-                      'h-8 w-8 shrink-0 rounded-2xl border',
-                      isMe ? 'border-cyan-300/25' : 'border-fuchsia-300/20',
-                      msg.isPending && 'opacity-50'
-                    )}
-                  />
-
-                  <div className={cn('flex min-w-0 flex-col', isMe ? 'items-end' : 'items-start')}>
-                    <div className="mb-1 flex items-center gap-2">
-                      {!isMe && msg.sender_username && (
-                        <UserNameWithAge
-                          user={{
-                            username: msg.sender_username,
-                            id: msg.sender_id,
-                            rgb_username_expires_at: msg.sender_rgb_expires_at || undefined,
-                            glowing_username_color:
-                              (msg as any).sender_glowing_username_color || undefined,
-                            created_at: msg.sender_created_at,
-                          }}
-                          className="text-xs font-bold text-slate-400 hover:text-cyan-200"
-                        />
-                      )}
-
-                      {isMe && <span className="text-xs font-black text-cyan-300">You</span>}
-
-                      <span className="text-[10px] text-slate-600">
-                        {new Date(msg.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-
-                    <div
-                      className={cn(
-                        'break-words rounded-2xl border px-3 py-2.5 text-sm leading-relaxed shadow-lg',
-                        isMe
-                          ? 'rounded-tr-md border-cyan-300/20 bg-cyan-400/15 text-cyan-50 shadow-[0_0_18px_rgba(34,211,238,0.08)]'
-                          : 'rounded-tl-md border-fuchsia-300/15 bg-white/7 text-slate-200',
-                        msg.isPending && 'opacity-70'
-                      )}
-                    >
-                      {msg.content}
-                    </div>
-
-                    {isMe && (
-                      <div className="mt-1 flex items-center gap-1">
-                        {msg.isPending ? (
-                          <div className="flex items-center gap-1" title="Sending...">
-                            <Clock className="h-3 w-3 animate-pulse text-slate-500" />
-                            <span className="text-[10px] text-slate-500">sending</span>
-                          </div>
-                        ) : msg.read_at ? (
-                          <div
-                            className="flex items-center gap-0.5"
-                            title={`Read at ${new Date(msg.read_at).toLocaleTimeString()}`}
-                          >
-                            <CheckCheck className="h-3 w-3 text-cyan-300" />
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-0.5" title="Delivered">
-                            <CheckCheck className="h-3 w-3 text-slate-500" />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })
-        )}
-
-        {isTyping && (
-          <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 text-xs text-slate-400">
-            <div className="flex gap-1">
-              <span className="animate-bounce delay-0">.</span>
-              <span className="animate-bounce delay-100">.</span>
-              <span className="animate-bounce delay-200">.</span>
-            </div>
-            <span>{activeUsername} is typing</span>
-          </div>
-        )}
-      </div>
-
-      <div className="relative z-10 shrink-0 border-t border-cyan-300/15 bg-slate-950/85 p-3">
-        {actualConversationId && activeUserId && (
-          <MessageInput
-            conversationId={actualConversationId}
-            otherUserId={activeUserId}
-            onMessageSent={scrollToBottom}
-            onNewMessage={handleLocalNewMessage}
-            onTyping={handleLocalTyping}
-          />
-        )}
-      </div>
     </div>
   )
 }

@@ -71,7 +71,7 @@ export default function UserCompliancePrompt() {
        .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
   }, [user, profile, isExcludedPage]);
 

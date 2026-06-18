@@ -50,7 +50,7 @@ function formatMessageTime(dateStr: string): string {
 }
 
 function getOtherParticipant(thread: UtromailThread, userId: string) {
-  // Use the pre-computed flat fields from getThreads (like old TCPS)
+  // Use the pre-computed flat fields from getThreads
   if (thread.other_user_id) {
     return {
       user_id: thread.other_user_id,
@@ -467,7 +467,7 @@ export default function UtromailPage() {
                   const lastMsg = thread.last_message;
                   const isActive = activeConversationId === thread.id;
                   const isUnread = thread.unread_count ? thread.unread_count > 0 : false;
-                  // Use flat fields from getThreads (same pattern as old TCPS InboxSidebar)
+                  // Use flat fields from getThreads
                   const displayName = thread.other_username || 'Unknown';
                   const avatarUrl = thread.other_avatar_url;
                   const avatarLetter = displayName !== 'Unknown' ? displayName[0].toUpperCase() : '?';

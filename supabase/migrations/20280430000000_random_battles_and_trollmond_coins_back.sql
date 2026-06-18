@@ -198,6 +198,8 @@ BEGIN
       winner_stream_id = v_winner_stream_id
   WHERE id = v_battle.id;
 
+  -- Only clear battle from the forfeiting stream.
+  -- The winning broadcaster stays live on their broadcast page with viewers.
   UPDATE public.streams
   SET is_battle = false,
       battle_status = 'ended',
@@ -208,7 +210,17 @@ BEGIN
       random_battle_queue_enabled = false,
       random_battle_queued_at = null,
       random_battle_cooldown_until = v_cooldown_until
-  WHERE id IN (v_forfeiter_stream_id, v_winner_stream_id);
+  WHERE id = v_forfeiter_stream_id;
+
+  -- Update the winning stream's battle state so it reflects the ended battle
+  -- but keeps the stream live (is_battle = true so the battle overlay shows results)
+  UPDATE public.streams
+  SET battle_status = 'ended',
+      battle_end_time = now(),
+      battle_end_reason = 'forfeit',
+      battle_winner_id = v_winner_id,
+      battle_forfeited_by = p_broadcaster_id
+  WHERE id = v_winner_stream_id;
 
   UPDATE public.user_profiles
   SET battle_crowns = COALESCE(battle_crowns, 0) + 2

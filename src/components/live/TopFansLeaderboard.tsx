@@ -400,8 +400,20 @@ export default function TopFansLeaderboard({
 
   useEffect(() => {
     fetchLeaderboard();
-    const interval = setInterval(fetchLeaderboard, 10000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`top-fans-leaderboard:${streamId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'stream_fan_tiers',
+        filter: `stream_id=eq.${streamId}`,
+      }, () => fetchLeaderboard())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchLeaderboard]);
 
   const totalCoins = useMemo(
