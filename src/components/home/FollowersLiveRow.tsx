@@ -87,9 +87,37 @@ export default function FollowersLiveRow({ onCountChange }: { onCountChange?: (c
 
   useEffect(() => {
     fetchFollowersLive()
-    const interval = setInterval(fetchFollowersLive, 30000)
-    return () => clearInterval(interval)
-  }, [fetchFollowersLive])
+
+    if (!profile?.id) return
+
+    const channel = supabase
+      .channel(`followers-live:${profile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'streams',
+          filter: `status=eq.live`,
+        },
+        () => fetchFollowersLive(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+          filter: `status=eq.live`,
+        },
+        () => fetchFollowersLive(),
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchFollowersLive, profile?.id])
 
   if (!profile?.id) return null
 

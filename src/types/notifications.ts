@@ -105,13 +105,16 @@ export type NotificationType =
   | 'appeal_submitted'
 | 'appeal_decision'
 
-   // TRMAIL NOTIFICATIONS
-   | 'tromail_received'
-   | 'tromail_important'
-   | 'team_meeting_scheduled'
-   | 'team_meeting_rescheduled'
-   | 'team_meeting_cancelled'
-   | 'team_meeting_started'
+  // TRMAIL NOTIFICATIONS
+    | 'tromail_received'
+    | 'tromail_important'
+    | 'team_meeting_scheduled'
+    | 'team_meeting_rescheduled'
+    | 'team_meeting_cancelled'
+    | 'team_meeting_started'
+
+  // SURVEY
+  | 'survey'
 
    // AUCTIONS / MARKETPLACE
    | 'auction_starting_soon'

@@ -58,9 +58,9 @@ export default function FeaturedPostCard({ post, onClick, variant = 'large' }: F
       </div>
 
       {/* Image area — takes up 60% of card */}
-      {hasImage && thumbnailUrl ? (
-        <div className={`relative w-full shrink-0 overflow-hidden ${isLarge ? 'h-[65%]' : 'h-[58%']}`}>
-          <img
+{hasImage && thumbnailUrl ? (
+         <div className={`relative w-full shrink-0 overflow-hidden ${isLarge ? 'h-[65%]' : 'h-[58%]'}`}>
+           <img
             src={thumbnailUrl}
             alt=""
             loading="lazy"

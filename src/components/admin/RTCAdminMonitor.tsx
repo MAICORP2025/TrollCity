@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import {
   Activity, BarChart3, Bug, Clock, Coins, Mail, Monitor, MoreVertical,
   Radio, RefreshCw, Send, Pause, Search, Shield, ShieldAlert, TrendingUp,
-  UserPlus, Users, Video, X, Stamp, FileText,
+  UserPlus, Users, X, Stamp, FileText,
 } from 'lucide-react';
 import BugCenterPanel from './BugCenterPanel';
 import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton';
@@ -122,7 +122,7 @@ interface StreamAnalyticsDaily {
   peak_concurrent_viewers: number;
 }
 
-type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'team_meeting' | 'bug_center' | 'tromail' | 'walkie_talkie' | 'notary';
+type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'bug_center' | 'tromail' | 'walkie_talkie' | 'notary';
 
 interface TromailInboxItem {
   id: string;
@@ -1331,9 +1331,8 @@ const renderFloatingButton = () => {
      { id: 'mod_actions', label: 'Mod Actions', icon: <Shield className="h-3 w-3" /> },
      { id: 'signups', label: 'Signups', icon: <UserPlus className="h-3 w-3" />, adminOnly: true },
      { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="h-3 w-3" />, adminOnly: true },
-     { id: 'cashout', label: 'Cashout Bonus', icon: <Coins className="h-3 w-3" />, adminOnly: true },
-     { id: 'team_meeting', label: 'Team Meeting', icon: <Video className="h-3 w-3" />, staffOnly: true },
-     { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
+      { id: 'cashout', label: 'Cashout Bonus', icon: <Coins className="h-3 w-3" />, adminOnly: true },
+      { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
      { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
      { id: 'notary', label: 'Notary', icon: <Stamp className="h-3 w-3" /> },
    ];
@@ -1753,18 +1752,6 @@ const renderFloatingButton = () => {
     </div>
   );
 
-  const renderTeamMeetingTab = () => (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-3">
-        <div className="mb-2 flex items-center gap-2"><Video className="h-4 w-4 text-cyan-400" /><span className="text-sm font-bold text-cyan-400">Team Meeting Rooms</span></div>
-        <p className="text-xs text-gray-400">Monitor and manage active staff meetings with 3x3 participant grid layout.</p>
-        <button type="button" onClick={() => navigate('/admin/meetings')} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-700">
-          <Video className="h-3 w-3" /> Open Meeting Dashboard
-        </button>
-      </div>
-    </div>
-  );
-
   const renderTromailTab = () => (
     <div className="space-y-3">
       <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-3">
@@ -1985,9 +1972,8 @@ const renderFloatingButton = () => {
      if (activeMainTab === 'walkie_talkie') return <WalkieTalkieTab />;
      if (activeMainTab === 'mod_actions') return renderModActionsTab();
      if (isFullAdmin && activeMainTab === 'signups') return renderSignupsTab();
-     if (isFullAdmin && activeMainTab === 'cashout') return renderCashoutTab();
-     if (activeMainTab === 'team_meeting') return renderTeamMeetingTab();
-      if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
+      if (isFullAdmin && activeMainTab === 'cashout') return renderCashoutTab();
+       if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
       if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
       if (activeMainTab === 'tromail') return renderTromailTab();
       if (activeMainTab === 'notary') return renderNotaryTab();

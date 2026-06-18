@@ -350,6 +350,7 @@ BEGIN
   END IF;
 
   -- 4. Perform atomic update: subtract hype coins, add troll coins
+  PERFORM set_config('app.bypass_coin_protection', 'true', true);
   UPDATE public.user_profiles
   SET
     hype_coins = hype_coins - p_amount,
@@ -585,6 +586,3 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION public.gift_hype_coin_to_viewer(uuid, uuid) TO authenticated;
 
 COMMENT ON FUNCTION public.gift_hype_coin_to_viewer(uuid, uuid) IS 'RPC for broadcasters to gift 1 hype coin to a viewer. Enforces 5-min cooldown per viewer, daily (25) and weekly (175) caps. Row-level locking prevents race conditions.';
-
-
-(End of file - total 408 lines)

@@ -895,31 +895,20 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     }
   }
 
-  // Cleanup handler for page unload - ensures camera is turned off immediately when user closes browser
+  // Cleanup handler for page unload - full LiveKit teardown when browser closes
   useEffect(() => {
     const handleBeforeUnload = () => {
-      const room = roomRef.current
-      
-      // Only disconnect if we're actually ending the stream/unloading
-      // Don't stop tracks here as that could interfere with normal operation
-      if (room && !isGoingLiveRef.current) {
-        try {
-          DEBUG_COUNTERS.livekitRoomDisconnectedCount++
-          console.log(`[BroadcastPage] LiveKit room disconnected: ${DEBUG_COUNTERS.livekitRoomDisconnectedCount}`)
-          livekitRoomDisconnectedCountRef.current += 1
-          room.disconnect().catch(() => {})
-        } catch (e) {
-          // Ignore
-        }
+      if (!isGoingLiveRef.current) {
+        disconnectLiveKitRoom()
       }
     }
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload)
-    
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
     }
-  }, [])
+  }, [disconnectLiveKitRoom])
 
   // Check if screen share mode from sessionStorage (set by SetupPage for gaming category)
   const { storedScreenMode: initialScreenMode, storedCameraOverlay: initialCameraOverlay } = useMemo(() => {
@@ -1729,6 +1718,57 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
       updateStreamActivity()
     }, [streamId, resolveGiftAmount, resolveGiftName, supabase]);
 
+  // ── Complete LiveKit room teardown ──────────────────────────────────
+  // Unpublishes all tracks, detaches event handlers, disconnects the
+  // socket, and nulls the ref. Use this everywhere the room must be
+  // fully torn down (stream end, viewer leave, realtime ended, unload).
+  const disconnectLiveKitRoom = useCallback(() => {
+    const room = roomRef.current
+    if (!room) return
+
+    // 1) Detach our custom handlers first so no events fire during teardown
+    try {
+      detachLiveKitHandlers(room)
+    } catch (e) {
+      console.warn('[BroadcastPage] Error detaching LiveKit handlers:', e)
+    }
+
+    // 2) Unpublish all local tracks so remote participants see us leave cleanly
+    if (room.localParticipant) {
+      const allPubs = [
+        ...room.localParticipant.videoTrackPublications.values(),
+        ...room.localParticipant.audioTrackPublications.values(),
+      ]
+      for (const pub of allPubs) {
+        try {
+          if (pub.track) {
+            room.localParticipant.unpublishTrack(pub.track).catch(() => {})
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    // 3) Remove all LiveKit room-level listeners
+    try {
+      room.removeAllListeners()
+    } catch (e) {
+      // ignore
+    }
+
+    // 4) Disconnect the WebSocket
+    try {
+      room.disconnect().catch(() => {})
+    } catch (e) {
+      // ignore
+    }
+
+    // 5) Null the ref so no stale references remain
+    roomRef.current = null
+    livekitRoomDisconnectedCountRef.current += 1
+  }, [detachLiveKitHandlers])
+
   const stopLocalTracks = useCallback(() => {
     if (localTracks) {
       localTracks.forEach((track) => {
@@ -1743,10 +1783,8 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
       setLocalTracks(null)
     }
 
-    const room = roomRef.current
-    if (room) {
-      room.disconnect().catch(console.error)
-    }
+    // Use the full teardown helper instead of raw disconnect
+    disconnectLiveKitRoom()
 
     // Only clear tracks if we're actually exiting, not going live
     if (!isGoingLiveRef.current) {
@@ -1755,7 +1793,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
     } else {
       console.log('[BroadcastPage] ?? Skipping clearTracks in stopLocalTracks during live transition')
     }
-  }, [localTracks, clearTracks])
+  }, [localTracks, clearTracks, disconnectLiveKitRoom])
 
   const stopLocalTracksRef = useRef(stopLocalTracks)
   useEffect(() => {
@@ -2042,41 +2080,18 @@ useEffect(() => {
     const confirmed = confirm(isHost ? 'End this broadcast?' : 'Leave this broadcast?')
     if (!confirmed) return
 
-    const room = roomRef.current
-    
-    // Stop publishing tracks
-    if (room && room.localParticipant) {
-      try {
-        for (const pub of room.localParticipant.videoTrackPublications.values()) {
-          if (pub.track) {
-            room.localParticipant.unpublishTrack(pub.track).catch(console.warn)
-          }
-        }
-        for (const pub of room.localParticipant.audioTrackPublications.values()) {
-          if (pub.track) {
-            room.localParticipant.unpublishTrack(pub.track).catch(console.warn)
-          }
-        }
-        console.log('[BroadcastPage] Unpublished all tracks on leave')
-      } catch (e) {
-        console.warn('Error unpublishing tracks on leave:', e)
-      }
-    }
-    
     // Stop local and published media
     cleanupLocalMedia()
 
-    // Disconnect from room
-    if (room) {
-      room.disconnect().catch(console.error)
-    }
-    
+    // Full LiveKit teardown: unpublish, detach handlers, disconnect
+    disconnectLiveKitRoom()
+
     // Clear PreflightStore
     PreflightStore.clear()
-    
+
     // Navigate away
     navigate('/home', { replace: true })
-  }, [isHost, localTracks, navigate])
+  }, [isHost, navigate, disconnectLiveKitRoom])
   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
 const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
     const handlePinProduct = useCallback(() => setIsPinProductModalOpen(true), [])
@@ -2396,136 +2411,12 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
     };
   }, [isHost, stream?.user_id]);
 
-  useEffect(() => {
-    if (!streamId || !stream) return;
-    
-    const pollInterval = setInterval(async () => {
-      try {
-         const { data, error } = await supabase
-          .from('streams')
-        .select('status, box_count, is_battle, battle_id, has_rgb_effect, are_seats_locked, total_likes, seat_price, current_viewers, total_gifts_coins, battle_mode, battle_format, battle_status, battle_start_time, battle_end_time, random_battle_queue_enabled, random_battle_queued_at, random_battle_cooldown_until, side_a_score, side_b_score, broadcast_theme_slug, active_theme_url, category')
-          .eq('id', streamId)
-          .maybeSingle()
-
-        if (error || !data) {
-          console.warn('[BroadcastPage] Poll stream fetch failed', { error, streamId })
-          return
-        }
-
-        // Handle battle mode transitions
-        if (stream.is_battle === true && data.is_battle === false) {
-          // Battle ended - fully sync battle flags so controls don't stay in stale active state
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              status: data.status,
-              is_battle: data.is_battle,
-              battle_id: data.battle_id,
-              battle_mode: data.battle_mode,
-              battle_format: data.battle_format,
-              battle_status: data.battle_status,
-              battle_start_time: data.battle_start_time,
-              battle_end_time: data.battle_end_time,
-              random_battle_queue_enabled: (data as any).random_battle_queue_enabled,
-              random_battle_queued_at: (data as any).random_battle_queued_at,
-              random_battle_cooldown_until: (data as any).random_battle_cooldown_until,
-              side_a_score: data.side_a_score,
-              side_b_score: data.side_b_score,
-            };
-          });
-          return;
-        }
-        
-        if (data?.box_count !== undefined && data.box_count !== streamRef.current?.box_count) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return { ...prev, box_count: data.box_count };
-          });
-        }
-        
-        if (data?.has_rgb_effect !== undefined && data.has_rgb_effect !== streamRef.current?.has_rgb_effect) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return { ...prev, has_rgb_effect: data.has_rgb_effect };
-          });
-        }
-        
-        if (data?.are_seats_locked !== undefined && data.are_seats_locked !== streamRef.current?.are_seats_locked) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return { ...prev, are_seats_locked: data.are_seats_locked };
-          });
-        }
-        
-        if (data?.total_likes !== undefined && data.total_likes !== streamRef.current?.total_likes) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return { ...prev, total_likes: data.total_likes };
-          });
-        }
-        
-        if (data?.seat_price !== undefined && data.seat_price !== streamRef.current?.seat_price) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return { ...prev, seat_price: data.seat_price };
-          });
-        }
-        
-        if (data?.current_viewers !== undefined && data.current_viewers !== streamRef.current?.current_viewers) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return { ...prev, current_viewers: data.current_viewers };
-          });
-        }
-        
-        if (data?.total_gifts_coins !== undefined && data.total_gifts_coins !== streamRef.current?.total_gifts_coins) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return { ...prev, total_gifts_coins: data.total_gifts_coins };
-          });
-        }
-
-        if (data) {
-          setStream((prev: any) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-                battle_mode: data.battle_mode,
-                battle_format: data.battle_format,
-                battle_status: data.battle_status,
-                random_battle_queue_enabled: (data as any).random_battle_queue_enabled,
-                random_battle_queued_at: (data as any).random_battle_queued_at,
-                random_battle_cooldown_until: (data as any).random_battle_cooldown_until,
-                side_a_score: data.side_a_score,
-                side_b_score: data.side_b_score,
-            };
-          });
-        }
-        
-        // Handle stream ended - redirect ALL users (host, guests, viewers) to summary
-        if (data?.status === 'ended') {
-
-          clearInterval(pollInterval);
-          stopLocalTracks();
-          // Hard disconnect LiveKit room
-          const room = roomRef.current;
-          if (room) {
-            room.disconnect().catch(() => {});
-            roomRef.current = null;
-          }
-          setRemoteParticipants(new Map());
-          navigate(`/broadcast/summary/${streamId}`);
-          return;
-        }
-      } catch (err) {
-      }
-    }, 3000);
-
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [streamId, isHost, supabase, navigate, stopLocalTracks]);
+  // TEMP DISABLED — replaced by useStreamRealtime subscription below
+  // useEffect(() => {
+  //   if (!streamId || !stream) return;
+  //   const pollInterval = setInterval(async () => { ... }, 3000);
+  //   return () => clearInterval(pollInterval);
+  // }, [streamId, isHost, supabase, navigate, stopLocalTracks]);
 
   const areStreamRealtimeUpdatesEqual = useCallback((current: any, next: any) => {
     if (!current || !next) return false;
@@ -2615,18 +2506,14 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
 
     if (nextStream.status === 'ended') {
       stopLocalTracksRef.current();
-      // Hard disconnect LiveKit room to ensure clean exit
-      const room = roomRef.current;
-      if (room) {
-        room.disconnect().catch(() => {});
-        roomRef.current = null;
-      }
+      // Full LiveKit teardown: unpublish, detach handlers, disconnect
+      disconnectLiveKitRoom();
       setRemoteParticipants(new Map());
       setTimeout(() => {
         navigate(`/broadcast/summary/${streamId}`);
       }, 100);
     }
-  }, [navigate, streamId]);
+  }, [navigate, streamId, disconnectLiveKitRoom]);
 
 useStreamRealtime(streamId, {
      onStream: (event) => {
@@ -3508,19 +3395,18 @@ useStreamRealtime(streamId, {
 
          return () => {
            mounted = false
-           const room = roomRef.current
-           if (room) {
-             detachLiveKitHandlers(room)
-           }
+           // Full teardown on unmount: unpublish, detach handlers, disconnect
+           disconnectLiveKitRoom()
          }
        }, [
          stream?.id,
          stream?.status,
          stream?.is_live,
-user?.id, // user.id is used for identity
+         user?.id, // user.id is used for identity
          isHost,
          attachLiveKitHandlers,
          detachLiveKitHandlers,
+         disconnectLiveKitRoom,
        ])
 
   const toggleCamera = useCallback(async () => {
@@ -4236,17 +4122,12 @@ const handleLike = useCallback(async () => {
     }
     // Stop local and published media first
     cleanupLocalMedia()
-    
+
     // Clear remote participants immediately
     setRemoteParticipants(new Map())
-    
-    // Disconnect from room
-    const room = roomRef.current
-    if (room) {
-      livekitRoomDisconnectedCountRef.current += 1
-      room.disconnect().catch(console.error)
-      roomRef.current = null
-    }
+
+    // Full LiveKit teardown: unpublish tracks, detach handlers, disconnect socket
+    disconnectLiveKitRoom()
 
     // Clear PreflightStore to reset state for next broadcast
     // This ensures clean state when starting a new stream (especially for gaming screen share)

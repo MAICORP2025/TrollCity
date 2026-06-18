@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
@@ -9,6 +9,7 @@ import {
   Car,
   Check,
   CheckCircle,
+  ChevronRight,
   CircleDollarSign,
   Clock,
   Dot,
@@ -24,6 +25,7 @@ import {
   Siren,
   Trash2,
   User,
+  Users,
   Video,
   X,
 } from 'lucide-react'
@@ -69,6 +71,16 @@ interface NotificationDestination {
   label: string
   external?: boolean
   openInPanel?: boolean
+}
+
+interface UserNotificationGroup {
+  userId: string | null
+  username: string | null
+  avatarUrl: string | null
+  notifications: Notification[]
+  unreadCount: number
+  latestAt: string
+  categories: Set<NotificationCategory>
 }
 
 const MAX_NOTIFICATIONS = 150
@@ -195,6 +207,7 @@ function getNotificationPriority(type: string, metadata?: any): NotificationPrio
     'marketplace_order_fulfillment_required',
     'team_meeting_scheduled',
     'team_meeting_started',
+    'survey',
     'contract_assigned',
     'contract_signature_required',
   ])
@@ -276,6 +289,8 @@ function getNotificationCategory(type: string, metadata?: any): NotificationCate
   }
 
   if (['support_ticket', 'support_reply'].includes(type)) return 'support'
+
+  if (type === 'survey') return 'system'
 
   if (
     [
@@ -419,6 +434,86 @@ function normalizeJailNotification(row: any, isAdmin: boolean): Notification {
   }
 }
 
+// ── User-based notification grouping ────────────────────────────────
+// Extracts the "actor" user from a notification's metadata so we can
+// group notifications by user instead of showing one long flat list.
+
+function extractNotificationUser(notification: Notification): { userId: string | null; username: string | null; avatarUrl: string | null } {
+  const m = notification.metadata || {}
+
+  // The actor is whoever triggered the notification (sender, reporter, etc.)
+  const userId = firstString(
+    m.actor_id,
+    m.sender_id,
+    m.target_user_id,
+    m.user_id,
+    m.profile_user_id,
+    m.inmate_id,
+    m.follower_id,
+    m.from_user_id,
+    m.reported_by,
+    m.submitted_by,
+  )
+
+  const username = firstString(
+    m.actor_username,
+    m.sender_username,
+    m.username,
+    m.target_username,
+    m.follower_username,
+    m.user_username,
+    m.display_name,
+    m.inmate_username,
+    m.reported_by_username,
+  )
+
+  const avatarUrl = firstString(
+    m.actor_avatar_url,
+    m.sender_avatar_url,
+    m.avatar_url,
+    m.target_avatar_url,
+    m.user_avatar_url,
+  )
+
+  return { userId, username, avatarUrl }
+}
+
+function groupNotificationsByUser(notifications: Notification[]): UserNotificationGroup[] {
+  const map = new Map<string, UserNotificationGroup>()
+
+  for (const n of notifications) {
+    const { userId, username, avatarUrl } = extractNotificationUser(n)
+    // Use userId as key; fall back to username; lastly "system" for none
+    const key = userId || username || '__system__'
+
+    let group = map.get(key)
+    if (!group) {
+      group = {
+        userId,
+        username,
+        avatarUrl,
+        notifications: [],
+        unreadCount: 0,
+        latestAt: n.created_at,
+        categories: new Set(),
+      }
+      map.set(key, group)
+    }
+
+    group.notifications.push(n)
+    if (!n.is_read) group.unreadCount++
+    if (new Date(n.created_at) > new Date(group.latestAt)) group.latestAt = n.created_at
+    group.categories.add(n.category)
+  }
+
+  // Sort groups: most recent first, then by unread count
+  return Array.from(map.values()).sort((a, b) => {
+    const unreadDelta = b.unreadCount - a.unreadCount
+    if (unreadDelta !== 0) return unreadDelta
+    return new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime()
+  })
+}
+
 function resolveNotificationDestination(
   notification: Notification,
   options: { isAdmin: boolean }
@@ -497,11 +592,11 @@ function resolveNotificationDestination(
         label: 'Open Tromail',
       }
 
-case 'team_meeting_scheduled':
+    case 'team_meeting_scheduled':
      case 'team_meeting_updated':
      case 'meeting_invite':
        return {
-         route: meetingId ? withQuery('/rtcadminmonitor', { tab: 'team-meetings', meeting: meetingId }) : '/rtcadminmonitor?tab=team-meetings',
+         route: meetingId ? withQuery('/tromail', { tab: 'meetings', meeting: meetingId }) : '/tromail?tab=meetings',
          label: 'Open team meeting',
        }
 
@@ -510,6 +605,12 @@ case 'team_meeting_scheduled':
          route: meetingId ? `/meeting/${meetingId}` : '/admin/meetings',
          label: 'Join meeting',
        }
+
+    case 'survey':
+      return {
+        route: metadata.survey_id ? `/survey/${metadata.survey_id}` : '/notifications',
+        label: 'Take survey',
+      }
 
     case 'contract_assigned':
     case 'contract_signature_required':
@@ -718,6 +819,8 @@ case 'team_meeting_scheduled':
   }
 }
 
+type ViewMode = 'list' | 'byUser'
+
 export default function Notifications() {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
@@ -726,6 +829,8 @@ export default function Notifications() {
   const [filter, setFilter] = useState<NotificationCategory>('all')
   const [loading, setLoading] = useState(true)
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('byUser')
+  const [selectedUserGroup, setSelectedUserGroup] = useState<UserNotificationGroup | null>(null)
 
   const isAdmin = useMemo(() => isAdminProfile(profile), [profile])
 
@@ -805,11 +910,53 @@ export default function Notifications() {
   useEffect(() => {
     if (!profile?.id) return
 
-    const interval = window.setInterval(() => {
-      void loadNotifications()
-    }, 30_000)
+    const channel = supabase
+      .channel(`notifications-page:${profile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => loadNotifications(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => loadNotifications(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'jail_notifications',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => loadNotifications(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'jail_notifications',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => loadNotifications(),
+      )
+      .subscribe()
 
-    return () => window.clearInterval(interval)
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [profile?.id, loadNotifications])
 
   const counts = useMemo(() => {
@@ -845,6 +992,18 @@ export default function Notifications() {
     if (filter === 'all') return notifications
     return notifications.filter((n) => n.category === filter)
   }, [notifications, filter])
+
+  const userGroups = useMemo(() => groupNotificationsByUser(filteredNotifications), [filteredNotifications])
+
+  const filteredUserGroups = useMemo(() => {
+    if (filter === 'all') return userGroups
+    return userGroups
+      .map((g) => ({
+        ...g,
+        notifications: g.notifications.filter((n) => n.category === filter),
+      }))
+      .filter((g) => g.notifications.length > 0)
+  }, [userGroups, filter])
 
   const markAsRead = useCallback(
     async (notification: Notification) => {
@@ -1253,6 +1412,153 @@ case 'stream_live':
     )
   }
 
+  const renderUserGroup = (_index: number, group: UserNotificationGroup) => {
+    const displayName = group.username || group.userId || 'System'
+    const latestNotif = group.notifications[0]
+    const categoryList = Array.from(group.categories).slice(0, 3).join(', ')
+
+    return (
+      <div className="pb-3 pr-1">
+        <article
+          onClick={() => setSelectedUserGroup(group)}
+          className={cn(
+            'group relative cursor-pointer overflow-hidden rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl',
+            group.unreadCount > 0
+              ? 'border-cyan-300/25 bg-slate-900/75 shadow-[0_0_24px_rgba(34,211,238,0.08)]'
+              : 'border-white/10 bg-slate-950/55 hover:border-white/20'
+          )}
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.06),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.06),transparent_34%)]" />
+
+          {group.unreadCount > 0 && (
+            <div className="absolute right-4 top-4 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-cyan-400 px-1.5 text-[11px] font-black text-slate-950 shadow-[0_0_14px_rgba(34,211,238,0.85)]">
+              {group.unreadCount}
+            </div>
+          )}
+
+          <div className="relative flex items-center gap-4">
+            <div className={cn(
+              'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border',
+              group.unreadCount > 0
+                ? 'border-cyan-300/30 bg-cyan-400/10'
+                : 'border-white/10 bg-white/5'
+            )}>
+              {group.avatarUrl ? (
+                <img src={group.avatarUrl} alt="" className="h-10 w-10 rounded-xl object-cover" />
+              ) : (
+                <User className={cn('h-6 w-6', group.unreadCount > 0 ? 'text-cyan-300' : 'text-slate-400')} />
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className={cn('truncate font-bold', group.unreadCount > 0 ? 'text-white' : 'text-slate-300')}>
+                  {displayName}
+                </h3>
+                <span className="text-xs text-slate-500">
+                  {group.notifications.length} notification{group.notifications.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-sm text-slate-400">
+                {latestNotif.title}
+              </p>
+              <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-500">
+                <Clock className="h-3 w-3" />
+                <span>{new Date(group.latestAt).toLocaleString()}</span>
+                <span className="text-slate-700">â€¢</span>
+                <span className="truncate">{categoryList}</span>
+              </div>
+            </div>
+
+            <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition group-hover:text-cyan-300" />
+          </div>
+        </article>
+      </div>
+    )
+  }
+
+  const renderUserNotificationDetail = () => {
+    const group = selectedUserGroup
+    if (!group) return null
+
+    const displayName = group.username || group.userId || 'System'
+
+    return (
+      <div className="flex h-full flex-col">
+        <div className="mb-4 flex items-center gap-3">
+          <button
+            onClick={() => setSelectedUserGroup(null)}
+            className="rounded-xl border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:border-cyan-300/35 hover:bg-cyan-400/10 hover:text-cyan-200"
+          >
+            <ChevronRight className="h-4 w-4 rotate-180" />
+          </button>
+          <div className="flex items-center gap-2">
+            {group.avatarUrl ? (
+              <img src={group.avatarUrl} alt="" className="h-8 w-8 rounded-lg object-cover" />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5">
+                <User className="h-4 w-4 text-slate-400" />
+              </div>
+            )}
+            <div>
+              <h3 className="font-bold text-white">{displayName}</h3>
+              <p className="text-xs text-slate-500">{group.notifications.length} notifications</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto pr-1">
+          {group.notifications.map((notification) => (
+            <div key={notification.id} className="pb-2">
+              <article
+                onClick={() => handleNotificationClick(notification)}
+                className={cn(
+                  'group relative cursor-pointer overflow-hidden rounded-xl border p-3 transition-all duration-200 hover:shadow-lg',
+                  notification.is_read
+                    ? 'border-white/10 bg-slate-950/55 hover:border-white/20'
+                    : 'border-cyan-300/20 bg-slate-900/60'
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                    {getNotificationIcon(notification)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className={cn('truncate text-sm font-bold', notification.is_read ? 'text-slate-400' : 'text-white')}>
+                        {notification.title}
+                      </h4>
+                      <time className="shrink-0 text-[11px] text-slate-500">
+                        {new Date(notification.created_at).toLocaleString()}
+                      </time>
+                    </div>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-slate-400">
+                      {renderMessage(notification)}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className={cn(
+                        'rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                        notification.category === 'admin' ? 'bg-cyan-400/10 text-cyan-300' :
+                        notification.category === 'moderation' ? 'bg-red-400/10 text-red-300' :
+                        notification.category === 'finance' ? 'bg-green-400/10 text-green-300' :
+                        'bg-white/5 text-slate-500'
+                      )}>
+                        {notification.category}
+                      </span>
+                      {notification.priority === 'critical' && (
+                        <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-300">Critical</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#050714] px-4 pb-8 pt-24 text-white md:px-8">
       <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.14),transparent_36%)]" />
@@ -1272,7 +1578,7 @@ case 'stream_live':
                     Trollifications
                   </h1>
                   <p className="text-sm text-slate-400">
-                    Admin alerts, user updates, finance events, jail actions, and system notices.
+                    Grouped by user for quick review. Click a user to see all their notifications.
                   </p>
                 </div>
               </div>
@@ -1284,11 +1590,18 @@ case 'stream_live':
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2 md:min-w-[360px]">
+            <div className={cn('grid gap-2 md:min-w-[360px]', viewMode === 'byUser' ? 'grid-cols-4' : 'grid-cols-3')}>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-center">
                 <p className="text-2xl font-black text-white">{notifications.length}</p>
                 <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Total</p>
               </div>
+
+              {viewMode === 'byUser' && (
+                <div className="rounded-2xl border border-purple-300/20 bg-purple-500/10 p-3 text-center">
+                  <p className="text-2xl font-black text-purple-200">{filteredUserGroups.length}</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Users</p>
+                </div>
+              )}
 
               <div className="rounded-2xl border border-cyan-300/15 bg-cyan-400/5 p-3 text-center">
                 <p className="text-2xl font-black text-cyan-200">{unreadCount}</p>
@@ -1325,10 +1638,40 @@ case 'stream_live':
           </div>
         </header>
 
+        {/* View mode toggle */}
+        <div className="mb-4 inline-flex rounded-2xl border border-white/10 bg-slate-950/70 p-1">
+          <button
+            onClick={() => { setViewMode('byUser'); setSelectedUserGroup(null); }}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition',
+              viewMode === 'byUser'
+                ? 'border border-cyan-300/40 bg-cyan-300 text-slate-950 shadow-[0_0_18px_rgba(34,211,238,0.22)]'
+                : 'text-slate-400 hover:text-white'
+            )}
+          >
+            <Users className="h-4 w-4" />
+            By User
+          </button>
+          <button
+            onClick={() => { setViewMode('list'); setSelectedUserGroup(null); }}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition',
+              viewMode === 'list'
+                ? 'border border-cyan-300/40 bg-cyan-300 text-slate-950 shadow-[0_0_18px_rgba(34,211,238,0.22)]'
+                : 'text-slate-400 hover:text-white'
+            )}
+          >
+            <Bell className="h-4 w-4" />
+            All List
+          </button>
+        </div>
+
         <nav className="mb-5 flex gap-2 overflow-x-auto pb-2">
           {filterTabs.map((tab) => {
             const active = filter === tab.key
-            const count = counts[tab.key] || 0
+            const count = viewMode === 'byUser'
+              ? filteredUserGroups.reduce((acc, g) => acc + g.notifications.filter((n) => tab.key === 'all' || n.category === tab.key).length, 0)
+              : counts[tab.key] || 0
 
             if (!isAdmin && ['admin', 'applications', 'support'].includes(tab.key)) return null
 
@@ -1361,7 +1704,7 @@ case 'stream_live':
                 Loading notifications...
               </div>
             </div>
-          ) : filteredNotifications.length === 0 ? (
+          ) : viewMode === 'byUser' && !selectedUserGroup && filteredUserGroups.length === 0 ? (
             <div className="flex min-h-[380px] items-center justify-center">
               <div className="text-center">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
@@ -1372,6 +1715,26 @@ case 'stream_live':
                   {filter === 'all' ? 'You are all caught up.' : `No ${filter} notifications right now.`}
                 </p>
               </div>
+            </div>
+          ) : viewMode === 'list' && filteredNotifications.length === 0 ? (
+            <div className="flex min-h-[380px] items-center justify-center">
+              <div className="text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
+                  <Bell className="h-8 w-8 text-slate-600" />
+                </div>
+                <p className="text-lg font-bold text-slate-300">No notifications found</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {filter === 'all' ? 'You are all caught up.' : `No ${filter} notifications right now.`}
+                </p>
+              </div>
+            </div>
+          ) : viewMode === 'byUser' && !selectedUserGroup ? (
+            <div className="h-[calc(100vh-380px)] min-h-[420px]">
+              <Virtuoso style={{ height: '100%' }} data={filteredUserGroups} itemContent={renderUserGroup} increaseViewportBy={300} />
+            </div>
+          ) : viewMode === 'byUser' && selectedUserGroup ? (
+            <div className="h-[calc(100vh-380px)] min-h-[420px]">
+              {renderUserNotificationDetail()}
             </div>
           ) : (
             <div className="h-[calc(100vh-360px)] min-h-[420px]">

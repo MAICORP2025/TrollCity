@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
+import { useXPStore } from '../stores/useXPStore';
 import { toast } from 'sonner';
 import type {
   CashoutRequest,
@@ -25,8 +26,15 @@ import {
   calculateNetCoins,
   isCashoutWindowOpen,
   CASHOUT_TIERS as TIERS,
+  getFastPayTierInfo,
   type CashoutTier,
 } from '../config/coinConfig';
+import {
+  getFastPayTier,
+  getFastPayTierLabel,
+  getFastPayTierDescription,
+  getFastPayProcessingTime,
+} from '../types/cashout';
 
 const PAYOUT_METHODS: { value: PayoutMethod; label: string; icon: React.ReactNode }[] = [
   {
@@ -46,12 +54,40 @@ const PAYOUT_METHODS: { value: PayoutMethod; label: string; icon: React.ReactNod
   },
 ];
 
+function getSavedPayoutUsernameForProfile(rawProfile: any, method: PayoutMethod) {
+  if (!rawProfile) return '';
+  const payoutProfile: any = rawProfile;
+
+  switch (method) {
+    case 'paypal':
+      return payoutProfile['paypal_email'] || '';
+    case 'cash_app':
+      return payoutProfile['cashapp_handle'] ? String(payoutProfile['cashapp_handle']).replace(/\$/g, '') : '';
+    case 'venmo':
+      return payoutProfile['venmo_handle'] || '';
+    default:
+      return '';
+  }
+}
+
+function getPreferredPayoutMethod(rawProfile: any): PayoutMethod {
+  if (!rawProfile) return 'paypal';
+  const payoutProfile: any = rawProfile;
+  if (payoutProfile['preferred_payout_method']) return payoutProfile['preferred_payout_method'] as PayoutMethod;
+  if (payoutProfile['paypal_email']) return 'paypal';
+  if (payoutProfile['venmo_handle']) return 'venmo';
+  return 'cash_app';
+}
+
 const MAX_MONTHLY_CASHOUTS = 4;
 
 const ID_BUCKET = 'verification_docs';
 
 export default function CashoutRequestPage() {
-  const { profile, refreshProfile } = useAuthStore();
+  const authStore = useAuthStore() as any;
+  const profile = authStore.profile as any;
+  const refreshProfile = authStore.refreshProfile as any;
+  const xpStore = useXPStore();
   const navigate = useNavigate();
 
   // State
@@ -71,6 +107,13 @@ export default function CashoutRequestPage() {
   const [activeGamingLoan, setActiveGamingLoan] = useState<any>(null);
   const [checkingLoan, setCheckingLoan] = useState(true);
 
+  const fastPayLevel = Number(xpStore.level || 1);
+  const fastPayTier = getFastPayTier(fastPayLevel);
+  const fastPayTierInfo = getFastPayTierInfo(fastPayLevel);
+  const fastPayTierLabel = getFastPayTierLabel(fastPayTier);
+  const fastPayTierDescription = getFastPayTierDescription(fastPayTier);
+  const fastPayProcessingTime = getFastPayProcessingTime(fastPayTier);
+
   const hasRecentApprovedPayout = useMemo(() => {
     if (!lastApprovedAt) return false;
     return new Date(lastApprovedAt).getTime() >= Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -83,37 +126,25 @@ export default function CashoutRequestPage() {
    const netCoins = selectedTier ? calculateNetCoins(selectedTier.coins, feeCoins) : 0;
    const usdAmount = selectedTier ? selectedTier.usd : 0;
 
-     const isFriday = isCashoutWindowOpen();
+     const isCashoutWindow = isCashoutWindowOpen();
+     const isStandardTierRestricted = fastPayTier === 'standard' && !isCashoutWindow;
      const monthlyCapReached = monthlyCashoutCount >= MAX_MONTHLY_CASHOUTS;
      const hasActiveGamingLoan = activeGamingLoan?.has_active_loan === true;
-     const canRequest = isFriday && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
+     const canRequest = !isStandardTierRestricted && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
 
   // Load user's troll_coins balance and recent payout requests
   const getSavedPayoutUsername = useCallback((method: PayoutMethod) => {
-    if (!profile) return '';
-    switch (method) {
-      case 'paypal':
-        return profile.paypal_email || '';
-      case 'cash_app':
-        return profile.cashapp_handle ? profile.cashapp_handle.replace(/\$/g, '') : '';
-      case 'venmo':
-        return profile.venmo_handle || '';
-      default:
-        return '';
-    }
+    return getSavedPayoutUsernameForProfile(profile, method);
   }, [profile]);
 
   useEffect(() => {
     if (!profile) return;
 
-    const preferredMethod = (profile.preferred_payout_method as PayoutMethod) || (
-      profile.paypal_email ? 'paypal' : profile.venmo_handle ? 'venmo' : 'cash_app'
-    );
-
+    const preferredMethod = getPreferredPayoutMethod(profile);
     setPayoutMethod(preferredMethod);
-    const savedProvider = getSavedPayoutUsername(preferredMethod);
+    const savedProvider = getSavedPayoutUsernameForProfile(profile, preferredMethod);
     if (savedProvider) setProviderUsername(savedProvider);
-  }, [profile, getSavedPayoutUsername]);
+  }, [profile]);
 
   useEffect(() => {
     if (!profile) return;
@@ -281,13 +312,13 @@ export default function CashoutRequestPage() {
       return;
     }
 
-    if (!isFriday) {
-      toast.error('Cashout requests are only available during the weekend payout window.');
+    if (isStandardTierRestricted) {
+      toast.error('Standard payout requests may only be submitted during the weekend payout window.');
       return;
     }
 
     if (eligibleCoins < selectedTier.coins) {
-      toast.error('Insufficient eligible gift coins');
+      toast.error('Insufficient eligible cashout coins');
       return;
     }
 
@@ -337,7 +368,7 @@ export default function CashoutRequestPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [profile, selectedTier, payoutMethod, providerUsername, userTag, idUrl, eligibleCoins, isFriday, refreshProfile, navigate]);
+  }, [profile, selectedTier, payoutMethod, providerUsername, userTag, idUrl, eligibleCoins, refreshProfile, navigate]);
 
   if (loading) {
     return (
@@ -370,14 +401,14 @@ export default function CashoutRequestPage() {
           </div>
 
           {/* Friday Gating Warning */}
-           {!isFriday && (
+           {fastPayTier === 'standard' && !isCashoutWindow && (
              <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
                <Lock className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
                <div>
-                 <h4 className="font-bold text-red-400">Cashouts Are Closed</h4>
+                 <h4 className="font-bold text-red-400">Standard Payout Window Closed</h4>
                  <p className="text-sm text-red-300/80">
-                   Cashout requests are only accepted on Friday, Saturday, and Sunday between 1:00 AM - 7:00 PM Mountain Time.
-                   Please come back during that window to submit your request.
+                   Standard payout requests are only accepted on Friday, Saturday, and Sunday between 1:00 AM - 7:00 PM Mountain Time.
+                   Fast Pay and Instant Pay can still be requested any day.
                  </p>
                </div>
              </div>
@@ -457,7 +488,7 @@ export default function CashoutRequestPage() {
               })}
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              * Cashout amounts are based on eligible gift coins only.
+              * Cashout amounts are based on your eligible cashout escrow balance.
             </p>
           </div>
 
@@ -521,7 +552,7 @@ export default function CashoutRequestPage() {
                 onChange={(e) => setProviderUsername(e.target.value)}
                 placeholder={getPayoutPlaceholder(payoutMethod)}
                 className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-troll-gold"
-                disabled={!isFriday}
+                disabled={isStandardTierRestricted}
               />
               {providerUsername.trim() && (
                 <CheckCircle className="absolute right-3 top-3 w-5 h-5 text-green-400" />
@@ -544,7 +575,7 @@ export default function CashoutRequestPage() {
                 onChange={(e) => setUserTag(e.target.value)}
                 placeholder="$Cashtag, @handle, or email"
                 className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-troll-gold"
-                disabled={!isFriday}
+                disabled={isStandardTierRestricted}
               />
               {userTag.trim() && (
                 <CheckCircle className="absolute right-3 top-3 w-5 h-5 text-green-400" />
@@ -594,7 +625,7 @@ export default function CashoutRequestPage() {
                   className="hidden"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
                   onChange={handleIdUpload}
-                  disabled={idUploading || !isFriday}
+                  disabled={idUploading || (fastPayTier === 'standard' && !isCashoutWindow)}
                 />
               </label>
             ) : (
@@ -632,10 +663,10 @@ export default function CashoutRequestPage() {
                   <div className="w-5 h-5 border-2 border-t-troll-purple-900 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
                   Submitting...
                 </>
-              ) : !isFriday ? (
+              ) : fastPayTier === 'standard' && !isCashoutWindow ? (
                 <>
                   <Clock className="w-5 h-5" />
-                  Weekend Cashout Window Closed
+                  Standard Payout Window Closed
                 </>
               ) : monthlyCapReached ? (
                 <>

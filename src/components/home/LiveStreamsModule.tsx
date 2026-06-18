@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Users, Video, Star, Trophy, TrendingUp, Flame, Zap, Crown, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { trollCityTheme } from '@/styles/trollCityTheme'
-import { useLiveStreams } from '@/hooks/useQueries'
+import { useLiveStreams, queryKeys } from '@/hooks/useQueries'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface Stream {
   id: string
@@ -47,11 +48,41 @@ export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModulePr
   const [streams, setStreams] = useState<Stream[]>([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const { data: streamsData, isLoading: streamsLoading } = useLiveStreams({
-    refetchInterval: 60000,
     enabled: true
   })
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('home-live-streams')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'streams',
+          filter: 'status=eq.live',
+        },
+        () => queryClient.invalidateQueries({ queryKey: queryKeys.liveStreams }),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+          filter: 'status=eq.live',
+        },
+        () => queryClient.invalidateQueries({ queryKey: queryKeys.liveStreams }),
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [queryClient])
 
   useEffect(() => {
     if (streamsData) {

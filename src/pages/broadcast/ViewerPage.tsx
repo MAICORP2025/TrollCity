@@ -1867,11 +1867,12 @@ const handleLeaveSeat = useCallback(async () => {
     }
   }, [streamId, navigate])
 
-  useEffect(() => {
-    if (!streamId) return
-    const interval = window.setInterval(() => void refreshStream(), 30000)
-    return () => window.clearInterval(interval)
-  }, [streamId, refreshStream])
+  // TEMP DISABLED — replaced by useStreamRealtime subscription below
+  // useEffect(() => {
+  //   if (!streamId) return
+  //   const interval = window.setInterval(() => void refreshStream(), 30000)
+  //   return () => window.clearInterval(interval)
+  // }, [streamId, refreshStream])
 
   // Canonical gift-animation source: stream_gifts postgres_changes received
   // via useStreamRealtime. event.new.id is the stream_gifts row UUID — the

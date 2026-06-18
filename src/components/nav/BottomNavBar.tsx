@@ -185,8 +185,7 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   const hypeCoins = Number((balances as any)?.hype_coins ?? 0);
   const crowns = Number((profile as any)?.crowns ?? 0);
   const trollmoods = Number((profile as any)?.trollmoods ?? 0);
-  // Use XP store data, but fall back to auth profile (which is kept in sync via syncAuthProfile)
-  const currentLevel = xpStore.level || profile?.level || 1;
+  const currentLevel = xpStore.level;
   const currentXp = xpStore.xpTotal ?? profile?.xp ?? profile?.total_xp ?? 0;
   const nextXp = xpStore.xpToNext ?? profile?.next_level_xp ?? 1;
   const progress = xpStore.progress ?? (nextXp > 0 ? Math.min((currentXp / nextXp) * 100, 100) : 0);
@@ -381,9 +380,8 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Leaderboard', icon: Trophy, path: '/leaderboard' },
           { label: 'Marketplace', icon: Store, path: '/marketplace' },
           { label: 'Inventory', icon: Package, path: '/inventory' },
-          { label: 'Wallet', icon: Wallet, path: '/wallet' },
+          { label: 'MAI Pay', icon: DollarSign, path: '/mai-pay' },
           { label: 'Coin Store', icon: Coins, path: '/store' },
-          { label: 'Crown Redemption', icon: Crown, path: '/crowns/redeem' },
           { label: 'My Garage', icon: Car, path: '/garage' },
         ],
       },
@@ -755,7 +753,7 @@ export default function BottomNavBar() {
                 <NavButton icon={Map} label="Neighborhood" to="/neighborhood-map" active={isActive('/neighborhood-map')} badge={badges.neighborhood} badgeKey="neighborhood" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Gamepad2} label="HydroGaming" to="/hytrogaming" active={isActive('/hytrogaming') || isActive('/gaming')} />
                 <NavButton icon={GraduationCap} label="Academy" to="/academy" active={isActive('/academy')} badge={badges.academy} badgeKey="academy" onBadgeDismiss={badges.dismiss} />
-                <NavButton icon={Wallet} label="Wallet" to="/wallet" active={isActive('/wallet')} badge={badges.wallet} badgeKey="wallet" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={DollarSign} label="MAI Pay" to="/mai-pay" active={isActive('/mai-pay')} />
                 <NavButton icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} />
                 <NavButton icon={Bell} label="Alerts" to="/notifications" active={isActive('/notifications')} badge={badges.alerts} badgeKey="alerts" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Search} label="Search" to="/search" active={isActive('/search')} />
@@ -765,11 +763,11 @@ export default function BottomNavBar() {
                 <NavButton icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} badge={badges.inventory} badgeKey="inventory" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={BookOpen} label="Church" to="/church" active={isActive('/church')} />
                 <NavButton icon={Compass} label="Explore" to="/explore" active={isActive('/explore') || isActive('/live')} />
-                <NavButton icon={Receipt} label="Transactions" to="/transactions" active={isActive('/transactions')} />
+
                 <NavButton icon={Shuffle} label="Troll Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} />
                 <NavButton icon={Car} label="Cars" to="/ktauto" active={isActive('/ktauto')} />
                 <NavButton icon={Briefcase} label="Careers" to="/careers" active={isActive('/careers')} />
-                <NavButton icon={DollarSign} label="Earnings" to="/earnings" active={isActive('/earnings')} />
+
                 <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} />
               </nav>
             )}

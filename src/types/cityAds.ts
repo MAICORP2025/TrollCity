@@ -3,7 +3,7 @@
  * Internal Troll City promotional ads
  */
 
-export type AdPlacement = 'left_sidebar_screensaver' | 'right_panel_featured' | 'home_horizontal_banner' | 'left_rail' | 'right_rail';
+export type AdPlacement = 'left_sidebar_screensaver' | 'right_panel_featured' | 'home_horizontal_banner' | 'left_rail' | 'right_rail' | 'home_right_upper' | 'home_right_lower';
 
 export type CampaignType = 
   | 'troll_coins' 
@@ -67,6 +67,8 @@ export const AD_PLACEMENTS: { value: AdPlacement; label: string; description: st
   { value: 'left_sidebar_screensaver', label: 'Left Sidebar', description: 'Tall card in empty sidebar area' },
   { value: 'right_panel_featured', label: 'Right Panel', description: 'Large featured card in right panel' },
   { value: 'home_horizontal_banner', label: 'Upper Panel', description: 'Horizontal banner on the home feed' },
+  { value: 'home_right_upper', label: 'Right Upper', description: 'Upper promo slot in right sidebar' },
+  { value: 'home_right_lower', label: 'Right Lower', description: 'Lower promo slot in right sidebar' },
 ];
 
 export const CAMPAIGN_TYPES: { value: CampaignType; label: string }[] = [

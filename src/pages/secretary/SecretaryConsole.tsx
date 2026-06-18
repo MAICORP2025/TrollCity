@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 
 import { useAuthStore } from '../../lib/store'
 import { usePresidentSystem } from '../../hooks/usePresidentSystem'
+import PromoSlot from '../../components/promo/PromoSlot'
 
 /* ================================
    Shared Panels
@@ -178,7 +179,7 @@ export default function ExecutiveOperationsConsole() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {dashboardStats.map((stat) => (
                 <button
                   key={stat.label}
@@ -198,7 +199,8 @@ export default function ExecutiveOperationsConsole() {
                   <div className="flex items-center justify-between mb-4">
                     <div className={stat.color}>
                       {stat.icon}
-                    </div>\                    <ChevronRight className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-600" />
                   </div>
 
                   <div className="text-3xl font-bold text-white">
@@ -210,6 +212,12 @@ export default function ExecutiveOperationsConsole() {
                   </div>
                 </button>
               ))}
+            </div>
+
+            {/* Promo Slots */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+              <PromoSlot placement="home_right_upper" variant="featured" />
+              <PromoSlot placement="home_right_lower" variant="sidebar" />
             </div>
 
           </div>

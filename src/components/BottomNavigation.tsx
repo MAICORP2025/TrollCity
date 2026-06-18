@@ -468,9 +468,34 @@ export default function BottomNavigation() {
     }
 
     fetchNotificationCount()
-    const interval = window.setInterval(fetchNotificationCount, 30_000)
 
-    return () => window.clearInterval(interval)
+    const channel = supabase
+      .channel(`nav-notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => fetchNotificationCount(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => fetchNotificationCount(),
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [user?.id])
 
   useEffect(() => {

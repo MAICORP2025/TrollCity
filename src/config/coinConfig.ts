@@ -204,3 +204,50 @@ export function isCashoutWindowOpen(): boolean {
   // Weekend payout window: Friday, Saturday, or Sunday between 01:00 and 19:00 MT
   return ['Friday', 'Saturday', 'Sunday'].includes(weekday || '') && Number(hour) >= 1 && Number(hour) < 19;
 }
+
+// ============================================================================
+// FAST PAY PROGRAM CONFIGURATION
+// ============================================================================
+
+/** Fast Pay tier thresholds */
+export const FAST_PAY_TIERS = {
+  standard: { minLevel: 1, maxLevel: 499, label: 'Standard', payoutDay: 'Friday', processingTime: 'Weekly on Fridays' },
+  fast_pay: { minLevel: 500, maxLevel: 999, label: 'Fast Pay', payoutDay: 'Any day', processingTime: 'Within 24 hours' },
+  instant: { minLevel: 1000, maxLevel: Infinity, label: 'Instant Pay', payoutDay: 'Any day', processingTime: 'Instant' },
+} as const;
+
+/** Fast Pay cashout fee percentage (all tiers) */
+export const FAST_PAY_FEE_PERCENT = 2.9;
+
+/** Safety requirements for Fast Pay */
+export const FAST_PAY_REQUIREMENTS = [
+  { key: 'verified_identity', label: 'Verified Identity', description: 'Government-issued ID verified' },
+  { key: 'no_violations', label: 'No Active Violations', description: 'No active community violations' },
+  { key: 'account_age', label: 'Account Older Than 30 Days', description: 'Account must be at least 30 days old' },
+  { key: 'good_standing', label: 'Good Standing', description: 'Good standing in the community' },
+  { key: 'no_fraud', label: 'No Fraud or Chargeback History', description: 'Clean payment history' },
+] as const;
+
+/**
+ * Get Fast Pay tier info for a given user level
+ */
+export function getFastPayTierInfo(level: number) {
+  if (level >= 1000) return FAST_PAY_TIERS.instant;
+  if (level >= 500) return FAST_PAY_TIERS.fast_pay;
+  return FAST_PAY_TIERS.standard;
+}
+
+/**
+ * Calculate Fast Pay fee for a coin amount
+ */
+export function calculateFastPayFee(coinAmount: number): number {
+  return Math.ceil(coinAmount * (FAST_PAY_FEE_PERCENT / 100));
+}
+
+/**
+ * Calculate net coins after Fast Pay fee
+ */
+export function calculateFastPayNet(coinAmount: number): number {
+  const fee = calculateFastPayFee(coinAmount);
+  return coinAmount - fee;
+}

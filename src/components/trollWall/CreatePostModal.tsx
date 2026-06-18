@@ -171,7 +171,14 @@ export default function CreatePostModal({
         metadata.image_url = publicUrl
       }
 
-      const { error } = await supabase
+      console.log('[CreatePost] Inserting post into troll_wall_posts:', {
+        user_id: user.id,
+        post_type: (postType === 'image' || postType === 'video') ? 'text' : postType,
+        content: content.trim(),
+        metadata
+      })
+
+      const { data: insertedPost, error } = await supabase
         .from('troll_wall_posts')
         .insert({
           user_id: user.id,
@@ -179,8 +186,35 @@ export default function CreatePostModal({
           content: content.trim(),
           metadata
         })
+        .select()
+        .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[CreatePost] Insert error:', error)
+        console.error('[CreatePost] Insert error code:', error.code)
+        console.error('[CreatePost] Insert error details:', error.details)
+        console.error('[CreatePost] Insert error hint:', error.hint)
+        throw error
+      }
+
+      console.log('[CreatePost] Post inserted successfully:', insertedPost)
+
+      // Verify the post can be read back immediately
+      const { data: verifyPost, error: verifyError } = await supabase
+        .from('troll_wall_posts')
+        .select('id, user_id, content, created_at, deleted_at, post_type')
+        .eq('id', insertedPost.id)
+        .single()
+
+      if (verifyError) {
+        console.error('[CreatePost] VERIFY READ FAILED:', verifyError)
+        console.error('[CreatePost] Post was inserted but cannot be read back!')
+      } else {
+        console.log('[CreatePost] Verified post readable:', verifyPost)
+        if (verifyPost.deleted_at) {
+          console.error('[CreatePost] WARNING: Post has deleted_at set immediately after creation!')
+        }
+      }
 
       toast.success('Post created!')
       setContent('')

@@ -159,7 +159,7 @@ BEGIN
 
   RETURN jsonb_build_object(
     'success', true,
-    'redemption_id', v_redemptionId,
+    'redemption_id', v_redemption_id,
     'crowns_redeemed', p_crowns,
     'coins_awarded', p_crowns,
     'new_crown_balance', v_new_crowns

@@ -533,8 +533,8 @@ if (typeof window !== 'undefined') {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30 * 1000, // 30 seconds - balance between freshness and reduced fetches
-      gcTime: 30 * 60 * 1000, // 30 minutes - keep inactive queries longer
+      staleTime: 5 * 60 * 1000, // 5 minutes - balance between freshness and reduced fetches
+      gcTime: 15 * 60 * 1000, // 15 minutes - keep inactive queries longer
       refetchOnMount: false, // Don't refetch on mount if cache exists
       refetchOnReconnect: true, // Refetch when reconnecting
       refetchOnWindowFocus: false, // Disabled to prevent bursts when switching tabs

@@ -20,6 +20,7 @@ const OfficerOperations = lazy(() => import('./OfficerOperations'))
 const OfficerPayrollReports = lazy(() => import('./OfficerPayrollReports'))
 const ZipGovernanceDashboard = lazy(() => import('./ZipGovernanceDashboard'))
 const AdminSupportTicketsPage = lazy(() => import('./AdminSupportTicketsPage'))
+const AdminSurveysPage = lazy(() => import('./AdminSurveysPage'))
 const CourtDocketsManager = lazy(() => import('./CourtDocketsManager'))
 const TournamentManager = lazy(() => import('./components/TournamentManager'))
 const WeeklyReportsView = lazy(() => import('./WeeklyReportsView'))
@@ -229,6 +230,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileColor: 'text-purple-200',
     tileBgColor: 'bg-purple-500/10',
     tileBorderColor: 'border-purple-500/30',
+    category: 'support'
+  },
+  {
+    id: 'surveys',
+    title: 'Surveys',
+    path: '/admin/surveys',
+    component: AdminSurveysPage,
+    roles: [UserRole.ADMIN],
+    description: 'Manage weekly user surveys and view responses',
+    icon: <FileText className="w-5 h-5 text-pink-200" />,
+    tileColor: 'text-pink-200',
+    tileBgColor: 'bg-pink-500/10',
+    tileBorderColor: 'border-pink-500/30',
     category: 'support'
   },
   {

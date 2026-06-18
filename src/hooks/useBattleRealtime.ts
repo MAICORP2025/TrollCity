@@ -135,29 +135,21 @@ export function useBattleRealtime(battleId: string | null | undefined) {
     });
 
     // 4. Broadcast: gift_sent (replaces battle-sync-gifts:${streamId} channels)
+    // Score updates come via the dedicated score_update broadcast, so we only
+    // need to update the lastGift info here for the gift animation.
     channel.on('broadcast', { event: 'gift_sent' }, (payload) => {
       if (!mountedRef.current) return;
       const data = payload?.payload;
       if (!data) return;
       BattleSounds.scoreUpdate();
-      // Full battle refetch for score accuracy
-      supabase
-        .from('battles')
-        .select('*')
-        .eq('id', battleId)
-        .maybeSingle()
-        .then(({ data: battleData }) => {
-          if (!mountedRef.current || !battleData) return;
-          setState(prev => ({
-            ...prev,
-            battle: battleData,
-            lastGift: {
-              username: data.sender_username || 'Unknown',
-              amount: data.amount || 0,
-              team: data.team || 'A',
-            },
-          }));
-        });
+      setState(prev => ({
+        ...prev,
+        lastGift: {
+          username: data.sender_name || data.sender_username || 'Unknown',
+          amount: data.amount || 0,
+          team: data.team || data.stream_id || 'A',
+        },
+      }));
     });
 
     // 5. Broadcast: timer_sync (replaces battle_timer:${battleId} channel)

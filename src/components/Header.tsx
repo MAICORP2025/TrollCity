@@ -218,10 +218,32 @@ const Header = () => {
 
     void fetchNotifications()
 
-    const interval = window.setInterval(fetchNotifications, 30_000)
+    const channel = supabase
+      .channel(`header-notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => fetchNotifications(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => fetchNotifications(),
+      )
+      .subscribe()
 
     return () => {
-      window.clearInterval(interval)
+      supabase.removeChannel(channel)
     }
   }, [user?.id])
 

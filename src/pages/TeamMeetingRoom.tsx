@@ -4,9 +4,10 @@ import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { useAgoraRoom } from '@/hooks/useAgoraRoom';
 import { toast } from 'sonner';
-import { PhoneOff, Users, Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { PhoneOff, Users, Mic, MicOff, Video, VideoOff, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import TeamMeetingGrid from '../components/TeamMeetingRoom/TeamMeetingGrid';
+import MeetingDocumentShare from '../components/TeamMeetingRoom/MeetingDocumentShare';
 import { motion } from 'framer-motion';
 
 interface StaffMeeting {
@@ -114,6 +115,7 @@ export const TeamMeetingRoom: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showDocumentShare, setShowDocumentShare] = useState(false);
 
   // Function to send notifications to all staff when meeting starts
   const sendStaffMeetingNotifications = async (meetingId: string) => {
@@ -683,27 +685,37 @@ export const TeamMeetingRoom: React.FC = () => {
              </div>
            )}
 
-           {meeting?.status === 'scheduled' && (userProfile?.is_admin || userProfile?.is_ceo) && (
-             <motion.button
-               whileHover={{ scale: 1.05 }}
-               whileTap={{ scale: 0.95 }}
-               onClick={handleStartMeeting}
-               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
-             >
-               <Users className="w-4 h-4" />
-               Start Meeting
-             </motion.button>
-           )}
+            {meeting?.status === 'scheduled' && (userProfile?.is_admin || userProfile?.is_ceo) && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleStartMeeting}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                <Users className="w-4 h-4" />
+                Start Meeting
+              </motion.button>
+            )}
 
-           <motion.button
-             whileHover={{ scale: 1.05 }}
-             whileTap={{ scale: 0.95 }}
-             onClick={handleLeaveRoom}
-             className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-           >
-             <PhoneOff className="w-4 h-4" />
-             Leave Meeting
-           </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowDocumentShare(true)}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <FolderOpen className="w-4 h-4" />
+              Documents
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLeaveRoom}
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <PhoneOff className="w-4 h-4" />
+              Leave Meeting
+            </motion.button>
          </div>
       </div>
 
@@ -733,6 +745,13 @@ export const TeamMeetingRoom: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Document Share Panel */}
+      <MeetingDocumentShare
+        meetingId={meetingId || ''}
+        isOpen={showDocumentShare}
+        onClose={() => setShowDocumentShare(false)}
+      />
     </div>
   );
 };

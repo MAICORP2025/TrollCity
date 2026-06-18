@@ -343,25 +343,11 @@ export default function Home() {
     [navigate, user],
   )
 
-  const handleLiveItemClick = useCallback((item: LiveItem) => {
-    if (item.type === 'auction') {
-      navigate(`/auctions/${item.id}`)
-    } else if (item.category === 'gaming') {
-      navigate(`/gaming/watch/${item.id}`)
-    } else {
-      navigate(`/watch/${item.id}`)
-    }
-  }, [navigate])
+const handleScrollItemClick = useCallback((id: string) => {
+     navigate(`/watch/${id}`)
+   }, [navigate])
 
-  const handleScrollItemClick = useCallback((id: string) => {
-    navigate(`/watch/${id}`)
-  }, [navigate])
-
-  const handlePostClick = useCallback((post: WallPost) => {
-    navigate(`/post/${post.id}`)
-  }, [navigate])
-
-  const showPresidentTab = currentElection?.status === 'open'
+   const showPresidentTab = currentElection?.status === 'open'
 
   return (
     <div className="relative min-h-full w-full overflow-hidden text-white">
@@ -435,136 +421,145 @@ export default function Home() {
           </div>
         )}
 
-        {activeTab === 'wall' && (
-          <section className="flex gap-4">
-            <LeftNavSidebar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              liveCount={allLiveItems.length}
-              battleCount={battleItems.length}
-              presidentTabLabel={presidentTabLabel}
-              showPresidentTab={showPresidentTab}
-            />
-            <div className="min-w-0 flex-1 space-y-4">
-              <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" hideGrid />
-              <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
-              <PodcastRow />
-            </div>
-            <aside className="hidden xl:flex xl:flex-col xl:gap-3 xl:w-[320px] xl:shrink-0 xl:sticky xl:top-3 xl:self-start">
-              <PromoSlot placement="home_right_sidebar" variant="featured" />
-            </aside>
-          </section>
-        )}
+{activeTab === 'wall' && (
+           <section className="flex gap-4">
+             <LeftNavSidebar
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               liveCount={allLiveItems.length}
+               battleCount={battleItems.length}
+               followersLiveCount={0}
+               presidentTabLabel={presidentTabLabel}
+               showPresidentTab={showPresidentTab}
+             />
+             <div className="min-w-0 flex-1 space-y-4">
+               <TrollWallFeed />
+               <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
+               <PodcastRow />
+               <HyTroGamingRow onItemClick={handleScrollItemClick} />
+             </div>
+             <aside className="hidden xl:flex xl:flex-col xl:gap-3 xl:w-[320px] xl:shrink-0 xl:sticky xl:top-3 xl:self-start">
+               <PromoSlot placement="home_right_upper" variant="featured" />
+               <PromoSlot placement="home_right_lower" variant="featured" />
+             </aside>
+           </section>
+         )}
 
-        {activeTab === 'live' && (
-          <div className="flex gap-4">
-            <LeftNavSidebar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              liveCount={allLiveItems.length}
-              battleCount={battleItems.length}
-              presidentTabLabel={presidentTabLabel}
-              showPresidentTab={showPresidentTab}
-            />
-            <div className="min-w-0 flex-1 space-y-4">
-              <NewStreamersRow onClickItem={handleLiveItemClick} />
-              <BestTrollersRow onClickItem={handleLiveItemClick} />
-              <HyTroGamingRow onItemClick={handleLiveItemClick} />
-            </div>
-          </div>
-        )}
+         {activeTab === 'live' && (
+           <div className="flex gap-4">
+             <LeftNavSidebar
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               liveCount={allLiveItems.length}
+               battleCount={battleItems.length}
+               followersLiveCount={0}
+               presidentTabLabel={presidentTabLabel}
+               showPresidentTab={showPresidentTab}
+             />
+             <div className="min-w-0 flex-1 space-y-4">
+               <NewStreamersRow onClickItem={handleScrollItemClick} />
+               <BestTrollersRow onClickItem={handleScrollItemClick} />
+               <HyTroGamingRow onItemClick={handleScrollItemClick} />
+             </div>
+           </div>
+         )}
 
-        {activeTab === 'universe' && (
-          <div className="flex gap-4">
-            <LeftNavSidebar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              liveCount={allLiveItems.length}
-              battleCount={battleItems.length}
-              presidentTabLabel={presidentTabLabel}
-              showPresidentTab={showPresidentTab}
-            />
-            <div className="min-w-0 flex-1">
-              <BattleGrid items={battleItems} onClickItem={handleLiveItemClick} />
+{activeTab === 'universe' && (
+            <div className="flex gap-4">
+              <LeftNavSidebar
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                liveCount={allLiveItems.length}
+                battleCount={battleItems.length}
+                followersLiveCount={battleItems.length}
+                presidentTabLabel={presidentTabLabel}
+                showPresidentTab={showPresidentTab}
+              />
+              <div className="min-w-0 flex-1">
+                <BattleGrid items={battleItems} onClickItem={handleScrollItemClick} />
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'laws-fees' && (
-          <div className="flex gap-4">
-            <LeftNavSidebar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              liveCount={allLiveItems.length}
-              battleCount={battleItems.length}
-              presidentTabLabel={presidentTabLabel}
-              showPresidentTab={showPresidentTab}
-            />
-            <div className="min-w-0 flex-1">
-              <section className={`${glass} rounded-2xl p-4`}>
-                <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" /></div>}>
-                  <CityLawsFeesTab />
-                </Suspense>
-              </section>
-            </div>
-          </div>
-        )}
+         {activeTab === 'laws-fees' && (
+           <div className="flex gap-4">
+             <LeftNavSidebar
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               liveCount={allLiveItems.length}
+               battleCount={battleItems.length}
+               followersLiveCount={0}
+               presidentTabLabel={presidentTabLabel}
+               showPresidentTab={showPresidentTab}
+             />
+             <div className="min-w-0 flex-1">
+               <section className={`${glass} rounded-2xl p-4`}>
+                 <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" /></div>}>
+                   <CityLawsFeesTab />
+                 </Suspense>
+               </section>
+             </div>
+           </div>
+         )}
 
-        {activeTab === 'leagues' && (
-          <div className="flex gap-4">
-            <LeftNavSidebar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              liveCount={allLiveItems.length}
-              battleCount={battleItems.length}
-              presidentTabLabel={presidentTabLabel}
-              showPresidentTab={showPresidentTab}
-            />
-            <div className="min-w-0 flex-1">
-              <section className={`${glass} rounded-2xl p-4`}>
-                <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-300 border-t-transparent" /></div>}>
-                  <LeaguesTab />
-                </Suspense>
-              </section>
-            </div>
-          </div>
-        )}
+         {activeTab === 'leagues' && (
+           <div className="flex gap-4">
+             <LeftNavSidebar
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               liveCount={allLiveItems.length}
+               battleCount={battleItems.length}
+               followersLiveCount={0}
+               presidentTabLabel={presidentTabLabel}
+               showPresidentTab={showPresidentTab}
+             />
+             <div className="min-w-0 flex-1">
+               <section className={`${glass} rounded-2xl p-4`}>
+                 <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-300 border-t-transparent" /></div>}>
+                   <LeaguesTab />
+                 </Suspense>
+               </section>
+             </div>
+           </div>
+         )}
 
-        {activeTab === 'president' && showPresidentTab && (
-          <div className="flex gap-4">
-            <LeftNavSidebar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              liveCount={allLiveItems.length}
-              battleCount={battleItems.length}
-              presidentTabLabel={presidentTabLabel}
-              showPresidentTab={showPresidentTab}
-            />
-            <div className="min-w-0 flex-1">
-              <section className={`${glass} rounded-2xl p-4`}>
-                <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-300 border-t-transparent" /></div>}>
-                  <PresidentCandidatesTab />
-                </Suspense>
-              </section>
-            </div>
-          </div>
-        )}
+         {activeTab === 'president' && showPresidentTab && (
+           <div className="flex gap-4">
+             <LeftNavSidebar
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               liveCount={allLiveItems.length}
+               battleCount={battleItems.length}
+               followersLiveCount={0}
+               presidentTabLabel={presidentTabLabel}
+               showPresidentTab={showPresidentTab}
+             />
+             <div className="min-w-0 flex-1">
+               <section className={`${glass} rounded-2xl p-4`}>
+                 <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-300 border-t-transparent" /></div>}>
+                   <PresidentCandidatesTab />
+                 </Suspense>
+               </section>
+             </div>
+           </div>
+         )}
 
-        {activeTab === 'academy' && (
-          <div className="flex gap-4">
-            <LeftNavSidebar
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              liveCount={allLiveItems.length}
-              battleCount={battleItems.length}
-              presidentTabLabel={presidentTabLabel}
-              showPresidentTab={showPresidentTab}
-            />
-            <div className="min-w-0 flex-1">
-              <AcademyTab />
-            </div>
-          </div>
-        )}
+         {activeTab === 'academy' && (
+           <div className="flex gap-4">
+             <LeftNavSidebar
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               liveCount={allLiveItems.length}
+               battleCount={battleItems.length}
+               followersLiveCount={0}
+               presidentTabLabel={presidentTabLabel}
+               showPresidentTab={showPresidentTab}
+             />
+             <div className="min-w-0 flex-1">
+               <AcademyTab />
+             </div>
+           </div>
+         )}
       </main>
 
       {supportGoalReminder && !reminderLoading && (

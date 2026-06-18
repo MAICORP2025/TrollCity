@@ -39,6 +39,7 @@ import {
   canSendAdminEmail,
   sendTromailMessage,
   createTromailCalendarEvent,
+  scheduleTeamMeeting,
 } from '@/lib/tromail'
 
 import { Button } from '@/components/ui/button'
@@ -656,42 +657,24 @@ export default function TromailPage() {
 
     try {
       const scheduledDateTime = `${newMeetingDate}T${newMeetingTime}:00`
-      const roomName = `staff-meeting-${Date.now()}`
       const selectedAccounts = directory.filter((account) => meetingRecipientIds.includes(account.user_id))
 
-      const { data: meeting, error } = await supabase
-        .from('staff_meetings')
-        .insert({
-          title: newMeetingTitle.trim(),
-          description: newMeetingDescription.trim() || null,
-          room_name: roomName,
-          status: 'scheduled',
-          scheduled_at: scheduledDateTime,
-          max_participants: 9,
-          created_by: user.id,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      const calendarResult = await createTromailCalendarEvent({
-        created_by_user_id: user.id,
-        created_by_role: profileRole,
+      const result = await scheduleTeamMeeting({
         title: newMeetingTitle.trim(),
         description: newMeetingDescription.trim() || undefined,
-        event_type: 'team_meeting',
-        starts_at: scheduledDateTime,
-        meeting_id: meeting.id,
+        scheduled_at: scheduledDateTime,
+        created_by: user.id,
+        created_by_role: profileRole,
         recipient_user_ids: selectedAccounts.map((account) => account.user_id),
         recipient_roles: selectedAccounts.map((account) => account.role),
+        recipient_tromail_addresses: selectedAccounts.map((account) => account.email_address),
       })
 
-      if (!calendarResult.success) {
-        console.warn('[TromailPage] Calendar event failed:', calendarResult.error)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to schedule meeting.')
       }
 
-      toast.success(`Meeting "${newMeetingTitle}" scheduled.`)
+      toast.success(`Meeting "${newMeetingTitle}" scheduled. All recipients notified via Tromail.`)
       setNewMeetingTitle('')
       setNewMeetingDescription('')
       setNewMeetingDate('')

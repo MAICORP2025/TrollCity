@@ -522,6 +522,92 @@ export const createTromailCalendarEvent = async (params: {
   }
 }
 
+// Schedule a team meeting and notify all recipients via Tromail + calendar
+export const scheduleTeamMeeting = async (params: {
+  title: string
+  description?: string
+  scheduled_at: string
+  created_by: string
+  created_by_role: string
+  recipient_user_ids: string[]
+  recipient_roles: string[]
+  recipient_tromail_addresses: string[]
+}): Promise<{ success: boolean; meeting_id?: string; error?: string }> => {
+  try {
+    const roomName = `staff-meeting-${Date.now()}`
+
+    // Create the meeting
+    const { data: meeting, error: meetingError } = await supabase
+      .from('staff_meetings')
+      .insert({
+        title: params.title,
+        description: params.description || null,
+        room_name: roomName,
+        status: 'scheduled',
+        scheduled_at: params.scheduled_at,
+        max_participants: 50,
+        created_by: params.created_by,
+      })
+      .select()
+      .single()
+
+    if (meetingError) throw meetingError
+
+    // Create calendar event
+    await createTromailCalendarEvent({
+      created_by_user_id: params.created_by,
+      created_by_role: params.created_by_role,
+      title: params.title,
+      description: params.description,
+      event_type: 'team_meeting',
+      starts_at: params.scheduled_at,
+      meeting_id: meeting.id,
+      recipient_user_ids: params.recipient_user_ids,
+      recipient_roles: params.recipient_roles,
+    })
+
+    // Send Tromail notifications from Troll City System
+    const scheduledDate = new Date(params.scheduled_at)
+    const formattedDate = scheduledDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+    const formattedTime = scheduledDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+
+    await sendTromailMessage({
+      sender_user_id: params.created_by,
+      sender_role: 'system',
+      sender_tromail_address: 'system@tromail.trollcity',
+      subject: `📅 Team Meeting Scheduled: ${params.title}`,
+      body: `A new team meeting has been scheduled by Troll City System.\n\n📋 Meeting: ${params.title}\n📅 Date: ${formattedDate}\n🕐 Time: ${formattedTime}\n\n${params.description ? `Description: ${params.description}\n\n` : ''}You will receive a notification when the meeting starts.\n\n— Troll City System`,
+      is_admin_email: true,
+      is_important: true,
+      related_meeting_id: meeting.id,
+      recipient_user_ids: params.recipient_user_ids,
+      recipient_roles: params.recipient_roles,
+    })
+
+    // Create in-app notifications
+    await notifyTeamMeetingScheduled(
+      params.recipient_user_ids,
+      params.title,
+      meeting.id,
+      params.scheduled_at
+    )
+
+    return { success: true, meeting_id: meeting.id }
+  } catch (err: any) {
+    console.error('[scheduleTeamMeeting] Failed:', err)
+    return { success: false, error: err?.message || 'Failed to schedule meeting' }
+  }
+}
+
 // Mark message as read
 export const markTromailRead = async (recipientId: string): Promise<void> => {
   await supabase

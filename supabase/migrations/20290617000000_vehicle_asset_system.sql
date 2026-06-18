@@ -200,6 +200,9 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Authentication required');
   END IF;
 
+  -- Set bypass flag for coin protection trigger
+  PERFORM set_config('app.bypass_coin_protection', 'true', true);
+
   SELECT * INTO v_catalog
   FROM public.vehicle_catalog
   WHERE vehicle_id = p_vehicle_id AND is_active = true;
@@ -304,6 +307,9 @@ BEGIN
   IF p_user_id IS NULL THEN
     RETURN json_build_object('success', false, 'error', 'Authentication required');
   END IF;
+
+  -- Set bypass flag for coin protection trigger
+  PERFORM set_config('app.bypass_coin_protection', 'true', true);
 
   SELECT * INTO v_asset
   FROM public.user_vehicle_assets

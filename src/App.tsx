@@ -27,6 +27,7 @@ import BugAlertPopup from './components/BugAlertPopup';
 import { useBugAlertStore } from "./stores/useBugAlertStore";
 import DailyChurchNotification from "./components/church/DailyChurchNotification";
 import TeamMeetingNotification from "./components/TeamMeetingRoom/TeamMeetingNotification";
+import SurveyNotification from "./components/SurveyNotification";
 
 import { useGlobalApp } from "./contexts/GlobalAppContext";
 import { updateRoute } from "./utils/sessionStorage";
@@ -72,6 +73,7 @@ const AgencyHRDashboard = lazyWithRetry(() => import("./pages/agency-hr-dashboar
 const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
 const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
 const Support = lazyWithRetry(() => import("./pages/Support"));
+const SurveyPage = lazyWithRetry(() => import("./pages/SurveyPage"));
 const JailPage = lazyWithRetry(() => import("./pages/JailPage"));
 const Safety = lazyWithRetry(() => import("./pages/Safety"));
 const AdminRFC = lazyWithRetry(() => import("./components/AdminRFC"));
@@ -92,7 +94,7 @@ const CEOAssistantDashboard = lazyWithRetry(() => import("./pages/ceo-assistant-
 const NoahAssistantDashboard = lazyWithRetry(() => import("./pages/noah-assistant-dashboard"));
 
 const TaxOnboarding = lazyWithRetry(() => import("./pages/TaxOnboarding"));
-const MyEarnings = lazyWithRetry(() => import("./pages/MyEarnings"));
+
 const EarningsDashboard = lazyWithRetry(() => import("./pages/EarningsDashboard"));
 const VerificationPage = lazyWithRetry(() => import("./pages/VerificationPage"));
 const VerificationComplete = lazyWithRetry(() => import("./pages/VerificationComplete"));
@@ -104,8 +106,9 @@ const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
 const BonusesPage = lazyWithRetry(() => import("./pages/Bonuses"));
 const CashoutPage = lazyWithRetry(() => import("./pages/CashoutPage"));
 const CashoutRequestPage = lazyWithRetry(() => import("./pages/CashoutRequestPage"));
+const MaiPayPage = lazyWithRetry(() => import("./pages/MaiPayPage"));
 const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
-const TransactionHistory = lazyWithRetry(() => import("./pages/TransactionHistory"));
+
 const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
 const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
 const PrideShop = lazyWithRetry(() => import("./pages/PrideShop"));
@@ -157,7 +160,7 @@ const LeadOfficerDashboard = lazyWithRetry(() => import("./pages/lead-officer/Le
 const ReportDetailsPage = lazyWithRetry(() => import("./pages/ReportDetailsPage"));
 const PasswordReset = lazyWithRetry(() => import("./pages/PasswordReset"));
 const CreditScorePage = lazyWithRetry(() => import("./pages/CreditScorePage"));
-const CrownRedemption = lazyWithRetry(() => import("./pages/CrownRedemption"));
+
 
 
 // Admin pages
@@ -438,9 +441,9 @@ import ExecutiveIntake from "./pages/admin/ExecutiveIntake.js";
 import AdminCashoutDetailPage from "./pages/admin/CashoutDetailPage.js";
 import CashoutManager from "./pages/admin/CashoutManager.js";
 import CourtRoom from "./pages/CourtRoom.js";
-import TeamMeetingRoom from "./pages/TeamMeetingRoom.js";
+import TeamMeetingRoom from "./pages/TeamMeetingRoom";
 import CoinsComplete from "./pages/CoinsComplete.js";
-import WalletPage from "./pages/Wallet";
+
 import StatsPage from "./pages/Stats";
 import Auth from "./pages/Auth.js";
 import AuthCallback from "./pages/AuthCallback.js";
@@ -1374,6 +1377,7 @@ const handleVisibilityChange = async () => {
       <BroadcastAnnouncement />
       <GlobalPodBanner />
       <DailyChurchNotification />
+      <SurveyNotification />
 
       {/* Global Loading Overlay */}
       <GlobalLoadingOverlay
@@ -1708,6 +1712,7 @@ const handleVisibilityChange = async () => {
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/credit-scores" element={<CreditScorePage />} />
                   <Route path="/support" element={<Support />} />
+                  <Route path="/survey/:surveyId" element={<SurveyPage />} />
                   <Route path="/under-construction" element={<UnderConstructionPage />} />
                   <Route path="/jail" element={<JailPage />} />
                   <Route path="/inmates" element={<InmatesPage />} />
@@ -1917,19 +1922,20 @@ const handleVisibilityChange = async () => {
                     <Route path="/coins" element={<CoinStore />} />
                     <Route path="/profile-frames" element={<ProfileFrameStore />} />
                     <Route path="/coins/complete" element={<CoinsComplete />} />
-                    <Route path="/crowns/redeem" element={<CrownRedemption />} />
-                    <Route path="/wallet" element={<WalletPage />} />
+
+
                    <Route path="/stats" element={<StatsPage />} />
                    <Route path="/payouts/setup" element={<PayoutSetupPage />} />
                   <Route path="/payouts/request" element={<PayoutRequest />} />
                   <Route path="/payment/callback" element={<PaymentCallback />} />
                    <Route path="/earnings" element={<EarningsDashboard />} />
-                  <Route path="/my-earnings" element={<MyEarnings />} />
+
                   <Route path="/bonuses" element={<BonusesPage />} />
                    <Route path="/cashout" element={<CashoutPage />} />
                    <Route path="/cashout-request" element={<CashoutRequestPage />} />
+                   <Route path="/mai-pay" element={<MaiPayPage />} />
                    <Route path="/withdraw" element={<Withdraw />} />
-                  <Route path="/transactions" element={<TransactionHistory />} />
+
                   <Route path="/shop-partner" element={<ShopPartnerPage />} />
                   <Route path="/sell" element={<SellOnTrollCity />} />
                   <Route path="/seller/orders" element={<SellerOrders />} />

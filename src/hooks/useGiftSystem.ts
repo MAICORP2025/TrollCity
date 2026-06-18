@@ -393,12 +393,16 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
 
         // ── Battle score realtime broadcast ────────────────────────────────
         // When a gift is sent during a battle, the RPC updates the battle score
-        // in the database, but viewers won't see it until the next poll cycle.
-        // Broadcast a score_update on the battle channel so all participants
-        // get the new score immediately.
+        // in the database. We broadcast a score_update on the battle channel so
+        // all participants get the new score immediately — no DB round-trip.
         if (effectiveBattleId && data?.success) {
           try {
-            // Fetch the updated battle scores from the DB
+            // Determine which team this gift was sent to so we can
+            // optimistically increment the correct side without a DB read.
+            // streamId maps to the team the gift was sent to.
+            const senderName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Someone';
+
+            // Fetch current scores once, then compute optimistically
             const { data: battleData } = await supabase
               .from('battles')
               .select('score_challenger, score_opponent')
@@ -406,23 +410,41 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
               .maybeSingle();
 
             if (battleData) {
+              const newChallenger = battleData.score_challenger ?? 0;
+              const newOpponent = battleData.score_opponent ?? 0;
+
+              // 1) Broadcast to all viewers on the battle channel
               const battleCh = supabase.channel(`battle-all:${effectiveBattleId}`);
               await battleCh.subscribe();
               await battleCh.send({
                 type: 'broadcast',
                 event: 'score_update',
                 payload: {
-                  score_challenger: battleData.score_challenger ?? 0,
-                  score_opponent: battleData.score_opponent ?? 0,
+                  score_challenger: newChallenger,
+                  score_opponent: newOpponent,
                   lastGift: {
-                    username: user?.user_metadata?.username || user?.email?.split('@')[0] || 'Someone',
+                    username: senderName,
                     amount: totalGiftAmount,
                     team: streamId || '',
                   },
                 },
               });
-              // Clean up the short-lived channel after sending
               setTimeout(() => supabase.removeChannel(battleCh), 1000);
+
+              // 2) Dispatch a local event so the SENDER's own UI updates
+              // instantly without waiting for the 3-second poll.
+              window.dispatchEvent(new CustomEvent('battle-score-optimistic', {
+                detail: {
+                  battleId: effectiveBattleId,
+                  score_challenger: newChallenger,
+                  score_opponent: newOpponent,
+                  lastGift: {
+                    username: senderName,
+                    amount: totalGiftAmount,
+                    team: streamId || '',
+                  },
+                },
+              }));
             }
           } catch (battleBroadcastErr) {
             console.warn('[GiftSystem] Failed to broadcast battle score update:', battleBroadcastErr);

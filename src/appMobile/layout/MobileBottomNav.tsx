@@ -376,7 +376,7 @@ export default function MobileBottomNav() {
 
       for (const rpcName of rpcAttempts) {
         const { error } = await supabase.rpc(rpcName, {
-          p_user_id: userCard.id,
+          p_amount: userCard.hypeCoins,
         });
 
         if (!error) {

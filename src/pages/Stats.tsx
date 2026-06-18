@@ -7,6 +7,7 @@ import { getFamilySeasonStats } from '../lib/familySeasons'
 import { useXPStore } from '../stores/useXPStore'
 import { useCreditScore } from '../lib/hooks/useCreditScore'
 import CreditScoreBadge from '../components/CreditScoreBadge'
+import ConvertHypeCoinsModal from '../components/modals/ConvertHypeCoinsModal'
 import { CreatorSeasonalGoals } from '../components/CreatorSeasonalGoals'
 import {
   Crown,
@@ -156,6 +157,7 @@ export default function Stats() {
   const [stats, setStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'earnings'>('overview')
+  const [isConvertHypeOpen, setIsConvertHypeOpen] = useState(false)
 
   // Earning state
   const [earningSummary, setEarningSummary] = useState<UserEarningSummary | null>(null)
@@ -493,7 +495,7 @@ export default function Stats() {
   }
 
   return (
-    <div className={pageShell}>
+    <><div className={pageShell}>
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
@@ -501,62 +503,56 @@ export default function Stats() {
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.035]"
         style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
+          backgroundImage: 'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
           backgroundSize: '32px 32px',
-        }}
-      />
+        }} />
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 md:px-8">
         <div className={`${cityPanel} mb-8 overflow-hidden p-6 md:p-8`}>
           <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
 
-<div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-             <div>
-               <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-200">
-                 <Activity className="h-4 w-4" />
-                 City OS Stats
-               </div>
-
-               <h1 className={`text-4xl font-black md:text-5xl ${cyanTitle}`}>
-                 Player Stats
-               </h1>
-
-               <p className="mt-3 max-w-2xl text-slate-400">
-                 Track your level, coins, battle rank, credit score, family activity, and city achievements.
-               </p>
-             </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <MetricBox label="Level" value={level || 1} tone="cyan" />
-                <MetricBox label="Coins" value={(balances.troll_coins || 0).toLocaleString()} tone="green" />
-                <MetricBox label="Hype" value={(balances.hype_coins || 0).toLocaleString()} tone="purple" />
+          <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-200">
+                <Activity className="h-4 w-4" />
+                City OS Stats
               </div>
-           </div>
-         </div>
 
-         <div className="flex gap-2 mb-6">
-           <button
-             onClick={() => setActiveTab('overview')}
-             className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-               activeTab === 'overview'
-                 ? 'bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-lg'
-                 : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
-             }`}
-           >
-             Overview
-           </button>
-           <button
-             onClick={() => setActiveTab('earnings')}
-             className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-               activeTab === 'earnings'
-                 ? 'bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-lg'
-                 : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
-             }`}
-           >
-             Earnings
-           </button>
-         </div>
+              <h1 className={`text-4xl font-black md:text-5xl ${cyanTitle}`}>
+                Player Stats
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-slate-400">
+                Track your level, coins, battle rank, credit score, family activity, and city achievements.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <MetricBox label="Level" value={level || 1} tone="cyan" />
+              <MetricBox label="Coins" value={(balances.troll_coins || 0).toLocaleString()} tone="green" />
+              <MetricBox label="Hype" value={(balances.hype_coins || 0).toLocaleString()} tone="purple" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-6 py-2 rounded-lg font-semibold transition-all ${activeTab === 'overview'
+                ? 'bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-lg'
+                : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'}`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('earnings')}
+            className={`px-6 py-2 rounded-lg font-semibold transition-all ${activeTab === 'earnings'
+                ? 'bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-lg'
+                : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'}`}
+          >
+            Earnings
+          </button>
+        </div>
 
         <div className={`${cityPanel} mb-8 p-6`}>
           <StatHeader icon={Zap} title="Quick Shortcuts" subtitle="Jump into your main city actions" />
@@ -566,7 +562,7 @@ export default function Stats() {
               { label: 'Coin Store', icon: ShoppingBag, path: '/store', tone: 'yellow' as const },
               { label: 'Shop', icon: Store, path: '/marketplace', tone: 'cyan' as const },
               { label: 'Inventory', icon: Package, path: '/inventory', tone: 'purple' as const },
-              { label: 'Earnings', icon: DollarSign, path: '/my-earnings', tone: 'green' as const },
+              { label: 'MAI Pay', icon: DollarSign, path: '/mai-pay', tone: 'green' as const },
             ].map((item) => (
               <button
                 key={item.label}
@@ -582,380 +578,370 @@ export default function Stats() {
           </div>
         </div>
 
-<div className="mb-8">
-           <CreatorSeasonalGoals />
-         </div>
+        <div className="mb-8">
+          <CreatorSeasonalGoals />
+        </div>
 
-          {activeTab === 'overview' && (
-            <>
-              {stats ? (
-                <div className={`grid grid-cols-1 gap-6 lg:grid-cols-2 ${loading || coinsLoading ? 'opacity-60 pointer-events-none' : ''}`}>
-                 <div className={`${cityCard} p-6`}>
-                   <StatHeader icon={Star} title="Level & XP" subtitle="Real-time progression sync" />
+        {activeTab === 'overview' && (
+          <>
+            {stats ? (
+              <div className={`grid grid-cols-1 gap-6 lg:grid-cols-2 ${loading || coinsLoading ? 'opacity-60 pointer-events-none' : ''}`}>
+                <div className={`${cityCard} p-6`}>
+                  <StatHeader icon={Star} title="Level & XP" subtitle="Real-time progression sync" />
 
-                   <div className="flex items-center justify-between">
-                     <span className="text-3xl font-black text-white">Level {stats.level}</span>
-                     <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-sm font-bold text-cyan-200">
-                       {stats.level} → {stats.level + 1}
-                     </span>
-                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-3xl font-black text-white">Level {stats.level}</span>
+                    <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-sm font-bold text-cyan-200">
+                      {stats.level} → {stats.level + 1}
+                    </span>
+                  </div>
 
-                   <div className="mt-5 h-4 overflow-hidden rounded-full bg-slate-900/80 ring-1 ring-white/10">
-                     <div
-                       className="h-full rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-pink-500 shadow-[0_0_18px_rgba(45,212,191,0.42)] transition-all duration-500"
-                       style={{ width: `${levelProgress}%` }}
-                     />
-                   </div>
+                  <div className="mt-5 h-4 overflow-hidden rounded-full bg-slate-900/80 ring-1 ring-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-pink-500 shadow-[0_0_18px_rgba(45,212,191,0.42)] transition-all duration-500"
+                      style={{ width: `${levelProgress}%` }} />
+                  </div>
 
-                   <div className="mt-3 text-center text-sm text-slate-400">
-                     {Math.round(levelProgress)}% to next level
-                   </div>
+                  <div className="mt-3 text-center text-sm text-slate-400">
+                    {Math.round(levelProgress)}% to next level
+                  </div>
 
-                   <div className="mt-5 border-t border-white/10 pt-4">
-                     <div className="flex justify-between text-sm">
-                       <span className="text-slate-400">Current Level</span>
-                       <span className="font-bold text-cyan-200">{stats.level} / 2000</span>
-                     </div>
-                     <div className="mt-2 flex items-center gap-2 text-xs text-emerald-300">
-                       <TrendingUp className="h-3 w-3" />
-                       Real-time sync enabled
-                     </div>
-                   </div>
-                 </div>
+                  <div className="mt-5 border-t border-white/10 pt-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Current Level</span>
+                      <span className="font-bold text-cyan-200">{stats.level} / 2000</span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-xs text-emerald-300">
+                      <TrendingUp className="h-3 w-3" />
+                      Real-time sync enabled
+                    </div>
+                  </div>
+                </div>
 
-                 <div className={`${cityCard} p-6`}>
-                   <StatHeader icon={Shield} title="Credit Score" subtitle="Reliability, loans, and city behavior" />
-                   <CreditScoreBadge
-                     score={creditData?.score}
-                     tier={creditData?.tier}
-                     trend7d={creditData?.trend_7d}
-                     loading={creditLoading}
-                   />
-                 </div>
+                <div className={`${cityCard} p-6`}>
+                  <StatHeader icon={Shield} title="Credit Score" subtitle="Reliability, loans, and city behavior" />
+                  <CreditScoreBadge
+                    score={creditData?.score}
+                    tier={creditData?.tier}
+                    trend7d={creditData?.trend_7d}
+                    loading={creditLoading} />
+                </div>
 
-                 {stats.familyName && (
-                   <div className={`${cityCard} p-6`}>
-                     <StatHeader icon={Crown} title="Family Status" subtitle="Family season rank and XP" />
+                {stats.familyName && (
+                  <div className={`${cityCard} p-6`}>
+                    <StatHeader icon={Crown} title="Family Status" subtitle="Family season rank and XP" />
 
-                     <div className="flex items-center justify-between">
-                       <span className="text-xl font-black text-white">🔥 {stats.familyName}</span>
-                       <span className="font-bold text-cyan-200">Level {stats.familyLevel}</span>
-                     </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl font-black text-white">🔥 {stats.familyName}</span>
+                      <span className="font-bold text-cyan-200">Level {stats.familyLevel}</span>
+                    </div>
 
-                     <div className="mt-5 rounded-2xl border border-cyan-300/10 bg-slate-950/60 p-4">
-                       <div className="mb-2 text-sm text-slate-300">
-                         Family XP:{' '}
-                         <span className="font-bold text-cyan-300">
-                           {stats.familyXp?.toLocaleString() || 0}
-                         </span>
-                       </div>
-
-                       <div className="h-2 overflow-hidden rounded-full bg-black/60">
-                         <div
-                           className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500"
-                           style={{ width: `${familyXpProgress}%` }}
-                         />
-                       </div>
-
-                       <div className="mt-4 border-t border-white/10 pt-3 text-sm text-slate-300">
-                         Season Score:{' '}
-                         <span className="font-bold text-cyan-300">
-                           {stats.seasonScore?.toLocaleString() || 0}
-                         </span>
-                       </div>
-                     </div>
-                   </div>
-                 )}
-
-                 <div className={`${cityCard} p-6`}>
-                   <StatHeader icon={Sword} title="Battle / War Stats" subtitle="Crowns, streaks, wins, and tier" />
-
-                   <div className="grid grid-cols-2 gap-4">
-                     <MetricBox label="Wins" value={stats.warWins} tone="green" />
-                     <MetricBox label="Losses" value={stats.warLosses} tone="red" />
-                     <MetricBox
-                       label="Streak"
-                       value={
-                         <span className="flex items-center gap-2">
-                           {stats.warStreak}
-                           {Number(stats.warStreak) > 0 && <span>🔥</span>}
-                         </span>
-                       }
-                       tone="orange"
-                     />
-                     <MetricBox label="Tier" value={stats.warTier} tone="yellow" />
-                   </div>
-                 </div>
-
-                 <div className={`${cityCard} p-6`}>
-                   <StatHeader icon={Coins} title="Currency & Assets" subtitle="Coins, value, and cashout status" />
-
-                   <div className="space-y-3">
-                     <div className="flex items-center justify-between rounded-2xl border border-cyan-300/10 bg-slate-950/60 p-4">
-                       <span className="font-bold text-slate-100">🎫 Troll Coins</span>
-                       <span className="text-xl font-black text-cyan-300">
-                         {stats.troll_coins.toLocaleString()}
-                       </span>
-                     </div>
-
-                      <div className="flex items-center justify-between rounded-2xl border border-emerald-300/10 bg-slate-950/60 p-4">
-                        <span className="font-bold text-slate-100">💰 Gifted Coins</span>
-                        <span className="text-xl font-black text-emerald-300">
-                          {stats.paid_coins.toLocaleString()}
+                    <div className="mt-5 rounded-2xl border border-cyan-300/10 bg-slate-950/60 p-4">
+                      <div className="mb-2 text-sm text-slate-300">
+                        Family XP:{' '}
+                        <span className="font-bold text-cyan-300">
+                          {stats.familyXp?.toLocaleString() || 0}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between rounded-2xl border border-purple-300/10 bg-slate-950/60 p-4">
-                        <span className="font-bold text-slate-100">⚡ Hype Coins</span>
-                        <div className="text-right">
-                          <span className="text-xl font-black text-purple-300">
-                            {stats.hype_coins.toLocaleString()}
-                          </span>
-                          <button
-                            onClick={() => navigate('/crowns/redeem')}
-                            className="ml-2 text-xs font-bold text-cyan-300 hover:text-cyan-200 underline"
-                          >
-                            Convert
-                          </button>
-                        </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-black/60">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-purple-500"
+                          style={{ width: `${familyXpProgress}%` }} />
                       </div>
 
-                     <div className="rounded-2xl border border-purple-300/10 bg-slate-950/60 p-4">
-                       <div className="flex items-center justify-between">
-                         <span className="text-slate-300">Total Coins Value</span>
-                         <span className="text-lg font-black text-purple-300">
-                           ${(Math.round((stats.troll_coins + stats.paid_coins) / 300 * 100) / 100).toFixed(2)}
-                         </span>
-                       </div>
-                       <div className="mt-1 text-xs text-slate-500">300 coins = $1.00</div>
-                     </div>
-
-                     {(stats.cashout_coins > 0 || stats.cashout_reserved_coins > 0) && (
-                       <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
-                         <div className="flex items-center justify-between">
-                           <span className="flex items-center gap-2 font-bold text-emerald-300">
-                             <DollarSign className="h-4 w-4" />
-                             Cashout Available
-                           </span>
-                           <span className="text-lg font-black text-emerald-300">
-                             ${(Math.min(stats.cashout_coins, stats.troll_coins + stats.paid_coins) / 300 * 100).toFixed(2)}
-                           </span>
-                         </div>
-                       </div>
-                     )}
-                   </div>
-                 </div>
-
-                 <div className={`${cityCard} p-6 lg:col-span-2`}>
-                   <StatHeader icon={Trophy} title="Badges & Achievements" subtitle="Unlocked rank markers and city achievements" />
-
-                   <div className="flex flex-wrap gap-3">
-                     {stats.badges.length > 0 ? (
-                       stats.badges.map((badge, index) => (
-                         <span
-                           key={index}
-                           className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 font-bold text-cyan-100"
-                         >
-                           {badge}
-                         </span>
-                       ))
-                     ) : (
-                       <span className="text-slate-400">
-                         No badges earned yet. Keep playing to unlock achievements.
-                       </span>
-                     )}
-                   </div>
-                 </div>
-                </div>
-              ) : (
-                <div className={`${cityPanel} p-12 text-center`}>
-                  <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-cyan-300" />
-                  <div className="text-xl font-black text-cyan-100">Loading Stats</div>
-                  <p className="mt-2 text-slate-400">Syncing your Troll City data...</p>
-                </div>
-              )}
-            </>
-          )}
-
-{activeTab === 'earnings' && (
-            <div className="grid grid-cols-1 gap-6">
-              <div className={`${cityCard} p-6`}>
-                <StatHeader icon={DollarSign} title="Earnings Summary" subtitle="Lifetime and pending earnings" />
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <MetricBox 
-                    label="Total Earned" 
-                    value={
-                      <div>
-                        <div>{earningSummary?.total_earned_coins?.toLocaleString() || '0'} coins</div>
-                        <div className="text-xs text-purple-300">{formatStatsUsd(earningSummary?.total_earned_coins || 0)}</div>
+                      <div className="mt-4 border-t border-white/10 pt-3 text-sm text-slate-300">
+                        Season Score:{' '}
+                        <span className="font-bold text-cyan-300">
+                          {stats.seasonScore?.toLocaleString() || 0}
+                        </span>
                       </div>
-                    } 
-                    tone="green" 
-                  />
-                  <MetricBox 
-                    label="Pending" 
-                    value={
-                      <div>
-                        <div>{earningSummary?.pending_coins?.toLocaleString() || '0'} coins</div>
-                        <div className="text-xs text-yellow-300">{formatStatsUsd(earningSummary?.pending_coins || 0)}</div>
-                      </div>
-                    } 
-                    tone="yellow" 
-                  />
-                  <MetricBox 
-                    label="Paid" 
-                    value={`${earningSummary?.paid_coins?.toLocaleString() || '0'} coins`} 
-                    tone="cyan" 
-                  />
-                  <MetricBox 
-                    label="This Week" 
-                    value={`${earningSummary?.week_earned_coins?.toLocaleString() || '0'} coins`} 
-                    tone="purple" 
-                  />
-                </div>
-              </div>
+                    </div>
+                  </div>
+                )}
 
-             {activeRoles.length > 0 && (
-               <div className={`${cityCard} p-6`}>
-                 <StatHeader icon={Star} title="Active Earning Roles" subtitle="Your current earning opportunities" />
-                 <div className="space-y-3">
-                   {activeRoles.map(role => (
-                     <div key={role.role_key} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                       <div>
-                         <span className="font-bold text-white">{role.role_label}</span>
-                         <p className="text-xs text-slate-400 mt-1">{role.requirements}</p>
-                       </div>
-                       <span className={`px-2 py-1 rounded text-xs font-bold ${
-                         role.status === 'active' ? 'bg-green-500/20 text-green-300' :
-                         role.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' :
-                         role.status === 'eligible' ? 'bg-cyan-500/20 text-cyan-300' :
-                         'bg-slate-500/20 text-slate-400'
-                       }`}>
-                         {role.status}
-                       </span>
-                     </div>
-                   ))}
-                 </div>
-               </div>
-             )}
+                <div className={`${cityCard} p-6`}>
+                  <StatHeader icon={Sword} title="Battle / War Stats" subtitle="Crowns, streaks, wins, and tier" />
 
-             {agencyData && (
-               <div className={`${cityCard} p-6`}>
-                 <StatHeader icon={Building2} title="Agency Earnings" subtitle="Split percentages and pending earnings" />
-
-                 <div className="space-y-3">
-                   <div className="flex items-center justify-between">
-                     <span className="text-slate-300">Agency</span>
-                     <span className="font-bold text-cyan-300">{agencyData.agency_name}</span>
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <span className="text-slate-300">Your Role</span>
-                     <span className="font-bold text-purple-300">{agencyData.agency_role}</span>
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <span className="text-slate-300">Split Percent</span>
-                     <span className="font-bold text-pink-300">{agencyData.split_percent}%</span>
-                   </div>
-                   <div className="border-t border-white/10 pt-3 mt-3">
-                     <div className="flex items-center justify-between">
-                       <span className="text-slate-300">Pending Agency Earnings</span>
-                       <span className="font-bold text-yellow-300">{agencyData.pending_agency_earnings.toLocaleString()} coins</span>
-                     </div>
-                     <div className="flex items-center justify-between mt-2">
-                       <span className="text-slate-300">Paid Agency Earnings</span>
-                       <span className="font-bold text-green-300">{agencyData.paid_agency_earnings.toLocaleString()} coins</span>
-                     </div>
-                   </div>
-                 </div>
-               </div>
-             )}
-
-             {familyData && (
-               <div className={`${cityCard} p-6`}>
-                 <StatHeader icon={Crown} title="Family Conversion Status" subtitle="Path to agency conversion" />
-
-                 <div className="space-y-3">
-                   <div className="flex items-center justify-between">
-                     <span className="text-slate-300">Family</span>
-                     <span className="font-bold text-cyan-300">{familyData.family_name}</span>
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <span className="text-slate-300">Members</span>
-                     <span className="font-bold text-purple-300">{familyData.member_count + 1}</span>
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <span className="text-slate-300">Leader Bonus</span>
-                     <span className="font-bold text-pink-300">25,000 coins available</span>
-                   </div>
-                   <div className="border-t border-white/10 pt-3 mt-3">
-                     <div className="flex items-center gap-2">
-                       <Lock className="h-4 w-4 text-slate-400" />
-                       <span className="text-slate-300">Conversion Status:</span>
-                       <span className={`font-bold ${familyData.conversion_eligible ? 'text-green-300' : 'text-slate-400'}`}>
-                         {familyData.conversion_eligible 
-                           ? familyData.conversion_status || 'Eligible - Apply for Agency Conversion' 
-                           : 'Need 15 members to qualify'}
-                       </span>
-                     </div>
-                   </div>
-                 </div>
-               </div>
-             )}
-
-             {treasuryPayouts.length > 0 && (
-               <div className={`${cityCard} p-6`}>
-                 <StatHeader icon={Calendar} title="Treasury Payouts" subtitle="Recent treasury distributions" />
-
-                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                   {treasuryPayouts.slice(0, 10).map(payout => (
-                     <div key={payout.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-950/60 p-3">
-                       <div>
-                         <span className="font-bold text-white capitalize">{payout.role_key.replace('_', ' ')}</span>
-                         <p className="text-xs text-slate-400">{payout.created_at ? new Date(payout.created_at).toLocaleDateString() : '—'}</p>
-                       </div>
-                       <span className="font-bold text-cyan-300">{payout.amount_coins.toLocaleString()} coins</span>
-                     </div>
-                   ))}
-                 </div>
-               </div>
-             )}
-
-{roleRules.filter(r => r.is_active).length > 0 && (
-                <div className={`${cityCard} p-6 lg:col-span-2`}>
-                  <StatHeader icon={Briefcase} title="Earning Opportunities" subtitle="All available earning paths" />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {roleRules.filter(r => r.is_active).map(rule => {
-                      const isUnlocked = activeRoles.some(r => r.role_key === rule.role_key)
-                      return (
-                        <div key={rule.role_key} className={`rounded-xl p-4 border transition-all ${
-                          isUnlocked 
-                            ? 'border-green-400/30 bg-green-400/5' 
-                            : 'border-white/10 bg-slate-950/60 hover:border-cyan-300/30'
-                        }`}>
-                          <div className="flex items-start justify-between">
-                            <span className="font-bold text-white">{rule.role_label}</span>
-                            {isUnlocked && <CheckCircle className="h-4 w-4 text-green-400" />}
-                          </div>
-                          <p className="text-xs text-slate-400 mt-2">{rule.requirement_text || 'No requirements'}</p>
-                          {rule.application_route && (
-                            <button
-                              onClick={() => navigate(rule.application_route || '/')}
-                              className="mt-3 text-xs font-semibold text-cyan-300 hover:text-cyan-200 flex items-center gap-1"
-                            >
-                              Apply Now <ArrowRight className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      )
-                    })}
+                  <div className="grid grid-cols-2 gap-4">
+                    <MetricBox label="Wins" value={stats.warWins} tone="green" />
+                    <MetricBox label="Losses" value={stats.warLosses} tone="red" />
+                    <MetricBox
+                      label="Streak"
+                      value={<span className="flex items-center gap-2">
+                        {stats.warStreak}
+                        {Number(stats.warStreak) > 0 && <span>🔥</span>}
+                      </span>}
+                      tone="orange" />
+                    <MetricBox label="Tier" value={stats.warTier} tone="yellow" />
                   </div>
                 </div>
-              )}
+
+                <div className={`${cityCard} p-6`}>
+                  <StatHeader icon={Coins} title="Currency & Assets" subtitle="Coins, value, and cashout status" />
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-2xl border border-cyan-300/10 bg-slate-950/60 p-4">
+                      <span className="font-bold text-slate-100">🎫 Troll Coins</span>
+                      <span className="text-xl font-black text-cyan-300">
+                        {stats.troll_coins.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-2xl border border-emerald-300/10 bg-slate-950/60 p-4">
+                      <span className="font-bold text-slate-100">💰 Gifted Coins</span>
+                      <span className="text-xl font-black text-emerald-300">
+                        {stats.paid_coins.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-2xl border border-amber-300/10 bg-slate-950/60 p-4">
+                      <span className="font-bold text-slate-100">👑 Crowns</span>
+                      <span className="text-xl font-black text-amber-300">
+                        {balances.battle_crowns.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-2xl border border-purple-300/10 bg-slate-950/60 p-4">
+                      <span className="font-bold text-slate-100">⚡ Hype Coins</span>
+                      <div className="text-right">
+                        <span className="text-xl font-black text-purple-300">
+                          {stats.hype_coins.toLocaleString()}
+                        </span>
+                        <button
+                          onClick={() => setIsConvertHypeOpen(true)}
+                          className="ml-2 text-xs font-bold text-cyan-300 hover:text-cyan-200 underline"
+                        >
+                          Convert
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-purple-300/10 bg-slate-950/60 p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300">Total Coins Value</span>
+                        <span className="text-lg font-black text-purple-300">
+                          ${(Math.round((stats.troll_coins + stats.paid_coins) / 300 * 100) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">300 coins = $1.00</div>
+                    </div>
+
+                    {(stats.cashout_coins > 0 || stats.cashout_reserved_coins > 0) && (
+                      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 font-bold text-emerald-300">
+                            <DollarSign className="h-4 w-4" />
+                            Cashout Available
+                          </span>
+                          <span className="text-lg font-black text-emerald-300">
+                            ${(Math.min(stats.cashout_coins, stats.troll_coins + stats.paid_coins) / 300 * 100).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={`${cityCard} p-6 lg:col-span-2`}>
+                  <StatHeader icon={Trophy} title="Badges & Achievements" subtitle="Unlocked rank markers and city achievements" />
+
+                  <div className="flex flex-wrap gap-3">
+                    {stats.badges.length > 0 ? (
+                      stats.badges.map((badge, index) => (
+                        <span
+                          key={index}
+                          className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 font-bold text-cyan-100"
+                        >
+                          {badge}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-slate-400">
+                        No badges earned yet. Keep playing to unlock achievements.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={`${cityPanel} p-12 text-center`}>
+                <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-cyan-300" />
+                <div className="text-xl font-black text-cyan-100">Loading Stats</div>
+                <p className="mt-2 text-slate-400">Syncing your Troll City data...</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'earnings' && (
+          <div className="grid grid-cols-1 gap-6">
+            <div className={`${cityCard} p-6`}>
+              <StatHeader icon={DollarSign} title="Earnings Summary" subtitle="Lifetime and pending earnings" />
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <MetricBox
+                  label="Total Earned"
+                  value={<div>
+                    <div>{earningSummary?.total_earned_coins?.toLocaleString() || '0'} coins</div>
+                    <div className="text-xs text-purple-300">{formatStatsUsd(earningSummary?.total_earned_coins || 0)}</div>
+                  </div>}
+                  tone="green" />
+                <MetricBox
+                  label="Pending"
+                  value={<div>
+                    <div>{earningSummary?.pending_coins?.toLocaleString() || '0'} coins</div>
+                    <div className="text-xs text-yellow-300">{formatStatsUsd(earningSummary?.pending_coins || 0)}</div>
+                  </div>}
+                  tone="yellow" />
+                <MetricBox
+                  label="Paid"
+                  value={`${earningSummary?.paid_coins?.toLocaleString() || '0'} coins`}
+                  tone="cyan" />
+                <MetricBox
+                  label="This Week"
+                  value={`${earningSummary?.week_earned_coins?.toLocaleString() || '0'} coins`}
+                  tone="purple" />
+              </div>
             </div>
-          )}
-        </div>
+
+            {activeRoles.length > 0 && (
+              <div className={`${cityCard} p-6`}>
+                <StatHeader icon={Star} title="Active Earning Roles" subtitle="Your current earning opportunities" />
+                <div className="space-y-3">
+                  {activeRoles.map(role => (
+                    <div key={role.role_key} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                      <div>
+                        <span className="font-bold text-white">{role.role_label}</span>
+                        <p className="text-xs text-slate-400 mt-1">{role.requirements}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${role.status === 'active' ? 'bg-green-500/20 text-green-300' :
+                          role.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' :
+                            role.status === 'eligible' ? 'bg-cyan-500/20 text-cyan-300' :
+                              'bg-slate-500/20 text-slate-400'}`}>
+                        {role.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {agencyData && (
+              <div className={`${cityCard} p-6`}>
+                <StatHeader icon={Building2} title="Agency Earnings" subtitle="Split percentages and pending earnings" />
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">Agency</span>
+                    <span className="font-bold text-cyan-300">{agencyData.agency_name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">Your Role</span>
+                    <span className="font-bold text-purple-300">{agencyData.agency_role}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">Split Percent</span>
+                    <span className="font-bold text-pink-300">{agencyData.split_percent}%</span>
+                  </div>
+                  <div className="border-t border-white/10 pt-3 mt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-300">Pending Agency Earnings</span>
+                      <span className="font-bold text-yellow-300">{agencyData.pending_agency_earnings.toLocaleString()} coins</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-slate-300">Paid Agency Earnings</span>
+                      <span className="font-bold text-green-300">{agencyData.paid_agency_earnings.toLocaleString()} coins</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {familyData && (
+              <div className={`${cityCard} p-6`}>
+                <StatHeader icon={Crown} title="Family Conversion Status" subtitle="Path to agency conversion" />
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">Family</span>
+                    <span className="font-bold text-cyan-300">{familyData.family_name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">Members</span>
+                    <span className="font-bold text-purple-300">{familyData.member_count + 1}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">Leader Bonus</span>
+                    <span className="font-bold text-pink-300">25,000 coins available</span>
+                  </div>
+                  <div className="border-t border-white/10 pt-3 mt-3">
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-slate-400" />
+                      <span className="text-slate-300">Conversion Status:</span>
+                      <span className={`font-bold ${familyData.conversion_eligible ? 'text-green-300' : 'text-slate-400'}`}>
+                        {familyData.conversion_eligible
+                          ? familyData.conversion_status || 'Eligible - Apply for Agency Conversion'
+                          : 'Need 15 members to qualify'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {treasuryPayouts.length > 0 && (
+              <div className={`${cityCard} p-6`}>
+                <StatHeader icon={Calendar} title="Treasury Payouts" subtitle="Recent treasury distributions" />
+
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {treasuryPayouts.slice(0, 10).map(payout => (
+                    <div key={payout.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-950/60 p-3">
+                      <div>
+                        <span className="font-bold text-white capitalize">{payout.role_key.replace('_', ' ')}</span>
+                        <p className="text-xs text-slate-400">{payout.created_at ? new Date(payout.created_at).toLocaleDateString() : '—'}</p>
+                      </div>
+                      <span className="font-bold text-cyan-300">{payout.amount_coins.toLocaleString()} coins</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {roleRules.filter(r => r.is_active).length > 0 && (
+              <div className={`${cityCard} p-6 lg:col-span-2`}>
+                <StatHeader icon={Briefcase} title="Earning Opportunities" subtitle="All available earning paths" />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {roleRules.filter(r => r.is_active).map(rule => {
+                    const isUnlocked = activeRoles.some(r => r.role_key === rule.role_key)
+                    return (
+                      <div key={rule.role_key} className={`rounded-xl p-4 border transition-all ${isUnlocked
+                          ? 'border-green-400/30 bg-green-400/5'
+                          : 'border-white/10 bg-slate-950/60 hover:border-cyan-300/30'}`}>
+                        <div className="flex items-start justify-between">
+                          <span className="font-bold text-white">{rule.role_label}</span>
+                          {isUnlocked && <CheckCircle className="h-4 w-4 text-green-400" />}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2">{rule.requirement_text || 'No requirements'}</p>
+                        {rule.application_route && (
+                          <button
+                            onClick={() => navigate(rule.application_route || '/')}
+                            className="mt-3 text-xs font-semibold text-cyan-300 hover:text-cyan-200 flex items-center gap-1"
+                          >
+                            Apply Now <ArrowRight className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-    )
+    </div><ConvertHypeCoinsModal
+        isOpen={isConvertHypeOpen}
+        onClose={() => setIsConvertHypeOpen(false)} /></>    )
   }

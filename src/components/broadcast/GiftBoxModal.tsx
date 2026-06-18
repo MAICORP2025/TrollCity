@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, Gift, Sparkles, Crown, Gem, Zap, Heart, Users, UserCircle, Radio, Coins } from 'lucide-react';
+import { X, Search, Gift, Sparkles, Crown, Gem, Zap, Heart, Users, UserCircle, Radio, Coins, Glasses } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { useGiftSystem, GiftItem } from '../../hooks/useGiftSystem';
@@ -8,6 +8,7 @@ import { useBroadcastAbilities } from '../../hooks/useBroadcastAbilities';
 import { getAbilityById } from '../../types/broadcastAbilities';
 import CoinStoreModal from './CoinStoreModal';
 import { getGiftVisualConfig, GiftRarity } from '../../lib/giftVisuals';
+import { AR_GIFTS, AR_GIFT_CATEGORIES, getARGiftById } from '../../data/arGiftCatalog';
 
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -37,6 +38,8 @@ interface GiftBoxModalProps {
 }
 
 type GiftCategory = 'all' | 'general' | 'cars' | 'houses' | 'boats' | 'planes' | 'luxury' | 'men' | 'women' | 'lgbt' | 'holiday' | 'smoking' | 'drinking' | 'funny' | 'seasonal';
+
+type ARTabType = 'gifts' | 'ar_gifts' | 'abilities' | 'store';
 
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic';
 
@@ -123,7 +126,8 @@ const GiftBoxModalComponent = function GiftBoxModal({
   const [selectedGift, setSelectedGift] = useState<GiftItem | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'gifts' | 'abilities' | 'store'>('gifts');
+  const [activeTab, setActiveTab] = useState<ARTabType>('gifts');
+  const [arCategory, setArCategory] = useState<string>('all');
 
   // Fetch gifts from database with defensive fallback
   useEffect(() => {
@@ -303,6 +307,41 @@ const GiftBoxModalComponent = function GiftBoxModal({
 
     try {
       let success = false;
+
+      // AR gifts use a separate RPC
+      if (activeTab === 'ar_gifts' && selectedGift) {
+        const arGift = getARGiftById(selectedGift.id);
+        if (!arGift) {
+          toast.error('Unknown AR gift');
+          return;
+        }
+
+        const targetId = giftTarget.userId || recipientId;
+
+        const { data, error } = await supabase.rpc('send_ar_gift', {
+          p_sender_id: user.id,
+          p_receiver_id: targetId,
+          p_stream_id: streamId || null,
+          p_battle_id: null,
+          p_gift_id: arGift.id,
+          p_quantity: quantity,
+        });
+
+        if (error) throw error;
+
+        if (data && (data as any).success) {
+          const targetName = userProfiles[targetId]?.username || 'user';
+          toast.success(`✨ Sent AR ${arGift.icon} ${arGift.name} to ${targetName}!`);
+          onGiftSent?.(selectedGift, { type: 'specific', userId: targetId, username: targetName, quantity });
+          onClose();
+          setSelectedGift(null);
+          setQuantity(1);
+          setGiftTarget({ type: 'specific', userId: recipientId });
+        } else {
+          toast.error((data as any)?.message || 'Failed to send AR gift');
+        }
+        return;
+      }
       
       if (giftTarget.type === 'all') {
         // Send to all active users (broadcaster + guests)
@@ -409,6 +448,17 @@ const GiftBoxModalComponent = function GiftBoxModal({
             >
               <Gift size={16} />
               Gifts
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('ar_gifts')}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-2 px-3 py-2 text-sm font-bold transition-colors',
+                activeTab === 'ar_gifts' ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'text-zinc-400 hover:bg-white/10 hover:text-white'
+              )}
+            >
+              <Glasses size={16} />
+              AR Gifts ✨
             </button>
             <button
               type="button"
@@ -527,6 +577,108 @@ const GiftBoxModalComponent = function GiftBoxModal({
                 </div>
               )}
             </div>
+          ) : activeTab === 'ar_gifts' ? (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* AR Category Filter */}
+              <div className="flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-white/5 flex-shrink-0 scrollbar-hide">
+                {AR_GIFT_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setArCategory(cat.id)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
+                      arCategory === cat.id
+                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-transparent'
+                    )}
+                  >
+                    {cat.icon} {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* AR Gift Grid */}
+              <div className="flex-1 overflow-y-auto p-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                  {AR_GIFTS
+                    .filter((g) => arCategory === 'all' || g.category === arCategory)
+                    .map((gift) => {
+                      const isSelected = selectedGift?.id === gift.id;
+                      const isLegendary = gift.category === 'legendary' || gift.rarity === 'mythic';
+
+                      return (
+                        <motion.button
+                          key={gift.id}
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.96 }}
+                          onClick={() => {
+                            const giftItem: GiftItem = {
+                              id: gift.id,
+                              name: gift.name,
+                              icon: gift.icon,
+                              coinCost: gift.price,
+                              type: 'paid' as const,
+                              slug: gift.id,
+                              animationKey: gift.id,
+                              animationType: 'ar_gift',
+                              animationDurationMs: gift.durationMs,
+                              rarity: gift.rarity,
+                              description: gift.description,
+                              category: 'ar_gift',
+                              subcategory: gift.category,
+                            };
+                            setSelectedGift(giftItem);
+                          }}
+                          className={cn(
+                            'relative overflow-hidden p-2 rounded-2xl border-2 transition-all flex flex-col items-center gap-1.5 text-left',
+                            isSelected
+                              ? 'border-fuchsia-400/80 bg-fuchsia-400/10'
+                              : isLegendary
+                                ? 'border-yellow-500/30 bg-gradient-to-b from-yellow-500/10 to-purple-500/10 hover:border-yellow-400/50'
+                                : 'border-white/10 bg-slate-950/60 hover:border-fuchsia-500/30 hover:bg-slate-900/80'
+                          )}
+                        >
+                          {isLegendary && (
+                            <div className="absolute inset-0 bg-gradient-to-t from-yellow-500/5 to-transparent pointer-events-none" />
+                          )}
+                          <div className="relative z-10 flex flex-col items-center gap-1.5 w-full">
+                            <div className={cn(
+                              'flex h-12 w-12 items-center justify-center rounded-xl border text-2xl',
+                              isLegendary
+                                ? 'border-yellow-500/30 bg-yellow-500/10'
+                                : 'border-white/10 bg-slate-900/70'
+                            )}>
+                              {gift.icon}
+                            </div>
+                            <span className="text-[10px] sm:text-xs font-semibold text-white tracking-tight text-center truncate w-full">
+                              {gift.name}
+                            </span>
+                            <span className="text-[10px] font-semibold text-fuchsia-300 flex items-center gap-1">
+                              {gift.price.toLocaleString()} <span>🪙</span>
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className={cn(
+                                'text-[8px] uppercase tracking-wider font-bold rounded-full px-1.5 py-0.5',
+                                gift.rarity === 'mythic' ? 'bg-fuchsia-500/20 text-fuchsia-200' :
+                                gift.rarity === 'legendary' ? 'bg-amber-500/20 text-amber-200' :
+                                gift.rarity === 'epic' ? 'bg-violet-500/20 text-violet-200' :
+                                gift.rarity === 'rare' ? 'bg-sky-500/20 text-sky-200' :
+                                gift.rarity === 'uncommon' ? 'bg-emerald-500/20 text-emerald-200' :
+                                'bg-slate-700/30 text-slate-300'
+                              )}>
+                                {gift.rarity}
+                              </span>
+                              <span className="text-[7px] text-slate-500 uppercase">
+                                {gift.trackingPoint.replace('_', ' ')}
+                              </span>
+                            </div>
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
           ) : (
           <div className="flex flex-1 overflow-hidden flex-col sm:flex-row">
             {/* Categories - horizontal scroll on mobile, sidebar on desktop */}
@@ -640,7 +792,7 @@ const GiftBoxModalComponent = function GiftBoxModal({
           )}
 
           {/* Recipient Selection - Always show when a gift is selected */}
-          {activeTab === 'gifts' && selectedGift && (
+          {(activeTab === 'gifts' || activeTab === 'ar_gifts') && selectedGift && (
             <div className="p-2 sm:p-4 border-t border-white/10 bg-zinc-900/50 flex-shrink-0">
               <div className="flex items-center gap-2 mb-2 sm:mb-3">
                 <UserCircle size={16} className="text-yellow-400 sm:h-[18px] sm:w-[18px]" />
@@ -725,7 +877,7 @@ const GiftBoxModalComponent = function GiftBoxModal({
           )}
 
           {/* Send Button */}
-          {activeTab === 'gifts' && selectedGift && (
+          {(activeTab === 'gifts' || activeTab === 'ar_gifts') && selectedGift && (
             <div className="p-2 sm:p-4 border-t border-white/10 bg-zinc-900/50 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0">
               <div className="flex items-center gap-2 sm:gap-4">
                 <div className="flex items-center gap-1 sm:gap-2">
@@ -760,13 +912,17 @@ const GiftBoxModalComponent = function GiftBoxModal({
                   "px-4 sm:px-8 py-2 sm:py-3 rounded-xl font-bold flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm transition-all",
                   isSending && "opacity-50",
                   canAfford
-                    ? "bg-yellow-500 hover:bg-yellow-400 text-black"
+                    ? activeTab === 'ar_gifts'
+                      ? "bg-gradient-to-r from-fuchsia-500 to-purple-500 hover:from-fuchsia-400 hover:to-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]"
+                      : "bg-yellow-500 hover:bg-yellow-400 text-black"
                     : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
                 )}
               >
-                <Gift size={16} className="sm:h-5 sm:w-5" />
+                {activeTab === 'ar_gifts' ? <Glasses size={16} className="sm:h-5 sm:w-5" /> : <Gift size={16} className="sm:h-5 sm:w-5" />}
                 <span className="hidden sm:inline">
-                  {activeUserIds.length > 0 ? (
+                  {activeTab === 'ar_gifts' ? (
+                    `Send AR ${quantity}x ${selectedGift.name}`
+                  ) : activeUserIds.length > 0 ? (
                     giftTarget.type === 'all' ? (
                       `Send to All (${1 + activeUserIds.length})`
                     ) : giftTarget.type === 'broadcaster' ? (

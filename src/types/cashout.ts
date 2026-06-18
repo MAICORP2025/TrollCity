@@ -1,7 +1,102 @@
 // Types for Enhanced Cashout System
 import { UserProfile } from '../lib/supabase';
 
-export type PayoutMethod = 'cash_app' | 'paypal' | 'venmo';
+// ============================================================================
+// FAST PAY PROGRAM TYPES
+// ============================================================================
+
+/** Fast Pay tier levels based on user level */
+export type FastPayTier = 'standard' | 'fast_pay' | 'instant';
+
+/** Fast Pay program requirements status */
+export interface FastPayRequirements {
+  verifiedIdentity: boolean;
+  noActiveViolations: boolean;
+  accountOlderThan30Days: boolean;
+  goodStanding: boolean;
+  noFraudChargeback: boolean;
+}
+
+/** Full Fast Pay eligibility result */
+export interface FastPayEligibility {
+  tier: FastPayTier;
+  eligible: boolean;
+  requirements: FastPayRequirements;
+  unmetRequirements: string[];
+  /** Level 1-499: Standard payout schedule */
+  isStandard: boolean;
+  /** Level 500-999: Fast Pay - request any day, processed within 24h */
+  isFastPay: boolean;
+  /** Level 1000+: Instant payout, multiple per week, priority support */
+  isInstant: boolean;
+  /** Cashout fee percentage (2.9% for all tiers) */
+  feePercent: number;
+  /** Max cashouts per week (for instant tier) */
+  maxCashoutsPerWeek: number;
+  /** Estimated processing time description */
+  processingTime: string;
+}
+
+/** Get the Fast Pay tier for a given user level */
+export function getFastPayTier(level: number | string): FastPayTier {
+  const numericLevel = Number(level || 0)
+  if (numericLevel >= 1000) return 'instant'
+  if (numericLevel >= 500) return 'fast_pay'
+  return 'standard'
+}
+
+/** Get human-readable tier label */
+export function getFastPayTierLabel(tier: FastPayTier): string {
+  switch (tier) {
+    case 'instant': return 'Instant Pay';
+    case 'fast_pay': return 'Fast Pay';
+    case 'standard': return 'Standard Payout';
+  }
+}
+
+/** Get tier description */
+export function getFastPayTierDescription(tier: FastPayTier): string {
+  switch (tier) {
+    case 'instant':
+      return 'Instant payout requests • Multiple cashouts per week • Priority support';
+    case 'fast_pay':
+      return 'Request payouts any day • Processed within 24 hours';
+    case 'standard':
+      return 'Standard payout schedule • Paid every Friday';
+  }
+}
+
+/** Get processing time description */
+export function getFastPayProcessingTime(tier: FastPayTier): string {
+  switch (tier) {
+    case 'instant': return 'Instant';
+    case 'fast_pay': return 'Within 24 hours';
+    case 'standard': return 'Every Friday';
+  }
+}
+
+/** Get max cashouts per week */
+export function getFastPayMaxCashouts(tier: FastPayTier): number {
+  switch (tier) {
+    case 'instant': return 5;
+    case 'fast_pay': return 3;
+    case 'standard': return 1;
+  }
+}
+
+/** Fast Pay fee percentage (same for all tiers) */
+export const FAST_PAY_FEE_PERCENT = 2.9;
+
+/** Minimum level for Fast Pay eligibility */
+export const FAST_PAY_MIN_LEVEL = 500;
+
+/** Minimum level for Instant Pay eligibility */
+export const INSTANT_PAY_MIN_LEVEL = 1000;
+
+/** Minimum account age in days for Fast Pay */
+export const FAST_PAY_MIN_ACCOUNT_AGE_DAYS = 30;
+
+export type PayoutMethod = 'cash_app' | 'paypal' | 'venmo' | 'ach' | 'check';
 
 export type CashoutStatus = 'pending' | 'processing' | 'approved' | 'completed' | 'denied' | 'submitted';
 

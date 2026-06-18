@@ -3521,7 +3521,10 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     };
   }, [challengerStream?.id, opponentStream?.id]);
 
-  // Fallback poll — 3s during active battle, 10s otherwise
+  // Fallback poll — 15s during active battle, 30s otherwise.
+  // Score updates are handled in realtime via useBattleRealtime broadcasts,
+  // so this is only a safety net. Keep it infrequent to avoid overwriting
+  // optimistic/realtime score updates with stale DB data.
   useEffect(() => {
     if (!battleId) return;
     const interval = setInterval(async () => {
@@ -3541,15 +3544,36 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
               prev.started_at !== data.started_at ||
               prev.ends_at !== data.ends_at
             ) {
-              return data;
+              return { ...prev, ...data };
             }
             return prev;
           });
         }
       } catch {}
-    }, battle?.status === 'active' ? 3000 : 10000);
+    }, battle?.status === 'active' ? 15000 : 30000);
     return () => clearInterval(interval);
   }, [battleId, battle?.status]);
+
+  // Listen for optimistic score updates from the local gift sender.
+  // This makes the score bar and jail bars update instantly for the
+  // user who sent the gift, without waiting for any poll or broadcast.
+  useEffect(() => {
+    if (!battleId) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail || detail.battleId !== battleId) return;
+      setBattle((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          score_challenger: detail.score_challenger ?? prev.score_challenger,
+          score_opponent: detail.score_opponent ?? prev.score_opponent,
+        };
+      });
+    };
+    window.addEventListener('battle-score-optimistic', handler);
+    return () => window.removeEventListener('battle-score-optimistic', handler);
+  }, [battleId]);
 
 
   // Timer Logic - 3 minutes with 10 second sudden death
