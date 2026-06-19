@@ -681,7 +681,7 @@ function LeftSidebar({ liveItems, user }: { liveItems: LiveItem[]; user: any }) 
     const fetchTrending = async () => {
       try {
         const { data, error } = await supabase
-          .from('wall_posts')
+          .from('troll_wall_posts')
           .select('content')
           .limit(100)
           .order('created_at', { ascending: false })

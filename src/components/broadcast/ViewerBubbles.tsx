@@ -123,7 +123,6 @@ function ViewerBubbles({ streamId, maxVisible = 50, className, viewers: viewerOv
             <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border border-black" />
           </div>
         ))}
-        </AnimatePresence>
       </div>
 
       {/* More viewers indicator */}

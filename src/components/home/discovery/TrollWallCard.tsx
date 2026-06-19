@@ -67,7 +67,7 @@ export default function TrollWallCard({ post, onClick, className }: TrollWallCar
             className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 hover:ring-purple-400/50 transition-all"
           >
             {post.avatar_url ? (
-              <img src={post.avatar_url} alt="" className="w-full h-full object-cover" />
+              <ProfileFrame frame={useUserFrame(post.user_id)} avatarUrl={post.avatar_url} username={post.username || 'User'} size="xs" fillParent />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-pink-500 to-purple-500 flex items-center justify-center">
                 <span className="text-[8px] font-bold text-white">

@@ -6,8 +6,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '../lib/store'
 import { doesUserProfileExist, supabase } from '../lib/supabase'
 import ProfileFrame from '@/components/profile/ProfileFrame'
-import { useProfileFrameStore } from '@/stores/useProfileFrameStore'
-import { getFrameById } from '@/config/profileFrames'
+import { useUserFrame } from '@/hooks/useUserFrame'
 
 import ProfileDropdown from './ui/ProfileDropdown'
 import PresidentialToolsModal from './PresidentialToolsModal'
@@ -18,8 +17,7 @@ import GlobalTicker from './header/GlobalTicker'
 
 const Header = () => {
   const { user, profile } = useAuthStore()
-  const { equippedFrame: storeFrame } = useProfileFrameStore()
-  const headerFrame = storeFrame || (profile?.active_frame_id ? getFrameById(profile.active_frame_id) : null)
+  const headerFrame = useUserFrame(user?.id)
   const navigate = useNavigate()
 
   const [unreadNotifications, setUnreadNotifications] = useState(0)
@@ -430,16 +428,16 @@ const Header = () => {
 
               <button
                 onClick={handleProfileClick}
-                className="md:hidden flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-troll-neon-gold to-troll-neon-orange text-troll-dark-bg border-2 border-troll-neon-gold/50 shadow-lg shadow-troll-neon-gold/20 active:scale-95 transition-all duration-300 overflow-hidden"
+                className="md:hidden flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-troll-neon-gold to-troll-neon-orange text-troll-dark-bg border-2 border-troll-neon-gold/50 shadow-lg shadow-troll-neon-gold/20 active:scale-95 transition-all duration-300"
                 aria-label="Open profile"
                 type="button"
+                style={{ overflow: 'visible' }}
               >
                 <ProfileFrame
                   frame={headerFrame}
                   avatarUrl={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.username || 'user'}`}
-                  size="xs"
+                  size="md"
                   username={profile?.username || ''}
-                  fillParent
                 />
               </button>
             </>

@@ -36,6 +36,8 @@ import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersMo
 import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton'
 import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
+import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
+import SaveBroadcastButton from '../../components/broadcast/SaveBroadcastButton'
 
 import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
 import { getBroadcastTheme, DEFAULT_BROADCAST_THEME_ID } from '@/lib/broadcastThemes'
@@ -895,6 +897,130 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     }
   }
 
+  const handleLiveKitParticipantConnected = useCallback((participant: RemoteParticipant) => {
+    if (!participant?.identity) return
+    setRemoteParticipants(prev => {
+      if (prev.get(participant.identity) === participant) return prev
+      const next = new Map(prev)
+      next.set(participant.identity, participant)
+      return next
+    })
+  }, [])
+
+  const handleLiveKitParticipantDisconnected = useCallback((participant: RemoteParticipant) => {
+    const identity = participant.identity
+    setRemoteParticipants(prev => {
+      if (!prev.has(identity)) return prev
+      const next = new Map(prev)
+      next.delete(identity)
+      return next
+    })
+  }, [])
+
+  const handleLiveKitTrackSubscribed = useCallback((_track: any, _publication: any, participant: RemoteParticipant) => {
+    DEBUG_COUNTERS.trackSubscribedCount++
+    if (!participant?.identity) return
+    setRemoteParticipants(prev => {
+      if (prev.get(participant.identity) === participant) return prev
+      const next = new Map(prev)
+      next.set(participant.identity, participant)
+      return next
+    })
+  }, [])
+
+  const handleLiveKitTrackUnsubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
+    DEBUG_COUNTERS.trackUnsubscribedCount++
+    const remainingVideo = Array.from((participant.videoTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
+    const remainingAudio = Array.from((participant.audioTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
+    if (!remainingVideo && !remainingAudio) {
+      setRemoteParticipants(prev => {
+        if (!prev.has(participant.identity)) return prev
+        const next = new Map(prev)
+        next.delete(participant.identity)
+        return next
+      })
+    }
+  }, [])
+
+  const attachLiveKitHandlers = useCallback((room: Room) => {
+    room.off(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
+    room.off(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
+    room.off(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
+    room.off(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
+    room.on(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
+    room.on(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
+    room.on(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
+    room.on(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
+  }, [
+    handleLiveKitParticipantConnected,
+    handleLiveKitParticipantDisconnected,
+    handleLiveKitTrackSubscribed,
+    handleLiveKitTrackUnsubscribed,
+  ])
+
+  const detachLiveKitHandlers = useCallback((room: Room) => {
+    room.off(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
+    room.off(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
+    room.off(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
+    room.off(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
+  }, [
+    handleLiveKitParticipantConnected,
+    handleLiveKitParticipantDisconnected,
+    handleLiveKitTrackSubscribed,
+    handleLiveKitTrackUnsubscribed,
+  ])
+
+  // ── Complete LiveKit room teardown ──────────────────────────────────
+  // Unpublishes all tracks, detaches event handlers, disconnects the
+  // socket, and nulls the ref. Use this everywhere the room must be
+  // fully torn down (stream end, viewer leave, realtime ended, unload).
+  const disconnectLiveKitRoom = useCallback(() => {
+    const room = roomRef.current
+    if (!room) return
+
+    // 1) Detach our custom handlers first so no events fire during teardown
+    try {
+      detachLiveKitHandlers(room)
+    } catch (e) {
+      console.warn('[BroadcastPage] Error detaching LiveKit handlers:', e)
+    }
+
+    // 2) Unpublish all local tracks so remote participants see us leave cleanly
+    if (room.localParticipant) {
+      const allPubs = [
+        ...room.localParticipant.videoTrackPublications.values(),
+        ...room.localParticipant.audioTrackPublications.values(),
+      ]
+      for (const pub of allPubs) {
+        try {
+          if (pub.track) {
+            room.localParticipant.unpublishTrack(pub.track).catch(() => {})
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    // 3) Remove all LiveKit room-level listeners
+    try {
+      room.removeAllListeners()
+    } catch (e) {
+      // ignore
+    }
+
+    // 4) Disconnect the WebSocket
+    try {
+      room.disconnect().catch(() => {})
+    } catch (e) {
+      // ignore
+    }
+
+    // 5) Null the ref so no stale references remain
+    roomRef.current = null
+    livekitRoomDisconnectedCountRef.current += 1
+  }, [detachLiveKitHandlers])
+
   // Cleanup handler for page unload - full LiveKit teardown when browser closes
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -1718,57 +1844,6 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
       updateStreamActivity()
     }, [streamId, resolveGiftAmount, resolveGiftName, supabase]);
 
-  // ── Complete LiveKit room teardown ──────────────────────────────────
-  // Unpublishes all tracks, detaches event handlers, disconnects the
-  // socket, and nulls the ref. Use this everywhere the room must be
-  // fully torn down (stream end, viewer leave, realtime ended, unload).
-  const disconnectLiveKitRoom = useCallback(() => {
-    const room = roomRef.current
-    if (!room) return
-
-    // 1) Detach our custom handlers first so no events fire during teardown
-    try {
-      detachLiveKitHandlers(room)
-    } catch (e) {
-      console.warn('[BroadcastPage] Error detaching LiveKit handlers:', e)
-    }
-
-    // 2) Unpublish all local tracks so remote participants see us leave cleanly
-    if (room.localParticipant) {
-      const allPubs = [
-        ...room.localParticipant.videoTrackPublications.values(),
-        ...room.localParticipant.audioTrackPublications.values(),
-      ]
-      for (const pub of allPubs) {
-        try {
-          if (pub.track) {
-            room.localParticipant.unpublishTrack(pub.track).catch(() => {})
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-    }
-
-    // 3) Remove all LiveKit room-level listeners
-    try {
-      room.removeAllListeners()
-    } catch (e) {
-      // ignore
-    }
-
-    // 4) Disconnect the WebSocket
-    try {
-      room.disconnect().catch(() => {})
-    } catch (e) {
-      // ignore
-    }
-
-    // 5) Null the ref so no stale references remain
-    roomRef.current = null
-    livekitRoomDisconnectedCountRef.current += 1
-  }, [detachLiveKitHandlers])
-
   const stopLocalTracks = useCallback(() => {
     if (localTracks) {
       localTracks.forEach((track) => {
@@ -1908,8 +1983,10 @@ useEffect(() => {
    // Quick Coin Store
    const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false)
 
+   // Broadcast recording
+   const recorder = useBroadcastRecorder()
 
-  const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
+   const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
     streamId: streamId || '',
     userId: user?.id,
     isHost,
@@ -2899,86 +2976,6 @@ useStreamRealtime(streamId, {
     };
     fetchMods();
   }, [stream?.user_id]);
-
-  const handleLiveKitParticipantConnected = useCallback((participant: RemoteParticipant) => {
-    if (!participant?.identity) return
-    setRemoteParticipants(prev => {
-      // Skip update if participant already in map with same reference
-      if (prev.get(participant.identity) === participant) return prev;
-      const next = new Map(prev)
-      next.set(participant.identity, participant)
-      return next
-    })
-  }, [])
-
-  const handleLiveKitParticipantDisconnected = useCallback((participant: RemoteParticipant) => {
-    const identity = participant.identity
-    setRemoteParticipants(prev => {
-      // Skip update if participant not in map
-      if (!prev.has(identity)) return prev;
-      const next = new Map(prev)
-      next.delete(identity)
-      return next
-    })
-  }, [])
-
-  const handleLiveKitTrackSubscribed = useCallback((_track: any, _publication: any, participant: RemoteParticipant) => {
-    DEBUG_COUNTERS.trackSubscribedCount++
-    if (!participant?.identity) return
-
-    setRemoteParticipants(prev => {
-      // Skip update if participant already in map with same reference
-      if (prev.get(participant.identity) === participant) return prev;
-      const next = new Map(prev)
-      next.set(participant.identity, participant)
-      return next
-    })
-  }, [])
-
-  const handleLiveKitTrackUnsubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
-    DEBUG_COUNTERS.trackUnsubscribedCount++
-    const remainingVideo = Array.from((participant.videoTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
-    const remainingAudio = Array.from((participant.audioTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
-
-    if (!remainingVideo && !remainingAudio) {
-      setRemoteParticipants(prev => {
-        // Skip update if participant not in map
-        if (!prev.has(participant.identity)) return prev;
-        const next = new Map(prev)
-        next.delete(participant.identity)
-        return next
-      })
-    }
-  }, [])
-
-  const attachLiveKitHandlers = useCallback((room: Room) => {
-    room.off(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
-    room.off(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
-    room.off(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
-    room.off(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
-
-    room.on(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
-    room.on(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
-    room.on(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
-    room.on(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
-  }, [
-    handleLiveKitParticipantConnected,
-    handleLiveKitParticipantDisconnected,
-    handleLiveKitTrackSubscribed,
-    handleLiveKitTrackUnsubscribed,
-  ])
-
-  const detachLiveKitHandlers = useCallback((room: Room) => {
-    room.off(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
-    room.off(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
-    room.off(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
-    room.off(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
-  }, [
-    handleLiveKitParticipantConnected,
-    handleLiveKitParticipantDisconnected,
-    handleLiveKitTrackSubscribed,
-    handleLiveKitTrackUnsubscribed,
-  ])
 
   useEffect(() => {
     // Allow anonymous viewers to watch without authentication.
@@ -4190,6 +4187,15 @@ const handleLike = useCallback(async () => {
         }
       } catch (forfeitErr) {
         console.warn('[handleStreamEnd] forfeit_random_battle failed:', forfeitErr);
+      }
+    }
+
+    // Stop recording if active
+    if (recorder.isRecording) {
+      try {
+        await recorder.stopRecording()
+      } catch (recErr) {
+        console.warn('[handleStreamEnd] Failed to stop recording:', recErr)
       }
     }
 
@@ -5607,6 +5613,18 @@ const handleLike = useCallback(async () => {
                 onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
                 isHost={isHost}
                 onInviteFollowers={handleInviteFollowers}
+                saveBroadcastButton={
+                  stream?.id ? (
+                    <SaveBroadcastButton
+                      isRecording={recorder.isRecording}
+                      isUploading={recorder.isUploading}
+                      recordingDuration={recorder.recordingDuration}
+                      streamId={stream.id}
+                      onStartRecording={recorder.startRecording}
+                      onStopRecording={recorder.stopRecording}
+                    />
+                  ) : undefined
+                }
               />
 
           

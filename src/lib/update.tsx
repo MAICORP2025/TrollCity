@@ -450,6 +450,9 @@ function GamingSetupPageInner() {
   const handleEndStream = useCallback(async () => {
     if (!streamData?.id) { toast.error('No active stream to end'); return }
     try {
+      if (recorder.isRecording) {
+        try { await recorder.stopRecording() } catch (recErr) { console.warn('[update.tsx] Failed to stop recording:', recErr) }
+      }
       await supabase.functions.invoke('agora-stream', { body: { action: 'endStream', sessionId: agoraSessionId } })
       const { error } = await supabase.from('streams').update({ status: 'ended', is_live: false, ended_at: new Date().toISOString() }).eq('id', streamData.id)
       if (error) throw error
@@ -502,7 +505,18 @@ function GamingSetupPageInner() {
       onEndStream={() => void handleEndStream()}
       chatPanel={streamData?.id ? <GamingChat streamId={streamData.id} /> : null}
       cameraPreview={undefined}
-      saveBroadcastButton={<SaveBroadcastButton />}
+      saveBroadcastButton={
+        streamData?.id ? (
+          <SaveBroadcastButton
+            isRecording={recorder.isRecording}
+            isUploading={recorder.isUploading}
+            recordingDuration={recorder.recordingDuration}
+            streamId={streamData.id}
+            onStartRecording={recorder.startRecording}
+            onStopRecording={recorder.stopRecording}
+          />
+        ) : undefined
+      }
     />
   )
 }

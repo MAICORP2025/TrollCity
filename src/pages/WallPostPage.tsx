@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { 
   MessageSquare, Heart, Video, Sword, Users, Trophy, 
-  Zap, ExternalLink, Share2, ArrowLeft
+  Zap, ExternalLink, Share2, ArrowLeft, PlayCircle
 } from 'lucide-react'
 import { WallPost, WallPostType } from '../types/trollWall'
 import ClickableUsername from '../components/ClickableUsername'
@@ -19,6 +19,7 @@ export default function WallPostPage() {
   const [post, setPost] = useState<WallPost | null>(null)
   const [loading, setLoading] = useState(true)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [streamStatus, setStreamStatus] = useState<'live' | 'ended' | 'unknown' | null>(null)
 
   useEffect(() => {
     const loadPost = async () => {
@@ -69,6 +70,31 @@ export default function WallPostPage() {
 
     loadPost()
   }, [postId, user?.id, navigate])
+
+  // Check stream status when post has a stream_id
+  useEffect(() => {
+    if (!post?.metadata?.stream_id) {
+      setStreamStatus(null)
+      return
+    }
+    const checkStreamStatus = async () => {
+      try {
+        const { data } = await supabase
+          .from('streams')
+          .select('status, ended_at')
+          .eq('id', post.metadata!.stream_id)
+          .maybeSingle()
+        if (data) {
+          setStreamStatus(data.status === 'ended' ? 'ended' : 'live')
+        } else {
+          setStreamStatus('unknown')
+        }
+      } catch {
+        setStreamStatus('unknown')
+      }
+    }
+    checkStreamStatus()
+  }, [post?.metadata?.stream_id])
 
   const getPostIcon = (type: WallPostType) => {
     switch (type) {
@@ -185,14 +211,29 @@ export default function WallPostPage() {
           <div className="mb-4">
             <p className="text-white whitespace-pre-wrap break-words text-lg">{parseTextWithLinks(post.content)}</p>
             
-            {/* Stream Link */}
-            {post.metadata?.stream_id && (
+            {/* Stream Link — supports both live and ended streams */}
+            {post.metadata?.stream_id && streamStatus && streamStatus !== 'unknown' && (
               <div 
                 className="mt-3 flex items-center gap-2 text-purple-400 text-sm cursor-pointer hover:underline"
-                onClick={() => navigate(`/stream/${post.metadata.stream_id}`)}
+                onClick={() => {
+                  if (streamStatus === 'ended') {
+                    navigate(`/watch/${post.metadata.stream_id}`)
+                  } else {
+                    navigate(`/stream/${post.metadata.stream_id}`)
+                  }
+                }}
               >
-                <ExternalLink className="w-4 h-4" />
-                <span>Watch Stream</span>
+                {streamStatus === 'ended' ? (
+                  <>
+                    <PlayCircle className="w-4 h-4" />
+                    <span>Watch Replay</span>
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Watch Stream</span>
+                  </>
+                )}
               </div>
             )}
 

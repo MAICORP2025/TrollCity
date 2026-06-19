@@ -26,18 +26,18 @@ export interface CoinPackage {
 }
 
 export const COIN_PACKAGES: CoinPackage[] = [
-  { id: 'pkg-7500', coins: 7500, usdPrice: 25, label: 'Starter Pack', description: '7,500 Coins' },
-  { id: 'pkg-15000', coins: 15000, usdPrice: 50, label: 'Bronze Pack', description: '15,000 Coins' },
-  { id: 'pkg-30000', coins: 30000, usdPrice: 150, label: 'Silver Pack', description: '30,000 Coins' },
-  { id: 'pkg-60000', coins: 60000, usdPrice: 300, label: 'Gold Pack', description: '60,000 Coins' },
-  { id: 'pkg-120000', coins: 120000, usdPrice: 600, label: 'Platinum Pack', description: '120,000 Coins' },
-  { id: 'pkg-200000', coins: 200000, usdPrice: 1000, label: 'Diamond Pack', description: '200,000 Coins • Manual Review' },
-  { id: 'pkg-400000', coins: 400000, usdPrice: 2000, label: 'Legendary Pack', description: '400,000 Coins • Manual Review' },
-  { id: 'pkg-600000', coins: 600000, usdPrice: 3000, label: 'Empire Pack', description: '600,000 Coins • Manual Review' },
-  { id: 'pkg-1000000', coins: 1000000, usdPrice: 5000, label: 'Titan Pack', description: '1,000,000 Coins • Manual Review' },
-  { id: 'pkg-1500000', coins: 1500000, usdPrice: 7500, label: 'Mythic Pack', description: '1,500,000 Coins • Manual Review' },
-  { id: 'pkg-2000000', coins: 2000000, usdPrice: 10000, label: 'Immortal Pack', description: '2,000,000 Coins • Manual Review' },
-  { id: 'pkg-3000000', coins: 3000000, usdPrice: 15000, label: 'Divine Pack', description: '3,000,000 Coins • Manual Review' },
+  { id: 'pkg-100', coins: 100, usdPrice: 1.00, label: 'Micro Pack', description: '100 Coins' },
+  { id: 'pkg-300', coins: 300, usdPrice: 3.00, label: 'Starter Pack', description: '300 Coins' },
+  { id: 'pkg-500', coins: 500, usdPrice: 5.00, label: 'Small Boost', description: '500 Coins' },
+  { id: 'pkg-1000', coins: 1000, usdPrice: 10.00, label: 'Casual Pack', description: '1,000 Coins' },
+  { id: 'pkg-2500', coins: 2500, usdPrice: 25.00, label: 'Bronze Pack', description: '2,500 Coins' },
+  { id: 'pkg-5000', coins: 5000, usdPrice: 50.00, label: 'Silver Pack', description: '5,000 Coins' },
+  { id: 'pkg-10000', coins: 10000, usdPrice: 100.00, label: 'Gold Pack', description: '10,000 Coins' },
+  { id: 'pkg-15000', coins: 15000, usdPrice: 150.00, label: 'Platinum Pack', description: '15,000 Coins' },
+  { id: 'pkg-25000', coins: 25000, usdPrice: 250.00, label: 'Diamond Pack', description: '25,000 Coins' },
+  { id: 'pkg-50000', coins: 50000, usdPrice: 500.00, label: 'Legendary Pack', description: '50,000 Coins' },
+  { id: 'pkg-100000', coins: 100000, usdPrice: 1000.00, label: 'Titan Pack', description: '100,000 Coins' },
+  { id: 'pkg-250000', coins: 250000, usdPrice: 2500.00, label: 'Immortal Pack', description: '250,000 Coins' },
 ];
 
 // Exchange rate: 100 coins per $1 (all packages)

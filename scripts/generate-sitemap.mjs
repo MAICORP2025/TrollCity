@@ -245,7 +245,7 @@ try {
 console.log('📊 Fetching wall posts...')
 try {
   const { data: posts, error } = await supabase
-    .from('wall_posts')
+    .from('troll_wall_posts')
     .select('id, updated_at, created_at')
     .eq('is_public', true)
     .order('created_at', { ascending: false })

@@ -70,6 +70,8 @@ import {
   reserveAnonymousChatSlot,
 } from '@/lib/anonymousIdentity'
 import useSEO from '@/hooks/useSEO'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -361,7 +363,9 @@ export default function HytroGamingViewer() {
   }, [enteredPassword, streamId])
 
   // SEO meta tags for stream page (accessible to Google for indexing)
-  const streamUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://maitrollcity.com'}/gaming/watch/${streamId}`
+  const streamUrl = currentStream
+    ? `${typeof window !== 'undefined' ? window.location.origin : 'https://maitrollcity.com'}/live/${encodeURIComponent(currentStream.broadcaster_name || streamId)}`
+    : `${typeof window !== 'undefined' ? window.location.origin : 'https://maitrollcity.com'}/gaming/watch/${streamId}`
   useSEO({
     title: currentStream
       ? `${currentStream.broadcaster_name || 'Gamer'} is LIVE on HytroGaming | Troll City`
@@ -755,11 +759,11 @@ export default function HytroGamingViewer() {
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-xl border border-cyan-300/30 bg-cyan-400/10">
+              <div className="h-9 w-9 shrink-0 rounded-xl border border-cyan-300/30 bg-cyan-400/10" style={{ overflow: 'visible' }}>
                 {currentStream.broadcaster_avatar ? (
-                  <img src={currentStream.broadcaster_avatar} alt="" className="h-full w-full object-cover" />
+                  <ProfileFrame frame={useUserFrame(currentStream.broadcaster_id)} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="xs" fillParent />
                 ) : (
-                  <div className="grid h-full w-full place-items-center">
+                  <div className="grid h-full w-full place-items-center rounded-xl">
                     <Gamepad2 className="h-5 w-5 text-cyan-300" />
                   </div>
                 )}
@@ -804,7 +808,7 @@ export default function HytroGamingViewer() {
             {/* Streamer info overlay — bottom left */}
             <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2.5 rounded-xl border border-white/10 bg-black/60 px-3 py-2 backdrop-blur-xl">
               {currentStream.broadcaster_avatar ? (
-                <img src={currentStream.broadcaster_avatar} alt="" className="h-8 w-8 rounded-lg border border-purple-300/30 object-cover" />
+                <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(currentStream.broadcaster_id)} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="xs" /></div>
               ) : (
                 <div className="grid h-8 w-8 place-items-center rounded-lg border border-purple-300/30 bg-purple-500/20 text-[10px] font-black">
                   {(currentStream.broadcaster_name || 'H').slice(0, 2).toUpperCase()}
@@ -863,7 +867,7 @@ export default function HytroGamingViewer() {
                   <div key={supporter.rank} className="flex items-center gap-2">
                     <span className="text-xs font-bold text-slate-500">{supporter.rank}.</span>
                     {supporter.avatar_url ? (
-                      <img src={supporter.avatar_url} alt="" className="h-6 w-6 rounded-lg object-cover" />
+                      <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(supporter.user_id)} avatarUrl={supporter.avatar_url} username={supporter.name} size="xs" /></div>
                     ) : (
                       <div className="grid h-6 w-6 place-items-center rounded-lg bg-purple-500/20 text-[8px] font-black">
                         {supporter.name.slice(0, 2).toUpperCase()}
@@ -894,7 +898,7 @@ export default function HytroGamingViewer() {
             <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">About Creator</p>
             <div className="flex items-center gap-3">
               {currentStream.broadcaster_avatar ? (
-                <img src={currentStream.broadcaster_avatar} alt="" className="h-12 w-12 rounded-xl border border-purple-300/30 object-cover" />
+                <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(currentStream.broadcaster_id)} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="sm" /></div>
               ) : (
                 <div className="grid h-12 w-12 place-items-center rounded-xl border border-purple-300/30 bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black">
                   {(currentStream.broadcaster_name || 'H').slice(0, 2).toUpperCase()}

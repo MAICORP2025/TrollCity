@@ -2245,7 +2245,7 @@ useEffect(() => {
                     amount: fee,
                     type: 'storage_purchase',
                     description: `Storage upgrade: ${STORAGE_TIERS[tierIndex].label}`,
-                    metadata: { tier_index: tierIndex, tier_label: STORAGE_TIERS[tierIndex].label, bytes_granted: STORAGE_TIERS[tierIndex].end },
+                     metadata: { tier_index: tierIndex, tier_label: STORAGE_TIERS[tierIndex].label, bytes_granted: STORAGE_TIERS[tierIndex].storageBytes },
                     useCredit,
                     supabaseClient: supabase,
                   });
@@ -2416,97 +2416,372 @@ useEffect(() => {
 }
 
 const STORAGE_TIERS = [
-  { start: 0, end: 10 * 1024 * 1024 * 1024, fee: 50, label: '0–10 GB', description: 'Starter tier — basic stream recordings' },
-  { start: 10 * 1024 * 1024 * 1024, end: 25 * 1024 * 1024 * 1024, fee: 100, label: '10–25 GB', description: 'Regular streamer — more room for archives' },
-  { start: 25 * 1024 * 1024 * 1024, end: 50 * 1024 * 1024 * 1024, fee: 250, label: '25–50 GB', description: 'Power user — gaming clips + broadcasts' },
-  { start: 50 * 1024 * 1024 * 1024, end: 100 * 1024 * 1024 * 1024, fee: 500, label: '50–100 GB', description: 'Heavy creator — full archive access' },
-  { start: 100 * 1024 * 1024 * 1024, end: null, fee: 1000, label: '100 GB+', description: 'Unlimited tier — no hard cap' },
+  { index: 0, id: 'starter',    label: '25 GB',   shortLabel: 'Starter',   storageBytes: 25 * 1024 * 1024 * 1024,  monthlyFee: 900,  description: 'For casual streamers — save a few broadcasts',                 features: ['25 GB recording storage','~80 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
+  { index: 1, id: 'basic',      label: '50 GB',   shortLabel: 'Basic',     storageBytes: 50 * 1024 * 1024 * 1024,  monthlyFee: 1500, description: 'For regular streamers — save weekly broadcasts',              features: ['50 GB recording storage','~160 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
+  { index: 2, id: 'standard',   label: '100 GB',  shortLabel: 'Standard',  storageBytes: 100 * 1024 * 1024 * 1024, monthlyFee: 3000, description: 'For daily streamers — keep a full month of content',          features: ['100 GB recording storage','~320 hours of recordings','30-day auto-delete','Manual save to profile','Priority support'], highlight: true },
+  { index: 3, id: 'pro',        label: '200 GB',  shortLabel: 'Pro',       storageBytes: 200 * 1024 * 1024 * 1024, monthlyFee: 6500, description: 'For power users — broadcasts + gaming clips',                features: ['200 GB recording storage','~640 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included'], highlight: false },
+  { index: 4, id: 'premium',    label: '500 GB',  shortLabel: 'Premium',   storageBytes: 500 * 1024 * 1024 * 1024, monthlyFee: 9000, description: 'For heavy creators — full archive access',                    features: ['500 GB recording storage','~1,600 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history'], highlight: false },
+  { index: 5, id: 'unlimited',  label: '1 TB',    shortLabel: 'Unlimited', storageBytes: 1024 * 1024 * 1024 * 1024, monthlyFee: 18000, description: 'Maximum storage — no hard cap on your archives',             features: ['1 TB+ recording storage','No recording limit','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history','Early access to new features'], highlight: false },
+];
+
+const STORAGE_TOP_UPS = [
+  { id: 'small',    label: 'Small',    gb: 10,  coins: 300,  description: '+10 GB' },
+  { id: 'medium',   label: 'Medium',   gb: 25,  coins: 600,  description: '+25 GB' },
+  { id: 'large',    label: 'Large',    gb: 50,  coins: 1000, description: '+50 GB' },
+  { id: 'xl',       label: 'XL',       gb: 100, coins: 1800, description: '+100 GB' },
+  { id: 'ultimate', label: 'Ultimate', gb: 500, coins: 8000, description: '+500 GB' },
 ];
 
 function StorageTab({ userId, trollCoins, onPurchase }) {
   const [purchasing, setPurchasing] = useState(null);
+  const [topUpPurchasing, setTopUpPurchasing] = useState(null);
+  const [replayPurchasing, setReplayPurchasing] = useState(false);
+  const [replayAmount, setReplayAmount] = useState(100);
+  const [storageStatus, setStorageStatus] = useState(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
 
-  const handleBuy = async (tierIndex) => {
+  const fetchStatus = useCallback(async () => {
+    if (!userId) return;
+    setLoadingStatus(true);
+    try {
+      const { data, error } = await supabase.rpc('get_user_storage_replay_status', { p_user_id: userId });
+      if (!error && data) setStorageStatus(data);
+    } catch (err) {
+      console.error('[StorageTab] Failed to fetch status:', err);
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000);
+    return () => clearInterval(interval);
+  }, [fetchStatus]);
+
+  const handleBuyPlan = async (tierIndex) => {
     const tier = STORAGE_TIERS[tierIndex];
-    if (trollCoins < tier.fee) {
-      toast.error(`Not enough Troll Coins. Need ${tier.fee}, have ${trollCoins}`);
+    if (trollCoins < tier.monthlyFee) {
+      toast.error(`Not enough Troll Coins. Need ${tier.monthlyFee.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
       return;
     }
     setPurchasing(tierIndex);
     try {
-      await onPurchase(tierIndex, tier.fee);
+      await onPurchase(tierIndex, tier.monthlyFee);
+      await fetchStatus();
     } finally {
       setPurchasing(null);
     }
   };
 
+  const handleBuyTopUp = async (topUp) => {
+    if (trollCoins < topUp.coins) {
+      toast.error(`Not enough Troll Coins. Need ${topUp.coins.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
+      return;
+    }
+    if (!storageStatus?.has_plan) {
+      toast.error('You need an active storage plan before purchasing top-ups.');
+      return;
+    }
+    setTopUpPurchasing(topUp.id);
+    try {
+      const { data, error } = await supabase.rpc('purchase_storage_top_up', {
+        p_user_id: userId,
+        p_gb_amount: topUp.gb,
+        p_coins_cost: topUp.coins,
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Added ${topUp.description} to your storage!`);
+        await fetchStatus();
+      } else {
+        toast.error(data?.error || 'Purchase failed');
+      }
+    } catch (err) {
+      toast.error(err?.message || 'Purchase failed');
+    } finally {
+      setTopUpPurchasing(null);
+    }
+  };
+
+  const handleBuyReplay = async () => {
+    if (replayAmount < 50) {
+      toast.error('Minimum purchase is 50 coins.');
+      return;
+    }
+    if (trollCoins < replayAmount) {
+      toast.error(`Not enough Troll Coins. Need ${replayAmount.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
+      return;
+    }
+    setReplayPurchasing(true);
+    try {
+      const { data, error } = await supabase.rpc('add_replay_balance', {
+        p_user_id: userId,
+        p_coins_amount: replayAmount,
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Added ${replayAmount.toLocaleString()} coins to replay balance!`);
+        await fetchStatus();
+      } else {
+        toast.error(data?.error || 'Purchase failed');
+      }
+    } catch (err) {
+      toast.error(err?.message || 'Purchase failed');
+    } finally {
+      setReplayPurchasing(false);
+    }
+  };
+
+  const formatGB = (bytes) => {
+    if (!bytes) return '0 GB';
+    const gb = bytes / (1024 * 1024 * 1024);
+    return `${gb.toFixed(1)} GB`;
+  };
+
+  const currentPlanIndex = storageStatus?.has_plan ? STORAGE_TIERS.findIndex(t => t.label === storageStatus.plan_label) : -1;
+  const isRestricted = storageStatus?.replay_status === 'restricted';
+  const isStorageFull = storageStatus?.storage_percentage >= 100;
+
   return (
     <div className="animate-fadeIn">
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-500/10 border border-cyan-400/30">
           <HardDrive className="h-6 w-6 text-cyan-400" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-white">Cloud Storage</h2>
-          <p className="text-sm text-slate-400">Upgrade your storage for stream recordings, gaming clips, and media</p>
+          <h2 className="text-xl font-bold text-white">Storage & Replay</h2>
+          <p className="text-sm text-slate-400">Manage your recording storage and replay balance</p>
         </div>
       </div>
 
-      <div className="mb-6 p-4 bg-cyan-500/5 border border-cyan-400/20 rounded-xl">
-        <div className="flex items-center gap-2 text-sm text-slate-300">
-          <AlertTriangle className="h-4 w-4 text-amber-400" />
-          <span>Storage tiers are recurring monthly charges deducted from your Troll Coin balance.</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {STORAGE_TIERS.map((tier, idx) => {
-          const isCurrent = idx === 0;
-          const canAfford = trollCoins >= tier.fee;
-          const isPurchasingThis = purchasing === idx;
-
-          return (
-            <div
-              key={tier.label}
-              className={`relative rounded-2xl border p-5 transition-all ${
-                isCurrent
-                  ? 'border-cyan-400/40 bg-cyan-500/5'
-                  : 'border-white/10 bg-white/[0.02] hover:border-cyan-400/20'
-              }`}
-            >
-              {isCurrent && (
-                <div className="absolute -top-3 left-4 rounded-full bg-cyan-500 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
-                  Current
+      {/* Status Dashboard */}
+      {!loadingStatus && storageStatus && (
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Storage Status */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <HardDrive className="h-4 w-4 text-cyan-400" />
+                Storage
+              </h3>
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isStorageFull ? 'bg-red-500/20 text-red-300' : 'bg-cyan-500/20 text-cyan-300'}`}>
+                {storageStatus.has_plan ? storageStatus.plan_label : 'No Plan'}
+              </span>
+            </div>
+            {storageStatus.has_plan ? (
+              <>
+                <div className="flex items-baseline gap-1 mb-2">
+                  <span className="text-2xl font-black text-white">{formatGB(storageStatus.total_used_bytes)}</span>
+                  <span className="text-sm text-slate-400">/ {formatGB(storageStatus.total_limit_bytes)}</span>
                 </div>
-              )}
-
-              <div className="mb-3">
-                <div className="text-lg font-black text-white">{tier.label}</div>
-                <div className="text-xs text-slate-400 mt-1">{tier.description}</div>
+                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden mb-2">
+                  <div className={`h-full transition-all ${storageStatus.storage_percentage >= 80 ? 'bg-amber-400' : 'bg-cyan-400'}`} style={{ width: `${Math.min(100, storageStatus.storage_percentage)}%` }} />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span>{storageStatus.storage_percentage}% used</span>
+                  <span>{formatGB(storageStatus.total_available_bytes)} available</span>
+                </div>
+                {storageStatus.renewal_date && (
+                  <div className="mt-2 text-[10px] text-slate-500">Renews: {new Date(storageStatus.renewal_date).toLocaleDateString()}</div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-sm text-slate-400 mb-2">No active storage plan</p>
+                <p className="text-[10px] text-slate-500">Purchase a plan below to start recording</p>
               </div>
+            )}
+          </div>
 
-              <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-3xl font-black text-cyan-300">{tier.fee}</span>
-                <span className="text-xs font-bold text-slate-400">coins/mo</span>
+          {/* Replay Status */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-400" />
+                Replay Balance
+              </h3>
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isRestricted ? 'bg-red-500/20 text-red-300' : 'bg-purple-500/20 text-purple-300'}`}>
+                {isRestricted ? 'RESTRICTED' : 'Active'}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1 mb-2">
+              <span className="text-2xl font-black text-white">{storageStatus.replay_balance?.toLocaleString() || 0}</span>
+              <span className="text-sm text-slate-400">coins</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <div className="rounded-lg bg-white/5 p-2">
+                <div className="text-[10px] text-slate-500">Minutes Today</div>
+                <div className="text-sm font-bold text-white">{storageStatus.replay_minutes_today || 0}</div>
               </div>
+              <div className="rounded-lg bg-white/5 p-2">
+                <div className="text-[10px] text-slate-500">Minutes This Month</div>
+                <div className="text-sm font-bold text-white">{storageStatus.replay_minutes_month || 0}</div>
+              </div>
+              <div className="rounded-lg bg-white/5 p-2">
+                <div className="text-[10px] text-slate-500">Charged Today</div>
+                <div className="text-sm font-bold text-white">{storageStatus.replay_coins_today?.toLocaleString() || 0}</div>
+              </div>
+              <div className="rounded-lg bg-white/5 p-2">
+                <div className="text-[10px] text-slate-500">Charged This Month</div>
+                <div className="text-sm font-bold text-white">{storageStatus.replay_coins_month?.toLocaleString() || 0}</div>
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] text-slate-500 text-center">5 coins per minute watched</div>
+          </div>
+        </div>
+      )}
 
-              <button
-                onClick={() => handleBuy(idx)}
-                disabled={!canAfford || isPurchasingThis}
-                className={`w-full rounded-xl py-2.5 text-sm font-black transition ${
-                  isCurrent
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 cursor-default'
-                    : canAfford
-                      ? 'bg-cyan-500 hover:bg-cyan-400 text-white'
-                      : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/10'
+      {/* Restricted Warning */}
+      {isRestricted && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-400/20 rounded-xl">
+          <div className="flex items-start gap-2 text-sm text-red-300">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>Your replay balance is exhausted. Replay playback is disabled. Purchase more replay balance to re-enable.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Storage Plans */}
+      <div className="mb-8">
+        <h3 className="text-lg font-black text-white mb-4">Storage Plans</h3>
+        <p className="text-xs text-slate-400 mb-4">Storage plans provide capacity to save your recordings. Replay billing is separate.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {STORAGE_TIERS.map((tier, idx) => {
+            const isCurrent = currentPlanIndex === idx;
+            const canAfford = trollCoins >= tier.monthlyFee;
+            const isPurchasingThis = purchasing === idx;
+
+            return (
+              <div
+                key={tier.id}
+                className={`relative rounded-2xl border p-5 transition-all ${
+                  tier.highlight
+                    ? 'border-purple-400/50 bg-purple-500/5 ring-1 ring-purple-400/20'
+                    : isCurrent
+                      ? 'border-cyan-400/40 bg-cyan-500/5'
+                      : 'border-white/10 bg-white/[0.02] hover:border-cyan-400/20'
                 }`}
               >
-                {isPurchasingThis ? 'Processing...' : isCurrent ? 'Active Plan' : canAfford ? 'Upgrade' : `Need ${tier.fee - trollCoins} more`}
+                {tier.highlight && (
+                  <div className="absolute -top-3 left-4 rounded-full bg-purple-500 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">Recommended</div>
+                )}
+                {isCurrent && !tier.highlight && (
+                  <div className="absolute -top-3 left-4 rounded-full bg-cyan-500 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">Current</div>
+                )}
+                <div className="mb-3">
+                  <div className="text-lg font-black text-white">{tier.label}</div>
+                  <div className="text-xs text-slate-400 mt-1">{tier.description}</div>
+                </div>
+                <div className="flex items-baseline gap-1 mb-3">
+                  <span className="text-3xl font-black text-cyan-300">{tier.monthlyFee.toLocaleString()}</span>
+                  <span className="text-xs font-bold text-slate-400">coins/mo</span>
+                </div>
+                <ul className="space-y-1.5 mb-4">
+                  {tier.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-1.5 text-[11px] text-slate-300">
+                      <span className="text-cyan-400 mt-0.5">✓</span>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => handleBuyPlan(idx)}
+                  disabled={!canAfford || isPurchasingThis || isCurrent}
+                  className={`w-full rounded-xl py-2.5 text-sm font-black transition ${
+                    isCurrent ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 cursor-default'
+                    : tier.highlight ? 'bg-purple-500 hover:bg-purple-400 text-white'
+                    : canAfford ? 'bg-cyan-500 hover:bg-cyan-400 text-white'
+                    : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/10'
+                  }`}
+                >
+                  {isPurchasingThis ? 'Processing...' : isCurrent ? 'Active Plan' : canAfford ? 'Select Plan' : `Need ${(tier.monthlyFee - trollCoins).toLocaleString()} more`}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Storage Top-Ups */}
+      {storageStatus?.has_plan && (
+        <div className="mb-8">
+          <h3 className="text-lg font-black text-white mb-4">Storage Top-Ups</h3>
+          <p className="text-xs text-slate-400 mb-4">Need more storage? Add extra capacity to your current plan.</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {STORAGE_TOP_UPS.map((topUp) => {
+              const canAfford = trollCoins >= topUp.coins;
+              const isPurchasingThis = topUpPurchasing === topUp.id;
+              return (
+                <div key={topUp.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-center">
+                  <div className="text-sm font-black text-white mb-1">{topUp.label}</div>
+                  <div className="text-xs text-slate-400 mb-2">{topUp.description}</div>
+                  <div className="text-lg font-black text-cyan-300 mb-3">{topUp.coins.toLocaleString()}</div>
+                  <button
+                    onClick={() => handleBuyTopUp(topUp)}
+                    disabled={!canAfford || isPurchasingThis}
+                    className={`w-full rounded-lg py-2 text-xs font-black transition ${
+                      canAfford ? 'bg-cyan-500 hover:bg-cyan-400 text-white' : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/10'
+                    }`}
+                  >
+                    {isPurchasingThis ? 'Processing...' : canAfford ? 'Add' : `Need ${topUp.coins - trollCoins}`}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Replay Balance Purchase */}
+      <div className="mb-8">
+        <h3 className="text-lg font-black text-white mb-4">Replay Balance</h3>
+        <p className="text-xs text-slate-400 mb-4">When viewers watch your saved recordings, 5 coins per minute is deducted from your replay balance. Purchase replay balance to keep your content available.</p>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+            <div className="flex-1">
+              <div className="text-sm font-bold text-white mb-1">Current Balance: <span className="text-purple-300">{storageStatus?.replay_balance?.toLocaleString() || 0} coins</span></div>
+              <div className="text-xs text-slate-400">Rate: 5 coins per minute watched by viewers</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={replayAmount}
+                onChange={(e) => setReplayAmount(Math.max(50, parseInt(e.target.value) || 0))}
+                min={50}
+                step={50}
+                className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white text-center"
+              />
+              <span className="text-xs text-slate-400">coins</span>
+              <button
+                onClick={handleBuyReplay}
+                disabled={replayPurchasing || trollCoins < replayAmount}
+                className={`rounded-lg px-4 py-2 text-sm font-black transition ${
+                  trollCoins >= replayAmount ? 'bg-purple-500 hover:bg-purple-400 text-white' : 'bg-white/5 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                {replayPurchasing ? 'Processing...' : 'Purchase'}
               </button>
             </div>
-          );
-        })}
+          </div>
+          <div className="mt-3 flex gap-2">
+            {[100, 500, 1000, 5000].map((amount) => (
+              <button
+                key={amount}
+                onClick={() => setReplayAmount(amount)}
+                className={`rounded-lg px-3 py-1 text-[10px] font-bold transition ${
+                  replayAmount === amount ? 'bg-purple-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                }`}
+              >
+                {amount.toLocaleString()}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+
+

@@ -289,8 +289,7 @@ export default function PodcastCentral() {
 
   const checkUserCanJoinPodcast = useCallback(async () => {
     if (!user?.id) {
-      toast.error('Sign in to listen to podcasts.')
-      return false
+      return true
     }
 
     const { data: jailData, error } = await supabase

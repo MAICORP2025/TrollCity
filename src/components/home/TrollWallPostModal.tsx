@@ -8,17 +8,32 @@ import {
   Trash2,
   Share2,
   MessageSquare,
+  PlayCircle,
+  ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
+import { useNavigate } from 'react-router-dom'
 import { WallPost } from '@/types/trollWall'
 import NeonGlowUsername from '@/components/NeonGlowUsername'
 import UserNameWithAge from '@/components/UserNameWithAge'
 import { parseTextWithLinks } from '@/lib/utils'
 import { trackPrideWallAction } from '@/services/prideChallengeTracker'
 import WallShareModal from '@/components/trollWall/WallShareModal'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
+
+/** Small avatar component for reply items — extracts useUserFrame out of .map() */
+function ReplyAvatar({ userId, avatarUrl, username }: { userId?: string; avatarUrl: string; username: string }) {
+  const frame = useUserFrame(userId)
+  return (
+    <div className="h-7 w-7 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10" style={{ overflow: 'visible' }}>
+      <ProfileFrame frame={frame} avatarUrl={avatarUrl} username={username} size="xs" />
+    </div>
+  )
+}
 
 interface TrollWallPostModalProps {
   post: WallPost | null
@@ -32,12 +47,39 @@ export default function TrollWallPostModal({
   onRequireAuth,
 }: TrollWallPostModalProps) {
   const { user, isAdmin } = useAuthStore()
+  const navigate = useNavigate()
   const [replies, setReplies] = useState<WallPost[]>([])
   const [replyText, setReplyText] = useState('')
   const [replying, setReplying] = useState(false)
   const [liking, setLiking] = useState(false)
   const [sharingPost, setSharingPost] = useState<WallPost | null>(null)
   const [currentPost, setCurrentPost] = useState<WallPost | null>(post)
+  const [streamStatus, setStreamStatus] = useState<'live' | 'ended' | 'unknown' | null>(null)
+
+  // Check stream status when post has a stream_id
+  useEffect(() => {
+    if (!currentPost?.metadata?.stream_id) {
+      setStreamStatus(null)
+      return
+    }
+    const checkStreamStatus = async () => {
+      try {
+        const { data } = await supabase
+          .from('streams')
+          .select('status, ended_at')
+          .eq('id', currentPost.metadata!.stream_id)
+          .maybeSingle()
+        if (data) {
+          setStreamStatus(data.status === 'ended' ? 'ended' : 'live')
+        } else {
+          setStreamStatus('unknown')
+        }
+      } catch {
+        setStreamStatus('unknown')
+      }
+    }
+    checkStreamStatus()
+  }, [currentPost?.metadata?.stream_id])
 
   useEffect(() => {
     setCurrentPost(post)
@@ -242,6 +284,7 @@ export default function TrollWallPostModal({
             ) : currentPost.username ? (
               <NeonGlowUsername
                 username={currentPost.username}
+                userId={currentPost.user_id}
                 avatarUrl={avatarUrl}
                 profile={{
                   is_admin: currentPost.is_admin,
@@ -271,6 +314,35 @@ export default function TrollWallPostModal({
               {parseTextWithLinks(currentPost.content)}
             </p>
           </div>
+
+          {/* Stream Link — supports both live and ended streams */}
+          {currentPost.metadata?.stream_id && streamStatus && streamStatus !== 'unknown' && (
+            <div className="mt-3 px-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (streamStatus === 'ended') {
+                    navigate(`/watch/${currentPost.metadata!.stream_id}`)
+                  } else {
+                    navigate(`/stream/${currentPost.metadata!.stream_id}`)
+                  }
+                }}
+                className="flex items-center gap-2 rounded-xl border border-purple-400/20 bg-purple-500/10 px-4 py-2.5 text-sm font-semibold text-purple-300 transition hover:bg-purple-500/20 hover:text-purple-200 w-full"
+              >
+                {streamStatus === 'ended' ? (
+                  <>
+                    <PlayCircle className="w-5 h-5" />
+                    <span>Watch Replay</span>
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="w-5 h-5" />
+                    <span>Join Live Stream</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
           {/* Media */}
           {currentPost.metadata?.image_url && (
@@ -366,14 +438,7 @@ export default function TrollWallPostModal({
                       className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10">
-                          <img
-                            src={rAvatar}
-                            alt={reply.username || ''}
-                            loading="lazy"
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
+                        <ReplyAvatar userId={reply.user_id} avatarUrl={rAvatar} username={reply.username || 'User'} />
                         <UserNameWithAge
                           user={{
                             username: reply.username || 'Unknown',

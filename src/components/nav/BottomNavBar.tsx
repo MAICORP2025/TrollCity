@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProfileFrame from '@/components/profile/ProfileFrame';
-import { useProfileFrameStore } from '@/stores/useProfileFrameStore';
+import { useUserFrame } from '@/hooks/useUserFrame';
 import {
   Home,
   Video,
@@ -35,6 +35,7 @@ import {
   ClipboardList,
   MonitorDot,
   Lock,
+  Mic,
   Eye,
   DollarSign,
   Bell,
@@ -202,16 +203,16 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   const displayName = profile?.display_name || profile?.username || 'Citizen';
   const avatarUrl = profile?.avatar_url;
   const prideActive = isPrideMonth();
-  const equippedFrame = useProfileFrameStore((s) => s.equippedFrame);
+  const equippedFrame = useUserFrame(user?.id);
 
   if (collapsed) {
     return (
-      <div className="flex items-center gap-2 px-2">
-        <div className="relative h-9 w-9">
+      <div className="flex items-center gap-2 px-2" style={{ overflow: 'visible' }}>
+        <div className="relative h-10 w-10" style={{ overflow: 'visible' }}>
           {avatarUrl ? (
-            <ProfileFrame frame={equippedFrame} avatarUrl={avatarUrl} username={displayName} size="xs" fillParent />
+            <ProfileFrame frame={equippedFrame} avatarUrl={avatarUrl} username={displayName} size="sm" />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-cyan-400/50 bg-gradient-to-br from-purple-600 to-cyan-500 text-xs font-black text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-cyan-400/50 bg-gradient-to-br from-purple-600 to-cyan-500 text-xs font-black text-white">
               {displayName.charAt(0).toUpperCase()}
             </div>
           )}
@@ -224,19 +225,18 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   }
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5">
+    <div className="flex items-center gap-2 px-2 py-1.5" style={{ overflow: 'visible' }}>
       {/* Avatar */}
-      <div className="relative shrink-0 h-10 w-10 md:h-11 md:w-11">
+      <div className="relative shrink-0 h-12 w-12 md:h-14 md:w-14" style={{ overflow: 'visible' }}>
         {avatarUrl ? (
           <ProfileFrame
             frame={equippedFrame}
             avatarUrl={avatarUrl}
             username={displayName}
-            size="xs"
-            fillParent
+            size="sm"
           />
         ) : (
-          <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-11 md:w-11 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}>
+          <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-14 md:w-14 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}>
             {displayName.charAt(0).toUpperCase()}
           </div>
         )}
@@ -396,6 +396,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Pool', icon: Waves, path: '/pool' },
           { label: 'Troll Church', icon: BookOpen, path: '/church' },
           { label: 'Troll Match', icon: Heart, path: '/match' },
+          { label: 'Podcast Central', icon: Mic, path: '/podcast' },
         ],
       },
        {
@@ -695,11 +696,11 @@ export default function BottomNavBar() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {/* Main bar with RGB pulsing border */}
-        <div className="rgb-pulsing-nav-bar relative border-2 bg-[#050715]/95 backdrop-blur-xl">
-          <div className={`mx-auto flex items-center ${isMobile ? 'h-16 justify-around px-1' : 'h-20 max-w-[1920px] justify-between px-2 md:h-36 md:px-4'}`}>
+        <div className="rgb-pulsing-nav-bar relative border-2 bg-[#050715]/95 backdrop-blur-xl" style={{ overflow: 'visible', zIndex: 100 }}>
+          <div className={`mx-auto flex items-center ${isMobile ? 'h-16 justify-around px-1' : 'h-20 max-w-[1920px] justify-between px-2 md:h-36 md:px-4'}`} style={{ overflow: 'visible' }}>
 
             {/* LEFT: Go Live + Profile Module (desktop only) */}
-            <div className="hidden shrink-0 items-center gap-2 md:flex">
+            <div className="hidden shrink-0 items-center gap-2 md:flex" style={{ overflow: 'visible' }}>
               <Link
                 to="/broadcast/setup"
                 className={`group relative flex items-center justify-center gap-2 rounded-2xl transition-all duration-200 px-4 h-14 md:px-5 md:h-16 shrink-0 ${
@@ -733,6 +734,7 @@ export default function BottomNavBar() {
                 <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
+                <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} size="large" />
                 <NavButton
                   icon={LayoutGrid}
                   label="More"
@@ -748,6 +750,7 @@ export default function BottomNavBar() {
                 <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} />
+                <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} />
                 <NavButton icon={Gavel} label="Auctions" to="/auctions" active={isActive('/auctions')} badge={badges.auctions} badgeKey="auctions" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Scale} label="Court" to="/troll-court" active={isActive('/troll-court')} badge={badges.court} badgeKey="court" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Map} label="Neighborhood" to="/neighborhood-map" active={isActive('/neighborhood-map')} badge={badges.neighborhood} badgeKey="neighborhood" onBadgeDismiss={badges.dismiss} />

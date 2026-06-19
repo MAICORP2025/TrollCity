@@ -53,7 +53,12 @@ const LiveAvatar: React.FC<LiveAvatarProps> = memo(({
           .single();
 
         if (stream?.id) {
-          navigate(`/stream/${stream.id}`);
+          // Use username-based URL for SEO if username is available
+          if (username) {
+            navigate(`/live/${encodeURIComponent(username)}`);
+          } else {
+            navigate(`/stream/${stream.id}`);
+          }
           return;
         } else {
           // If no active stream found despite isLive=true (could be stale state), fallback to profile

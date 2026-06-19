@@ -31,6 +31,7 @@ import {
   Gamepad2,
   Lock,
   BookOpen,
+  Mic,
   Radio,
   LayoutDashboard,
   Newspaper,
@@ -632,6 +633,8 @@ export default function BottomNavigation() {
 
       { category: 'News + Ads', label: 'Advertise', icon: Megaphone, path: '/city-registry/advertise' },
       { category: 'News + Ads', label: 'Trollified', icon: ShoppingBag, path: '/trollifieds' },
+
+      { category: 'Podcast', label: 'Podcast Central', icon: Mic, path: '/podcast' },
 
       { category: 'Social', label: 'Search', icon: Search, path: '/search' },
       { category: 'Social', label: 'Notifications', icon: Bell, path: '/notifications', badge: notificationCount, onClick: handleMessagesClick },
@@ -1241,8 +1244,7 @@ export default function BottomNavigation() {
                   frame={null}
                   avatarUrl={recentMessage.sender_avatar_url || `https://ui-avatars.com/api/?name=${recentMessage.sender_username}&background=random`}
                   username={recentMessage.sender_username}
-                  size="xs"
-                  fillParent
+                  size="sm"
                 />
                 <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-[#1A1A2E] bg-green-500 z-10" />
               </div>

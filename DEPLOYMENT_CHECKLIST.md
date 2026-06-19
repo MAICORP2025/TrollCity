@@ -281,9 +281,9 @@ If migrations cause issues:
 4. Debug offline
 
 ### Emergency Contacts
-- Supabase Support: support@supabase.io
-- Square Support: developer@squareup.com
-- Vercel Support: support@vercel.com
+- Supabase Support: kain.towns@maicorp.online
+- Square Support: kain.towns@maicorp.online
+- Vercel Support: kain.towns@maicorp.online
 
 ---
 

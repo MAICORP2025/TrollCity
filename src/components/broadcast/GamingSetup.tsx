@@ -29,6 +29,8 @@ import {
 import { cn } from '@/lib/utils'
 import { SceneConfig } from '@/components/broadcast/GamingSceneManager'
 import TipBanner from '@/components/broadcast/TipBanner'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 
 interface GamingSetupProps {
   streamTitle?: string
@@ -81,6 +83,7 @@ interface GamingSetupProps {
   inlineAgreementChecked?: boolean
   onInlineAgreementChange?: (checked: boolean) => void
   streamId?: string | null
+  saveBroadcastButton?: React.ReactNode
 }
 
 export function GamingSetup({
@@ -128,6 +131,7 @@ export function GamingSetup({
   inlineAgreementChecked = false,
   onInlineAgreementChange,
   streamId,
+  saveBroadcastButton,
 }: GamingSetupProps) {
   const [showGameSearch, setShowGameSearch] = React.useState(false)
   const [gameSearchQuery, setGameSearchQuery] = React.useState('')
@@ -174,7 +178,7 @@ export function GamingSetup({
             <div className="hidden rounded-2xl border border-emerald-400/40 bg-emerald-400/10 px-5 py-2.5 text-sm font-black text-emerald-200 shadow-[0_0_24px_rgba(74,222,128,0.18)] md:flex md:items-center md:gap-2"><Gamepad2 className="h-4 w-4" />HytroGaming</div>
           </div>
           <div className="hidden items-center gap-3 rounded-2xl border border-cyan-400/15 bg-white/[0.04] px-3 py-2 md:flex">
-            {userAvatar ? <img src={userAvatar} alt={username} className="h-10 w-10 rounded-xl border border-purple-300/40 object-cover" /> : <div className="grid h-10 w-10 place-items-center rounded-xl border border-purple-300/40 bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black">{username.slice(0, 2).toUpperCase()}</div>}
+            {userAvatar ? <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(userId)} avatarUrl={userAvatar} username={username} size="sm" /></div> : <div className="grid h-10 w-10 place-items-center rounded-xl border border-purple-300/40 bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black">{username.slice(0, 2).toUpperCase()}</div>}
             <div><p className="text-sm font-black">{username}</p><p className="text-xs font-bold text-cyan-300">LVL {userLevel}</p></div>
             <ChevronDown className="h-4 w-4 text-slate-400" />
           </div>
@@ -249,6 +253,11 @@ export function GamingSetup({
                     <Power className="h-5 w-5" />
                     End Stream
                   </button>
+                )}
+
+                {/* Recording control */}
+                {isLive && saveBroadcastButton && (
+                  <div className="mt-2">{saveBroadcastButton}</div>
                 )}
               </div>
 
@@ -467,7 +476,7 @@ export function GamingSetup({
 
               {/* Stream info overlay */}
               <div className="absolute bottom-5 left-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-black/60 p-3 backdrop-blur-xl">
-                {userAvatar ? <img src={userAvatar} alt={username} className="h-11 w-11 rounded-xl border border-purple-300/30 object-cover" /> : <div className="grid h-11 w-11 place-items-center rounded-xl border border-purple-300/30 bg-purple-500/20 text-xs font-black">{username.slice(0, 2).toUpperCase()}</div>}
+                {userAvatar ? <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(userId)} avatarUrl={userAvatar} username={username} size="sm" /></div> : <div className="grid h-11 w-11 place-items-center rounded-xl border border-purple-300/30 bg-purple-500/20 text-xs font-black">{username.slice(0, 2).toUpperCase()}</div>}
                 <div>
                   <p className="text-xs font-black uppercase">{username}</p>
                   <div className="mt-1 h-2 w-40 rounded-full bg-white/15"><div className="h-full w-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" /></div>

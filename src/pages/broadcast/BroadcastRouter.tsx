@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Loader2, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -134,14 +134,21 @@ function updateMetaTag(property: string, content: string, isName = false) {
   document.head.appendChild(meta)
 }
 
-function injectSocialMetaTags(stream: Stream | null, broadcaster: BroadcasterMeta | null) {
+function injectSocialMetaTags(stream: Stream | null, broadcaster: BroadcasterMeta | null, currentPath?: string) {
   if (!stream || typeof document === 'undefined') return
 
   const isLive = stream.status === 'live' || stream.is_live === true
   const statusText = isLive ? 'LIVE' : 'Ended'
-  const title = `${broadcaster?.username || 'Broadcaster'} is ${statusText} on Troll City`
+  const broadcasterName = broadcaster?.username || 'Broadcaster'
+  const title = `${broadcasterName} is ${statusText} on Troll City`
   const description = stream.title || 'Watch this live broadcast on Troll City'
-  const canonicalUrl = `${APP_URL}/watch/${stream.id}`
+
+  // Use username-based canonical URL for SEO (e.g. /live/username instead of /watch/uuid)
+  const isUsernameRoute = currentPath && !currentPath.includes('/watch/') && !currentPath.includes('/broadcast/')
+  const canonicalUrl = isUsernameRoute && broadcasterName
+    ? `${APP_URL}/live/${encodeURIComponent(broadcasterName)}`
+    : `${APP_URL}/live/${encodeURIComponent(broadcasterName)}`
+
   const previewImage =
     (stream as any).thumbnail_url ||
     broadcaster?.thumbnail_url ||
@@ -199,7 +206,6 @@ function injectSocialMetaTags(stream: Stream | null, broadcaster: BroadcasterMet
   schemaScript.type = 'application/ld+json'
 
   const streamStart = (stream as any).started_at || (stream as any).created_at || new Date().toISOString()
-  const broadcasterName = broadcaster?.username || 'Troll City Creator'
 
   schemaScript.textContent = JSON.stringify({
     '@context': 'https://schema.org',
@@ -235,12 +241,16 @@ function injectSafeMetaForPrivateStream(streamId: string, isPrivate: boolean) {
     ? 'This is a private broadcast. Log in to request access.'
     : 'This broadcast is not available.'
 
+  // Use username-based URL if the streamId looks like a username (not a UUID)
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(streamId)
+  const safeUrl = isUUID ? `${APP_URL}/watch/${streamId}` : `${APP_URL}/live/${encodeURIComponent(streamId)}`
+
   document.title = title
 
   updateMetaTag('og:type', 'website')
   updateMetaTag('og:title', title)
   updateMetaTag('og:description', description)
-  updateMetaTag('og:url', `${APP_URL}/watch/${streamId}`)
+  updateMetaTag('og:url', safeUrl)
   updateMetaTag('og:image', FALLBACK_PREVIEW_IMAGE)
 
   updateMetaTag('twitter:card', 'summary_large_image', true)
@@ -266,9 +276,10 @@ function injectSafeMetaForPrivateStream(streamId: string, isPrivate: boolean) {
  * - Do not remount BroadcastPage when profile realtime updates.
  */
 function BroadcastRouter() {
-  const params = useParams<{ id?: string; streamId?: string }>()
-  const streamId = params.id || params.streamId
+  const params = useParams<{ id?: string; streamId?: string; username?: string }>()
+  const streamId = params.id || params.streamId || params.username
   const navigate = useNavigate()
+  const location = useLocation()
 
    const userId = useAuthStore((state) => state.user?.id || null)
    const profile = useAuthStore((state) => state.profile)
@@ -465,7 +476,7 @@ function BroadcastRouter() {
 
       setStream(streamData)
       setBroadcaster(broadcasterData)
-      injectSocialMetaTags(streamData, broadcasterData)
+      injectSocialMetaTags(streamData, broadcasterData, location.pathname)
       setIsLoading(false)
     }
 

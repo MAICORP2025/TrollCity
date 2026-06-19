@@ -216,3 +216,70 @@
   display: inline-block;
   animation: slide-right-to-left 15s linear infinite;
 }
+
+/* ─── Two-System Ticker: Activity + SEO Links ─── */
+.ticker-two-system {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.ticker-two-system .ticker-wrap {
+  height: 48px;
+}
+
+@media (max-width: 768px) {
+  .ticker-two-system .ticker-wrap {
+    height: 40px;
+  }
+}
+
+.ticker-seo-links {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.6);
+  border-top: 1px solid rgba(51, 65, 85, 0.3);
+  overflow: hidden;
+}
+
+.ticker-seo-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 28px;
+}
+
+@media (max-width: 768px) {
+  .ticker-seo-list {
+    gap: 1px;
+    height: 24px;
+  }
+}
+
+.ticker-seo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  text-decoration: none;
+  transition: color 0.2s ease, background 0.2s ease;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.ticker-seo-link:hover {
+  color: #c084fc;
+  background: rgba(147, 51, 234, 0.1);
+}
+
+@media (max-width: 768px) {
+  .ticker-seo-link {
+    padding: 2px 6px;
+    font-size: 0.6rem;
+  }
+}

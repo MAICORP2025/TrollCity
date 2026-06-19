@@ -1030,6 +1030,10 @@ function GamingSetupPageInner() {
     }
 
     try {
+      if (recorder.isRecording) {
+        try { await recorder.stopRecording() } catch (recErr) { console.warn('[refreshOnFocus] Failed to stop recording:', recErr) }
+      }
+
       const { error } = await supabase
         .from('streams')
         .update({
@@ -1127,14 +1131,9 @@ function GamingSetupPageInner() {
           isRecording={recorder.isRecording}
           isUploading={recorder.isUploading}
           recordingDuration={recorder.recordingDuration}
-          hasRecording={!!recorder.recordedBlob}
+          streamId={streamData?.id || null}
           onStartRecording={recorder.startRecording}
           onStopRecording={recorder.stopRecording}
-          onUploadRecording={() =>
-            streamData?.id
-              ? recorder.uploadRecording(streamData.id)
-              : Promise.resolve()
-          }
         />
       }
     />

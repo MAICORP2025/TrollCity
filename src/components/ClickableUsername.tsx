@@ -730,7 +730,12 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
         return
     }
     
-    // If user is live and we have a stream ID, navigate to stream
+    // If user is live, navigate to username-based stream URL for SEO
+    if (isLive && username) {
+      navigate(`/live/${encodeURIComponent(username)}`);
+      return;
+    }
+    // Fallback: if we only have stream ID (no username), use the UUID route
     if (isLive && liveStreamId) {
       navigate(`/stream/${liveStreamId}`);
       return;

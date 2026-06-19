@@ -2,6 +2,8 @@ import React from 'react';
 import { Mic, MicOff, Video, VideoOff, MoreVertical, Circle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { StagePass } from '../../types/broadcast';
+import ProfileFrame from '@/components/profile/ProfileFrame';
+import { useUserFrame } from '@/hooks/useUserFrame';
 
 interface StageGuestCardProps {
   pass: StagePass;
@@ -24,6 +26,8 @@ export default function StageGuestCard({
   const name = pass.user_profile?.username || 'Stage Guest';
   const initials = name.slice(0, 2).toUpperCase();
   const avatarUrl = pass.user_profile?.avatar_url;
+  const userId = (pass as any)?.user_id;
+  const guestFrame = useUserFrame(userId);
 
   return (
     <div
@@ -58,13 +62,16 @@ export default function StageGuestCard({
       </div>
 
       {/* Video area */}
-      <div className="flex-1 min-h-0 relative bg-slate-950/80 flex items-center justify-center">
+      <div className="flex-1 min-h-0 relative bg-slate-950/80 flex items-center justify-center" style={{ overflow: 'visible' }}>
         {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt={name}
-            className="w-full h-full object-cover"
-          />
+          <div className="w-full h-full flex items-center justify-center" style={{ overflow: 'visible' }}>
+            <ProfileFrame
+              frame={guestFrame}
+              avatarUrl={avatarUrl}
+              username={name}
+              size="sm"
+            />
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500/30 to-violet-500/30 border border-cyan-400/30 flex items-center justify-center">
@@ -121,11 +128,19 @@ export default function StageGuestCard({
       <div className="px-2.5 py-2 border-t border-white/5 bg-black/40">
         <div className="flex items-center gap-2">
           {/* Avatar ring */}
-          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-violet-500 flex items-center justify-center text-[8px] font-black text-white overflow-hidden flex-shrink-0">
-            {avatarUrl
-              ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-              : initials
-            }
+          <div className="w-8 h-8 rounded-full flex-shrink-0" style={{ overflow: 'visible' }}>
+            {avatarUrl ? (
+              <ProfileFrame
+                frame={guestFrame}
+                avatarUrl={avatarUrl}
+                username={name}
+                size="sm"
+              />
+            ) : (
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-cyan-500 to-violet-500 flex items-center justify-center text-[8px] font-black text-white">
+                {initials}
+              </div>
+            )}
           </div>
           <span className="text-[11px] font-bold text-white/90 truncate">{name}</span>
         </div>

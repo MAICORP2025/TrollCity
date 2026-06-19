@@ -10,6 +10,7 @@ import {
   Home,
   Lock,
   MessageCircle,
+  Mic,
   Radio,
   Scale,
   Settings,
@@ -36,6 +37,7 @@ import MobileTreelzUpload from "./pages/MobileTreelzUpload";
 import MobileTreelzSettings from "./pages/MobileTreelzSettings";
 import MobileTreelzSaved from "./pages/MobileTreelzSaved";
 import MobilePrideChallenges from "./pages/MobilePrideChallenges";
+import MobilePodcastPage from "./pages/MobilePodcastPage";
 
 import MobilePlaceholder from "./components/MobilePlaceholder";
 
@@ -144,6 +146,17 @@ export const mobileRoutes: MobileRouteItem[] = [
     element: <MobileTreelzPage />,
     icon: Sparkles,
     priority: 60,
+    regular: true,
+    public: true,
+    showInBottomBubble: true,
+  },
+  {
+    key: "podcast",
+    label: "Podcast",
+    path: "/podcast",
+    element: <MobilePodcastPage />,
+    icon: Mic,
+    priority: 62,
     regular: true,
     public: true,
     showInBottomBubble: true,

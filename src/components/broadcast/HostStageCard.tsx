@@ -1,6 +1,8 @@
 import React from 'react';
 import { Mic, MicOff, Video, VideoOff, Crown, Circle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import ProfileFrame from '@/components/profile/ProfileFrame';
+import { useUserFrame } from '@/hooks/useUserFrame';
 
 interface HostStageCardProps {
   name: string;
@@ -20,8 +22,10 @@ export default function HostStageCard({
   isScreenShare,
   hasVideo,
   videoElement,
-}: HostStageCardProps) {
+  userId,
+}: HostStageCardProps & { userId?: string }) {
   const initials = name.slice(0, 2).toUpperCase();
+  const hostFrame = useUserFrame(userId);
 
   return (
     <div
@@ -57,11 +61,18 @@ export default function HostStageCard({
         ) : (
           <div className="flex flex-col items-center gap-3">
             <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/25 to-violet-500/25 border-2 border-cyan-400/30 flex items-center justify-center">
+              <div className="w-20 h-20" style={{ overflow: 'visible' }}>
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt={name} className="w-full h-full rounded-full object-cover" />
+                  <ProfileFrame
+                    frame={hostFrame}
+                    avatarUrl={avatarUrl}
+                    username={name}
+                    size="sm"
+                  />
                 ) : (
-                  <span className="text-[28px] font-black text-cyan-300/80">{initials}</span>
+                  <div className="w-full h-full rounded-full bg-gradient-to-br from-cyan-500/25 to-violet-500/25 border-2 border-cyan-400/30 flex items-center justify-center">
+                    <span className="text-[28px] font-black text-cyan-300/80">{initials}</span>
+                  </div>
                 )}
               </div>
               <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 border-2 border-black flex items-center justify-center shadow-lg">
@@ -117,11 +128,19 @@ export default function HostStageCard({
       {/* Name bar */}
       <div className="px-3 py-2.5 border-t border-cyan-500/15 bg-black/40">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-violet-500 flex items-center justify-center text-[10px] font-black text-white overflow-hidden flex-shrink-0 border border-cyan-500/30">
-            {avatarUrl
-              ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-              : initials
-            }
+          <div className="w-9 h-9 flex-shrink-0" style={{ overflow: 'visible' }}>
+            {avatarUrl ? (
+              <ProfileFrame
+                frame={hostFrame}
+                avatarUrl={avatarUrl}
+                username={name}
+                size="sm"
+              />
+            ) : (
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-cyan-500 to-violet-500 flex items-center justify-center text-[10px] font-black text-white border border-cyan-500/30">
+                {initials}
+              </div>
+            )}
           </div>
           <span className="text-xs font-bold text-white/95 truncate">{name}</span>
         </div>

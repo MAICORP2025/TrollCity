@@ -4,10 +4,20 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 import {
   getAnonymousDisplayName,
   reserveAnonymousChatSlot,
 } from '@/lib/anonymousIdentity'
+
+/** Small avatar for chat messages — extracts useUserFrame out of .map() */
+function ChatAvatar({ userId, avatarUrl, username }: { userId?: string; avatarUrl: string; username: string }) {
+  const frame = useUserFrame(userId)
+  return (
+    <ProfileFrame frame={frame} avatarUrl={avatarUrl} username={username} size="xs" />
+  )
+}
 
 interface ChatMessage {
   id: string
@@ -170,7 +180,7 @@ export function GamingChat({ streamId, className, guestChatLimit }: GamingChatPr
           messages.map((msg) => (
             <div key={msg.id} className="group flex items-start gap-2 rounded-lg px-1.5 py-1 hover:bg-white/5">
               {msg.avatarUrl ? (
-                <img src={msg.avatarUrl} alt="" className="mt-0.5 h-5 w-5 shrink-0 rounded-full object-cover" />
+                <ChatAvatar userId={msg.user_id} avatarUrl={msg.avatarUrl} username={msg.username || 'User'} />
               ) : (
                 <div className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-purple-500/20 text-[8px] font-black text-purple-300">
                   {msg.username.slice(0, 1).toUpperCase()}

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Eye, Radio, Users, Building2, Sparkles, Play, TrendingUp, DollarSign, Home, ChevronRight, Settings } from 'lucide-react'
+import { Eye, Home, Mail, HelpCircle, Shield, FileText, MessageCircle, ChevronRight, Share2, Twitter, Facebook, Linkedin } from 'lucide-react'
 import useSEO from '@/hooks/useSEO'
 
 interface SEOPageProps {
@@ -13,11 +13,9 @@ interface SEOPageProps {
 
 const navLinks = [
   { path: '/about', label: 'About', icon: Home },
-  { path: '/broadcasting', label: 'Broadcasting', icon: Radio },
-  { path: '/categories', label: 'Categories', icon: Sparkles },
-  { path: '/seo-government', label: 'Government', icon: Building2 },
-  { path: '/creators', label: 'Creators', icon: DollarSign },
-  { path: '/live', label: 'Go Live', icon: Play },
+  { path: '/contact', label: 'Contact', icon: Mail },
+  { path: '/support', label: 'Support', icon: HelpCircle },
+  { path: '/faq', label: 'FAQ', icon: MessageCircle },
 ]
 
 export default function SEOLayout({ children, title, description, keywords = [], ogImage }: SEOPageProps) {
@@ -30,13 +28,21 @@ export default function SEOLayout({ children, title, description, keywords = [],
     ogImage
   })
 
-  const origin = window.location.origin
-  const canonicalUrl = `${origin}${location.pathname}`
-  const imageUrl = ogImage || `${origin}/api/og/default`
-
   React.useEffect(() => {
     window.scrollTo(0, 0)
   }, [location.pathname])
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://maitrollcity.com'
+  const canonicalUrl = `${origin}${location.pathname}`
+
+  const handleShare = async () => {
+    const shareData = { title: `${title} | Troll City`, url: canonicalUrl }
+    if (navigator.share) {
+      try { await navigator.share(shareData) } catch {}
+    } else {
+      try { await navigator.clipboard.writeText(canonicalUrl) } catch {}
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
@@ -70,13 +76,13 @@ export default function SEOLayout({ children, title, description, keywords = [],
               })}
             </nav>
             <div className="flex items-center gap-3">
-              <Link
-                to="/admin"
+              <button
+                onClick={handleShare}
                 className="p-2 text-slate-400 hover:text-white transition-colors"
-                title="Admin Dashboard"
+                title="Share this page"
               >
-                <Settings className="w-5 h-5" />
-              </Link>
+                <Share2 className="w-5 h-5" />
+              </button>
               <Link
                 to="/auth"
                 className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
@@ -102,40 +108,42 @@ export default function SEOLayout({ children, title, description, keywords = [],
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div>
-              <h3 className="text-white font-semibold mb-4">Platform</h3>
+              <h3 className="text-white font-semibold mb-4">Company</h3>
               <ul className="space-y-2">
-                <li><Link to="/about" className="text-slate-400 hover:text-purple-300 transition-colors">About</Link></li>
-                <li><Link to="/broadcasting" className="text-slate-400 hover:text-purple-300 transition-colors">Broadcasting</Link></li>
-                <li><Link to="/categories" className="text-slate-400 hover:text-purple-300 transition-colors">Categories</Link></li>
-                <li><Link to="/seo-government" className="text-slate-400 hover:text-purple-300 transition-colors">Government</Link></li>
+                <li><Link to="/about" className="text-slate-400 hover:text-purple-300 transition-colors">About Us</Link></li>
+                <li><Link to="/contact" className="text-slate-400 hover:text-purple-300 transition-colors">Contact</Link></li>
+                <li><Link to="/faq" className="text-slate-400 hover:text-purple-300 transition-colors">FAQ</Link></li>
               </ul>
             </div>
             <div>
-              <h3 className="text-white font-semibold mb-4">Creators</h3>
+              <h3 className="text-white font-semibold mb-4">Support</h3>
               <ul className="space-y-2">
-                <li><Link to="/creators" className="text-slate-400 hover:text-purple-300 transition-colors">Become a Creator</Link></li>
-                <li><Link to="/live" className="text-slate-400 hover:text-purple-300 transition-colors">Go Live</Link></li>
-                <li><Link to="/legal/creator-earnings" className="text-slate-400 hover:text-purple-300 transition-colors">Earnings</Link></li>
-                <li><Link to="/bonuses" className="text-slate-400 hover:text-purple-300 transition-colors">Coin Bonuses</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-white font-semibold mb-4">Watch</h3>
-              <ul className="space-y-2">
-                <li><Link to="/explore" className="text-slate-400 hover:text-purple-300 transition-colors">Explore</Link></li>
-                <li><Link to="/live-swipe" className="text-slate-400 hover:text-purple-300 transition-colors">Live Streams</Link></li>
-                <li><Link to="/badges" className="text-slate-400 hover:text-purple-300 transition-colors">Top Creators</Link></li>
-                <li><Link to="/tcnn" className="text-slate-400 hover:text-purple-300 transition-colors">TCNN News</Link></li>
+                <li><Link to="/support" className="text-slate-400 hover:text-purple-300 transition-colors">Help Center</Link></li>
+                <li><Link to="/contact" className="text-slate-400 hover:text-purple-300 transition-colors">Submit a Ticket</Link></li>
+                <li><a href="mailto:kain.towns@maicorp.online" className="text-slate-400 hover:text-purple-300 transition-colors">Email Us</a></li>
               </ul>
             </div>
             <div>
               <h3 className="text-white font-semibold mb-4">Legal</h3>
               <ul className="space-y-2">
-                <li><Link to="/legal/terms" className="text-slate-400 hover:text-purple-300 transition-colors">Terms of Service</Link></li>
-                <li><Link to="/legal/privacy" className="text-slate-400 hover:text-purple-300 transition-colors">Privacy Policy</Link></li>
+                <li><Link to="/privacy" className="text-slate-400 hover:text-purple-300 transition-colors">Privacy Policy</Link></li>
+                <li><Link to="/terms" className="text-slate-400 hover:text-purple-300 transition-colors">Terms of Service</Link></li>
                 <li><Link to="/legal/safety" className="text-slate-400 hover:text-purple-300 transition-colors">Safety Guidelines</Link></li>
-                <li><Link to="/support" className="text-slate-400 hover:text-purple-300 transition-colors">Support</Link></li>
               </ul>
+            </div>
+            <div>
+              <h3 className="text-white font-semibold mb-4">Follow Us</h3>
+              <div className="flex items-center gap-3">
+                <a href="https://twitter.com/trollcity" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-slate-700 transition-colors" aria-label="Twitter">
+                  <Twitter className="w-5 h-5" />
+                </a>
+                <a href="https://facebook.com/trollcity" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-slate-700 transition-colors" aria-label="Facebook">
+                  <Facebook className="w-5 h-5" />
+                </a>
+                <a href="https://linkedin.com/company/trollcity" target="_blank" rel="noopener noreferrer" className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-slate-700 transition-colors" aria-label="LinkedIn">
+                  <Linkedin className="w-5 h-5" />
+                </a>
+              </div>
             </div>
           </div>
           <div className="mt-12 pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -143,17 +151,12 @@ export default function SEOLayout({ children, title, description, keywords = [],
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
                 <Eye className="w-4 h-4 text-white" />
               </div>
-              <span className="text-slate-400">© 2026 Troll City (Mai Troll City). All rights reserved.</span>
-              <Link
-                to="/admin"
-                className="ml-4 px-3 py-1 text-xs text-slate-500 hover:text-purple-400 transition-colors"
-              >
-                Admin
-              </Link>
+              <span className="text-slate-400">&copy; 2026 Troll City (Mai Troll City). All rights reserved.</span>
             </div>
-            <div className="flex items-center gap-6 text-slate-400">
-              <TrendingUp className="w-5 h-5" />
-              <span>Trending Worldwide</span>
+            <div className="flex items-center gap-4">
+              <Link to="/privacy" className="text-slate-500 hover:text-purple-400 text-sm transition-colors">Privacy</Link>
+              <Link to="/terms" className="text-slate-500 hover:text-purple-400 text-sm transition-colors">Terms</Link>
+              <Link to="/sitemap.xml" className="text-slate-500 hover:text-purple-400 text-sm transition-colors">Sitemap</Link>
             </div>
           </div>
         </div>
@@ -164,10 +167,11 @@ export default function SEOLayout({ children, title, description, keywords = [],
 
 export function Breadcrumb({ items }: { items: { label: string; path?: string }[] }) {
   return (
-    <nav className="flex items-center gap-2 text-sm mb-8">
+    <nav className="flex items-center gap-2 text-sm mb-8" aria-label="Breadcrumb">
+      <Link to="/" className="text-purple-300 hover:text-purple-200 transition-colors">Home</Link>
       {items.map((item, index) => (
         <React.Fragment key={index}>
-          {index > 0 && <ChevronRight className="w-4 h-4 text-slate-500" />}
+          <ChevronRight className="w-4 h-4 text-slate-500" />
           {item.path ? (
             <Link to={item.path} className="text-purple-300 hover:text-purple-200 transition-colors">
               {item.label}
@@ -181,12 +185,12 @@ export function Breadcrumb({ items }: { items: { label: string; path?: string }[
   )
 }
 
-export function SEOContentSection({ 
-  title, 
-  description, 
+export function SEOContentSection({
+  title,
+  description,
   icon: Icon,
-  children 
-}: { 
+  children
+}: {
   title: string
   description: string
   icon?: React.ElementType
@@ -214,12 +218,12 @@ export function SEOContentSection({
   )
 }
 
-export function CTASection({ 
-  title, 
-  description, 
-  primaryAction, 
-  secondaryAction 
-}: { 
+export function CTASection({
+  title,
+  description,
+  primaryAction,
+  secondaryAction
+}: {
   title: string
   description: string
   primaryAction: { label: string; path: string }

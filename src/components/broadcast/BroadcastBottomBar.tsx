@@ -140,6 +140,7 @@ export interface BroadcastBottomBarProps {
   onTroll?: () => void;
   isHost?: boolean;
   onInviteFollowers?: () => void;
+  saveBroadcastButton?: React.ReactNode;
 }
 
 export default function BroadcastBottomBar({
@@ -163,6 +164,7 @@ export default function BroadcastBottomBar({
   onTroll,
   isHost = false,
   onInviteFollowers,
+  saveBroadcastButton,
 }: BroadcastBottomBarProps) {
   const theme = trollCityBroadcastTheme
   return (
@@ -226,6 +228,9 @@ export default function BroadcastBottomBar({
               icon={MoreHorizontal}
               label="More"
             />
+            {isHost && saveBroadcastButton && (
+              <div className="flex items-center">{saveBroadcastButton}</div>
+            )}
             {!isHost && (
               <HostActionButton
                 active={false}

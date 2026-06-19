@@ -19,6 +19,12 @@ interface PodcastAgoraConfig {
   onError?: (error: string) => void
 }
 
+// Generate a unique numeric UID that won't collide with other users.
+// Uses a large random range (1Bâ€“4B) to minimize collision risk.
+function generateUniqueUid(): UID {
+  return 1000000000 + Math.floor(Math.random() * 3000000000)
+}
+
 export function usePodcastAgora({
   channelName,
   enabled,
@@ -28,7 +34,6 @@ export function usePodcastAgora({
   onUserLeft,
   onError
 }: PodcastAgoraConfig) {
-  // State
   const [isConnected, setIsConnected] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
@@ -38,19 +43,21 @@ export function usePodcastAgora({
   const [error, setError] = useState<string | null>(null)
   const [isJoining, setIsJoining] = useState(false)
 
-  // Auth
   const user = useAuthStore(state => state.user)
   const profile = useAuthStore(state => state.profile)
 
-  // Refs
   const clientRef = useRef<IAgoraRTCClient | null>(null)
   const audioTrackRef = useRef<IMicrophoneAudioTrack | null>(null)
   const joinedRef = useRef(false)
   const joiningRef = useRef(false)
   const startTimeRef = useRef<number | null>(null)
   const timerRef = useRef<number | null>(null)
+  const uidRef = useRef<UID>(generateUniqueUid())
 
-  // Get Agora app ID
+  const isMutedRef = useRef(false)
+  const isPlayingRef = useRef(false)
+  const volumeRef = useRef(1)
+
   const getAgoraAppId = () => import.meta.env.VITE_AGORA_APP_ID
 
   const debugAgora = (...args: unknown[]) => {
@@ -59,7 +66,24 @@ export function usePodcastAgora({
     }
   }
 
-  // Initialize Agora client - audio-only mode
+  const applyAudioState = useCallback(() => {
+    const client = clientRef.current
+    if (!client) return
+    const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
+    if (!allRemoteUsers) return
+    allRemoteUsers.forEach((remoteUser) => {
+      const audioTrack = remoteUser.audioTrack
+      if (audioTrack) {
+        if (isMutedRef.current || !isPlayingRef.current) {
+          audioTrack.setVolume(0)
+        } else {
+          audioTrack.setVolume(volumeRef.current)
+          try { audioTrack.play() } catch { /* already playing */ }
+        }
+      }
+    })
+  }, [])
+
   const initAgoraClient = useCallback(async () => {
     try {
       const appId = getAgoraAppId()
@@ -69,29 +93,27 @@ export function usePodcastAgora({
 
       debugAgora('[PodcastAgora] Initializing Agora client (audio-only)')
 
-      // Create client for audio mode
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' })
 
-      // Event handlers
-      client.on('user-joined', (user) => {
-        debugAgora('[PodcastAgora] User joined:', user.uid)
-        setRemoteUsers(prev => [...prev, user])
-        onUserJoined?.(user)
+      client.on('user-joined', (agoraUser) => {
+        debugAgora('[PodcastAgora] User joined:', agoraUser.uid)
+        setRemoteUsers(prev => [...prev, agoraUser])
+        onUserJoined?.(agoraUser)
       })
 
-      client.on('user-left', (user) => {
-        debugAgora('[PodcastAgora] User left:', user.uid)
-        setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid))
-        onUserLeft?.(user)
+      client.on('user-left', (agoraUser) => {
+        debugAgora('[PodcastAgora] User left:', agoraUser.uid)
+        setRemoteUsers(prev => prev.filter(u => u.uid !== agoraUser.uid))
+        onUserLeft?.(agoraUser)
       })
 
-      client.on('user-published', async (user, mediaType) => {
-        debugAgora('[PodcastAgora] User published:', user.uid, mediaType)
+      client.on('user-published', async (agoraUser, mediaType) => {
+        debugAgora('[PodcastAgora] User published:', agoraUser.uid, mediaType)
         try {
-          await client.subscribe(user, mediaType)
-          debugAgora('[PodcastAgora] Subscribed to:', user.uid, mediaType)
+          await client.subscribe(agoraUser, mediaType)
+          debugAgora('[PodcastAgora] Subscribed to:', agoraUser.uid, mediaType)
           if (mediaType === 'audio') {
-            const audioTrack = user.audioTrack
+            const audioTrack = agoraUser.audioTrack
             if (audioTrack) {
               if (isMutedRef.current || !isPlayingRef.current) {
                 audioTrack.setVolume(0)
@@ -107,18 +129,19 @@ export function usePodcastAgora({
         }
       })
 
-      client.on('user-subscribed', (user, mediaType) => {
-        debugAgora('[PodcastAgora] User subscribed event:', user.uid, mediaType)
-        if (mediaType === 'audio' && user.audioTrack) {
+      client.on('user-subscribed', (agoraUser, mediaType) => {
+        debugAgora('[PodcastAgora] User subscribed event:', agoraUser.uid, mediaType)
+        if (mediaType === 'audio' && agoraUser.audioTrack) {
           if (isMutedRef.current || !isPlayingRef.current) {
-            user.audioTrack.setVolume(0)
+            agoraUser.audioTrack.setVolume(0)
           } else {
-            user.audioTrack.setVolume(volumeRef.current)
-            user.audioTrack.play()
+            agoraUser.audioTrack.setVolume(volumeRef.current)
+            agoraUser.audioTrack.play()
           }
           setIsPlaying(true)
         }
       })
+
       clientRef.current = client
       return client
     } catch (err) {
@@ -130,8 +153,7 @@ export function usePodcastAgora({
     }
   }, [onError, onUserJoined, onUserLeft])
 
-  // Fetch Agora token
-  const fetchAgoraToken = useCallback(async (channel: string, uid: UID, podcastId?: string) => {
+  const fetchAgoraToken = useCallback(async (channel: string, uid: UID, pId?: string) => {
     try {
       debugAgora('[PodcastAgora] Fetching Agora token for channel:', channel, 'uid:', uid)
 
@@ -140,15 +162,14 @@ export function usePodcastAgora({
           channelName: channel,
           userId: uid.toString(),
           role: isHost ? 'publisher' : 'subscriber',
-          podcastId: podcastId
+          podcastId: pId
         }
       })
 
       if (tokenError) {
         console.error('[PodcastAgora] Token fetch error:', tokenError)
-        // Log to podcast_rtc_logs
         await supabase.from('podcast_rtc_logs').insert({
-          podcast_id: podcastId || null,
+          podcast_id: pId || null,
           user_id: user?.id || null,
           username: profile?.username || null,
           role: profile?.role || null,
@@ -174,17 +195,6 @@ export function usePodcastAgora({
     }
   }, [isHost, onError, user, profile])
 
-  // Convert user ID to numeric UID
-  const getUserUid = (uid: string): UID => {
-    let hash = 0
-    for (let i = 0; i < uid.length; i++) {
-      hash = (hash << 5) - hash + uid.charCodeAt(i)
-      hash |= 0
-    }
-    return Math.abs(hash) % 4294967295
-  }
-
-  // Join podcast channel
   const joinPodcast = useCallback(async (podcastIdArg?: string) => {
     const resolvedPodcastId = podcastIdArg || podcastId
     if (joiningRef.current || joinedRef.current) return
@@ -199,16 +209,12 @@ export function usePodcastAgora({
     try {
       debugAgora('[PodcastAgora] Joining channel:', channelName)
 
-      // Initialize client
       let client = clientRef.current
       if (!client) {
         client = await initAgoraClient()
       }
 
-      // Get numeric UID
-      const uid = getUserUid(user?.id || 'anonymous')
-
-      // Fetch token
+      const uid = uidRef.current
       const appId = getAgoraAppId()
       if (!appId) {
         throw new Error('Agora App ID not configured')
@@ -216,14 +222,13 @@ export function usePodcastAgora({
 
       const { token } = await fetchAgoraToken(channelName, uid, resolvedPodcastId)
 
-      // Join channel
       const joinPromise = client.join(appId, channelName, token, uid)
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Join timeout')), 15000)
       )
 
       await Promise.race([joinPromise, timeoutPromise])
-      debugAgora('[PodcastAgora] Joined channel successfully')
+      debugAgora('[PodcastAgora] Joined channel successfully with uid:', uid)
 
       if (isHost) {
         try {
@@ -241,14 +246,12 @@ export function usePodcastAgora({
       joinedRef.current = true
       startTimeRef.current = Date.now()
 
-      // Start elapsed time timer
       timerRef.current = window.setInterval(() => {
         if (startTimeRef.current) {
           setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000))
         }
       }, 1000)
 
-      // Log join success
       await supabase.from('podcast_rtc_logs').insert({
         podcast_id: resolvedPodcastId || null,
         user_id: user?.id || null,
@@ -265,8 +268,7 @@ export function usePodcastAgora({
       console.error('[PodcastAgora] Join error:', errMsg)
       setError(errMsg)
       toast.error('Failed to connect to podcast: ' + errMsg)
-      
-      // Log join failure
+
       await supabase.from('podcast_rtc_logs').insert({
         podcast_id: resolvedPodcastId || null,
         user_id: user?.id || null,
@@ -275,32 +277,28 @@ export function usePodcastAgora({
         level: profile?.level || null,
         event_type: 'agora_join_failed',
         message: errMsg,
-        metadata: { channelName, uid: user?.id }
+        metadata: { channelName, uid: uidRef.current }
       })
     } finally {
       joiningRef.current = false
       setIsJoining(false)
     }
-  }, [channelName, fetchAgoraToken, initAgoraClient, user, profile])
+  }, [channelName, fetchAgoraToken, initAgoraClient, user, profile, isHost])
 
-  // Leave podcast channel
   const leavePodcast = useCallback(async () => {
     if (!joinedRef.current || !clientRef.current) return
 
     try {
       debugAgora('[PodcastAgora] Leaving channel')
 
-      // Stop local audio track
       if (audioTrackRef.current) {
         audioTrackRef.current.stop()
         audioTrackRef.current.close()
         audioTrackRef.current = null
       }
 
-      // Leave channel
       await clientRef.current.leave()
 
-      // Clear timer
       if (timerRef.current) {
         clearInterval(timerRef.current)
         timerRef.current = null
@@ -308,6 +306,7 @@ export function usePodcastAgora({
 
       setIsConnected(false)
       setIsPlaying(false)
+      isPlayingRef.current = false
       setRemoteUsers([])
       joinedRef.current = false
       startTimeRef.current = null
@@ -320,44 +319,23 @@ export function usePodcastAgora({
     }
   }, [])
 
-  // Toggle mute — uses refs to avoid stale closures
   const toggleMute = useCallback(async () => {
     const nextMuted = !isMutedRef.current
-    setIsMuted(nextMuted)
     isMutedRef.current = nextMuted
+    setIsMuted(nextMuted)
 
     debugAgora(`[PodcastAgora] Toggle mute: ${nextMuted ? 'muted' : 'unmuted'}`)
 
-    // For host: enable/disable the local microphone track
     if (audioTrackRef.current) {
       try {
         audioTrackRef.current.setEnabled(!nextMuted)
-        debugAgora(`[PodcastAgora] Host mic setEnabled: ${!nextMuted}`)
       } catch (err) {
         console.error('[PodcastAgora] Error setting host mic enabled:', err)
       }
     }
 
-    // For listener: set volume on all remote audio tracks
-    const client = clientRef.current
-    if (client) {
-      const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
-      if (allRemoteUsers) {
-        allRemoteUsers.forEach((remoteUser) => {
-          const audioTrack = remoteUser.audioTrack
-          if (audioTrack) {
-            if (nextMuted || !isPlayingRef.current) {
-              audioTrack.setVolume(0)
-            } else {
-              audioTrack.setVolume(volumeRef.current)
-              try { audioTrack.play() } catch { /* already playing */ }
-            }
-          }
-        })
-      }
-    }
+    applyAudioState()
 
-    // Log mute/unmute (fire-and-forget)
     supabase.from('podcast_rtc_logs').insert({
       podcast_id: podcastId || null,
       user_id: user?.id || null,
@@ -368,39 +346,20 @@ export function usePodcastAgora({
       message: `User ${nextMuted ? 'muted' : 'unmuted'} podcast audio`,
       metadata: {}
     })
-  }, [user, profile, podcastId])
+  }, [user, profile, podcastId, applyAudioState])
 
-  // Toggle play/pause — actually controls audio playback
   const togglePlay = useCallback(() => {
     const nextPlaying = !isPlayingRef.current
-    setIsPlaying(nextPlaying)
     isPlayingRef.current = nextPlaying
+    setIsPlaying(nextPlaying)
 
     debugAgora(`[PodcastAgora] Toggle play: ${nextPlaying ? 'playing' : 'paused'}`)
+    applyAudioState()
+  }, [applyAudioState])
 
-    const client = clientRef.current
-    if (client) {
-      const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
-      if (allRemoteUsers) {
-        allRemoteUsers.forEach((remoteUser) => {
-          const audioTrack = remoteUser.audioTrack
-          if (audioTrack) {
-            if (!nextPlaying || isMutedRef.current) {
-              audioTrack.setVolume(0)
-            } else {
-              audioTrack.setVolume(volumeRef.current)
-              try { audioTrack.play() } catch { /* already playing */ }
-            }
-          }
-        })
-      }
-    }
-  }, [])
-
-  // Set volume — applies to all remote tracks immediately
   const handleSetVolume = useCallback((newVolume: number) => {
-    setVolume(newVolume)
     volumeRef.current = newVolume
+    setVolume(newVolume)
 
     if (!isMutedRef.current && isPlayingRef.current) {
       const client = clientRef.current
@@ -417,32 +376,11 @@ export function usePodcastAgora({
     }
   }, [])
 
-  // Apply current volume and mute state to all remote audio tracks
-  const applyAudioStateToRemotes = useCallback(() => {
-    const client = clientRef.current
-    if (!client) return
-    const allRemoteUsers = (client as any).remoteUsers as IAgoraRTCRemoteUser[] | undefined
-    if (!allRemoteUsers) return
-    allRemoteUsers.forEach((remoteUser) => {
-      const audioTrack = remoteUser.audioTrack
-      if (audioTrack) {
-        if (isMutedRef.current || !isPlayingRef.current) {
-          audioTrack.setVolume(0)
-        } else {
-          audioTrack.setVolume(volumeRef.current)
-          try { audioTrack.play() } catch { /* already playing */ }
-        }
-      }
-    })
-  }, [])
-
-  // When isMuted or isPlaying changes, apply to remote tracks
   useEffect(() => {
     if (!joinedRef.current) return
-    applyAudioStateToRemotes()
-  }, [isMuted, isPlaying, applyAudioStateToRemotes])
+    applyAudioState()
+  }, [isMuted, isPlaying, applyAudioState])
 
-  // Auto-join when enabled and channel changes
   useEffect(() => {
     if (enabled && channelName && !joinedRef.current && !joiningRef.current) {
       joinPodcast()
@@ -456,22 +394,15 @@ export function usePodcastAgora({
   }, [enabled, channelName, joinPodcast, leavePodcast])
 
   useEffect(() => {
-    if (!isHost && isMuted) {
-      remoteUsers.forEach((remoteUser) => {
-        remoteUser.audioTrack?.setVolume(0)
-      })
-    }
-  }, [isHost, isMuted, remoteUsers])
-
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
-      leavePodcast()
+      if (joinedRef.current) {
+        leavePodcast()
+      }
     }
-  }, [])
+  }, [leavePodcast])
 
   return {
     isConnected,

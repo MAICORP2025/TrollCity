@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import SubscribeButton from './SubscribeButton';
+import ProfileFrame from '@/components/profile/ProfileFrame';
+import { useUserFrame } from '@/hooks/useUserFrame';
 
 interface UserMiniProfileProps {
   userId: string;
@@ -38,6 +40,7 @@ const UserMiniProfile: React.FC<UserMiniProfileProps> = ({
   const [following, setFollowing] = useState(false); // placeholder for future follow system
 
   const isOwnProfile = user?.id === userId;
+  const userFrame = useUserFrame(userId);
 
   useEffect(() => {
     fetchProfile();
@@ -155,12 +158,15 @@ const UserMiniProfile: React.FC<UserMiniProfileProps> = ({
 
         {/* Profile Section */}
         <div className="px-4 pb-4">
-          <div className="flex items-end gap-3 -mt-8 mb-3">
-            <img
-              src={avatarUrl || targetProfile?.avatar_url || '/default-avatar.png'}
-              alt={username}
-              className="w-16 h-16 rounded-full border-4 border-slate-900 bg-slate-800 object-cover"
-            />
+          <div className="flex items-end gap-3 -mt-8 mb-3" style={{ overflow: 'visible' }}>
+            <div className="w-20 h-20" style={{ overflow: 'visible' }}>
+              <ProfileFrame
+                frame={userFrame}
+                avatarUrl={avatarUrl || targetProfile?.avatar_url || '/default-avatar.png'}
+                username={username}
+                size="md"
+              />
+            </div>
             <div className="flex-1 min-w-0 mt-8">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-white truncate text-lg">{username}</h3>

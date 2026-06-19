@@ -19,6 +19,8 @@ import { StreamAudienceMember } from './AudienceBubbleTicker'
 import { useNavigate } from 'react-router-dom'
 import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton'
 import StorageIndicator from './StorageIndicator'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 
 const LIVE_DOT_CLASS = 'h-2 w-2 rounded-full bg-red-500 animate-pulse'
 
@@ -86,6 +88,7 @@ export default function BroadcastNeonHeader({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
+  const broadcasterFrame = useUserFrame(stream?.user_id);
 
   const coinDisplay = coinBalance ?? profile?.troll_coins ?? 0
   const streamTitle = stream.title || stream.category || 'Live'
@@ -203,26 +206,29 @@ export default function BroadcastNeonHeader({
       <div className="flex h-[68px] items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0" ref={profileMenuRef}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setProfileMenuOpen((prev) => !prev)
-              }}
-              className="relative h-12 w-12 rounded-full bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 p-[2px] shadow-[0_0_22px_rgba(168,85,247,0.38)] transition-shadow hover:shadow-[0_0_30px_rgba(168,85,247,0.55)]"
-              aria-label="Broadcaster profile menu"
-            >
-              {broadcasterProfile?.avatar_url ? (
-                <img
-                  src={broadcasterProfile.avatar_url}
-                  alt={broadcasterProfile.username || 'Broadcaster'}
-                  className="h-full w-full rounded-full bg-black object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center rounded-full bg-[#111]">
-                  <Crown className="h-5 w-5 text-purple-400" />
-                </div>
-              )}
-            </button>
+            <div className="relative h-14 w-14" style={{ overflow: 'visible' }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setProfileMenuOpen((prev) => !prev)
+                }}
+                className="relative h-14 w-14 rounded-full bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 p-[2px] shadow-[0_0_22px_rgba(168,85,247,0.38)] transition-shadow hover:shadow-[0_0_30px_rgba(168,85,247,0.55)]"
+                aria-label="Broadcaster profile menu"
+              >
+                {broadcasterProfile?.avatar_url ? (
+                  <ProfileFrame
+                    frame={broadcasterFrame}
+                    avatarUrl={broadcasterProfile.avatar_url}
+                    username={broadcasterProfile.username || 'Broadcaster'}
+                    size="sm"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center rounded-full bg-[#111]">
+                    <Crown className="h-5 w-5 text-purple-400" />
+                  </div>
+                )}
+              </button>
+            </div>
 
             {profileMenuOpen && (
               <div className="absolute left-0 top-full z-[100] mt-2 w-56 overflow-hidden rounded-xl border border-white/15 bg-slate-950/98 p-1.5 shadow-2xl backdrop-blur-xl">

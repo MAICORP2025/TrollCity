@@ -24,6 +24,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { trollCityBroadcastTheme as theme } from '@/styles/broadcastTheme'
 import { usePodcastStore } from '@/stores/podcastStore'
 import { usePodcastAgora } from '@/hooks/usePodcastAgora'
+import { usePodcastRecorder } from '@/hooks/usePodcastRecorder'
 import { cn } from '@/lib/utils'
 
 type PodcastStatus =
@@ -102,7 +103,7 @@ export default function PodcastRoom() {
     return podcast ? LIVE_STATUSES.includes(podcast.status) : false
   }, [podcast])
 
-  const agoraEnabled = Boolean(podcast?.agora_channel_name && user?.id && podcast?.id && isLive)
+  const agoraEnabled = Boolean(podcast?.agora_channel_name && podcast?.id && isLive)
 
   const {
     isConnected,
@@ -117,6 +118,8 @@ export default function PodcastRoom() {
     isHost,
     podcastId: podcast?.id,
   })
+
+  const recorder = usePodcastRecorder()
 
   const fetchPodcast = useCallback(async () => {
     if (!id) return
@@ -153,7 +156,7 @@ export default function PodcastRoom() {
   }, [fetchPodcast])
 
   useEffect(() => {
-    if (!podcast || !user?.id) return
+    if (!podcast) return
 
     setActivePodcast({
       id: podcast.id,
@@ -168,12 +171,9 @@ export default function PodcastRoom() {
     })
 
     setPlaying(isLive)
-
-    // Host should stay in full room/studio, listeners get mini player.
     setShowMiniPlayer(!isHost)
   }, [
     podcast,
-    user?.id,
     profile?.username,
     isHost,
     isLive,
@@ -434,6 +434,48 @@ export default function PodcastRoom() {
                     </div>
                   </div>
                 </div>
+
+                {/* Recording controls */}
+                {isHost && isLive && (
+                  <div className="mt-4">
+                    {recorder.isRecording ? (
+                      <button
+                        type="button"
+                        onClick={() => recorder.stopRecording()}
+                        disabled={recorder.isUploading}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/25 disabled:opacity-50"
+                      >
+                        {recorder.isUploading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Saving Recording...
+                          </>
+                        ) : (
+                          <>
+                            <span className="relative flex h-3 w-3">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                              <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
+                            </span>
+                            Stop Recording
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (podcast?.id && podcast?.agora_channel_name) {
+                            recorder.startRecording(podcast.id, podcast.agora_channel_name)
+                          }
+                        }}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-200 transition hover:bg-emerald-500/20"
+                      >
+                        <span className="h-3 w-3 rounded-full bg-emerald-400" />
+                        Record Podcast
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <button

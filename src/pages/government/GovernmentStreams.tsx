@@ -204,15 +204,15 @@ export default function GovernmentStreams() {
   const fetchPods = React.useCallback(async () => {
     try {
       let query = supabase
-        .from('pod_rooms')
+        .from('podcasts')
         .select(`
           id,
-          host_id,
+          host_user_id,
           title,
-          is_live,
-          viewer_count,
+          status,
+          listener_count,
           started_at,
-          host:user_profiles!host_id(
+          host:user_profiles!host_user_id(
             username,
             avatar_url
           )
@@ -221,7 +221,7 @@ export default function GovernmentStreams() {
         .limit(100)
 
       if (!showHistory) {
-        query = query.eq('is_live', true)
+        query = query.in('status', ['live', 'active'])
       }
 
       const { data, error } = await query
@@ -231,6 +231,9 @@ export default function GovernmentStreams() {
       const transformed =
         data?.map((pod: any) => ({
           ...pod,
+          host_id: pod.host_user_id,
+          is_live: ['live', 'active'].includes(pod.status),
+          viewer_count: pod.listener_count || 0,
           host: Array.isArray(pod.host)
             ? pod.host[0]
             : pod.host,
@@ -239,7 +242,7 @@ export default function GovernmentStreams() {
       setPods(transformed)
     } catch (err) {
       console.error(err)
-      toast.error('Failed to load pods')
+      toast.error('Failed to load podcasts')
     }
   }, [showHistory])
 
@@ -561,8 +564,8 @@ export default function GovernmentStreams() {
           ) : pods.length === 0 ? (
             <EmptyState
               icon={Waves}
-              title="No Active Pods"
-              description="There are currently no live pod rooms active."
+              title="No Active Podcasts"
+              description="There are currently no live podcasts active."
             />
           ) : (
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -571,7 +574,7 @@ export default function GovernmentStreams() {
                   key={pod.id}
                   pod={pod}
                   onWatch={() =>
-                    navigate(`/pods/${pod.id}`)
+                    navigate(`/podcast/${pod.id}`)
                   }
                 />
               ))}

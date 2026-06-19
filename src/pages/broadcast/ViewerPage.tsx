@@ -48,6 +48,8 @@ import { getGiftVisualConfig } from '../../lib/giftVisuals'
 import { GiftSystemProvider } from '../../lib/hooks/useGiftSystem'
 import BattleView from '../../components/broadcast/BattleView'
 import { useBoxCount } from '../../hooks/useBoxCount'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useUserLeagues } from '../../hooks/useUserLeagues'
 import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
@@ -578,6 +580,9 @@ function ViewerPage() {
   const CHAT_FLOAT_MS = isMobileViewer ? 10000 : 20000
 
    const [stream, setStream] = useState<Stream | null>(null)
+
+   // Broadcaster's equipped profile frame
+   const broadcasterFrame = useUserFrame((stream as any)?.user_id)
 
    // Random battle phase (derived from stream state for viewers)
   const randomBattlePhase = useMemo((): 'regular' | 'queue' | 'starting' | 'active' | 'ended' => {
@@ -2502,13 +2507,16 @@ useStreamRealtime(
                 room={liveKitRoom}
                 fallback={
                   <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
-                    <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
+                    <div className="rounded-3xl border border-cyan-400/20 bg-slate-950/70 p-6 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl" style={{ overflow: 'visible' }}>
                       {broadcasterProfile?.avatar_url ? (
-                        <img
-                          src={broadcasterProfile.avatar_url}
-                          alt={hostName}
-                          className="mx-auto h-24 w-24 rounded-full border-2 border-cyan-300/60 object-cover shadow-[0_0_28px_rgba(34,211,238,0.45)]"
-                        />
+                        <div className="mx-auto h-28 w-28" style={{ overflow: 'visible' }}>
+                          <ProfileFrame
+                            frame={broadcasterFrame}
+                            avatarUrl={broadcasterProfile.avatar_url}
+                            username={hostName}
+                            size="md"
+                          />
+                        </div>
                       ) : (
                         <Video className="mx-auto h-12 w-12 text-cyan-200/70" />
                       )}
@@ -2567,13 +2575,16 @@ useStreamRealtime(
               )}
 
               {!isMobileViewer && (
-                <div className="absolute bottom-24 left-6 z-20 flex items-center gap-1.5">
+                <div className="absolute bottom-24 left-6 z-20 flex items-center gap-1.5" style={{ overflow: 'visible' }}>
                   {broadcasterProfile?.avatar_url ? (
-                    <img
-                      src={broadcasterProfile.avatar_url}
-                      alt={hostName}
-                      className="h-9 w-9 rounded-md border border-white/20 object-cover shadow-[0_0_18px_rgba(45,212,191,0.28)]"
-                    />
+                    <div className="h-10 w-10" style={{ overflow: 'visible' }}>
+                      <ProfileFrame
+                        frame={broadcasterFrame}
+                        avatarUrl={broadcasterProfile.avatar_url}
+                        username={hostName}
+                        size="sm"
+                      />
+                    </div>
                   ) : (
                     <div className="grid h-9 w-9 place-items-center rounded-md border border-white/20 bg-white/10">
                       <Crown className="h-5 w-5 text-cyan-200" />

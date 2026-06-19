@@ -20,14 +20,14 @@ export function useActiveBroadcasts() {
           return;
         }
 
-        // Check active pods
-        const { count: podCount } = await supabase
-          .from('pod_rooms')
+        // Check active podcasts
+        const { count: podcastCount } = await supabase
+          .from('podcasts')
           .select('*', { count: 'exact', head: true })
-          .eq('is_live', true);
+          .in('status', ['live', 'active']);
 
         if (mounted) {
-          setHasActiveContent((podCount || 0) > 0);
+          setHasActiveContent((podcastCount || 0) > 0);
         }
       } catch (error) {
         console.error('Error checking active content:', error);

@@ -5,6 +5,9 @@ Allow: /
 Sitemap: https://maitrollcity.com/sitemap.xml
 Sitemap: https://maitrollcity.com/sitemap-dynamic.xml
 
+# Allow public content (profiles, streams, live broadcasts)
+# /:username, /profile/:username, /live/:username, /stream/:username are all public
+
 # Disallow auth and internal pages from indexing
 Disallow: /auth
 Disallow: /auth/callback

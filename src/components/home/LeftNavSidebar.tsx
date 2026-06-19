@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   MessageCircle,
+  Mic,
   Radio,
   Sparkles,
   FileText,
@@ -15,7 +16,7 @@ import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import FloatingPoster from './FloatingPoster'
 import LevelStatusCard from './LevelStatusCard'
 
-type TabType = 'wall' | 'live' | 'universe' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'wall' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
 interface LeftNavSidebarProps {
   activeTab: TabType
@@ -47,6 +48,7 @@ export default function LeftNavSidebar({
     { id: 'wall', label: 'Wall', icon: MessageCircle, activeGradient: 'from-pink-500 to-purple-600' },
     { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount + battleCount },
     { id: 'universe', label: 'Universe', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
+    { id: 'podcast', label: 'Podcast', icon: Mic, activeGradient: 'from-purple-500 to-fuchsia-600' },
     { id: 'laws-fees', label: 'City Laws', icon: FileText, activeGradient: 'from-cyan-500 to-blue-600' },
     { id: 'leagues', label: 'Leagues', icon: Trophy, activeGradient: 'from-purple-500 to-indigo-600' },
     { id: 'academy', label: 'Academy', icon: BookOpen, activeGradient: 'from-emerald-500 to-teal-600' },

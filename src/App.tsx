@@ -146,14 +146,11 @@ const GamblingDisclosure = lazyWithRetry(() => import("./pages/legal/GamblingDis
 
 // SEO Pages (public, indexed by search engines)
 const SEOAboutPage = lazyWithRetry(() => import("./pages/seo/AboutPage"));
-const SEOBroadcastingPage = lazyWithRetry(() => import("./pages/seo/BroadcastingPage"));
-const SEOCategoriesPage = lazyWithRetry(() => import("./pages/seo/CategoriesPage"));
-const SEOCreatorsPage = lazyWithRetry(() => import("./pages/seo/CreatorsPage"));
-const SEOGoLivePage = lazyWithRetry(() => import("./pages/seo/GoLivePage"));
-const SEOGovernmentPage = lazyWithRetry(() => import("./pages/seo/GovernmentPage"));
-const SEOCategoryPage = lazyWithRetry(() => import("./pages/seo/CategoryPage"));
-const SEOTopCreatorsPage = lazyWithRetry(() => import("./pages/seo/TopCreatorsPage"));
-const SEOTrendingPage = lazyWithRetry(() => import("./pages/seo/TrendingPage"));
+const SEOContactPage = lazyWithRetry(() => import("./pages/seo/ContactPage"));
+const SEOSupportPage = lazyWithRetry(() => import("./pages/seo/SupportPage"));
+const SEOFAQPage = lazyWithRetry(() => import("./pages/seo/FAQPage"));
+const SEOPrivacyPage = lazyWithRetry(() => import("./pages/seo/PrivacyPage"));
+const SEOTermsPage = lazyWithRetry(() => import("./pages/seo/TermsPage"));
 
 const OfficerPayrollDashboard = lazyWithRetry(() => import("./pages/officer/OfficerPayrollDashboard"));
 const OfficerDashboard = lazyWithRetry(() => import("./pages/officer/OfficerDashboard"));
@@ -283,22 +280,20 @@ const isPublicRoute = (pathname: string) => {
 
   // SEO pages are public — indexable by search engines
   if (pathname === '/about') return true
-  if (pathname === '/broadcasting') return true
-  if (pathname === '/categories') return true
-  if (pathname === '/creators') return true
-  if (pathname === '/go-live') return true
-  if (pathname === '/seo-government') return true
-  if (pathname.startsWith('/categories/')) return true
-  if (pathname === '/top-creators') return true
-  if (pathname === '/trending') return true
-  if (pathname === '/trending-creators') return true
-  if (pathname === '/new-creators') return true
+  if (pathname === '/contact') return true
+  if (pathname === '/support') return true
+  if (pathname === '/faq') return true
+  if (pathname === '/privacy') return true
+  if (pathname === '/terms') return true
 
   // Legal pages are public
   if (pathname.startsWith('/legal/')) return true
 
   // Profile pages are public - usernames and user IDs
   if (pathname.startsWith('/profile/')) return true
+
+  // Podcast routes are public — anyone can listen without signing in
+  if (pathname === '/podcast' || pathname.startsWith('/podcast/')) return true
 
   // Username-based routes (e.g., /ceo_of_mai) are public profile redirects
   // Must come before broadcast check - route must look like a username (alphanumeric + underscores/hyphens)
@@ -1252,6 +1247,17 @@ function AppContent() {
 
         const fullMessage = rootMessage.trim() || serializedArgs.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')
 
+        // Supabase Realtime AbortError ("Lock broken by another request with the 'steal' option")
+        // is a known non-fatal issue when multiple realtime channels compete for the same connection.
+        // Supabase auto-retries, so we suppress it from Bug Center reporting.
+        if (
+          fullMessage.includes('Lock broken by another request') ||
+          fullMessage.includes("'steal' option") ||
+          (firstError && firstError.name === 'AbortError')
+        ) {
+          return
+        }
+
         let stack = null
         if (firstError && firstError.stack) stack = firstError.stack
         if (!stack) stack = new Error(fullMessage).stack
@@ -1464,19 +1470,13 @@ const handleVisibilityChange = async () => {
 
                 {/* 🔍 SEO Pages (Public, Indexable by Search Engines) */}
                 <Route path="/about" element={<SEOAboutPage />} />
-                <Route path="/broadcasting" element={<SEOBroadcastingPage />} />
-                <Route path="/categories" element={<SEOCategoriesPage />} />
-                <Route path="/creators" element={<SEOCreatorsPage />} />
-                <Route path="/go-live" element={<SEOGoLivePage />} />
-                <Route path="/seo-government" element={<SEOGovernmentPage />} />
-                <Route path="/categories/:slug" element={<SEOCategoryPage />} />
-                <Route path="/categories/:slug/live" element={<SEOCategoryPage />} />
-                <Route path="/top-creators" element={<SEOTopCreatorsPage />} />
-                <Route path="/trending" element={<SEOTrendingPage />} />
-                <Route path="/trending-creators" element={<Navigate to="/top-creators" replace />} />
-                <Route path="/new-creators" element={<Navigate to="/top-creators" replace />} />
+                <Route path="/contact" element={<SEOContactPage />} />
+                <Route path="/support" element={<SEOSupportPage />} />
+                <Route path="/faq" element={<SEOFAQPage />} />
+                <Route path="/privacy" element={<SEOPrivacyPage />} />
+                <Route path="/terms" element={<SEOTermsPage />} />
 
-{/* 🏢 Talent Offices (Public) */}
+                {/* 🏢 Talent Offices (Public) */}
                 <Route path="/agencies" element={<AgenciesPage />} />
                 <Route path="/agencies/create" element={<CreateAgencyPage />} />
                 <Route path="/agency/:agencyIdOrSlug" element={<AgencyProfilePage />} />
@@ -1507,6 +1507,10 @@ const handleVisibilityChange = async () => {
 
                 {/* Broadcast/Stream routes - public with password protection */}
                 <Route path="/gaming/watch/:streamId" element={<HytroGamingViewer />} />
+                {/* Username-based stream routes (SEO-friendly, e.g. /live/username) */}
+                <Route path="/live/:username" element={<BroadcastRouter />} />
+                <Route path="/stream/:username" element={<BroadcastRouter />} />
+                {/* UUID-based stream routes (backwards compatibility) */}
                 <Route path="/broadcast/:id" element={<BroadcastRouter />} />
                 <Route path="/watch/:id" element={<BroadcastRouter />} />
                 <Route path="/live/:streamId" element={<BroadcastRouter />} />
@@ -1902,9 +1906,7 @@ const handleVisibilityChange = async () => {
                       }
                     />
 
-                    {/* 🎙️ Podcast Central */}
-                   <Route path="/podcast" element={<PodcastCentral />} />
-                   <Route path="/podcast/:id" element={<PodcastRoom />} />
+
                    
                   {/* 🎮 Multi-Box Streaming */}
 
@@ -2567,7 +2569,11 @@ const handleVisibilityChange = async () => {
 {/* Account routes removed - Settings/Account pages no longer in sidebar */}
                 </Route>
 
-{/* 🔙 Catch-all - redirect username patterns to profile (PUBLIC ACCESS) */}
+                {/* 🎙️ Podcast Central — public, no sign-in required to listen */}
+                <Route path="/podcast" element={<PodcastCentral />} />
+                <Route path="/podcast/:id" element={<PodcastRoom />} />
+
+                {/* 🔙 Catch-all - redirect username patterns to profile (PUBLIC ACCESS) */}
                  <Route path="/:username" element={<UsernameRedirect />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
                    </Routes>
@@ -2698,13 +2704,15 @@ function UsernameRedirect() {
           .eq('status', 'live')
           .maybeSingle();
       })
-      .then(({ data: liveStream }) => {
+      .then((result) => {
         if (cancelled) return;
+        // Handle both the direct stream result and the chained promise result
+        const liveStream = result?.data || result;
         if (liveStream?.id) {
-          // Gaming streams route to gaming viewer, others to general watch
+          // Gaming streams route to gaming viewer, others to username-based watch URL
           const targetPath = liveStream.category === 'gaming' 
-            ? `/gaming/watch/${liveStream.id}` 
-            : `/watch/${liveStream.id}`;
+            ? `/gaming/watch/${username}` 
+            : `/live/${encodeURIComponent(username)}`;
           navigate(targetPath, { replace: true });
         } else {
           navigate(`/profile/${encodeURIComponent(username)}`, { replace: true });

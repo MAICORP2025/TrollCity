@@ -7,6 +7,7 @@ import {
   Home,
   LogOut,
   MessageCircle,
+  Mic,
   Radio,
   Sparkles,
   Store,
@@ -164,8 +165,7 @@ function MobileUserPanel({
               frame={equippedFrame}
               avatarUrl={user.avatarUrl}
               username={user.username}
-              size="xs"
-              fillParent
+              size="sm"
             />
           ) : (
             user.username.slice(0, 2).toUpperCase()
@@ -248,7 +248,7 @@ function MobileGoLiveButton({ onClick }: { onClick: () => void }) {
 }
 
 function splitRoutes(routes: MobileRouteItem[]) {
-  const primaryKeys = new Set(["home", "profile", "store", "wallet"]);
+  const primaryKeys = new Set(["home", "profile", "store", "wallet", "podcast"]);
 
   return {
     primaryRoutes: routes.filter((route) => primaryKeys.has(route.key)),
@@ -417,6 +417,10 @@ export default function MobileBottomNav() {
         <NavLink to="/treelz" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
           <Sparkles size={15} />
           <span className="text-[7px] font-bold leading-none">Treelz</span>
+        </NavLink>
+        <NavLink to="/podcast" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+          <Mic size={15} />
+          <span className="text-[7px] font-bold leading-none">Podcast</span>
         </NavLink>
         <button
           type="button"

@@ -19,6 +19,9 @@ import BroadcastTicker from './BroadcastTicker';
 import SeatHeatBar from './SeatHeatBar';
 import BroadcastStageLayout from './BroadcastStageLayout';
 import { SeatSession } from '@/hooks/useStreamSeats';
+import ProfileFrame from '@/components/profile/ProfileFrame';
+import { useUserFrame } from '@/hooks/useUserFrame';
+import UserMiniProfile from '@/components/user/UserMiniProfile';
 
  // Battle Timer Display Component - Shows 3 minute countdown for standalone battles
 
@@ -488,6 +491,37 @@ const BroadcastGridComponent = function BroadcastGrid({
 
 const { profile } = useAuthStore();
 const stagePassesHook = useStagePasses(streamStatus === 'live' ? stream.id : undefined);
+
+  // Mini profile popup state
+  const [miniProfile, setMiniProfile] = useState<{ userId: string; username: string; avatarUrl: string } | null>(null);
+
+  // Frame cache for seat users (populated via effect)
+  const frameCacheRef = useRef<Map<string, import('@/config/profileFrames').ProfileFrame | null>>(new Map())
+  const [, forceUpdate] = useState(0)
+  const catalog = useProfileFrameStore((s: any) => s.catalog)
+
+  // Fetch frames for all seated users
+  useEffect(() => {
+    const userIds = seatAssignments.map((s: any) => s?.user_id).filter(Boolean) as string[]
+    if (userIds.length === 0) return
+    let cancelled = false
+    supabase
+      .from('user_profile_frames')
+      .select('user_id, frame_id')
+      .in('user_id', userIds)
+      .eq('is_equipped', true)
+      .then(({ data }) => {
+        if (cancelled) return
+        const newCache = new Map<string, import('@/config/profileFrames').ProfileFrame | null>()
+        for (const row of data || []) {
+          const frame = catalog.find((f: any) => f.id === (row as any).frame_id)
+          if (frame) newCache.set((row as any).user_id, frame)
+        }
+        frameCacheRef.current = newCache
+        forceUpdate((n: number) => n + 1)
+      })
+    return () => { cancelled = true }
+  }, [seatAssignments, catalog])
 
   const liveStagePasses = useMemo(() => {
     return stagePassesHook.stagePasses
@@ -1494,19 +1528,35 @@ boxClass,
                 
                 // Remote users who exist but have camera off or no track
                 if (participant) {
+                  const seatUserFrame = userId ? frameCacheRef.current.get(userId) ?? null : null
                   return (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/90">
-                      <div className="relative">
-                        <img
-                          src={
-                            displayProfile?.avatar_url ||
-                            `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                              displayProfile?.username || 'User'
-                            )}&background=random`
+                      <div
+                        className="relative cursor-pointer"
+                        style={{ overflow: 'visible' }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (userId && displayProfile?.username) {
+                            setMiniProfile({ userId, username: displayProfile.username, avatarUrl: displayProfile.avatar_url || '' })
                           }
-                          alt={displayProfile?.username}
-                          className="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white/20"
-                        />
+                        }}
+                      >
+                        {displayProfile?.avatar_url ? (
+                          <div className="w-14 h-14 md:w-18 md:h-18" style={{ overflow: 'visible' }}>
+                            <ProfileFrame
+                              frame={seatUserFrame}
+                              avatarUrl={displayProfile.avatar_url}
+                              username={displayProfile.username || 'User'}
+                              size="sm"
+                            />
+                          </div>
+                        ) : (
+                          <img
+                            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayProfile?.username || 'User')}&background=random`}
+                            alt={displayProfile?.username}
+                            className="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white/20"
+                          />
+                        )}
                         {!isMicOn && (
                           <div className="absolute -bottom-1 -right-1 bg-red-500 rounded-full p-1">
                             <MicOff size={12} className="text-white" />
@@ -1947,6 +1997,15 @@ boxClass,
              })}
            </div>
          </div>
+       )}
+
+       {miniProfile && (
+         <UserMiniProfile
+           userId={miniProfile.userId}
+           username={miniProfile.username}
+           avatarUrl={miniProfile.avatarUrl}
+           onClose={() => setMiniProfile(null)}
+         />
        )}
     </div>
   </div>

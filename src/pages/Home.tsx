@@ -45,8 +45,9 @@ import PodcastRow from '@/components/home/PodcastRow'
 import NewStreamersRow from '@/components/home/NewStreamersRow'
 import BestTrollersRow from '@/components/home/BestTrollersRow'
 import PromoSlot from '@/components/promo/PromoSlot'
+import PodcastCentral from '@/pages/PodcastCentral'
 
-type TabType = 'wall' | 'live' | 'universe' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'wall' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
 const PWAInstallPrompt = lazyWithRetry(() => import('../components/PWAInstallPrompt'))
 const TCNNPopupWidget = lazyWithRetry(() => import('@/components/tcnn/TCNNPopupWidget'))
@@ -156,10 +157,21 @@ const LiveGrid = React.memo(function LiveGrid({
                 <div key={index} className="aspect-[4/3] animate-pulse rounded-2xl bg-white/5" />
               ))
             ) : liveItems.length === 0 ? (
-              <div className="col-span-full rounded-2xl border border-white/10 bg-white/[0.03] py-12 text-center">
-                <Radio className="mx-auto h-10 w-10 text-slate-600" />
-                <p className="mt-3 text-sm font-bold text-slate-400">No one is live right now</p>
-              </div>
+              <button
+                onClick={() => {
+                  if (user) {
+                    navigate('/broadcast/setup')
+                  } else {
+                    toast.info('Sign in to start broadcasting.')
+                    navigate('/auth')
+                  }
+                }}
+                className="col-span-full rounded-2xl border border-dashed border-cyan-500/30 bg-cyan-500/[0.04] py-12 text-center transition hover:border-cyan-400/50 hover:bg-cyan-500/[0.08] cursor-pointer"
+              >
+                <Radio className="mx-auto h-10 w-10 text-cyan-500/50" />
+                <p className="mt-3 text-sm font-bold text-cyan-300/70">No one is live right now</p>
+                <p className="mt-1 text-xs text-cyan-400/50">Click here to start your broadcast!</p>
+              </button>
             ) : (
               liveItems.map((item) => (
                 <button
@@ -433,7 +445,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                showPresidentTab={showPresidentTab}
              />
              <div className="min-w-0 flex-1 space-y-4">
-               <TrollWallFeed />
+                <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" />
                <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
                <PodcastRow />
                <HyTroGamingRow onItemClick={handleScrollItemClick} />
@@ -480,6 +492,27 @@ const handleScrollItemClick = useCallback((id: string) => {
               </div>
             </div>
           )}
+
+         {activeTab === 'podcast' && (
+           <div className="flex gap-4">
+             <LeftNavSidebar
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               liveCount={allLiveItems.length}
+               battleCount={battleItems.length}
+               followersLiveCount={0}
+               presidentTabLabel={presidentTabLabel}
+               showPresidentTab={showPresidentTab}
+             />
+             <div className="min-w-0 flex-1">
+               <section className={`${glass} rounded-2xl p-4`}>
+                 <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-300 border-t-transparent" /></div>}>
+                   <PodcastCentral />
+                 </Suspense>
+               </section>
+             </div>
+           </div>
+         )}
 
          {activeTab === 'laws-fees' && (
            <div className="flex gap-4">

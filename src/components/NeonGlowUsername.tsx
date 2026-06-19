@@ -1,8 +1,11 @@
 import React from 'react'
 import { Crown, Shield, Skull, Star, Verified, Gem, Award, ClipboardList } from 'lucide-react'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 
 interface NeonGlowUsernameProps {
   username: string
+  userId?: string
   avatarUrl?: string | null
   profile?: {
     is_admin?: boolean
@@ -26,7 +29,8 @@ interface NeonGlowUsernameProps {
 }
 
 export default function NeonGlowUsername({ 
-  username, 
+  username,
+  userId,
   avatarUrl,
   profile, 
   size = 'md',
@@ -111,7 +115,10 @@ export default function NeonGlowUsername({
         className={`flex items-center gap-2 ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
         onClick={onClick}
       >
-        {avatarUrl && (
+        {avatarUrl && userId && (
+          <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(userId)} avatarUrl={avatarUrl} username={username} size="xs" /></div>
+        )}
+        {avatarUrl && !userId && (
           <img src={avatarUrl} alt={username} className={`${sizes.avatar} rounded-full`} />
         )}
         <span className={`font-bold username-readable ${sizes.text} ${getUsernameColor()} ${getSpecialClasses()}`}>
@@ -127,7 +134,9 @@ export default function NeonGlowUsername({
       onClick={onClick}
     >
       {/* Avatar */}
-      {avatarUrl ? (
+      {avatarUrl && userId ? (
+        <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(userId)} avatarUrl={avatarUrl} username={username} size={size === 'lg' ? 'sm' : 'xs'} /></div>
+      ) : avatarUrl ? (
         <img src={avatarUrl} alt={username} className={`${sizes.avatar} rounded-full ring-2 ring-white/20`} />
       ) : (
         <div className={`${sizes.avatar} rounded-full bg-zinc-800 flex items-center justify-center`}>

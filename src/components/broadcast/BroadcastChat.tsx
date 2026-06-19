@@ -11,6 +11,9 @@ import { useMissionProgress } from '../../hooks/useMissionProgress';
 import useTrollFamilyActivity from '../../hooks/useTrollFamilyActivity';
 import GiftBoxModal from './GiftBoxModal';
 import ModActionsPopup from './ModActionsPopup';
+import ProfileFrame from '@/components/profile/ProfileFrame';
+import { useUserFrame } from '@/hooks/useUserFrame';
+import UserMiniProfile from '@/components/user/UserMiniProfile';
 
 import { isStaffProfile } from '../../lib/staff';
 import { shouldAutoHideMessage, canControlSlowMode, shouldShowGoldenBanner } from '../../lib/perkEffects';
@@ -109,12 +112,14 @@ interface ChatMessageItemProps {
   deleteMessage: (id: string) => void;
   onAcceptChallenge?: (challengeId: string, challengerId: string) => void;
   onDenyChallenge?: (challengeId: string) => void;
+  onOpenMiniProfile?: (userId: string, username: string, avatarUrl?: string) => void;
 }
 
-function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disappearingMessages, openModActionsForUser, openGiftForUser, deleteMessage, onAcceptChallenge, onDenyChallenge }: ChatMessageItemProps) {
+function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disappearingMessages, openModActionsForUser, openGiftForUser, deleteMessage, onAcceptChallenge, onDenyChallenge, onOpenMiniProfile }: ChatMessageItemProps) {
   const isSystem = msg.type === 'system';
   const isGift = msg.type === 'gift' || msg.content?.startsWith('GIFT_EVENT:');
   const isChallenge = msg.type === 'challenge';
+  const userFrame = useUserFrame(msg.user_id);
 
   if (isSystem) {
     return (
@@ -238,11 +243,28 @@ function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disap
       {showGoldenBanner && msg.user_id === user?.id && (
         <span className="text-yellow-400 text-xs">👑</span>
       )}
-      <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-zinc-700 overflow-hidden flex-shrink-0">
+      <div
+        className="w-7 h-7 md:w-8 md:h-8 rounded-full flex-shrink-0 cursor-pointer"
+        style={{ overflow: 'visible' }}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (msg.user_id && msg.user_profiles?.username) {
+            onOpenMiniProfile?.(msg.user_id, msg.user_profiles.username, msg.user_profiles.avatar_url || '')
+          }
+        }}
+        title={`View ${msg.user_profiles?.username || 'User'}'s profile`}
+      >
         {msg.user_profiles?.avatar_url ? (
-          <img src={msg.user_profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+          <ProfileFrame
+            frame={userFrame}
+            avatarUrl={msg.user_profiles.avatar_url}
+            username={msg.user_profiles.username || 'User'}
+            size="sm"
+          />
         ) : (
-          <User size={8} className="md:w-[10px] md:h-[10px] m-0.5 text-zinc-400" />
+          <div className="w-full h-full rounded-full bg-zinc-700 flex items-center justify-center">
+            <User size={8} className="text-zinc-400" />
+          </div>
         )}
       </div>
       <div className="flex-1 min-w-0 flex items-center gap-1">
@@ -310,6 +332,15 @@ export default function BroadcastChat({
   const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
   const { trackChatMessage } = useMissionProgress(streamId);
   const { recordChatMessage } = useTrollFamilyActivity();
+
+  // Mini profile popup state
+  const [miniProfile, setMiniProfile] = useState<{ userId: string; username: string; avatarUrl: string } | null>(null);
+  const handleOpenMiniProfile = useCallback((userId: string, username: string, avatarUrl: string) => {
+    setMiniProfile({ userId, username, avatarUrl });
+  }, []);
+  const handleCloseMiniProfile = useCallback(() => {
+    setMiniProfile(null);
+  }, []);
 
   const buildUserProfile = (source: any) => ({
     username:
@@ -1589,7 +1620,7 @@ const fetchMessages = async () => {
                   <Virtuoso
                     ref={virtuosoRef}
                     data={reversedMessages}
-                    itemContent={(index, msg) => <ChatMessageItem msg={msg} isHost={isHost} isOfficer={isOfficer} user={user} showGoldenBanner={showGoldenBanner} disappearingMessages={disappearingMessages} openModActionsForUser={openModActionsForUser} openGiftForUser={openGiftForUser} deleteMessage={deleteMessage} onAcceptChallenge={onAcceptChallenge} onDenyChallenge={onDenyChallenge} />}
+                    itemContent={(index, msg) => <ChatMessageItem msg={msg} isHost={isHost} isOfficer={isOfficer} user={user} showGoldenBanner={showGoldenBanner} disappearingMessages={disappearingMessages} openModActionsForUser={openModActionsForUser} openGiftForUser={openGiftForUser} deleteMessage={deleteMessage} onAcceptChallenge={onAcceptChallenge} onDenyChallenge={onDenyChallenge} onOpenMiniProfile={handleOpenMiniProfile} />}
                     style={{ height: '100%', width: '100%' }}
                     overscan={20}
                     alignToBottom
@@ -1663,6 +1694,15 @@ const fetchMessages = async () => {
           hostId={hostId}
           currentUserId={user?.id}
         />
+
+        {miniProfile && (
+          <UserMiniProfile
+            userId={miniProfile.userId}
+            username={miniProfile.username}
+            avatarUrl={miniProfile.avatarUrl}
+            onClose={handleCloseMiniProfile}
+          />
+        )}
     </div>
   );
 }

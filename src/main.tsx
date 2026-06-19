@@ -65,6 +65,7 @@ const shouldReportBugCenterError = (errorLike: unknown) => {
 
 const shouldIgnoreBugCenterError = (errorLike: unknown) => {
   const text = String((errorLike as any)?.message || errorLike || '').toLowerCase()
+  const stack = String((errorLike as any)?.stack || '').toLowerCase()
   return (
     text.includes('analytics.google.com') ||
     text.includes('googletagmanager.com') ||
@@ -74,7 +75,11 @@ const shouldIgnoreBugCenterError = (errorLike: unknown) => {
     // Auth token expiration is normal — not a bug
     text.includes('refresh_token_not_found') ||
     text.includes('invalid refresh token') ||
-    text.includes('refresh token not found')
+    text.includes('refresh token not found') ||
+    // Service worker registration rejections — non-critical, handled by PWA context
+    stack.includes('serviceworker') ||
+    stack.includes('service-worker') ||
+    (text.includes('rejected') && stack.includes('register'))
   )
 }
 
@@ -229,7 +234,9 @@ const shouldIgnoreNetworkErrorForBugCenter = (url: string) => {
     url.includes('/g/collect') ||
     url.includes('/collect?v=2') ||
     url.includes('facebook.net') ||
-    url.includes('connect.facebook.net')
+    url.includes('connect.facebook.net') ||
+    // Non-critical catalog fetches with graceful fallback — already caught by callers
+    url.includes('/rest/v1/profile_frames')
   )
 }
 

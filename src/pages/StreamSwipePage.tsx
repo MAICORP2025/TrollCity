@@ -34,7 +34,7 @@ interface StreamSwipePageProps {
 const CATEGORIES: { id: SwipeCategory; label: string; icon: React.ReactNode; query: string | null }[] = [
   { id: 'battle', label: 'Battle', icon: <Flame className="w-4 h-4" />, query: 'trollmers' },
   { id: 'top', label: 'Top Streamers', icon: <Crown className="w-4 h-4" />, query: null }, // All categories
-  { id: 'podcast', label: 'Podcast', icon: <Mic className="w-4 h-4" />, query: 'podcast' },
+  { id: 'podcast', label: 'Podcast', icon: <Mic className="w-4 h-4" />, query: null },
   { id: 'gaming', label: 'Gaming', icon: <Gamepad2 className="w-4 h-4" />, query: 'gaming' },
 ];
 
@@ -156,35 +156,40 @@ export default function StreamSwipePage({ initialCategory = 'top' }: StreamSwipe
           : stream.broadcaster
       }));
       
-      setStreams(formattedStreams);
-      setCurrentIndex(0);
-      
-      // If no streams, try fetching from pod_rooms for podcast category
-      if (category === 'podcast' && formattedStreams.length === 0) {
-        const { data: podsData } = await supabase
-          .from('pod_rooms')
+      // If podcast category, fetch from podcasts table instead
+      if (category === 'podcast') {
+        const { data: podsData, error: podsError } = await supabase
+          .from('podcasts')
           .select(`
-            *,
-            broadcaster:user_profiles!pod_rooms_host_id_fkey(
+            id,
+            host_user_id,
+            title,
+            status,
+            listener_count,
+            started_at,
+            created_at,
+            host:user_profiles!host_user_id(
               username,
               avatar_url,
               level
             )
           `)
-          .eq('is_live', true)
-          .order('viewer_count', { ascending: false })
+          .in('status', ['live', 'active'])
+          .order('listener_count', { ascending: false })
           .limit(50);
-        
+
+        if (podsError) throw podsError;
+
         if (podsData) {
-          const podStreams: StreamWithProfile[] = podsData.map(pod => ({
+          const podStreams: StreamWithProfile[] = podsData.map((pod: any) => ({
             id: pod.id,
-            user_id: pod.host_id,
+            user_id: pod.host_user_id,
             title: pod.title,
             category: 'podcast',
             status: 'live' as const,
             is_battle: false,
-            viewer_count: pod.viewer_count || 0,
-            current_viewers: pod.viewer_count || 0,
+            viewer_count: pod.listener_count || 0,
+            current_viewers: pod.listener_count || 0,
             box_count: 1,
             layout_mode: 'spotlight' as const,
             started_at: pod.started_at,
@@ -193,14 +198,20 @@ export default function StreamSwipePage({ initialCategory = 'top' }: StreamSwipe
             seat_price: 0,
             are_seats_locked: false,
             has_rgb_effect: false,
-            broadcaster: Array.isArray(pod.broadcaster)
-              ? pod.broadcaster[0]
-              : pod.broadcaster
+            broadcaster: Array.isArray(pod.host)
+              ? pod.host[0]
+              : pod.host,
           }));
-          
+
           setStreams(podStreams);
+          setCurrentIndex(0);
+          setLoading(false);
+          return;
         }
       }
+
+      setStreams(formattedStreams);
+      setCurrentIndex(0);
       
     } catch (error) {
       console.error('Error fetching streams:', error);

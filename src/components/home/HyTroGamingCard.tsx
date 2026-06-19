@@ -1,5 +1,7 @@
 import React from 'react'
 import { Play, Users, Gamepad2, Flame, Radio } from 'lucide-react'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 
 interface HyTroGamingCardProps {
   stream: {
@@ -81,7 +83,7 @@ export default function HyTroGamingCard({ stream, onClick }: HyTroGamingCardProp
         {/* Streamer row */}
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 shrink-0 overflow-hidden rounded-full ring-1 ring-white/20">
-            <img src={avatarUrl} alt={stream.streamer_name} loading="lazy" className="h-full w-full object-cover" />
+            <ProfileFrame frame={useUserFrame(stream.streamer_id)} avatarUrl={avatarUrl} username={stream.streamer_name || 'User'} size="xs" fillParent />
           </div>
           <span className="truncate text-[11px] font-bold text-white/50">{stream.streamer_name}</span>
           <Flame className="ml-auto h-3 w-3 text-orange-400/60" />

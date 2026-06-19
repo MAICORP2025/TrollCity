@@ -1,12 +1,22 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import useGlobalActivity, { ActivityEvent } from '../../hooks/useGlobalActivity'
 import { useAuthStore } from '../../lib/store'
 import { useTCNNRoles } from '../../hooks/useTCNNRoles'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Home, Mail, HelpCircle, MessageCircle, Shield, FileText } from 'lucide-react'
 import '../../styles/ticker.css'
+
+const seoLinks = [
+  { path: '/about', label: 'About', icon: Home },
+  { path: '/contact', label: 'Contact', icon: Mail },
+  { path: '/support', label: 'Support', icon: HelpCircle },
+  { path: '/faq', label: 'FAQ', icon: MessageCircle },
+  { path: '/privacy', label: 'Privacy', icon: Shield },
+  { path: '/terms', label: 'Terms', icon: FileText },
+]
 
 const GlobalTicker = () => {
   const events = useGlobalActivity()
@@ -60,7 +70,6 @@ const GlobalTicker = () => {
 
       if (error) throw error
 
-      // Send in-app and push notifications via Edge Function
       try {
         const notifTitle = getNotificationTitle(tickerType)
         await supabase.functions.invoke('global-ticker-notify', {
@@ -71,12 +80,11 @@ const GlobalTicker = () => {
             icon: tickerType === 'breaking' ? 'alert' : 'newspaper',
             original_type: tickerType === 'breaking' ? 'tcnn_breaking' : 'tcnn_live',
             category: tickerType === 'breaking' ? 'breaking_news' : 'ticker_message',
-            url: '/', // default landing page
+            url: '/',
           },
         })
       } catch (notifyErr: any) {
         console.warn('Failed to send ticker notifications:', notifyErr)
-        // Do not block on notification failures
       }
 
       toast.success(tickerType === 'breaking' ? 'Breaking news pushed!' : 'Ticker message pushed!')
@@ -153,38 +161,58 @@ const GlobalTicker = () => {
 
   return (
     <>
-      <div
-        className={`ticker-wrap ${isHeartbeating ? 'heartbeat' : ''} ${hasBreakingNews ? 'breaking-news-active' : ''} ${canEditTicker ? 'cursor-pointer' : ''}`}
-        onDoubleClick={() => canEditTicker && setShowEditModal(true)}
-        title={canEditTicker ? 'Double-click to push new ticker message' : undefined}
-      >
-        <div className="ticker">
-          {currentEvent ? (
-            <div
-              key={`${currentEvent.id}-${currentEvent.type}`}
-              className={`ticker-item ${getEventStyles(currentEvent)} ${currentEvent.metadata?.url ? 'cursor-pointer hover:underline' : ''} animate-slide-right-to-left`}
-              onClick={() => currentEvent.metadata?.url && handleTickerClick(currentEvent)}
-              role={currentEvent.metadata?.url ? 'button' : undefined}
-              tabIndex={currentEvent.metadata?.url ? 0 : undefined}
-            >
-              <span className="ticker-icon">{getEventIcon(currentEvent)}</span>
-              <span className="ticker-message">{currentEvent.message}</span>
-              {currentEvent.type === 'tcnn_breaking' && <span className="breaking-badge">BREAKING</span>}
-              {currentEvent.type === 'tcnn_live' && <span className="live-badge">LIVE</span>}
-            </div>
-          ) : (
-            <div className="ticker-item event-system animate-slide-right-to-left">
-              <span className="ticker-icon">LIVE</span>
-              <span className="ticker-message">Waiting for live city events...</span>
+      <div className="ticker-two-system">
+        {/* Top: Activity Ticker */}
+        <div
+          className={`ticker-wrap ${isHeartbeating ? 'heartbeat' : ''} ${hasBreakingNews ? 'breaking-news-active' : ''} ${canEditTicker ? 'cursor-pointer' : ''}`}
+          onDoubleClick={() => canEditTicker && setShowEditModal(true)}
+          title={canEditTicker ? 'Double-click to push new ticker message' : undefined}
+        >
+          <div className="ticker">
+            {currentEvent ? (
+              <div
+                key={`${currentEvent.id}-${currentEvent.type}`}
+                className={`ticker-item ${getEventStyles(currentEvent)} ${currentEvent.metadata?.url ? 'cursor-pointer hover:underline' : ''} animate-slide-right-to-left`}
+                onClick={() => currentEvent.metadata?.url && handleTickerClick(currentEvent)}
+                role={currentEvent.metadata?.url ? 'button' : undefined}
+                tabIndex={currentEvent.metadata?.url ? 0 : undefined}
+              >
+                <span className="ticker-icon">{getEventIcon(currentEvent)}</span>
+                <span className="ticker-message">{currentEvent.message}</span>
+                {currentEvent.type === 'tcnn_breaking' && <span className="breaking-badge">BREAKING</span>}
+                {currentEvent.type === 'tcnn_live' && <span className="live-badge">LIVE</span>}
+              </div>
+            ) : (
+              <div className="ticker-item event-system animate-slide-right-to-left">
+                <span className="ticker-icon">LIVE</span>
+                <span className="ticker-message">Waiting for live city events...</span>
+              </div>
+            )}
+          </div>
+
+          {hasBreakingNews && (
+            <div className="breaking-news-overlay">
+              <span className="breaking-pulse">BREAKING NEWS</span>
             </div>
           )}
         </div>
 
-        {hasBreakingNews && (
-          <div className="breaking-news-overlay">
-            <span className="breaking-pulse">BREAKING NEWS</span>
-          </div>
-        )}
+        {/* Bottom: SEO Page Links */}
+        <nav className="ticker-seo-links" aria-label="Quick links">
+          <ul className="ticker-seo-list">
+            {seoLinks.map((link) => {
+              const Icon = link.icon
+              return (
+                <li key={link.path}>
+                  <Link to={link.path} className="ticker-seo-link">
+                    <Icon className="w-3 h-3" />
+                    <span>{link.label}</span>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
       </div>
 
       {showEditModal && (

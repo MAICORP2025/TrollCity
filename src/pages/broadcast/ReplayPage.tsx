@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { toast } from 'sonner';
 
 interface ReplayData {
   id: string;
@@ -11,7 +12,7 @@ interface ReplayData {
   replay_url: string;
   thumbnail_url: string | null;
   duration_seconds: number | null;
-  file_size: number | null;
+  file_size_bytes: number | null;
   created_at: string;
   user_profiles?: {
     username: string;
@@ -25,6 +26,8 @@ export default function ReplayPage() {
   const [replay, setReplay] = useState<ReplayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const egressRecordedRef = useRef(false);
 
   useEffect(() => {
     if (!streamId) {
@@ -65,6 +68,60 @@ export default function ReplayPage() {
     fetchReplay();
     return () => { cancelled = true; };
   }, [streamId]);
+
+  useEffect(() => {
+    if (!replay || !videoRef.current || egressRecordedRef.current) return;
+
+    const video = videoRef.current;
+    const egressInterval = setInterval(async () => {
+      if (egressRecordedRef.current) return;
+      if (!video.duration || video.duration < 1) return;
+      if (video.paused) return;
+
+      const currentTime = video.currentTime;
+      const duration = video.duration;
+
+      // Record every 1 minute of watch time (or at 10% and 50% marks for short videos)
+      const watchedRatio = currentTime / duration;
+      if (watchedRatio < 0.05) return;
+
+      // Calculate minutes watched (incremental)
+      const minutesWatched = Math.max(1, Math.floor(currentTime / 60));
+      if (minutesWatched < 1) return;
+
+      egressRecordedRef.current = true;
+
+      try {
+        const { data: result, error: rpcError } = await supabase.rpc('record_replay_view', {
+          p_creator_user_id: replay.user_id,
+          p_stream_id: replay.stream_id,
+          p_viewer_user_id: (await supabase.auth.getUser())?.data?.user?.id || null,
+          p_minutes_watched: minutesWatched,
+        });
+
+        if (rpcError) {
+          console.warn('[ReplayPage] Replay view error:', rpcError);
+          return;
+        }
+
+        if (result?.error) {
+          console.warn('[ReplayPage] Replay rejected:', result.error);
+          if (result?.restricted) {
+            toast.error('Replay playback unavailable. Creator replay balance exhausted.');
+          }
+          return;
+        }
+
+        if (result?.charged) {
+          console.log('[ReplayPage] Replay charged:', result.charged, 'coins for', minutesWatched, 'min');
+        }
+      } catch (err: any) {
+        console.warn('[ReplayPage] Replay view failed:', err);
+      }
+    }, 60000);
+
+    return () => clearInterval(egressInterval);
+  }, [replay]);
 
   if (loading) {
     return (
@@ -131,6 +188,7 @@ export default function ReplayPage() {
 
         <div className="w-full aspect-video bg-zinc-900 rounded-2xl overflow-hidden mb-6 relative">
           <video
+            ref={videoRef}
             src={replay.replay_url}
             controls
             autoPlay
@@ -156,8 +214,8 @@ export default function ReplayPage() {
             {replay.duration_seconds && (
               <span>Duration: {formatDuration(replay.duration_seconds)}</span>
             )}
-            {replay.file_size && (
-              <span>Size: {formatFileSize(replay.file_size)}</span>
+            {replay.file_size_bytes && (
+              <span>Size: {formatFileSize(replay.file_size_bytes)}</span>
             )}
             <span>Archived: {formatDate(replay.created_at)}</span>
           </div>

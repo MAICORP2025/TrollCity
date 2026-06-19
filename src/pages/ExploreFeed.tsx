@@ -17,8 +17,11 @@ interface Broadcast {
   viewer_count?: number;
   current_viewers: number;
   started_at: string;
-  thumbnail_url?: string;
-  type: 'stream' | 'pod';
+  ended_at?: string
+  thumbnail_url?: string
+  type: 'stream';
+  is_ended?: boolean
+  recording_url?: string | null
   user_profiles: {
     username: string;
     avatar_url?: string;
@@ -31,7 +34,7 @@ export default function ExploreFeed() {
   const navigate = useNavigate();
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'gaming' | 'irl' | 'podcast'>('all');
+  const [filter, setFilter] = useState<'all' | 'gaming' | 'irl'>('all');
 
   useSEO({
     title: 'Explore Live Streams | Troll City - Watch Trending Content',
@@ -122,44 +125,57 @@ export default function ExploreFeed() {
         type: 'stream'
       }));
 
-      // 2. Fetch Pods (Only on first page and if filter allows)
-      let formattedPods: Broadcast[] = [];
-      if (targetPage === 0 && (filter === 'all' || filter === 'podcast')) {
-        const { data: podsData, error: podsError } = await supabase
-          .from('pod_rooms')
+      // 2. If no live streams on first page, fetch recent ended streams as VOD suggestions
+      let endedStreams: Broadcast[] = [];
+      if (targetPage === 0 && formattedStreams.length === 0) {
+        const { data: endedData, error: endedError } = await supabase
+          .from('streams')
           .select(`
-            *,
-            user_profiles:host_id (
-              username,
-              avatar_url,
-              level,
-              created_at
-            )
+            id,
+            title,
+            category,
+            viewer_count,
+            current_viewers,
+            is_live,
+            is_featured,
+            broadcaster_id,
+            battle_mode,
+            battle_format,
+            ended_at,
+            started_at,
+            recording_url
           `)
-          .eq('is_live', true)
-          .order('viewer_count', { ascending: false })
-          .limit(50);
+          .eq('status', 'ended')
+          .not('ended_at', 'is', null)
+          .order('ended_at', { ascending: false })
+          .limit(20);
 
-        if (!podsError && podsData) {
-          formattedPods = podsData.map(pod => ({
-            id: pod.id,
-            broadcaster_id: pod.host_id,
-            title: pod.title,
-            category: 'podcast',
-            viewer_count: pod.viewer_count || 0,
-            current_viewers: pod.viewer_count || 0,
-            started_at: pod.started_at,
-            thumbnail_url: undefined, // Pods don't have thumbnails usually
-            type: 'pod',
-            user_profiles: pod.user_profiles
+        if (!endedError && endedData && endedData.length > 0) {
+          const endedBroadcasterIds = Array.from(new Set(endedData.map((s: any) => s.broadcaster_id).filter(Boolean)))
+          let endedBroadcasterMap = new Map<string, any>()
+
+          if (endedBroadcasterIds.length > 0) {
+            const { data: endedBroadcasters } = await supabase
+              .from('user_profiles')
+              .select('id, username, avatar_url, level, created_at')
+              .in('id', endedBroadcasterIds)
+
+            if (endedBroadcasters) {
+              endedBroadcasterMap = new Map(endedBroadcasters.map((b: any) => [b.id, b]))
+            }
+          }
+
+          endedStreams = (endedData || []).map((stream: any) => ({
+            ...stream,
+            type: 'stream' as const,
+            user_profiles: endedBroadcasterMap.get(stream.broadcaster_id),
+            is_ended: true
           }));
         }
       }
 
-      // Combine results
-      // If filtering by podcast, show pods first, then streams
-      // If filtering by all, show pods mixed or first? Let's put pods first for visibility
-      const newBroadcasts = [...formattedPods, ...formattedStreams];
+      // Combine results — live streams first, then ended streams
+      const newBroadcasts = [...formattedStreams, ...endedStreams];
 
       if (isLoadMore) {
         setBroadcasts(prev => [...prev, ...newBroadcasts]);
@@ -213,19 +229,6 @@ export default function ExploreFeed() {
           }
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'pod_rooms'
-        },
-        () => {
-          if (window.scrollY < 500) {
-            fetchBroadcasts(0, false);
-          }
-        }
-      )
       .subscribe();
 
     return () => {
@@ -242,7 +245,11 @@ export default function ExploreFeed() {
   };
 
   const handleBroadcastClick = (broadcast: Broadcast) => {
-    navigate(`/watch/${broadcast.id}`, { state: { fromExplore: true } });
+    if (broadcast.is_ended) {
+      navigate(`/watch/${broadcast.id}`, { state: { fromExplore: true, replay: true } });
+    } else {
+      navigate(`/watch/${broadcast.id}`, { state: { fromExplore: true } });
+    }
   };
 
   return (
@@ -292,7 +299,7 @@ export default function ExploreFeed() {
 
           {/* Filters */}
           <div className="flex flex-wrap gap-3">
-            {['all', 'irl', 'podcast'].map((cat) => (
+            {['all', 'irl'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setFilter(cat as typeof filter)}
@@ -312,7 +319,7 @@ export default function ExploreFeed() {
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
               <span className={trollCityTheme.text.primary}>
-                <span className="font-bold">{broadcasts.length}</span> Live Now
+                <span className="font-bold">{broadcasts.filter(b => !b.is_ended).length}</span> Live Now
               </span>
             </div>
             <div className="w-px h-6 bg-white/10" />
@@ -322,6 +329,17 @@ export default function ExploreFeed() {
                 {broadcasts.reduce((sum, b) => sum + (b.current_viewers || b.viewer_count || 0), 0).toLocaleString()} Total Viewers
               </span>
             </div>
+            {broadcasts.some(b => b.is_ended) && (
+              <>
+                <div className="w-px h-6 bg-white/10" />
+                <div className="flex items-center gap-2">
+                  <Play className="w-4 h-4 text-purple-400" />
+                  <span className={trollCityTheme.text.secondary}>
+                    <span className="font-bold">{broadcasts.filter(b => b.is_ended).length}</span> Replays Available
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -342,7 +360,7 @@ export default function ExploreFeed() {
           <div className={`text-center py-20 ${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-3xl`}>
             <Radio className="w-16 h-16 text-slate-600 mx-auto mb-4" />
             <h3 className={`text-2xl font-bold ${trollCityTheme.text.primary} mb-2`}>No one is live right now</h3>
-            <p className={trollCityTheme.text.muted}>Check back later to see who is streaming.</p>
+            <p className={trollCityTheme.text.muted}>Check back later to see who is streaming, or browse past broadcasts below.</p>
           </div>
         ) : (
           <VirtuosoGrid
@@ -369,11 +387,18 @@ export default function ExploreFeed() {
                     </div>
                   )}
                   
-                  {/* Live Badge */}
-                  <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full shadow-lg">
-                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                    <span className="text-white font-bold text-xs uppercase">Live</span>
-                  </div>
+                  {/* Live Badge or Replay Badge */}
+                  {broadcast.is_ended ? (
+                    <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 bg-purple-600/90 backdrop-blur-sm rounded-full shadow-lg">
+                      <Play className="w-3 h-3 text-white" fill="white" />
+                      <span className="text-white font-bold text-xs uppercase">Replay</span>
+                    </div>
+                  ) : (
+                    <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 bg-red-600/90 backdrop-blur-sm rounded-full shadow-lg">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                      <span className="text-white font-bold text-xs uppercase">Live</span>
+                    </div>
+                  )}
 
                   {/* Viewer Count */}
                   <div className="absolute top-3 right-3 flex items-center gap-1 px-3 py-1.5 bg-black/60 backdrop-blur-sm rounded-full">
@@ -429,7 +454,7 @@ export default function ExploreFeed() {
 
                   {/* Title */}
                   <h3 className={`font-bold ${trollCityTheme.text.primary} line-clamp-2 group-hover:text-cyan-400 transition-colors`}>
-                    {broadcast.title || (broadcast.type === 'pod' ? 'Untitled Podcast' : 'Untitled Stream')}
+                     {broadcast.title || 'Untitled Stream'}
                   </h3>
 
                   {/* Category */}

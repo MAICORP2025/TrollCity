@@ -74,9 +74,13 @@ export default function FeaturedBroadcasts() {
     };
   }, []);
 
-  // Handle stream click - navigate to full stream
-  const handleStreamClick = (streamId: string) => {
-    navigate(`/stream/${streamId}`);
+  // Handle stream click - navigate to username-based stream URL for SEO
+  const handleStreamClick = (streamId: string, username?: string) => {
+    if (username) {
+      navigate(`/live/${encodeURIComponent(username)}`);
+    } else {
+      navigate(`/stream/${streamId}`);
+    }
   };
 
   if (loading) {
@@ -116,7 +120,7 @@ export default function FeaturedBroadcasts() {
           return (
             <div
               key={stream.id}
-              onClick={() => handleStreamClick(stream.id)}
+              onClick={() => handleStreamClick(stream.id, stream.user_profiles?.username)}
               className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden border border-pink-500/30 hover:border-pink-500/60 transition-all cursor-pointer group"
             >
               {/* Lazy-loaded live thumbnail with hover preview */}
@@ -127,7 +131,7 @@ export default function FeaturedBroadcasts() {
                 avatarUrl={stream.user_profiles?.avatar_url}
                 title={stream.title}
                 isLive={stream.is_live}
-                onClick={() => handleStreamClick(stream.id)}
+                onClick={() => handleStreamClick(stream.id, stream.user_profiles?.username)}
               />
 
               {/* Overlay gradient */}
@@ -181,7 +185,7 @@ export default function FeaturedBroadcasts() {
               <div
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleStreamClick(stream.id);
+                  handleStreamClick(stream.id, stream.user_profiles?.username);
                 }}
                 className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
               >

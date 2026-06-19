@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { LAUNCH_FRAMES, type ProfileFrame } from '../config/profileFrames';
 import { deductCoins } from '../lib/coinTransactions';
+import { invalidateFrameCache } from '../lib/frameCache';
 
 interface UserFrameRecord {
   id: string;
@@ -201,10 +202,50 @@ export const useProfileFrameStore = create<ProfileFrameState>((set, get) => ({
         .update({ active_frame_id: frameId })
         .eq('id', user.id);
 
-      // Update local state
-      const equippedFrame = frameId
+      // Update local state — find frame in catalog or build minimal object
+      let equippedFrame = frameId
         ? get().catalog.find(f => f.id === frameId) || null
         : null;
+
+      // If frame not in catalog (just purchased), fetch from DB and add to catalog
+      if (frameId && !equippedFrame) {
+        const { data: frameRow } = await supabase
+          .from('profile_frames')
+          .select('*')
+          .eq('id', frameId)
+          .maybeSingle();
+
+        if (frameRow) {
+          equippedFrame = {
+            id: frameRow.id,
+            name: frameRow.name,
+            description: frameRow.description || '',
+            icon: frameRow.icon || '✨',
+            animationType: frameRow.animation_type,
+            frameStyle: frameRow.frame_style || 'flat',
+            borderColor: frameRow.border_color || '#ffffff',
+            borderGradient: frameRow.border_gradient || null,
+            glowColor: frameRow.glow_color || null,
+            glowIntensity: frameRow.glow_intensity ?? 1,
+            animationSpeed: frameRow.animation_speed || 'normal',
+            hasParticles: frameRow.has_particles ?? false,
+            particleColor: frameRow.particle_color || null,
+            particleCount: frameRow.particle_count ?? 4,
+            hasSparkles: frameRow.has_sparkles ?? false,
+            hasEnergyRings: frameRow.has_energy_rings ?? false,
+            rarity: frameRow.rarity || 'common',
+            coinCost: frameRow.coin_cost ?? 0,
+            isActive: frameRow.is_active ?? true,
+            isLimited: frameRow.is_limited ?? false,
+            limitedQuantity: frameRow.limited_quantity ?? null,
+            sortOrder: frameRow.sort_order ?? 0,
+          };
+          // Add to catalog so future lookups are instant
+          set({
+            catalog: [...get().catalog, equippedFrame],
+          });
+        }
+      }
 
       set({
         equippedFrameId: frameId,
@@ -214,6 +255,9 @@ export const useProfileFrameStore = create<ProfileFrameState>((set, get) => ({
           is_equipped: f.frame_id === frameId,
         })),
       });
+
+      // Invalidate the useUserFrame cache so all components re-fetch
+      invalidateFrameCache(user.id);
 
       return true;
     } catch (err) {

@@ -2,6 +2,8 @@ import React from 'react'
 import { Gamepad2, Users, Play, Flame } from 'lucide-react'
 import HorizontalScrollRow from './HorizontalScrollRow'
 import { useLiveContent } from '@/contexts/LiveContentContext'
+import ProfileFrame from '@/components/profile/ProfileFrame'
+import { useUserFrame } from '@/hooks/useUserFrame'
 
 interface HyTroGamingRowProps {
   onItemClick: (id: string) => void
@@ -77,7 +79,7 @@ export default function HyTroGamingRow({ onItemClick }: HyTroGamingRowProps) {
                 <p className="line-clamp-2 flex-1 text-xs font-black text-white">{item.title}</p>
                 <div className="flex items-center gap-1.5">
                   <div className="h-5 w-5 shrink-0 overflow-hidden rounded-full ring-1 ring-white/15">
-                    <img src={avatarUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    <ProfileFrame frame={useUserFrame(item.streamerId)} avatarUrl={avatarUrl} username={item.streamerName || 'User'} size="xs" fillParent />
                   </div>
                   <span className="truncate text-[10px] font-bold text-white/40">{item.streamerName}</span>
                 </div>

@@ -1,27 +1,28 @@
 import React from 'react'
-import { Circle, Square, Loader2, Save, Upload } from 'lucide-react'
+import { Circle, Square, Loader2, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
 
 interface SaveBroadcastButtonProps {
   isRecording: boolean
   isUploading: boolean
   recordingDuration: number
-  hasRecording: boolean
-  onStartRecording: () => void
+  streamId: string | null
+  onStartRecording: (streamId: string) => void
   onStopRecording: () => void
-  onUploadRecording: () => void
   className?: string
 }
 
+/**
+ * SaveBroadcastButton — records the entire LiveKit room via Egress API.
+ * No screen-share needed. Captures all participants' audio + video.
+ */
 export function SaveBroadcastButton({
   isRecording,
   isUploading,
   recordingDuration,
-  hasRecording,
+  streamId,
   onStartRecording,
   onStopRecording,
-  onUploadRecording,
   className,
 }: SaveBroadcastButtonProps) {
   const minutes = Math.floor(recordingDuration / 60)
@@ -37,7 +38,7 @@ export function SaveBroadcastButton({
         )}
       >
         <Loader2 className="h-4 w-4 animate-spin" />
-        Uploading recording...
+        Saving recording...
       </button>
     )
   }
@@ -60,31 +61,19 @@ export function SaveBroadcastButton({
     )
   }
 
-  if (hasRecording) {
-    return (
-      <button
-        onClick={onUploadRecording}
-        className={cn(
-          'flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-black text-emerald-200 transition hover:bg-emerald-500/20',
-          className,
-        )}
-      >
-        <Upload className="h-4 w-4" />
-        Save Recording
-      </button>
-    )
-  }
-
   return (
     <button
-      onClick={onStartRecording}
+      onClick={() => {
+        if (streamId) onStartRecording(streamId)
+      }}
+      disabled={!streamId}
       className={cn(
-        'flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/[0.08]',
+        'flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-xs font-black text-slate-300 transition hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed',
         className,
       )}
     >
       <Save className="h-4 w-4" />
-      Save Broadcast
+      Record Stream
     </button>
   )
 }

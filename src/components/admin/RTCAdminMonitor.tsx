@@ -218,6 +218,12 @@ const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer',
   const prevOnlineUserIdsRef = useRef<Set<string>>(new Set());
   const isFirstOnlineCheckRef = useRef(true);
 
+  // State to track new live stream (black ring flash)
+  const [showLiveFlash, setShowLiveFlash] = useState(false);
+
+  // State to track new report (purple flash)
+  const [showReportFlash, setShowReportFlash] = useState(false);
+
   const [actionTarget, setActionTarget] = useState<UserListItem | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [actionReason, setActionReason] = useState('');
@@ -392,12 +398,19 @@ const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
       });
       setLastRefresh(new Date());
       setNow(Date.now());
-    } catch (err) {
-      console.error('[RTC Monitor] Error:', err);
-      toast.error('Failed to refresh RTC monitor');
-      // Trigger red error flash
-      setShowErrorFlash(true);
-      setTimeout(() => setShowErrorFlash(false), 5000);
+    } catch (err: any) {
+      // AbortError ("Lock broken by another request with the 'steal' option")
+      // is a known Supabase Realtime issue when multiple channels compete.
+      // It's not a real failure — just log it silently and move on.
+      if (err?.name === 'AbortError' || err?.message?.includes('steal')) {
+        console.warn('[RTC Monitor] Realtime lock contention (non-fatal):', err?.message);
+      } else {
+        console.error('[RTC Monitor] Error:', err);
+        toast.error('Failed to refresh RTC monitor');
+        // Trigger red error flash
+        setShowErrorFlash(true);
+        setTimeout(() => setShowErrorFlash(false), 5000);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1051,7 +1064,11 @@ const openAction = useCallback((user: UserListItem, action: string) => {
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIPTION_ERROR') {
+          console.warn('[RTCAdminMonitor] Tromail subscription error (lock contention) — will retry');
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
@@ -1132,7 +1149,11 @@ const openAction = useCallback((user: UserListItem, action: string) => {
         setShowSignupFlash(true);
         setTimeout(() => setShowSignupFlash(false), 15000);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIPTION_ERROR') {
+          console.warn('[RTCAdminMonitor] Signup subscription error (lock contention) — will retry');
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -1199,6 +1220,70 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     checkNewOnlineUsers();
     const interval = setInterval(checkNewOnlineUsers, 30000); // Check every 30s
     return () => clearInterval(interval);
+  }, [isStaff]);
+
+  // Monitor for new live streams to trigger black ring flash
+  useEffect(() => {
+    if (!isStaff) return;
+
+    const channel = supabase
+      .channel('admin-live-stream-monitor')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'streams',
+      }, (payload) => {
+        const newStream = payload.new as any;
+        if (newStream.is_live === true || newStream.status === 'live') {
+          setShowLiveFlash(true);
+          setTimeout(() => setShowLiveFlash(false), 4000);
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'streams',
+      }, (payload) => {
+        const updatedStream = payload.new as any;
+        const prevStream = payload.old as any;
+        if (
+          (updatedStream.is_live === true || updatedStream.status === 'live') &&
+          !(prevStream.is_live === true || prevStream.status === 'live')
+        ) {
+          setShowLiveFlash(true);
+          setTimeout(() => setShowLiveFlash(false), 4000);
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIPTION_ERROR') {
+          console.warn('[RTCAdminMonitor] Live stream subscription error (lock contention) — will retry');
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isStaff]);
+
+  // Monitor for new moderation reports to trigger purple flash
+  useEffect(() => {
+    if (!isStaff) return;
+
+    const channel = supabase
+      .channel('admin-report-monitor')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'moderation_reports',
+      }, () => {
+        setShowReportFlash(true);
+        setTimeout(() => setShowReportFlash(false), 5000);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isStaff]);
 
    useEffect(() => {
@@ -1279,14 +1364,18 @@ const renderFloatingButton = () => {
       const badgePy = isOpen ? 'py-0.5' : 'py-1';
       const badgeTextSize = isOpen ? 'text-[9px]' : 'text-[18px]';
 
-      // Determine flash styling — priority: error (red) > signup (dark blue) > online (white)
+      // Determine flash styling — priority: error (red) > report (purple) > live (black) > signup (dark blue) > online (white)
       const flashClass = showErrorFlash
         ? 'ring-4 ring-red-500 ring-offset-2 animate-pulse shadow-[0_0_24px_rgba(239,68,68,0.7)]'
-        : showSignupFlash
-          ? 'ring-4 ring-blue-800 ring-offset-2 animate-pulse shadow-[0_0_24px_rgba(30,58,138,0.7)]'
-          : showOnlineFlash
-            ? 'ring-4 ring-white ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(255,255,255,0.5)]'
-            : '';
+        : showReportFlash
+          ? 'ring-4 ring-purple-500 ring-offset-2 animate-pulse shadow-[0_0_24px_rgba(168,85,247,0.7)]'
+          : showLiveFlash
+            ? 'ring-4 ring-black ring-offset-2 animate-pulse shadow-[0_0_24px_rgba(0,0,0,0.9)]'
+            : showSignupFlash
+              ? 'ring-4 ring-blue-800 ring-offset-2 animate-pulse shadow-[0_0_24px_rgba(30,58,138,0.7)]'
+              : showOnlineFlash
+                ? 'ring-4 ring-white ring-offset-2 animate-pulse shadow-[0_0_20px_rgba(255,255,255,0.5)]'
+                : '';
 
       return (
          <div className="fixed bottom-[160px] right-4 z-[100] flex flex-col gap-2 md:bottom-[200px]">
@@ -1294,15 +1383,23 @@ const renderFloatingButton = () => {
              type="button"
              onClick={() => setIsOpen((open) => !open)}
              className={`flex ${buttonSize} items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${flashClass}`}
-             style={{
-               backgroundColor: showErrorFlash
-                 ? '#ef4444'
-                 : stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
-               boxShadow: showErrorFlash
-                 ? '0 4px 24px rgba(239,68,68,0.5)'
-                 : `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
-             }}
-             title={`RTC Monitor - ${stats.liveStreams} live streams${showErrorFlash ? ' ⚠ ERROR' : ''}`}
+              style={{
+                backgroundColor: showErrorFlash
+                  ? '#ef4444'
+                  : showReportFlash
+                    ? '#a855f7'
+                    : showLiveFlash
+                      ? '#000000'
+                      : stats.liveStreams > 0 ? '#22c55e' : '#3b82f6',
+                boxShadow: showErrorFlash
+                  ? '0 4px 24px rgba(239,68,68,0.5)'
+                  : showReportFlash
+                    ? '0 4px 24px rgba(168,85,247,0.5)'
+                    : showLiveFlash
+                      ? '0 4px 24px rgba(0,0,0,0.7)'
+                      : `0 4px 18px ${stats.liveStreams > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(59,130,246,0.35)'}`,
+              }}
+              title={`RTC Monitor - ${stats.liveStreams} live streams${showErrorFlash ? ' ⚠ ERROR' : ''}${showReportFlash ? ' 📋 NEW REPORT' : ''}${showLiveFlash ? ' 🔴 NEW LIVE' : ''}`}
            >
              <Monitor className={`${iconSize} text-white`} />
              <span className={`inline-flex items-center justify-center rounded-full bg-emerald-300 ${badgePx} ${badgePy} ${badgeTextSize} font-bold leading-none text-black`}>

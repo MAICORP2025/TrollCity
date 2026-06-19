@@ -516,7 +516,9 @@ async function stopStreaming(req, res) {
       return res.status(404).json({ error: "Stream not found", streamId });
     }
 
-    // Stop LiveKit egress
+    // Stop LiveKit egress and get recording metadata
+    let recordingFileSize = 0
+    let recordingDuration = 0
     if (stream.egress_id) {
       try {
         console.log(`[stopStreaming] Stopping LiveKit egress: ${stream.egress_id}`);
@@ -526,6 +528,16 @@ async function stopStreaming(req, res) {
           liveKitConfig.apiKey,
           liveKitConfig.apiSecret
         );
+
+        try {
+          const egressInfo = await egressClient.getEgress(stream.egress_id)
+          recordingFileSize = egressInfo.fileResults?.[0]?.size || 0
+          recordingDuration = Math.floor((egressInfo.fileResults?.[0]?.duration || 0) / 1e9)
+          console.log(`[stopStreaming] Egress info — size: ${recordingFileSize}, duration: ${recordingDuration}s`);
+        } catch (infoErr) {
+          console.warn(`[stopStreaming] Could not fetch egress info:`, infoErr.message);
+        }
+
         await egressClient.stopEgress(stream.egress_id);
         console.log(`[stopStreaming] LiveKit egress stopped`);
       } catch (egressError) {
@@ -553,6 +565,47 @@ async function stopStreaming(req, res) {
         streamId,
         warning: "Stream status update failed but egress was stopped successfully"
       });
+    }
+
+    // Create broadcast_replays entry and update saved_streams with storage info
+    if (stream.egress_id) {
+      try {
+        const { data: streamInfo } = await supabase
+          .from('streams')
+          .select('title, broadcaster_id, category')
+          .eq('id', streamId)
+          .maybeSingle()
+
+        if (streamInfo?.broadcaster_id) {
+          const replayUrl = `recordings/${streamId}/${stream.egress_id}.mp4`
+
+          await supabase
+            .from('saved_streams')
+            .upsert({
+              user_id: streamInfo.broadcaster_id,
+              stream_id: streamId,
+              source: 'auto_egress_recording',
+              storage_category: 'broadcast_recording',
+              file_size_bytes: recordingFileSize,
+              recording_duration: recordingDuration,
+            }, { onConflict: 'user_id,stream_id' })
+
+          await supabase
+            .from('broadcast_replays')
+            .upsert({
+              stream_id: streamId,
+              user_id: streamInfo.broadcaster_id,
+              title: streamInfo.title || 'Live Stream',
+              replay_url: replayUrl,
+              duration_seconds: recordingDuration,
+              file_size_bytes: recordingFileSize,
+            }, { onConflict: 'stream_id' })
+
+          console.log(`[stopStreaming] broadcast_replays entry created for stream ${streamId}`);
+        }
+      } catch (replayErr) {
+        console.warn('[stopStreaming] Failed to create broadcast_replays entry:', replayErr.message);
+      }
     }
 
     console.log(`[stopStreaming] Stream stopped: ${streamId}`);
