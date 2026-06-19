@@ -31,6 +31,7 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { usePodcastStore } from '@/stores/podcastStore'
 import { trollCityBroadcastTheme as theme } from '@/styles/broadcastTheme'
+import { showStorageStartWarning } from '@/hooks/useStorageUsage'
 
 type PodcastStatus =
   | 'scheduled'
@@ -419,6 +420,7 @@ export default function PodcastCentral() {
       setShowStartForm(false)
 
       toast.success('Podcast started!')
+      void showStorageStartWarning(user.id, 'podcast')
       navigate(`/podcast/${podcast.id}`)
     } catch (err: any) {
       console.error('[PodcastCentral] Error starting podcast:', err)

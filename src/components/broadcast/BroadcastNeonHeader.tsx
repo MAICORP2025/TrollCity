@@ -202,7 +202,7 @@ export default function BroadcastNeonHeader({
         : coinDisplay.toLocaleString()
 
   return (
-    <header className="shrink-0 border-b border-white/10 bg-black/70 px-4 py-2 backdrop-blur-xl">
+    <header className="relative z-50 shrink-0 border-b border-white/10 bg-black/70 px-4 py-2 backdrop-blur-xl">
       <div className="flex h-[68px] items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0" ref={profileMenuRef}>

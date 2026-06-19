@@ -28,6 +28,25 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
+function isPostBoostActive(post: WallPost) {
+  const expiresAt = post.metadata?.boost_expires_at ? new Date(post.metadata.boost_expires_at).getTime() : 0
+  return Number.isFinite(expiresAt) && expiresAt > Date.now()
+}
+
+function sortWallPosts(rows: WallPost[]) {
+  return [...rows].sort((a, b) => {
+    const aPinned = a.is_pinned ? 1 : 0
+    const bPinned = b.is_pinned ? 1 : 0
+    if (aPinned !== bPinned) return bPinned - aPinned
+
+    const aBoosted = isPostBoostActive(a) ? 1 : 0
+    const bBoosted = isPostBoostActive(b) ? 1 : 0
+    if (aBoosted !== bBoosted) return bBoosted - aBoosted
+
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+}
+
 /** Small avatar component for wall posts — extracts useUserFrame out of .map() */
 function PostAvatar({ userId, avatarUrl, username }: { userId?: string; avatarUrl: string; username: string }) {
   const frame = useUserFrame(userId)
@@ -48,6 +67,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
   const [posts, setPosts] = useState<WallPost[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<WallPost | null>(null)
+  const currentUserFrame = useUserFrame(user?.id)
 
   // Composer state
   const [content, setContent] = useState('')
@@ -92,7 +112,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         gifts: {},
       }))
 
-      setPosts(rows)
+      setPosts(sortWallPosts(rows))
     } catch (err) {
       console.error('[TrollWallFeed] Failed to fetch posts:', err)
       setPosts([])
@@ -246,7 +266,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         <div className="flex items-end gap-2">
           <div className="h-8 w-8 shrink-0 rounded-full bg-white/5" style={{ overflow: 'visible' }}>
             {profile?.avatar_url ? (
-              <ProfileFrame frame={useUserFrame(user?.id)} avatarUrl={profile.avatar_url} username={profile.username || 'User'} size="xs" />
+              <ProfileFrame frame={currentUserFrame} avatarUrl={profile.avatar_url} username={profile.username || 'User'} size="xs" />
             ) : (
               <div className="flex h-full w-full items-center justify-center rounded-full text-xs text-white/60">
                 {profile?.username?.[0]?.toUpperCase() || 'T'}
@@ -346,6 +366,7 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
             ))
           : hasData
             ? posts.map((post) => {
+                const boosted = isPostBoostActive(post)
                 const avatarUrl =
                   post.avatar_url ||
                   `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(post.username || 'TC')}`
@@ -360,11 +381,19 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                   : 0
 
                 return (
-                  <button
+                    <button
                     key={post.id}
                     onClick={() => handlePostClick(post)}
                     className="group relative flex h-[220px] w-[180px] shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-cyan-400/30 hover:shadow-[0_0_24px_rgba(34,211,238,0.12)]"
                   >
+                    {boosted && (
+                      <div className="absolute inset-x-0 top-0 z-10 h-[2px] bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 shadow-[0_0_18px_rgba(245,158,11,0.8)]" />
+                    )}
+                    {boosted && (
+                      <div className="absolute right-2 top-2 z-10 rounded-full border border-amber-200/30 bg-amber-400/90 px-2 py-0.5 text-[9px] font-black text-black shadow-lg">
+                        Boosted
+                      </div>
+                    )}
                     {post.is_pinned && (
                       <div className="absolute inset-x-0 top-0 z-10 h-[2px] bg-gradient-to-r from-transparent via-yellow-400/80 to-transparent" />
                     )}

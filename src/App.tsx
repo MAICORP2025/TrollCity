@@ -1468,10 +1468,11 @@ const handleVisibilityChange = async () => {
                 {/* Safety Page (standalone) */}
                 <Route path="/safety" element={<Safety />} />
 
+                {/* 🔒 Authenticated Support Route - must come before SEO */}
+
                 {/* 🔍 SEO Pages (Public, Indexable by Search Engines) */}
                 <Route path="/about" element={<SEOAboutPage />} />
                 <Route path="/contact" element={<SEOContactPage />} />
-                <Route path="/support" element={<SEOSupportPage />} />
                 <Route path="/faq" element={<SEOFAQPage />} />
                 <Route path="/privacy" element={<SEOPrivacyPage />} />
                 <Route path="/terms" element={<SEOTermsPage />} />

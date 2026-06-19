@@ -39,7 +39,7 @@ export function StorageIndicator({ userId, storageType = 'broadcast', className 
   }
 
   return (
-    <div className={cn('relative', className)}>
+    <div className={cn('relative z-[999]', className)}>
       <button type="button" onClick={() => setExpanded(!expanded)}
         className={cn('flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition-all', borderColor, bgColor, statusColor)}>
         {(isWarning || isExceeded || isRestricted) && <AlertTriangle className="h-3.5 w-3.5" />}
@@ -49,7 +49,7 @@ export function StorageIndicator({ userId, storageType = 'broadcast', className 
       </button>
 
       {expanded && (
-        <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur-xl z-50">
+        <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur-xl z-[9999] pointer-events-auto">
           <div className="mb-3">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-black text-white">Storage & Replay</h4>

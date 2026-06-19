@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { toast } from 'sonner'
 
 export interface StorageBreakdown {
   category: string
@@ -58,6 +59,52 @@ function getTierInfo(totalBytes: number) {
     if (tier.end === null || totalBytes < tier.end) return tier
   }
   return STORAGE_TIERS[STORAGE_TIERS.length - 1]
+}
+
+function formatStorageUsage(bytes: number): string {
+  const gb = bytes / (1024 * 1024 * 1024)
+  return `${gb.toFixed(1)} GB`
+}
+
+export async function showStorageStartWarning(userId?: string | null, context = 'stream') {
+  if (!userId) return
+
+  try {
+    const { data, error } = await supabase.rpc('get_user_storage_replay_status', { p_user_id: userId })
+    if (error) throw error
+
+    const percentage = Number(data?.storage_percentage || 0)
+    const usedGB = Number(data?.total_used_bytes || 0)
+    const limitGB = Number(data?.total_limit_bytes || 0)
+    const usedLabel = limitGB > 0
+      ? `${formatStorageUsage(usedGB)} / ${formatStorageUsage(limitGB)} Used`
+      : `${formatStorageUsage(usedGB)} Used`
+
+    if (percentage >= 100) {
+      toast.error(`Storage Limit Reached\nUpgrade Storage Plan\nPurchase Storage Top-Up`, {
+        duration: 10000,
+        description: usedLabel,
+      })
+      return
+    }
+
+    if (percentage >= 90) {
+      toast.warning(`⚠ Upgrade Recommended`, {
+        duration: 9000,
+        description: usedLabel,
+      })
+      return
+    }
+
+    if (percentage >= 80) {
+      toast.warning(`⚠ Storage Almost Full`, {
+        duration: 8000,
+        description: `${usedLabel} • ${context}`,
+      })
+    }
+  } catch (err) {
+    console.warn('[showStorageStartWarning] Failed:', err)
+  }
 }
 
 export function useStorageUsage(userId?: string | null) {

@@ -795,19 +795,30 @@ const openAction = useCallback((user: UserListItem, action: string) => {
              
              const courtDateStr = nextCourtDate.toISOString().split('T')[0];
 
-             // 1. Create jail record
-             const arrestDate = new Date().toISOString();
-             const { error: jailError } = await supabase.from('jail').insert({
-                 user_id: actionTarget.id,
-                 release_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 1 day default
-                 reason: arrestReason,
-                 sentence_days: 1,
-                 arrested_by: profile?.id,
-                 court_date: courtDateStr,
-                 status: 'jailed',
-                 severity: arrestSeverity,
-                 bond_amount: bail,
-             });
+              // 1. Create jail record
+              const arrestDate = new Date().toISOString();
+
+              // Look up arrested user's IP geolocation for geofence device tracking
+              const { data: userIpRecords } = await supabase
+                .from('user_ip_tracking')
+                .select('latitude, longitude, ip_address')
+                .eq('user_id', actionTarget.id)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+              const { error: jailError } = await supabase.from('jail').insert({
+                  user_id: actionTarget.id,
+                  release_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 1 day default
+                  reason: arrestReason,
+                  sentence_days: 1,
+                  arrested_by: profile?.id,
+                  court_date: courtDateStr,
+                  status: 'jailed',
+                  severity: arrestSeverity,
+                  bond_amount: bail,
+                  arrest_latitude: userIpRecords?.[0]?.latitude ?? null,
+                  arrest_longitude: userIpRecords?.[0]?.longitude ?? null,
+              });
              
              if (jailError) throw jailError;
 

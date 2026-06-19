@@ -390,7 +390,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                 <X className="h-4 w-4 text-red-400" />
               </div>
               <div>
-                <p className="text-sm font-bold text-red-300">You've been kicked</p>
+                <p className="text-sm font-bold text-red-300">You&apos;ve been kicked</p>
                 <p className="text-xs text-red-400/80">{kickedReason}</p>
               </div>
             </div>
@@ -400,6 +400,12 @@ const handleScrollItemClick = useCallback((id: string) => {
             >
               <X size={16} />
             </button>
+          </div>
+        )}
+
+        {isPrideMonth() && (
+          <div className="rounded-2xl border border-pink-300/25 bg-gradient-to-r from-pink-600/25 via-purple-600/25 to-cyan-500/25 px-4 py-3 text-center text-sm font-black text-white shadow-[0_0_28px_rgba(236,72,153,0.22)] backdrop-blur-xl">
+            🏳️‍🌈 Pride Month Theme Active · Theme automatically ends July 1st.
           </div>
         )}
 

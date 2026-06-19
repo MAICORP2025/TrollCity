@@ -37,6 +37,7 @@ import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton'
 import { BadgeCheck, Gift } from 'lucide-react'
 import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
 import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
+import { showStorageStartWarning } from '../../hooks/useStorageUsage'
 import SaveBroadcastButton from '../../components/broadcast/SaveBroadcastButton'
 
 import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
@@ -717,6 +718,11 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     const videoTrack = videoTrackRef.current
     return audioTrack || videoTrack ? [audioTrack, videoTrack] : null
   }, [localTracksVersion])
+
+  const broadcastRecordingSourceUrl = useMemo(() => stream?.hls_url || stream?.hls_path || null, [stream?.hls_path, stream?.hls_url])
+
+  const recorder = useBroadcastRecorder({ sourceUrl: broadcastRecordingSourceUrl })
+
   // Host users publish through this local track state.
   const combinedLocalTracks = localTracks
   const setLocalTracks = useCallback((
@@ -1983,10 +1989,19 @@ useEffect(() => {
    // Quick Coin Store
    const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false)
 
-   // Broadcast recording
-   const recorder = useBroadcastRecorder()
+    // F8 shortcut for instant clip save
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'F8' && recorder.isRecording && !recorder.isUploading) {
+          e.preventDefault()
+          recorder.saveClip()
+        }
+      }
+      window.addEventListener('keydown', handleKeyDown)
+      return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [recorder])
 
-   const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
+    const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
     streamId: streamId || '',
     userId: user?.id,
     isHost,
@@ -2628,6 +2643,9 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
       recordStreamStarted(streamId).catch(err => {
         console.warn('[BroadcastPage] Failed to record stream started:', err)
       })
+      showStorageStartWarning(user?.id, 'broadcast').catch(err => {
+        console.warn('[BroadcastPage] Failed to show storage warning:', err)
+      })
     }
 
     if (((!wasInBattleMode && isNowInBattleMode) || (battleIdChanged && isNowInBattleMode))) {
@@ -2647,7 +2665,7 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
         navigate(`/broadcast/summary/${streamId}`);
       }, 100);
     }
-  }, [navigate, streamId, disconnectLiveKitRoom]);
+  }, [navigate, streamId, disconnectLiveKitRoom, user?.id]);
 
 useStreamRealtime(streamId, {
      onStream: (event) => {
@@ -5622,6 +5640,7 @@ const handleLike = useCallback(async () => {
                       streamId={stream.id}
                       onStartRecording={recorder.startRecording}
                       onStopRecording={recorder.stopRecording}
+                      onSaveClip={recorder.saveClip}
                     />
                   ) : undefined
                 }

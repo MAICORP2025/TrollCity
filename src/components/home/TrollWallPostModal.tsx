@@ -10,6 +10,7 @@ import {
   MessageSquare,
   PlayCircle,
   ExternalLink,
+  Coins,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -35,6 +36,13 @@ function ReplyAvatar({ userId, avatarUrl, username }: { userId?: string; avatarU
   )
 }
 
+const WALL_BOOST_PERK_IDS = ['wall_boost_24h', 'wall_boost_7d']
+
+function formatWallBoostLabel(perkId: string) {
+  if (perkId === 'wall_boost_7d') return '7 Days'
+  return '24 Hours'
+}
+
 interface TrollWallPostModalProps {
   post: WallPost | null
   onClose: () => void
@@ -55,6 +63,10 @@ export default function TrollWallPostModal({
   const [sharingPost, setSharingPost] = useState<WallPost | null>(null)
   const [currentPost, setCurrentPost] = useState<WallPost | null>(post)
   const [streamStatus, setStreamStatus] = useState<'live' | 'ended' | 'unknown' | null>(null)
+  const [activeWallBoosts, setActiveWallBoosts] = useState<any[]>([])
+  const [loadingWallBoosts, setLoadingWallBoosts] = useState(false)
+  const [applyingBoost, setApplyingBoost] = useState(false)
+  const [boostMenuOpen, setBoostMenuOpen] = useState(false)
 
   // Check stream status when post has a stream_id
   useEffect(() => {
@@ -115,6 +127,37 @@ export default function TrollWallPostModal({
         setReplies(rows)
       })
   }, [post?.id])
+
+  const loadActiveWallBoosts = useCallback(async () => {
+    if (!user?.id) {
+      setActiveWallBoosts([])
+      return
+    }
+
+    setLoadingWallBoosts(true)
+    try {
+      const { data, error } = await supabase
+        .from('user_perks')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('perk_id', WALL_BOOST_PERK_IDS)
+        .eq('is_active', true)
+        .gte('expires_at', new Date().toISOString())
+        .order('expires_at', { ascending: true })
+
+      if (error) throw error
+      setActiveWallBoosts((data || []) as any[])
+    } catch (err) {
+      console.warn('[TrollWallPostModal] Failed to load wall boosts:', err)
+      setActiveWallBoosts([])
+    } finally {
+      setLoadingWallBoosts(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    void loadActiveWallBoosts()
+  }, [loadActiveWallBoosts, currentPost?.id])
 
   // Close on Escape
   useEffect(() => {
@@ -218,6 +261,61 @@ export default function TrollWallPostModal({
       toast.error('Failed to pin/unpin')
     }
   }, [currentPost, user?.id])
+
+  const handleBoostPost = useCallback(async (boost: any) => {
+    if (!currentPost || !user?.id) return
+    if (applyingBoost) return
+
+    setApplyingBoost(true)
+    try {
+      const now = new Date()
+      const expiresAt = new Date(boost.expires_at || now.getTime() + Number(boost.metadata?.boost_duration_hours || 24) * 3600000).toISOString()
+      const metadata = {
+        ...(currentPost.metadata || {}),
+        is_boosted: true,
+        boost_expires_at: expiresAt,
+        boost_package_id: boost.perk_id,
+        boosted_at: now.toISOString(),
+        boosted_by: user.id,
+      }
+
+      const { data, error } = await supabase
+        .from('troll_wall_posts')
+        .update({ metadata })
+        .eq('id', currentPost.id)
+        .select('*')
+        .single()
+
+      if (error) throw error
+
+      await supabase
+        .from('user_perks')
+        .update({
+          is_active: false,
+          metadata: {
+            ...(boost.metadata || {}),
+            consumed_post_id: currentPost.id,
+            consumed_at: now.toISOString(),
+          },
+        })
+        .eq('id', boost.id)
+
+      const updatedPost = {
+        ...currentPost,
+        ...data,
+        metadata,
+      }
+      setCurrentPost(updatedPost)
+      setActiveWallBoosts((prev) => prev.filter((item) => item.id !== boost.id))
+      setBoostMenuOpen(false)
+      toast.success(`Post boosted for ${formatWallBoostLabel(boost.perk_id)}`)
+    } catch (err: any) {
+      console.error('[TrollWallPostModal] Boost failed:', err)
+      toast.error(err?.message || 'Failed to boost post')
+    } finally {
+      setApplyingBoost(false)
+    }
+  }, [currentPost, user?.id, applyingBoost])
 
   const handleDelete = useCallback(async () => {
     if (!currentPost || !user?.id) return
@@ -417,6 +515,59 @@ export default function TrollWallPostModal({
                   </button>
                 </>
               )}
+
+            {user && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void loadActiveWallBoosts()
+                    setBoostMenuOpen((prev) => !prev)
+                  }}
+                  className="flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1.5 text-xs font-bold text-amber-200 transition hover:bg-amber-400/20"
+                >
+                  <Coins className="h-3.5 w-3.5" />
+                  Boost
+                </button>
+                {boostMenuOpen && (
+                  <div className="absolute bottom-full right-0 z-20 mb-2 w-56 rounded-2xl border border-amber-300/20 bg-slate-950/98 p-3 shadow-2xl backdrop-blur-xl">
+                    <div className="mb-2 text-xs font-black text-white">Apply Wall Boost</div>
+                    {loadingWallBoosts ? (
+                      <p className="text-[10px] text-slate-400">Loading boosts...</p>
+                    ) : activeWallBoosts.length > 0 ? (
+                      <div className="space-y-2">
+                        {activeWallBoosts.map((boost) => (
+                          <button
+                            key={boost.id}
+                            type="button"
+                            onClick={() => void handleBoostPost(boost)}
+                            disabled={applyingBoost}
+                            className="w-full rounded-lg border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-left text-xs font-bold text-amber-100 disabled:opacity-50"
+                          >
+                            {formatWallBoostLabel(boost.perk_id)}
+                            <span className="ml-2 text-[10px] text-amber-300/70">expires {new Date(boost.expires_at).toLocaleDateString()}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-[10px] text-slate-400">No Wall Boosts available. Buy one in Coin Store &gt; Perks.</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBoostMenuOpen(false)
+                            navigate('/store?tab=perks')
+                          }}
+                          className="w-full rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-3 py-2 text-xs font-bold text-white"
+                        >
+                          Open Coin Store
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Replies section */}

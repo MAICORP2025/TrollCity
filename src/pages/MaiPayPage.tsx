@@ -29,6 +29,7 @@ import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
 import { CASHOUT_TIERS as TIERS, type CashoutTier } from '../config/coinConfig';
 import type { CashoutRequest, PayoutMethod } from '../types/cashout';
+import FastPayProgram from '../components/FastPayProgram';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -648,7 +649,7 @@ export default function MaiPayPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-bold">Coins Gifted to Others</h3>
-                <p className="text-xs text-gray-400 mt-1">Total coins you've gifted to other users</p>
+                <p className="text-xs text-gray-400 mt-1">Total coins you&apos;ve gifted to other users</p>
               </div>
               <button
                 onClick={() => {
@@ -720,6 +721,8 @@ export default function MaiPayPage() {
         {/* ─── Cash Out Tab ─────────────────────────────────────────────── */}
         {activeTab === 'cashout' && (
           <>
+            <FastPayProgram onNavigateToCashout={() => setActiveTab('cashout')} />
+
             {/* Eligible Balance */}
             <div className="bg-gradient-to-br from-green-900/30 to-[#0E0A1A] rounded-xl border border-green-500/30 p-6">
               <div className="flex items-center gap-3 mb-2">

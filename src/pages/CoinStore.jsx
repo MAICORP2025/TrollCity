@@ -52,6 +52,11 @@ const SAMPLE_PERKS = [
   { id: 'perk_troll_spell', name: 'Troll Spell (1h)', description: "Randomly change another user's username style & emoji for 1 hour", cost: 2240, duration_minutes: 60, perk_type: 'fun' },
 ];
 
+const WALL_BOOST_PERKS = [
+  { id: 'wall_boost_24h', name: 'Wall Boost 24 Hours', description: 'Boost a Troll Wall post for 24 hours.', cost: 100, duration_minutes: 24 * 60, perk_type: 'wall_boost', boost_duration_hours: 24 },
+  { id: 'wall_boost_7d', name: 'Wall Boost 7 Days', description: 'Boost a Troll Wall post for 7 days.', cost: 500, duration_minutes: 7 * 24 * 60, perk_type: 'wall_boost', boost_duration_hours: 7 * 24 },
+];
+
 const SAMPLE_INSURANCE_PLANS = [
   { id: 'insurance_basic_week', name: 'Basic Coverage', description: '-10% gambling loss, covers 10,000 coins/week', cost: 8000, duration_hours: 168, protection_type: 'gambling' },
   { id: 'insurance_basic_month', name: 'Basic Monthly', description: '-10% gambling loss, covers 50,000 coins/month', cost: 25000, duration_hours: 720, protection_type: 'gambling' },
@@ -1131,6 +1136,70 @@ useEffect(() => {
    }
  }
 
+  const buyWallBoost = async (boost) => {
+    if (!user?.id) {
+      toast.error('Sign in to buy Wall Boosts.');
+      return;
+    }
+
+    const price = Number(boost.cost || 0);
+    const durationHours = Number(boost.boost_duration_hours || 0);
+
+    if (price <= 0 || durationHours <= 0) {
+      toast.error('Invalid Wall Boost package.');
+      return;
+    }
+
+    if (!useCredit && troll_coins < price) {
+      toast.error(`Not enough Troll Coins. Need ${price}, have ${troll_coins}`);
+      return;
+    }
+    if (useCredit && (creditInfo?.available || 0) < price) {
+      toast.error(`Not enough Credit. Need ${price}, available ${creditInfo?.available}`);
+      return;
+    }
+
+    try {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + durationHours * 3600000).toISOString();
+      const metadata = {
+        boost_type: 'troll_wall',
+        boost_duration_hours: durationHours,
+        purchased_at: now.toISOString(),
+      };
+
+      const { success, error: deductError } = await deductCoins({
+        userId: user.id,
+        amount: price,
+        type: 'wall_boost_purchase',
+        description: `Purchased Wall Boost: ${boost.name}`,
+        metadata: { ...metadata, boost_id: boost.id },
+        useCredit,
+        supabaseClient: supabase,
+      });
+
+      if (!success) throw new Error(deductError || 'Payment failed');
+
+      const { error } = await supabase.from('user_perks').insert({
+        user_id: user.id,
+        perk_id: boost.id,
+        expires_at: expiresAt,
+        is_active: true,
+        metadata: { ...metadata, boost_id: boost.id },
+      });
+
+      if (error) throw error;
+
+      await refreshCoins();
+      toast.success(`Wall Boost purchased: ${durationHours >= 24 ? `${durationHours / 24} day(s)` : `${durationHours} hour(s)`}`);
+      showPurchaseCompleteOverlay();
+      await loadWalletData(false);
+    } catch (err) {
+      console.error('Wall Boost purchase error:', err);
+      toast.error(err.message || 'Failed to purchase Wall Boost');
+    }
+  };
+
   const buyInsurance = async (plan) => {
     try {
       const basePrice = Number(plan.cost || 0);
@@ -2130,7 +2199,39 @@ useEffect(() => {
                  </div>
               )}
               
-              <div className="mb-6 bg-black/20 p-4 rounded-lg border border-white/10">
+              <div className="mb-6 rounded-xl border border-purple-500/20 bg-black/25 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Wall Boosts</h3>
+                    <p className="text-xs text-gray-400">Allow posts to be boosted on the Troll Wall.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {WALL_BOOST_PERKS.map((boost) => (
+                    <div key={boost.id} className="rounded-lg border border-purple-500/20 bg-white/[0.03] p-3">
+                      <div className="mb-2 flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-white">{boost.name}</div>
+                          <div className="text-xs text-gray-400">{boost.description}</div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-sm font-black text-yellow-400">{formatCoins(boost.cost)}</div>
+                          <div className="text-[10px] text-gray-500">Coins</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => buyWallBoost(boost)}
+                        className="w-full rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-3 py-2 text-xs font-bold text-white transition hover:from-purple-500 hover:to-pink-500"
+                      >
+                        Boost Post for {boost.boost_duration_hours >= 24 ? `${boost.boost_duration_hours / 24} Day(s)` : `${boost.boost_duration_hours} Hour(s)`}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+ 
+               <div className="mb-6 bg-black/20 p-4 rounded-lg border border-white/10">
                  <label className="text-sm text-gray-400 mb-2 block">Duration Multiplier</label>
                  <div className="flex gap-2">
                    {[1, 2, 5, 10].map(m => (
@@ -2345,7 +2446,7 @@ useEffect(() => {
                 Broadcast Themes
               </h2>
               <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-200">
-                Customize your broadcast appearance! Choose from various themes that change your stream's visual style.
+                Customize your broadcast appearance! Choose from various themes that change your stream&apos;s visual style.
                 Note: RGB effects will disable theme visuals until RGB is turned off.
               </div>
 

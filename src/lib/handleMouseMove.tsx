@@ -28,7 +28,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SceneConfig } from '@/components/broadcast/GamingSceneManager'
-// LocalVideoPreview and DraggableCameraOverlay are not available; using inline video elements
 
 interface GamingSetupProps {
   streamTitle?: string
@@ -73,18 +72,17 @@ interface GamingSetupProps {
   onUpdateTextOverlay?: (sceneId: string, overlayId: string, updates: Partial<SceneConfig['textOverlays'][0]>) => void
   onDeleteTextOverlay?: (sceneId: string, overlayId: string) => void
   onSetBackgroundImage?: (sceneId: string, imageUrl: string | null) => void
-  // Preview streams (MediaStream for local preview)
   screenStream?: MediaStream | null
   cameraStream?: MediaStream | null
   micStream?: MediaStream | null
-  // State
   isPreviewing?: boolean
   hasCameraTrack?: boolean
   isCameraEnabled?: boolean
-  // Actions
   onStartPreview?: () => void
   onStopPreview?: () => void
   onToggleCamera?: () => void
+  streamId?: string | null
+  saveBroadcastButton?: React.ReactNode
 }
 
 export function GamingSetup({
@@ -130,6 +128,8 @@ export function GamingSetup({
   hasCameraTrack = false,
   isCameraEnabled = false,
   onToggleCamera,
+  streamId = null,
+  saveBroadcastButton,
 }: GamingSetupProps) {
   const [showGameSearch, setShowGameSearch] = React.useState(false)
   const [gameSearchQuery, setGameSearchQuery] = React.useState('')
@@ -152,7 +152,6 @@ export function GamingSetup({
     return POPULAR_GAMES.filter(g => g.toLowerCase().includes(gameSearchQuery.toLowerCase())).slice(0, 10)
   }, [gameSearchQuery])
 
-  // Status config for two-phase flow: preview → live
   const statusConfig = React.useMemo(() => {
     if (isConnecting) return { label: 'Going Live...', detail: 'Joining Agora and publishing tracks.', className: 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100', dotClassName: 'bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)] animate-pulse' }
     if (isLive) return { label: 'Live on HytroGaming', detail: 'Your screen + camera are being broadcast via Agora.', className: 'border-red-400/30 bg-red-500/10 text-red-100', dotClassName: 'bg-red-400 shadow-[0_0_16px_rgba(248,113,113,0.95)] animate-pulse' }
@@ -162,7 +161,6 @@ export function GamingSetup({
 
   return (
     <div className={cn('min-h-screen overflow-hidden bg-[#05080f] text-white', 'bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.14),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,0.12),transparent_30%),linear-gradient(180deg,#05080f,#02040a)]', className)}>
-      {/* ── Header ── */}
       <header className="border-b border-cyan-400/15 bg-black/35 px-4 py-3 backdrop-blur-2xl sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-5">
@@ -180,17 +178,13 @@ export function GamingSetup({
         </div>
       </header>
 
-      {/* ── Main Grid ── */}
       <main className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[360px_minmax(560px,1fr)_360px] 2xl:grid-cols-[420px_minmax(680px,1fr)_420px]">
 
-        {/* ── Left Column: Controls + Settings ── */}
         <section className="space-y-4">
 
-          {/* Screen Share Control Panel */}
           <Panel>
             <PanelHeader icon={<MonitorPlay className="h-4 w-4" />} title="Screen Share" right={isLive && <span className="flex items-center gap-1 text-xs font-black text-red-300"><span className="h-2 w-2 rounded-full bg-red-400 animate-pulse" />LIVE</span>} />
             <div className="p-4">
-              {/* Status indicator */}
               <div className={cn('rounded-2xl border px-4 py-3', statusConfig.className)}>
                 <div className="flex items-start gap-3">
                   <span className={cn('mt-1 h-2.5 w-2.5 shrink-0 rounded-full', statusConfig.dotClassName)} />
@@ -201,7 +195,6 @@ export function GamingSetup({
                 </div>
               </div>
 
-              {/* Error display */}
               {errorMessage && (
                 <div className="mt-3 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2">
                   <div className="flex items-start gap-2">
@@ -211,9 +204,7 @@ export function GamingSetup({
                 </div>
               )}
 
-              {/* Main action buttons — two-phase: preview → live */}
               <div className="mt-4 grid gap-2">
-                {/* Phase 1: Not previewing, not live → show "Start Preview" */}
                 {!isPreviewing && !isLive && !isConnecting && (
                   <button type="button" onClick={onStartPreview} className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/30 bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_0_30px_rgba(59,130,246,0.35)] transition hover:scale-[1.01]">
                     <MonitorPlay className="h-5 w-5" />
@@ -221,7 +212,6 @@ export function GamingSetup({
                   </button>
                 )}
 
-                {/* Connecting spinner */}
                 {isConnecting && (
                   <div className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3.5 text-sm font-black text-cyan-200">
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -229,7 +219,6 @@ export function GamingSetup({
                   </div>
                 )}
 
-                {/* Phase 2: Previewing but not live → show "Go Live" + "Stop Preview" */}
                 {isPreviewing && !isLive && !isConnecting && (
                   <>
                     <button type="button" onClick={onGoLive} className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300/30 bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-3.5 text-sm font-black text-white shadow-[0_0_30px_rgba(52,211,153,0.35)] transition hover:scale-[1.01]">
@@ -242,7 +231,6 @@ export function GamingSetup({
                   </>
                 )}
 
-                {/* Phase 3: Live → show "End Stream" */}
                 {isLive && (
                   <button type="button" onClick={onEndStream} className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/15 px-4 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20">
                     <Power className="h-5 w-5" />
@@ -251,7 +239,6 @@ export function GamingSetup({
                 )}
               </div>
 
-              {/* Mic toggle */}
               <div className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   {isMicEnabled ? <Mic className="h-4 w-4 text-emerald-300" /> : <MicOff className="h-4 w-4 text-red-300" />}
@@ -262,7 +249,6 @@ export function GamingSetup({
                 </button>
               </div>
 
-              {/* Camera toggle (webcam overlay, like OBS) */}
               <div className="mt-2 flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   {isCameraEnabled ? <Video className="h-4 w-4 text-emerald-300" /> : <VideoOff className="h-4 w-4 text-red-300" />}
@@ -273,7 +259,6 @@ export function GamingSetup({
                 </button>
               </div>
 
-              {/* Heartbeat status */}
               {heartbeatStatus && isConnected && (
                 <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
                   <p className="text-[10px] font-bold uppercase text-slate-500 mb-2">Activity Monitor</p>
@@ -295,7 +280,15 @@ export function GamingSetup({
             </div>
           </Panel>
 
-          {/* Stream Settings */}
+          {streamId && saveBroadcastButton && (
+            <Panel>
+              <PanelHeader icon={<Save className="h-4 w-4" />} title="Recording" />
+              <div className="p-4 flex items-center justify-center">
+                {saveBroadcastButton}
+              </div>
+            </Panel>
+          )}
+
           <Panel>
             <PanelHeader icon={<Settings className="h-4 w-4" />} title="Stream Settings" />
             <div className="divide-y divide-white/10 p-4">
@@ -324,12 +317,11 @@ export function GamingSetup({
                   )}
                 </div>
               </div>
-              <SettingRow label="Engine" value="Agora RTC (Browser)" />
-              <SettingRow label="Latency" value="Ultra Low (< 1s)" />
+              <SettingRow label="Engine" value="Browser MediaRecorder" />
+              <SettingRow label="Recording" value="Browser-native (no egress cost)" />
             </div>
           </Panel>
 
-          {/* Scenes Panel */}
           {scenes && scenes.length > 0 && onSwitchScene && (
             <Panel>
               <PanelHeader icon={<Layout className="h-4 w-4" />} title="Scenes" right={<button type="button" onClick={() => setShowScenePanel(!showScenePanel)} className="text-xs text-slate-400 hover:text-white">{showScenePanel ? 'Hide' : 'Edit'}</button>} />
@@ -361,33 +353,22 @@ export function GamingSetup({
           )}
         </section>
 
-        {/* ── Center Column: Preview + Status ── */}
         <section className="space-y-4">
-          {/* Screen Share Preview */}
           <Panel className="overflow-hidden">
-            <PanelHeader icon={<MonitorPlay className="h-4 w-4" />} title={isLive ? 'Live Preview' : 'Preview'} right={<div className="flex items-center gap-3 text-xs font-black"><span className="rounded-lg bg-cyan-400/10 px-2 py-1 text-cyan-200">Agora RTC</span><span className="flex items-center gap-1 text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />{isLive ? 'LIVE' : isPreviewing ? 'PREVIEW' : 'READY'}</span></div>} />
+            <PanelHeader icon={<MonitorPlay className="h-4 w-4" />} title={isLive ? 'Live Preview' : 'Preview'} right={<div className="flex items-center gap-3 text-xs font-black"><span className="rounded-lg bg-cyan-400/10 px-2 py-1 text-cyan-200">Browser</span><span className="flex items-center gap-1 text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />{isLive ? 'LIVE' : isPreviewing ? 'PREVIEW' : 'READY'}</span></div>} />
             <div className="relative aspect-video overflow-hidden bg-black">
-              {/* Screen share preview — shows during both preview and live phases */}
               {(isPreviewing || isLive) && screenStream ? (
                 <div className="h-full w-full bg-black">
                   <video autoPlay playsInline muted ref={el => { if (el) el.srcObject = screenStream; }} className="h-full w-full object-contain" />
-                </div>
-              ) : (isPreviewing || isLive) ? (
-                <div className="h-full w-full flex flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_40%,rgba(251,191,36,0.08),transparent_30%),#02040a] px-6 text-center">
-                  <Pause className="h-16 w-16 text-amber-300/40" />
-                  <p className="mt-4 text-lg font-black text-white/70">Stream Paused</p>
-                  <p className="mt-2 max-w-sm text-sm text-slate-500">Agora disconnected to save minutes. Click Resume to go live again.</p>
                 </div>
               ) : (
                 <div className="h-full w-full flex flex-col items-center justify-center bg-[radial-gradient(circle_at_50%_40%,rgba(34,211,238,0.12),transparent_30%),#02040a] px-6 text-center">
                   <MonitorPlay className="h-16 w-16 text-cyan-300/40" />
                   <p className="mt-4 text-lg font-black text-white/70">Ready to Share</p>
-                  <p className="mt-2 max-w-sm text-sm text-slate-500">Click "Share Screen" to start broadcasting your gameplay via Agora.</p>
-                  <p className="mt-3 text-xs text-slate-600">Browser → Agora RTC → HytroGaming Viewers</p>
+                  <p className="mt-2 max-w-sm text-sm text-slate-500">Click "Share Screen" to start broadcasting your gameplay.</p>
                 </div>
               )}
 
-              {/* Scene overlay preview */}
               {activeSceneId && scenes && (() => {
                 const activeScene = scenes.find(s => s.id === activeSceneId)
                 if (!activeScene) return null
@@ -403,12 +384,10 @@ export function GamingSetup({
                 )
               })()}
 
-              {/* Draggable camera overlay (like OBS) — shows during both preview and live */}
               {(isPreviewing || isLive) && isCameraEnabled && cameraStream && (
                 <DraggableCameraOverlay track={cameraStream} />
               )}
 
-              {/* Stream info overlay */}
               <div className="absolute bottom-5 left-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-black/60 p-3 backdrop-blur-xl">
                 {userAvatar ? <img src={userAvatar} alt={username} className="h-11 w-11 rounded-xl border border-purple-300/30 object-cover" /> : <div className="grid h-11 w-11 place-items-center rounded-xl border border-purple-300/30 bg-purple-500/20 text-xs font-black">{username.slice(0, 2).toUpperCase()}</div>}
                 <div>
@@ -418,7 +397,6 @@ export function GamingSetup({
                 <span className="text-xs font-black">100 / 100</span>
               </div>
 
-              {/* Viewer count */}
               <div className="absolute bottom-5 right-5 rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-xl font-black backdrop-blur-xl flex items-center gap-2">
                 <Eye className="h-5 w-5 text-cyan-300" />
                 {viewerCount}
@@ -426,10 +404,9 @@ export function GamingSetup({
             </div>
           </Panel>
 
-          {/* Stream Metrics */}
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel>
-              <PanelHeader icon={<Radio className="h-4 w-4" />} title="Agora Connection" />
+              <PanelHeader icon={<Radio className="h-4 w-4" />} title="Connection" />
               <div className="p-4">
                 <div className="flex items-center gap-4">
                   <div className={cn('relative grid h-16 w-16 place-items-center rounded-full border bg-black', isConnected ? 'border-emerald-400/40 shadow-[0_0_30px_rgba(74,222,128,0.20)]' : isPaused ? 'border-amber-400/40' : 'border-slate-600')}>
@@ -437,10 +414,8 @@ export function GamingSetup({
                     {isConnected && <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white"><ShieldCheck className="h-3 w-3" /></span>}
                   </div>
                   <div>
-                    <p className={cn('text-sm font-black uppercase', isLive ? 'text-red-300' : isConnected ? 'text-emerald-300' : isPaused ? 'text-amber-300' : 'text-slate-400')}>
-                      {isLive ? 'Live' : isConnected ? 'Connected' : isPaused ? 'Paused' : 'Not Connected'}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">Hytrogaming Engine</p>
+                    <p className={cn('text-sm font-black uppercase', isLive ? 'text-red-300' : isConnected ? 'text-emerald-300' : isPaused ? 'text-amber-300' : 'text-slate-400')}>{isLive ? 'Live' : isConnected ? 'Connected' : isPaused ? 'Paused' : 'Not Connected'}</p>
+                    <p className="mt-1 text-xs text-slate-500">Browser MediaRecorder</p>
                   </div>
                 </div>
               </div>
@@ -451,39 +426,29 @@ export function GamingSetup({
               <div className="grid grid-cols-2 gap-3 p-4">
                 <StatusMetric label="Viewers" value={viewerCount.toLocaleString()} icon={<Users className="h-3 w-3" />} />
                 <StatusMetric label="Duration" value={streamDuration} icon={<Activity className="h-3 w-3" />} />
-                <StatusMetric label="Engine" value="Agora" icon={<Radio className="h-3 w-3" />} />
+                <StatusMetric label="Engine" value="Browser" icon={<Radio className="h-3 w-3" />} />
                 <StatusMetric label="Status" value={isLive ? 'LIVE' : isPaused ? 'Paused' : isConnected ? 'Active' : 'Ready'} good={isLive || isConnected} icon={<Eye className="h-3 w-3" />} />
               </div>
             </Panel>
           </div>
         </section>
 
-        {/* ── Right Column: Chat ── */}
         <section className="space-y-4">
           <Panel className="flex flex-col" style={{ maxHeight: 380 }}>
             <PanelHeader icon={<Mail className="h-4 w-4" />} title="Chat" right={<CounterBadge value={isLive ? 'Live' : 'Offline'} />} />
             <div className="min-h-0 flex-1 overflow-hidden p-2">{chatPanel || <p className="py-4 text-center text-xs text-slate-500">Start streaming to enable chat</p>}</div>
           </Panel>
 
-          {/* Quick Info */}
           <Panel>
-            <PanelHeader icon={<ShieldCheck className="h-4 w-4" />} title="HytroGaming" />
+            <PanelHeader icon={<ShieldCheck className="h-4 w-4" />} title="Recording" />
             <div className="p-4 space-y-3">
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <MonitorPlay className="h-3.5 w-3.5 text-cyan-300" />
-                <span>Browser-native screen sharing</span>
+                <span>Browser-native recording via MediaRecorder API</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Radio className="h-3.5 w-3.5 text-emerald-300" />
-                <span>Agora RTC — Ultra low latency</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Pause className="h-3.5 w-3.5 text-amber-300" />
-                <span>Pause to save Agora minutes</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Activity className="h-3.5 w-3.5 text-purple-300" />
-                <span>Auto-disconnect on idle</span>
+                <Radio className="h-3.5 w-3.5 text-purple-300" />
+                <span>Circular buffer for instant clips (F8)</span>
               </div>
             </div>
           </Panel>
@@ -493,7 +458,7 @@ export function GamingSetup({
   )
 }
 
-// ─── UI Components ────────────────────────────────────────────────────────────
+import { Save } from 'lucide-react'
 
 function Panel({ children, className, style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return <div style={style} className={cn('rounded-2xl border border-cyan-400/20 bg-[#07111d]/82 shadow-[0_0_30px_rgba(0,0,0,0.35)] backdrop-blur-xl', className)}>{children}</div>
@@ -513,7 +478,6 @@ function StatusMetric({ label, value, good, icon }: { label: string; value: stri
   return <div><div className="flex items-center gap-1">{icon}<p className={cn('text-xs font-black', good ? 'text-emerald-300' : 'text-white')}>{value}</p></div><p className="mt-1 text-[10px] font-semibold text-slate-500">{label}</p></div>
 }
 
-/** Shows when screen is actively being shared */
 function ScreenShareActiveIndicator({ isLive, isPaused }: { isLive: boolean; isPaused: boolean }) {
   return (
     <div className="flex flex-col items-center gap-4 px-6 text-center">
@@ -532,19 +496,18 @@ function ScreenShareActiveIndicator({ isLive, isPaused }: { isLive: boolean; isP
         <p className="text-xl font-black text-white">{isLive ? 'Broadcasting Live' : 'Screen Sharing Active'}</p>
         <p className="mt-2 text-sm text-slate-400">
           {isLive
-            ? 'Your screen is being broadcast to viewers via Agora RTC.'
-            : 'Connecting to Agora... You will go live automatically.'}
+            ? 'Your screen is being recorded via MediaRecorder.'
+            : 'Connecting... You will start recording automatically.'}
         </p>
       </div>
       <div className="flex items-center gap-4 text-xs text-slate-500">
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" />Agora Connected</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" />MediaRecorder Ready</span>
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-cyan-400" />No OBS Required</span>
       </div>
     </div>
   )
 }
 
-/** Renders the local screen-share track into a video element */
 function ScreenSharePreview({ track }: { track: any }) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -572,7 +535,6 @@ function ScreenSharePreview({ track }: { track: any }) {
   );
 }
 
-/** Draggable camera overlay — like OBS webcam overlay */
 function DraggableCameraOverlay({ track }: { track: any }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -580,7 +542,6 @@ function DraggableCameraOverlay({ track }: { track: any }) {
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
-  // Attach camera track to video element
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !track) return;
@@ -592,7 +553,6 @@ function DraggableCameraOverlay({ track }: { track: any }) {
     return () => { try { track.stop(); } catch { /* ignore */ } };
   }, [track]);
 
-  // Mouse drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -642,7 +602,6 @@ function DraggableCameraOverlay({ track }: { track: any }) {
           muted
           className="h-full w-full object-cover bg-black"
         />
-        {/* Camera label */}
         <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-0.5 text-[9px] font-bold text-white/70 flex items-center gap-1">
           <div className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
           CAM

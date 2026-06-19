@@ -541,13 +541,13 @@ const autoEndInterval = setInterval(async () => {
     }
 
     if (data && data.length > 0) {
-      console.log(`[AutoEnd] Ended ${data.length} inactive stream(s):`, data.map((s: any) => ({
+      console.log(`[AutoEnd] Ended ${data.length} inactive stream(s):`, data.map((s) => ({
         streamId: s.ended_stream_id,
         broadcasterId: s.broadcaster_id,
         lastActivity: s.last_activity,
       })));
     }
-  } catch (err: any) {
+  } catch (err) {
     console.warn('[AutoEnd] Unexpected error:', err.message);
   }
 }, INACTIVITY_CHECK_INTERVAL_MS);

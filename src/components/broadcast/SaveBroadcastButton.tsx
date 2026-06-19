@@ -1,5 +1,5 @@
 import React from 'react'
-import { Circle, Square, Loader2, Save } from 'lucide-react'
+import { Circle, Square, Loader2, Save, Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SaveBroadcastButtonProps {
@@ -9,13 +9,10 @@ interface SaveBroadcastButtonProps {
   streamId: string | null
   onStartRecording: (streamId: string) => void
   onStopRecording: () => void
+  onSaveClip?: () => void
   className?: string
 }
 
-/**
- * SaveBroadcastButton — records the entire LiveKit room via Egress API.
- * No screen-share needed. Captures all participants' audio + video.
- */
 export function SaveBroadcastButton({
   isRecording,
   isUploading,
@@ -23,6 +20,7 @@ export function SaveBroadcastButton({
   streamId,
   onStartRecording,
   onStopRecording,
+  onSaveClip,
   className,
 }: SaveBroadcastButtonProps) {
   const minutes = Math.floor(recordingDuration / 60)
@@ -38,26 +36,41 @@ export function SaveBroadcastButton({
         )}
       >
         <Loader2 className="h-4 w-4 animate-spin" />
-        Saving recording...
+        Saving...
       </button>
     )
   }
 
   if (isRecording) {
     return (
-      <button
-        onClick={onStopRecording}
-        className={cn(
-          'flex items-center gap-2 rounded-xl border border-red-400/40 bg-red-500/15 px-4 py-2.5 text-xs font-black text-red-200 transition hover:bg-red-500/25',
-          className,
+      <div className="flex items-center gap-2">
+        {onSaveClip && (
+          <button
+            onClick={onSaveClip}
+            className={cn(
+              'flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-3 py-2 text-xs font-black text-cyan-200 transition hover:bg-cyan-500/25',
+              className,
+            )}
+            title="Save last 60 seconds as clip"
+          >
+            <Scissors className="h-3.5 w-3.5" />
+            Clip
+          </button>
         )}
-      >
-        <span className="relative">
-          <Circle className="h-3.5 w-3.5 fill-red-400 text-red-400 animate-pulse" />
-        </span>
-        REC {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
-        <Square className="h-3 w-3 fill-current" />
-      </button>
+        <button
+          onClick={onStopRecording}
+          className={cn(
+            'flex items-center gap-2 rounded-xl border border-red-400/40 bg-red-500/15 px-4 py-2.5 text-xs font-black text-red-200 transition hover:bg-red-500/25',
+            className,
+          )}
+        >
+          <span className="relative">
+            <Circle className="h-3.5 w-3.5 fill-red-400 text-red-400 animate-pulse" />
+          </span>
+          REC {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
+          <Square className="h-3 w-3 fill-current" />
+        </button>
+      </div>
     )
   }
 

@@ -1134,6 +1134,7 @@ function GamingSetupPageInner() {
           streamId={streamData?.id || null}
           onStartRecording={recorder.startRecording}
           onStopRecording={recorder.stopRecording}
+          onSaveClip={recorder.saveClip}
         />
       }
     />

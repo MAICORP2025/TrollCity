@@ -228,7 +228,6 @@ export default function SetupPage() {
   const [selectedTheme, setSelectedTheme] = useState<string>(DEFAULT_BROADCAST_THEME_ID);
   const [ownedThemes, setOwnedThemes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [enableRecording, setEnableRecording] = useState(false);
   const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean; unrestricted?: boolean; isStaffBypass?: boolean } | null>(null);
 const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
   const [battleMode, setBattleMode] = useState<BattleModeType>('world');
@@ -1895,35 +1894,6 @@ livekit_room_name: roomName,
         console.log('[SetupPage] Stream marked as live in database');
         broadcastStartLog('stream live verification', { streamId: data.id, status: 'live' });
 
-        // Start cloud recording if enabled by the broadcaster
-        if (enableRecording) {
-          try {
-            const broadcastApiBase = import.meta.env.VITE_BROADCAST_API_URL || 'http://localhost:3002/api';
-            const recordingRes = await fetch(`${broadcastApiBase}/broadcasts/start-streaming`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                streamId: data.id,
-                roomName: data.id,
-                broadcasterId: user?.id,
-                title: data.title || 'Live Stream',
-              }),
-            });
-            if (recordingRes.ok) {
-              const recordingData = await recordingRes.json();
-              console.log('[SetupPage] Recording started:', recordingData.livekitEgressId);
-              toast.success('Recording started — your broadcast is being saved.');
-            } else {
-              const errData = await recordingRes.json().catch(() => ({}));
-              console.warn('[SetupPage] Failed to start recording:', recordingRes.status, errData);
-              toast.warning('Could not start recording. You can start it manually from the broadcast page.');
-            }
-          } catch (recErr: any) {
-            console.warn('[SetupPage] Recording start error:', recErr);
-            toast.warning('Could not start recording. You can start it manually from the broadcast page.');
-          }
-        }
-
         // Create a system wall post so the stream appears on the Troll Wall feed
         // Runs independently — if it fails, the stream is still live
         try {
@@ -2689,47 +2659,6 @@ livekit_room_name: roomName,
             <span className="text-xs text-zinc-300 leading-snug">
               I am 18 years of age or older and agree to the Broadcast Agreement, Terms of Service, and Community Guidelines.
             </span>
-          </label>
-        </div>
-
-        {/* Recording Toggle */}
-        <div className="bg-zinc-900/80 rounded-2xl border border-white/10 p-4">
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className="relative">
-              <input
-                type="checkbox"
-                checked={enableRecording}
-                onChange={(e) => setEnableRecording(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className={cn(
-                'w-10 h-5 rounded-full transition-all',
-                enableRecording
-                  ? 'bg-red-500'
-                  : 'bg-zinc-700 group-hover:bg-zinc-600'
-              )}>
-                <div className={cn(
-                  'w-4 h-4 rounded-full bg-white shadow-md transform transition-transform mt-0.5',
-                  enableRecording ? 'translate-x-5.5 ml-0.5' : 'translate-x-0.5'
-                )} />
-              </div>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white">Record this stream</span>
-                {enableRecording && (
-                  <span className="flex items-center gap-1 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-                    REC
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-zinc-400 mt-0.5">
-                {enableRecording
-                  ? 'Your broadcast will be recorded and saved as an MP4 file.'
-                  : 'Enable to automatically record your broadcast.'}
-              </p>
-            </div>
           </label>
         </div>
 

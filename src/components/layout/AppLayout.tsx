@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import BottomNavigation from '../BottomNavigation'
 import BottomNavBar from '../nav/BottomNavBar'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
@@ -49,10 +48,12 @@ export default function AppLayout({
    const isThemeExemptPage = normalizedPath.includes('court') || normalizedPath.startsWith('/church');
    const isKeyboardVisible = false;
    const isMobileLayout = isMobileWidth && !isAuthPage;
+   const [hytroSetupLive, setHytroSetupLive] = useState(() => typeof window !== 'undefined' && sessionStorage.getItem('tc_hytro_gaming_setup_live') === 'true')
 
    // New bottom nav bar is always shown (replaces sidebar on all screen sizes)
    // Hidden on live pages and treelz pages
-   const showNewBottomNavBar = !isAuthPage && !isLivePage && !isTreelzPage;
+   const isHytroGamingSetupLivePage = location.pathname.startsWith('/broadcast/setup/gaming') && hytroSetupLive
+   const showNewBottomNavBar = !isAuthPage && !isLivePage && !isTreelzPage && !isHytroGamingSetupLivePage
 
   // Setup global message notifications - opens chat bubble when message received
   useEffect(() => {
@@ -60,8 +61,17 @@ export default function AppLayout({
   }, [user?.id])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-  }, []);
+    const updateHytroSetupLive = () => {
+      setHytroSetupLive(typeof window !== 'undefined' && sessionStorage.getItem('tc_hytro_gaming_setup_live') === 'true')
+    }
+
+    window.addEventListener('tc-hytro-gaming-setup-live-changed', updateHytroSetupLive)
+    window.addEventListener('focus', updateHytroSetupLive)
+    return () => {
+      window.removeEventListener('tc-hytro-gaming-setup-live-changed', updateHytroSetupLive)
+      window.removeEventListener('focus', updateHytroSetupLive)
+    }
+  }, [])
 
   useEffect(() => {
     document.body.classList.toggle('tc-theme-exempt-body', isThemeExemptPage);
@@ -72,10 +82,10 @@ export default function AppLayout({
   }, [isThemeExemptPage]);
 
    const effectiveShowSidebar = false;
-   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isTreelzPage;
+   const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isTreelzPage && !isHytroGamingSetupLivePage;
    const effectiveShowBottomNav = false;
-  const mainOverflowClass = isLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
-  const mainPaddingClass = showNewBottomNavBar && !isLivePage ? 'pb-[calc(var(--bottom-nav-height,128px)+env(safe-area-inset-bottom,0px))]' : '';
+   const mainOverflowClass = isLivePage || isHytroGamingSetupLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
+   const mainPaddingClass = showNewBottomNavBar && !isLivePage && !isHytroGamingSetupLivePage ? 'pb-[calc(var(--bottom-nav-height,128px)+env(safe-area-inset-bottom,0px))]' : '';
   const appThemeClass = isThemeExemptPage ? 'tc-theme-exempt' : 'tc-app-shell';
 
   return (
@@ -137,11 +147,6 @@ export default function AppLayout({
             children
           )}
         </main>
-
-        {/* Old Bottom Navigation Bubble - Hidden, replaced by BottomNavBar */}
-        {false && effectiveShowBottomNav && !isKeyboardVisible && (
-          <BottomNavigation />
-        )}
 
       </div>
 

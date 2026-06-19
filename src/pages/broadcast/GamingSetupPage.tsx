@@ -308,9 +308,11 @@ function GamingSetupPageInner() {
 
   // Phase 3: End stream (full disconnect)
   const handleEndStream = useCallback(async () => {
-    await agora.endStream();
-    setIsLive(false);
-  }, [agora]);
+    await agora.endStream()
+    setIsLive(false)
+    sessionStorage.removeItem('tc_hytro_gaming_setup_live')
+    window.dispatchEvent(new CustomEvent('tc-hytro-gaming-setup-live-changed'))
+  }, [agora])
 
   // Stop preview (back to idle)
   const handleStopPreview = useCallback(async () => {

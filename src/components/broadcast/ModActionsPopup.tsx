@@ -346,9 +346,18 @@ const ModActionsPopup = memo(function ModActionsPopup({
       
       // 1. Create jail record
       const arrestDate = new Date().toISOString();
+
+      // Look up arrested user's IP geolocation for geofence device tracking
+      const { data: userIpRecords } = await supabase
+        .from('user_ip_tracking')
+        .select('latitude, longitude, ip_address')
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
        await supabase.from('jail').insert({
          user_id: targetUserId,
-         release_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 1 day default
+         release_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
          reason: arrestReason,
          sentence_days: 1,
          arrested_by: currentActorId,
@@ -356,6 +365,8 @@ const ModActionsPopup = memo(function ModActionsPopup({
          status: 'jailed',
          severity: arrestSeverity,
          bond_amount: bail,
+         arrest_latitude: userIpRecords?.[0]?.latitude ?? null,
+         arrest_longitude: userIpRecords?.[0]?.longitude ?? null,
        });
       
        // 2. Find or create court docket for next Tue/Thu

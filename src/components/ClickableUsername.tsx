@@ -631,6 +631,17 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                     docketId = newDocket?.id;
                 }
                 
+                // Look up arrested user's IP geolocation for geofence tracking
+                const { data: userIpRecords } = await supabase
+                    .from('user_ip_tracking')
+                    .select('latitude, longitude, ip_address')
+                    .eq('user_id', targetUserId)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                const arrestLat = userIpRecords?.[0]?.latitude ?? null;
+                const arrestLon = userIpRecords?.[0]?.longitude ?? null;
+
                 // Check if inmate already exists in jail - update instead of insert
                 const { data: existingJail } = await supabase
                     .from('jail')
@@ -647,13 +658,15 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                             reason: reason,
                             sentence_days: days,
                             status: 'jailed',
-                            updated_at: new Date().toISOString()
+                            updated_at: new Date().toISOString(),
+                            arrest_latitude: arrestLat,
+                            arrest_longitude: arrestLon
                         })
                         .eq('id', existingJail.id);
                     
                     if (jailError) throw jailError;
                 } else {
-                    // Insert new jail record
+                    // Insert new jail record with arrest location for geofence device tracking
                     const { error: jailError } = await supabase
                         .from('jail')
                         .insert({
@@ -663,7 +676,9 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                             sentence_days: days,
                             arrested_by: currentUser?.id,
                             court_date: courtDateStr,
-                            status: 'jailed'
+                            status: 'jailed',
+                            arrest_latitude: arrestLat,
+                            arrest_longitude: arrestLon
                         });
                     
                     if (jailError) throw jailError;

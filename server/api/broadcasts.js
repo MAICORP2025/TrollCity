@@ -503,7 +503,7 @@ async function stopStreaming(req, res) {
 
     const { data: stream, error: fetchError } = await supabase
       .from("streams")
-      .select("id, egress_id, livekit_room_name")
+      .select("id, egress_id, livekit_room_name, broadcaster_id, title")
       .eq("id", streamId)
       .maybeSingle();
 
@@ -611,7 +611,7 @@ async function stopStreaming(req, res) {
     console.log(`[stopStreaming] Stream stopped: ${streamId}`);
 
     // Update Troll Wall system post for ended stream
-    await handleTrollWallSystemPost(streamId, broadcasterId, false, title || 'Live Stream');
+    await handleTrollWallSystemPost(streamId, stream.broadcaster_id, false, stream.title || 'Live Stream');
 
     return res.status(200).json({ success: true, message: "Stream stopped", streamId });
 

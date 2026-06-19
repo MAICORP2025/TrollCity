@@ -53,6 +53,7 @@ import { cars } from '../data/vehicles';
 import ProfileFeed from '../components/profile/ProfileFeed';
 import ProfileWatchlist from '../components/profile/ProfileWatchlist';
 import ProfileFrame from '../components/profile/ProfileFrame';
+import ProfileReplays from '../components/profile/ProfileReplays';
 import { useProfileFrameStore } from '../stores/useProfileFrameStore';
 import type { ProfileFrame as ProfileFrameType } from '../config/profileFrames';
 
@@ -215,6 +216,7 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
 
   const tabOptions: TabOption[] = [
     { key: 'social', label: 'Social', icon: MessageCircle, show: true },
+    { key: 'recorded', label: 'Recorded', icon: Video, show: isOwnProfile },
     { key: 'watchlist', label: 'Watchlist', icon: Heart, show: isOwnProfile },
     { key: 'background', label: 'Background Check', icon: Shield, show: canUseBackground },
     { key: 'inventory', label: 'Inventory & Perks', icon: Package, show: canSeeFullProfile },
@@ -1189,10 +1191,19 @@ function ProfileInner({ xpStoreLevel: xpStoreLevelProp }: { xpStoreLevel: number
     </div>
   );
 
+  const renderRecordedStreams = () => (
+    <div className="space-y-6">
+      <SectionHeader icon={Video} title="Broadcast Replays" subtitle="Your archived live broadcasts" />
+      <ProfileReplays userId={profile.id} />
+    </div>
+  );
+
   const renderTabsContent = () => {
     switch (activeTab) {
       case 'social':
         return renderSocial();
+      case 'recorded':
+        return renderRecordedStreams();
       case 'watchlist':
         return <ProfileWatchlist userId={profile.id} />;
       case 'background':
