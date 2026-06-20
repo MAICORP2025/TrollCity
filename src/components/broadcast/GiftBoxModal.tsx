@@ -502,7 +502,7 @@ const GiftBoxModalComponent = function GiftBoxModal({
 
           {activeTab === 'store' ? (
             <div className="flex-1 overflow-hidden">
-              <CoinStoreModal isOpen={true} onClose={() => setActiveTab('gifts')} embedded />
+              <CoinStoreModal isOpen={true} onClose={() => setActiveTab('gifts')} embedded allowCardPayment={false} />
             </div>
           ) : activeTab === 'abilities' ? (
             <div className="flex-1 overflow-hidden p-4 flex flex-col">

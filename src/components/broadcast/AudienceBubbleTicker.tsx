@@ -3,29 +3,13 @@ import { motion } from 'framer-motion'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../lib/store'
 import { isStaffProfile } from '../../lib/staff'
+import { StreamAudienceMember } from '../../hooks/useStreamAudiencePresence'
 
 export interface ModerateUserInfo {
   userId: string
   username: string
   role?: string
   createdAt?: string
-}
-
-export interface StreamAudienceMember {
-  id: string
-  stream_id: string
-  user_id: string
-  username: string
-  avatar_url: string | null
-  joined_at: string
-  left_at: string | null
-  is_active: boolean
-  gift_total: number
-  gift_score?: number
-  seat_id: string | null
-  seat_status?: 'audience' | 'seated'
-  role: 'viewer' | 'audience' | 'seat' | 'broadcaster'
-  last_seen_at: string
 }
 
 interface AudienceBubbleTickerProps {
@@ -57,9 +41,17 @@ export function AudienceBubbleTicker({
   >({})
   const previousActiveIdsRef = useRef<string[]>([])
 
+  const isCurrentUserStaff = Boolean(
+    currentProfile?.is_troll_officer || currentProfile?.is_admin || currentProfile?.is_lead_officer || currentProfile?.is_ceo || currentProfile?.is_secretary || currentProfile?.is_mod
+  )
+
   const activeAudience = useMemo(() => {
-    return audience.filter((member) => member.is_active && !member.left_at)
-  }, [audience])
+    return audience.filter((member) => {
+      if (!member.is_active || member.left_at) return false
+      if (member.is_ghost_mode && !isCurrentUserStaff) return false
+      return true
+    })
+  }, [audience, isCurrentUserStaff])
 
   const sortedAudience = useMemo(() => {
     return [...activeAudience].sort((a, b) => {
@@ -143,7 +135,7 @@ export function AudienceBubbleTicker({
     return [...visible, ...leavingExtras]
   }, [sortedAudience, leavingAudienceArray, maxVisible])
 
-  const overflowCount = Math.max(0, activeAudience.length - maxVisible)
+  const overflowCount = Math.max(0, sortedAudience.length - maxVisible)
 
   const canModerateMember = (member: StreamAudienceMember) => {
     if (!currentProfile) return false

@@ -6033,6 +6033,7 @@ const handleLike = useCallback(async () => {
                 <CoinStoreModal
                   isOpen={isCoinStoreOpen}
                   onClose={handleCloseCoinStore}
+                  allowCardPayment={false}
                 />
                 </div>
               )}

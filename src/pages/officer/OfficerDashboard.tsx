@@ -199,12 +199,17 @@ export default function OfficerDashboard() {
         <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-lg p-6 flex flex-col justify-between`}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Ghost className={`w-6 h-6 ${profile?.is_ghost_mode ? 'text-purple-400' : trollCityTheme.text.muted}`} />
+              <Ghost className={`w-6 h-6 ${profile?.is_ghost_mode ? 'text-purple-400 animate-pulse' : trollCityTheme.text.muted}`} />
               <h2 className="text-xl font-bold">Ghost Mode</h2>
+              {profile?.is_ghost_mode && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-400/30">
+                  ACTIVE
+                </span>
+              )}
             </div>
             <p className={`text-sm ${trollCityTheme.text.muted}`}>
               {profile?.is_ghost_mode 
-                ? 'You are invisible to users. They cannot see your location or status.' 
+                ? 'You are invisible to regular users. They cannot see your role in the audience bar or viewer list.' 
                 : 'Become invisible to users while keeping all moderation tools active.'
               }
             </p>
@@ -221,7 +226,7 @@ export default function OfficerDashboard() {
             {togglingGhost 
               ? 'Toggling...' 
               : profile?.is_ghost_mode 
-                ? '👻 GHOST ON' 
+                ? '👻 GHOST ON - Click to Disable' 
                 : '🛡 Activate Ghost Mode'
             }
           </button>

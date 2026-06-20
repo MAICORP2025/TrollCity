@@ -16,9 +16,10 @@ export interface StreamAudienceMember {
   gift_total: number
   gift_score?: number
   seat_id: string | null
-  seat_status: 'audience' | 'seated'
+  seat_status?: 'audience' | 'seated'
   role: 'viewer' | 'audience' | 'seat' | 'broadcaster'
   last_seen_at: string
+  is_ghost_mode?: boolean
 }
 
 function normalizeSeatStatus(value: any): 'audience' | 'seated' {
@@ -45,6 +46,7 @@ function normalizeAudienceMember(row: any): StreamAudienceMember {
     seat_status: seatStatus,
     role: row?.role ?? (seatStatus === 'seated' ? 'seat' : 'audience'),
     last_seen_at: row?.last_seen_at ?? row?.joined_at ?? new Date().toISOString(),
+    is_ghost_mode: row?.user_profiles?.is_ghost_mode ?? false,
   }
 }
 
@@ -86,12 +88,17 @@ export function useStreamAudiencePresence(
   const fetchAudience = useCallback(async () => {
     if (!streamId) return
     try {
-      const { data, error } = await supabase
-        .from('stream_audience_presence')
-        .select('*')
-        .eq('stream_id', streamId)
-        .order('gift_total', { ascending: false })
-        .order('joined_at', { ascending: true })
+const { data, error } = await supabase
+         .from('stream_audience_presence')
+         .select(`
+           *,
+           user_profiles:user_id (
+             is_ghost_mode
+           )
+         `)
+         .eq('stream_id', streamId)
+         .order('gift_total', { ascending: false })
+         .order('joined_at', { ascending: true })
 
       if (error) {
         console.warn('[useStreamAudiencePresence] fetchAudience error', error)
@@ -434,6 +441,33 @@ export function useStreamAudiencePresence(
       cleanupChannels()
     }
   }, [streamId, effectiveUserId, fetchAudience, cleanupChannels])
+
+  // Fetch ghost mode status for audience members (realtime doesn't support joins)
+  useEffect(() => {
+    if (!streamId || audience.length === 0) return
+
+    const userIds = audience.map(m => m.user_id).filter(Boolean)
+    if (userIds.length === 0) return
+
+    const fetchGhostModeStatus = async () => {
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, is_ghost_mode')
+        .in('id', userIds)
+
+      if (profiles) {
+        const ghostModeMap = new Map(profiles.map((p: any) => [p.id, p.is_ghost_mode]))
+        setAudience((prev) =>
+          prev.map((member) => ({
+            ...member,
+            is_ghost_mode: ghostModeMap.get(member.user_id) ?? false,
+          }))
+        )
+      }
+    }
+
+    fetchGhostModeStatus()
+  }, [streamId, audience])
 
   // REPLACED: 30s DB heartbeat interval removed.
   // The postgres_changes subscription on stream_audience_presence (above) already

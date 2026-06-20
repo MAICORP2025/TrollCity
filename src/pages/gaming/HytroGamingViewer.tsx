@@ -105,6 +105,7 @@ interface StreamData {
 interface TopSupporter {
   rank: number
   name: string
+  user_id: string
   avatar_url?: string | null
   coins_sent: number
 }
@@ -284,6 +285,7 @@ export default function HytroGamingViewer() {
             topGifts.map((g: any, i: number) => ({
               rank: i + 1,
               name: profileMap.get(g.sender_id)?.username || 'Viewer',
+              user_id: g.sender_id,
               avatar_url: profileMap.get(g.sender_id)?.avatar_url || null,
               coins_sent: g.amount || 0,
             }))
@@ -903,7 +905,13 @@ export default function HytroGamingViewer() {
                   <div key={supporter.rank} className="flex items-center gap-2">
                     <span className="text-xs font-bold text-slate-500">{supporter.rank}.</span>
                     {supporter.avatar_url ? (
-                      <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(supporter.user_id)} avatarUrl={supporter.avatar_url} username={supporter.name} size="xs" /></div>
+                      <div style={{ overflow: 'visible' }}>
+                        <TopSupporterAvatar
+                          userId={supporter.user_id}
+                          avatarUrl={supporter.avatar_url}
+                          name={supporter.name}
+                        />
+                      </div>
                     ) : (
                       <div className="grid h-6 w-6 place-items-center rounded-lg bg-purple-500/20 text-[8px] font-black">
                         {supporter.name.slice(0, 2).toUpperCase()}
@@ -1419,6 +1427,27 @@ function TopStreamersList({ streamId }: { streamId: string }) {
         </div>
       ))}
     </div>
+  )
+}
+
+function TopSupporterAvatar({
+  userId,
+  avatarUrl,
+  name,
+}: {
+  userId: string
+  avatarUrl: string | null
+  name: string
+}) {
+  const frame = useUserFrame(userId)
+
+  return (
+    <ProfileFrame
+      frame={frame}
+      avatarUrl={avatarUrl}
+      username={name}
+      size="xs"
+    />
   )
 }
 
