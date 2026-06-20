@@ -511,6 +511,7 @@ function GamingSetupPageInner() {
             isRecording={recorder.isRecording}
             isUploading={recorder.isUploading}
             recordingDuration={recorder.recordingDuration}
+            recordingSize={recorder.recordingSize}
             streamId={streamData.id}
             onStartRecording={recorder.startRecording}
             onStopRecording={recorder.stopRecording}

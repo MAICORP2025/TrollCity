@@ -122,6 +122,19 @@ function GamingSetupPageInner() {
     setGamingStreamId(streamData?.id || null);
   }, [streamData?.id, setGamingStreamId]);
 
+  // Hide the global bottom nav while the HytroGaming setup preview/live flow is active.
+  useEffect(() => {
+    const shouldHideBottomNav = location.pathname === '/broadcast/setup/gaming' && (agora.isPreviewing || isLive)
+
+    if (shouldHideBottomNav) {
+      sessionStorage.setItem('tc_hytro_gaming_setup_live', 'true')
+    } else {
+      sessionStorage.removeItem('tc_hytro_gaming_setup_live')
+    }
+
+    window.dispatchEvent(new CustomEvent('tc-hytro-gaming-setup-live-changed'))
+  }, [agora.isPreviewing, isLive, location.pathname])
+
   // ── Initialize stream record ──
   useEffect(() => {
     if (!user?.id) { setInitialized(true); return; }
@@ -246,6 +259,8 @@ function GamingSetupPageInner() {
     if (!streamData?.id) { toast.error('Stream not initialized yet'); return; }
     await supabase.from('streams').update({ status: 'starting' }).eq('id', streamData.id);
     await agora.startPreview();
+    sessionStorage.setItem('tc_hytro_gaming_setup_live', 'true')
+    window.dispatchEvent(new CustomEvent('tc-hytro-gaming-setup-live-changed'))
   }, [streamData?.id, agora]);
 
   // Phase 2: Go live (join Agora + publish)
@@ -314,9 +329,10 @@ function GamingSetupPageInner() {
     window.dispatchEvent(new CustomEvent('tc-hytro-gaming-setup-live-changed'))
   }, [agora])
 
-  // Stop preview (back to idle)
   const handleStopPreview = useCallback(async () => {
     await agora.stopPreview();
+    sessionStorage.removeItem('tc_hytro_gaming_setup_live')
+    window.dispatchEvent(new CustomEvent('tc-hytro-gaming-setup-live-changed'))
   }, [agora]);
 
   const handleToggleMic = useCallback(async () => {

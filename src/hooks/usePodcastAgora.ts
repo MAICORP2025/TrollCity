@@ -17,6 +17,9 @@ interface PodcastAgoraConfig {
   onUserJoined?: (user: IAgoraRTCRemoteUser) => void
   onUserLeft?: (user: IAgoraRTCRemoteUser) => void
   onError?: (error: string) => void
+  /** Called when the Agora client is initialized and when local track is published,
+   *  exposing refs needed to merge Agora audio into the recording stream. */
+  onClientReady?: (client: IAgoraRTCClient, localAudioTrack: IMicrophoneAudioTrack | null) => void
 }
 
 // Generate a unique numeric UID that won't collide with other users.
@@ -32,7 +35,8 @@ export function usePodcastAgora({
   podcastId,
   onUserJoined,
   onUserLeft,
-  onError
+  onError,
+  onClientReady
 }: PodcastAgoraConfig) {
   const [isConnected, setIsConnected] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -143,6 +147,7 @@ export function usePodcastAgora({
       })
 
       clientRef.current = client
+      onClientReady?.(client, audioTrackRef.current)
       return client
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Failed to initialize Agora client'
@@ -151,7 +156,7 @@ export function usePodcastAgora({
       onError?.(errMsg)
       throw err
     }
-  }, [onError, onUserJoined, onUserLeft])
+  }, [onError, onUserJoined, onUserLeft, onClientReady])
 
   const fetchAgoraToken = useCallback(async (channel: string, uid: UID, pId?: string) => {
     try {
@@ -241,6 +246,9 @@ export function usePodcastAgora({
           setError('Could not access microphone for podcast host')
         }
       }
+
+      // Expose client + local track for recording (merge audio into display media)
+      onClientReady?.(client, audioTrackRef.current)
 
       setIsConnected(true)
       joinedRef.current = true
@@ -417,6 +425,7 @@ export function usePodcastAgora({
     leavePodcast,
     togglePlay,
     toggleMute,
-    setVolume: handleSetVolume
+    setVolume: handleSetVolume,
   }
 }
+

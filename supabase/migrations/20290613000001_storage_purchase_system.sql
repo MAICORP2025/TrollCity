@@ -56,16 +56,18 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'User not found');
     END IF;
 
-    IF v_current_balance < p_monthly_fee THEN
+    IF p_monthly_fee > 0 AND v_current_balance < p_monthly_fee THEN
         RETURN jsonb_build_object('success', false, 'error', 
             format('Insufficient coins. Need %s, have %s', p_monthly_fee, v_current_balance));
     END IF;
 
-    -- Deduct coins
-    UPDATE public.user_profiles
-    SET troll_coins = troll_coins - p_monthly_fee,
-        updated_at = NOW()
-    WHERE id = p_user_id;
+    -- Deduct coins only for paid tiers
+    IF p_monthly_fee > 0 THEN
+        UPDATE public.user_profiles
+        SET troll_coins = troll_coins - p_monthly_fee,
+            updated_at = NOW()
+        WHERE id = p_user_id;
+    END IF;
 
     -- Upsert storage purchase record
     INSERT INTO public.user_storage_purchases (
@@ -87,21 +89,23 @@ BEGIN
         payment_failed_at = NULL,
         metadata = jsonb_build_object('last_upgrade', NOW());
 
-    -- Record coin transaction
-    INSERT INTO public.coin_transactions (
-        user_id, amount, type, description, metadata
-    ) VALUES (
-        p_user_id, -p_monthly_fee, 'storage_purchase',
-        format('Storage upgrade: %s', p_tier_label),
-        jsonb_build_object('tier_index', p_tier_index, 'tier_label', p_tier_label, 'bytes_granted', p_bytes_granted)
-    );
+    -- Record coin transaction only for paid tiers
+    IF p_monthly_fee > 0 THEN
+        INSERT INTO public.coin_transactions (
+            user_id, amount, type, description, metadata
+        ) VALUES (
+            p_user_id, -p_monthly_fee, 'storage_purchase',
+            format('Storage upgrade: %s', p_tier_label),
+            jsonb_build_object('tier_index', p_tier_index, 'tier_label', p_tier_label, 'bytes_granted', p_bytes_granted)
+        );
+    END IF;
 
     v_result := jsonb_build_object(
         'success', true,
         'tier_index', p_tier_index,
         'tier_label', p_tier_label,
         'monthly_fee', p_monthly_fee,
-        'new_balance', v_current_balance - p_monthly_fee,
+        'new_balance', v_current_balance - GREATEST(p_monthly_fee, 0),
         'next_billing', (NOW() + INTERVAL '30 days')::TEXT
     );
 

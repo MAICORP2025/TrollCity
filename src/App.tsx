@@ -459,6 +459,7 @@ import GamingMonetization from "./pages/broadcast/gaming/GamingMonetization.tsx"
 import GamingStore from "./pages/broadcast/gaming/GamingStore.tsx";
 import BroadcastRouter from "./pages/broadcast/BroadcastRouter.js";
 import StreamSummary from "./pages/broadcast/StreamSummary.js";
+import ReplayPage from "./pages/broadcast/ReplayPage.tsx";
 import PresidentPage from "./pages/President.js";
 import PresidentDashboard from "./pages/president/PresidentDashboard.js";
 import SecretaryDashboard from "./pages/president/SecretaryDashboard.js";
@@ -1507,7 +1508,10 @@ const handleVisibilityChange = async () => {
                 <Route path="/profile/:username" element={<Profile />} />
 
                 {/* Broadcast/Stream routes - public with password protection */}
-                <Route path="/gaming/watch/:streamId" element={<HytroGamingViewer />} />
+                 <Route path="/replay/:streamId" element={<ReplayPage />} />
+                 <Route path="/replay/id/:streamId" element={<ReplayPage />} />
+
+                 <Route path="/gaming/watch/:streamId" element={<HytroGamingViewer />} />
                 {/* Username-based stream routes (SEO-friendly, e.g. /live/username) */}
                 <Route path="/live/:username" element={<BroadcastRouter />} />
                 <Route path="/stream/:username" element={<BroadcastRouter />} />

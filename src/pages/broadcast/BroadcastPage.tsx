@@ -41,9 +41,6 @@ import { showStorageStartWarning } from '../../hooks/useStorageUsage'
 import SaveBroadcastButton from '../../components/broadcast/SaveBroadcastButton'
 
 import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
-import { getBroadcastTheme, DEFAULT_BROADCAST_THEME_ID } from '@/lib/broadcastThemes'
-import type { BroadcastTheme } from '@/lib/broadcastThemes'
-import ThemeEffectLayer from '@/components/themes/ThemeEffectLayer'
 
 // Reusable label classes from broadcastTheme
 const guestLabel = 'rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]'
@@ -579,16 +576,6 @@ export function BroadcastPage() {
    const videoPreset = isStreamAdmin ? VideoPresets.h1080 : VideoPresets.h720
 
     const [stream, setStream] = useState<Stream | null>(null)
-    const [broadcastTheme, setBroadcastTheme] = useState<BroadcastTheme | null>(null)
-
-    useEffect(() => {
-      if (!stream?.broadcast_theme_slug || stream.broadcast_theme_slug === DEFAULT_BROADCAST_THEME_ID) {
-        setBroadcastTheme(null);
-        return;
-      }
-      const resolved = getBroadcastTheme(stream.broadcast_theme_slug, stream.category || 'general');
-      setBroadcastTheme(resolved);
-    }, [stream?.broadcast_theme_slug, stream?.category]);
 
     const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
 
@@ -720,8 +707,6 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   }, [localTracksVersion])
 
   const broadcastRecordingSourceUrl = useMemo(() => stream?.hls_url || stream?.hls_path || null, [stream?.hls_path, stream?.hls_url])
-
-  const recorder = useBroadcastRecorder({ sourceUrl: broadcastRecordingSourceUrl })
 
   // Host users publish through this local track state.
   const combinedLocalTracks = localTracks
@@ -1054,7 +1039,38 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   const [cameraOverlayTrackState, setCameraOverlayTrackState] = useState<LocalVideoTrack | null>(null)
 const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
    const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
-   
+
+    // Collect AUDIO tracks only (mic + seat users) for the recorder.
+    // Video is always captured via getDisplayMedia inside the recorder so the
+    // browser screen-share picker fires when recording starts.
+    const broadcastRecordingStream = useMemo(() => {
+      const tracks: MediaStreamTrack[] = []
+
+      // Local audio (microphone)
+      if (localTracks?.[0]?.mediaStreamTrack) {
+        tracks.push(localTracks[0].mediaStreamTrack.clone())
+      }
+
+      // Remote participants' audio tracks (seat users, guests, etc.)
+      remoteParticipants.forEach((participant) => {
+        participant.audioTrackPublications.forEach((pub) => {
+          const track = pub.track
+          if (track?.mediaStreamTrack) {
+            tracks.push(track.mediaStreamTrack.clone())
+          }
+        })
+      })
+
+      return tracks.length > 0 ? new MediaStream(tracks) : null
+    }, [localTracks, remoteParticipants])
+
+   // Pass LiveKit tracks to the recorder so it gets mic + seat user audio directly.
+   const recorder = useBroadcastRecorder({
+     sourceStream: broadcastRecordingStream,
+     replaySource: 'broadcast',
+     replayTitlePrefix: 'Broadcast',
+   })
+
    // Ghost participants - separate collection for ghost mode (not merged with remoteParticipants)
    const [ghostParticipants, setGhostParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
    const ghostUsers = useMemo(() => Array.from(ghostParticipants.values()), [ghostParticipants])
@@ -4208,10 +4224,56 @@ const handleLike = useCallback(async () => {
       }
     }
 
-    // Stop recording if active
+    // Stop recording if active and save the replay
     if (recorder.isRecording) {
       try {
-        await recorder.stopRecording()
+        const recordingBlob = await recorder.stopRecording()
+        console.log('[handleStreamEnd] Recording stopped, blob:', recordingBlob ? `${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB` : 'null')
+        
+        if (recordingBlob && stream?.id && user?.id && recordingBlob.size > 0) {
+          try {
+            const ext = recordingBlob.type.includes('webm') ? 'webm' : 'mp4'
+            const path = `recordings/${user.id}/${stream.id}/${Date.now()}.${ext}`
+            console.log('[handleStreamEnd] Uploading to:', path)
+            
+            const { error: uploadError } = await supabase.storage
+              .from('replays')
+              .upload(path, recordingBlob, {
+                contentType: recordingBlob.type || 'video/webm',
+                cacheControl: '3600',
+              })
+
+            if (uploadError) {
+              console.warn('[handleStreamEnd] Upload failed:', uploadError)
+              toast.error('Recording saved locally but upload failed')
+              return
+            }
+
+            const { data: urlData } = supabase.storage.from('replays').getPublicUrl(path)
+            console.log('[handleStreamEnd] Public URL:', urlData.publicUrl)
+
+            const { error: insertError } = await supabase.from('broadcast_replays').insert({
+              stream_id: stream.id,
+              user_id: user.id,
+              replay_url: urlData.publicUrl,
+              title: stream.title || 'Broadcast Replay',
+              duration_seconds: recorder.recordingDuration || Math.floor((Date.now() - new Date(stream.started_at || Date.now()).getTime()) / 1000),
+              file_size_bytes: recordingBlob.size,
+              thumbnail_url: null,
+            })
+
+            if (insertError) {
+              console.warn('[handleStreamEnd] DB insert failed:', insertError)
+            } else {
+              console.log('[handleStreamEnd] Replay saved successfully:', urlData.publicUrl)
+              toast.success('Replay saved!')
+            }
+          } catch (saveErr) {
+            console.warn('[handleStreamEnd] Failed to save replay:', saveErr)
+          }
+        } else {
+          console.log('[handleStreamEnd] No valid recording blob to save')
+        }
       } catch (recErr) {
         console.warn('[handleStreamEnd] Failed to stop recording:', recErr)
       }
@@ -4879,16 +4941,8 @@ const handleLike = useCallback(async () => {
 
           {/* -- Outer layout: header + 3-column grid + bottom bar + footer -- */}
           <div
-            className={cn(broadcastTheme?.shellClassName || theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden')}
-            data-theme={broadcastTheme?.id || 'default'}
+            className={cn(theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden')}
           >
-
-            {broadcastTheme && (
-              <ThemeEffectLayer
-                effectType={broadcastTheme.effectType}
-                accentColor={broadcastTheme.accentColor}
-              />
-            )}
 
             {/* Background layers � identical to Sidebar ShellBackdrop */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
@@ -5637,6 +5691,7 @@ const handleLike = useCallback(async () => {
                       isRecording={recorder.isRecording}
                       isUploading={recorder.isUploading}
                       recordingDuration={recorder.recordingDuration}
+                      recordingSize={recorder.recordingSize}
                       streamId={stream.id}
                       onStartRecording={recorder.startRecording}
                       onStopRecording={recorder.stopRecording}

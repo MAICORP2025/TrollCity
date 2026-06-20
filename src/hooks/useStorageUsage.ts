@@ -46,7 +46,8 @@ export interface StorageUsage {
 }
 
 const STORAGE_TIERS = [
-  { start: 0, end: 25 * 1024 * 1024 * 1024, fee: 900, label: '25 GB' },
+  { start: 0, end: 5 * 1024 * 1024 * 1024, fee: 0, label: '5 GB' },
+  { start: 5 * 1024 * 1024 * 1024, end: 25 * 1024 * 1024 * 1024, fee: 900, label: '25 GB' },
   { start: 25 * 1024 * 1024 * 1024, end: 50 * 1024 * 1024 * 1024, fee: 1500, label: '50 GB' },
   { start: 50 * 1024 * 1024 * 1024, end: 100 * 1024 * 1024 * 1024, fee: 3000, label: '100 GB' },
   { start: 100 * 1024 * 1024 * 1024, end: 200 * 1024 * 1024 * 1024, fee: 6500, label: '200 GB' },

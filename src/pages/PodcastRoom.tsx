@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -24,7 +24,8 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { trollCityBroadcastTheme as theme } from '@/styles/broadcastTheme'
 import { usePodcastStore } from '@/stores/podcastStore'
 import { usePodcastAgora } from '@/hooks/usePodcastAgora'
-import { usePodcastRecorder } from '@/hooks/usePodcastRecorder'
+import { useBroadcastRecorder } from '@/hooks/useBroadcastRecorder'
+import SaveBroadcastButton from '@/components/broadcast/SaveBroadcastButton'
 import { cn } from '@/lib/utils'
 
 type PodcastStatus =
@@ -117,9 +118,47 @@ export default function PodcastRoom() {
     enabled: agoraEnabled,
     isHost,
     podcastId: podcast?.id,
+    onClientReady: (client, localAudioTrack) => {
+      agoraClientRef.current = client
+      localAudioTrackRef.current = localAudioTrack
+    },
   })
 
-  const recorder = usePodcastRecorder()
+  // Refs to hold Agora client/track references for merging audio into recording
+  const agoraClientRef = useRef<any>(null)
+  const localAudioTrackRef = useRef<any>(null)
+
+  // Use the same recorder as BroadcastPage — captures the entire screen
+  // (full Troll City UI) via getDisplayMedia, with Agora audio tracks merged in
+  // so the recording includes both the screen video AND the podcast audio (mic + remote users)
+  const recorder = useBroadcastRecorder({
+    sourceStream: () => {
+      const tracks: MediaStreamTrack[] = []
+
+      // Collect remote users' audio tracks from Agora
+      const client = agoraClientRef.current
+      if (client?.remoteUsers) {
+        client.remoteUsers.forEach((u: any) => {
+          if (u.audioTrack) {
+            const raw = u.audioTrack.mediaStreamTrack || u.audioTrack._track
+            if (raw && raw.readyState !== 'ended') tracks.push(raw)
+          }
+        })
+      }
+
+      // Local host microphone track
+      const localTrack = localAudioTrackRef.current
+      if (localTrack) {
+        const raw = localTrack.mediaStreamTrack || localTrack._track
+        if (raw && raw.readyState !== 'ended') tracks.push(raw)
+      }
+
+      if (tracks.length === 0) return null
+      return new MediaStream(tracks)
+    },
+    replaySource: 'broadcast',
+    replayTitlePrefix: 'Podcast',
+  })
 
   const fetchPodcast = useCallback(async () => {
     if (!id) return
@@ -435,45 +474,19 @@ export default function PodcastRoom() {
                   </div>
                 </div>
 
-                {/* Recording controls */}
+                {/* Recording controls — same SaveBroadcastButton as BroadcastPage */}
                 {isHost && isLive && (
                   <div className="mt-4">
-                    {recorder.isRecording ? (
-                      <button
-                        type="button"
-                        onClick={() => recorder.stopRecording()}
-                        disabled={recorder.isUploading}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/25 disabled:opacity-50"
-                      >
-                        {recorder.isUploading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Saving Recording...
-                          </>
-                        ) : (
-                          <>
-                            <span className="relative flex h-3 w-3">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-                              <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
-                            </span>
-                            Stop Recording
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (podcast?.id && podcast?.agora_channel_name) {
-                            recorder.startRecording(podcast.id, podcast.agora_channel_name)
-                          }
-                        }}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-200 transition hover:bg-emerald-500/20"
-                      >
-                        <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                        Record Podcast
-                      </button>
-                    )}
+                    <SaveBroadcastButton
+                      isRecording={recorder.isRecording}
+                      isUploading={recorder.isUploading}
+                      recordingDuration={recorder.recordingDuration}
+                      recordingSize={recorder.recordingSize}
+                      streamId={podcast?.id ?? null}
+                      onStartRecording={recorder.startRecording}
+                      onStopRecording={recorder.stopRecording}
+                      onSaveClip={recorder.saveClip}
+                    />
                   </div>
                 )}
 

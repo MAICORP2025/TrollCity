@@ -215,9 +215,9 @@ export default function WallPostPage() {
             {post.metadata?.stream_id && streamStatus && streamStatus !== 'unknown' && (
               <div 
                 className="mt-3 flex items-center gap-2 text-purple-400 text-sm cursor-pointer hover:underline"
-                onClick={() => {
+                  onClick={() => {
                   if (streamStatus === 'ended') {
-                    navigate(`/watch/${post.metadata.stream_id}`)
+                    navigate(`/replay/id/${post.metadata.stream_id}`)
                   } else {
                     navigate(`/stream/${post.metadata.stream_id}`)
                   }

@@ -6,6 +6,7 @@ interface UseBroadcastRecorderReturn {
   isRecording: boolean
   isUploading: boolean
   recordingDuration: number
+  recordingSize: number
   recordingId: string | null
   startRecording: (streamId: string) => Promise<void>
   stopRecording: () => Promise<Blob | null>
@@ -14,16 +15,25 @@ interface UseBroadcastRecorderReturn {
 }
 
 interface UseBroadcastRecorderOptions {
-  sourceStream?: MediaStream | null
+  /** Static MediaStream, or a function that returns a MediaStream (or null) at record-time.
+   *  Use a lazy getter to avoid getDisplayMedia popup until recording starts,
+   *  or to build the stream from live tracks (e.g. Agora audio). */
+  sourceStream?: MediaStream | null | (() => MediaStream | null | Promise<MediaStream | null>)
   sourceStreamCleanup?: boolean
   sourceUrl?: string | null
+  /** Label for the replay: 'broadcast', 'podcast', 'hytro_gaming', etc.
+   *  Stored in broadcast_replays.source and used to display where the replay came from. */
+  replaySource?: string
+  /** Custom title prefix for the replay. If set, the replay title becomes "{prefix} — {streamTitle}". */
+  replayTitlePrefix?: string
 }
 
 export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}): UseBroadcastRecorderReturn {
-  const { sourceStream, sourceUrl } = options
+  const { sourceStream, sourceStreamCleanup = false, sourceUrl, replaySource, replayTitlePrefix } = options
   const [isRecording, setIsRecording] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
+  const [recordingSize, setRecordingSize] = useState(0)
   const [recordingId, setRecordingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,6 +43,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
   const playbackVideoRef = useRef<HTMLVideoElement | null>(null)
   const playbackStreamRef = useRef<MediaStream | null>(null)
   const ownsPlaybackStreamRef = useRef(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const clipBufferRef = useRef<Blob[]>([])
   const mimeTypeRef = useRef<string | undefined>(undefined)
@@ -41,6 +52,8 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
   const clipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const startTimeRef = useRef<number>(0)
   const streamIdRef = useRef<string | null>(null)
+
+
 
   const BUCKET_NAME = 'replays'
   const CLIP_BUFFER_SECONDS = 60
@@ -64,6 +77,10 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
       }
       playbackStreamRef.current = null
       ownsPlaybackStreamRef.current = false
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {})
+        audioContextRef.current = null
+      }
     }
   }, [])
 
@@ -120,17 +137,24 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
       chunksRef.current = []
       clipBufferRef.current = []
       mimeTypeRef.current = undefined
+      setRecordingSize(0)
 
       console.log('[useBroadcastRecorder] Starting MediaRecorder for stream:', streamId)
 
       let displayStream: MediaStream | null = null
-      const recordingStream = sourceStream
+
+      // Resolve sourceStream: can be a static MediaStream, a lazy getter function, or null
+      let resolvedStream: MediaStream | null = null
+      if (typeof sourceStream === 'function') {
+        resolvedStream = await sourceStream()
+      } else {
+        resolvedStream = sourceStream ?? null
+      }
 
       try {
         if (sourceUrl) {
           const video = document.createElement('video')
           video.playsInline = true
-          video.muted = true
           video.src = sourceUrl
           playbackVideoRef.current = video
 
@@ -143,6 +167,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
 
           await video.play()
 
+          // Capture video from the <video> element
           const captureStream =
             typeof video.captureStream === 'function'
               ? video.captureStream()
@@ -152,24 +177,112 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
             throw new Error('Browser does not support capturing video playback for recording')
           }
 
-          displayStream = captureStream
-          playbackStreamRef.current = captureStream
-          ownsPlaybackStreamRef.current = true
-        } else {
-          if (!recordingStream?.getTracks().length) {
-            throw new Error('No active broadcast stream available to record')
+          // captureStream() from a <video> only carries video tracks, not audio.
+          // To include audio, route the video element through a silent Web Audio
+          // destination and merge the audio tracks into the recording stream.
+          const audioTracks: MediaStreamTrack[] = []
+
+          try {
+            const audioCtx = new AudioContext()
+            audioContextRef.current = audioCtx
+            const audioDestination = audioCtx.createMediaStreamDestination()
+            const silentGain = audioCtx.createGain()
+            silentGain.gain.value = 0 // silent — prevents feedback loop
+            const source = audioCtx.createMediaElementSource(video)
+            source.connect(silentGain)
+            silentGain.connect(audioDestination)
+            audioTracks.push(...audioDestination.stream.getAudioTracks())
+          } catch (audioErr) {
+            console.warn('[useBroadcastRecorder] Web Audio routing failed, recording without audio:', audioErr)
           }
 
-          displayStream = recordingStream
-          ownsSourceStreamRef.current = false
+          // Mute the <video> element itself so the user doesn't hear it
+          // (the audio is already routed silently above)
+          video.muted = true
+
+          if (audioTracks.length > 0) {
+            displayStream = new MediaStream([
+              ...captureStream.getVideoTracks(),
+              ...audioTracks,
+            ])
+          } else {
+            displayStream = captureStream
+          }
+
+          playbackStreamRef.current = displayStream
+          ownsPlaybackStreamRef.current = true
+        } else if (resolvedStream?.getTracks().length) {
+          // Check if the resolved stream has video or is audio-only
+          const hasVideo = resolvedStream.getVideoTracks().length > 0
+          const hasAudio = resolvedStream.getAudioTracks().length > 0
+
+          if (hasVideo) {
+            // Full stream with video+audio — use directly (e.g. LiveKit tracks)
+            displayStream = resolvedStream
+            ownsSourceStreamRef.current = sourceStreamCleanup
+          } else if (hasAudio) {
+            // Audio-only stream (e.g. LiveKit mic + seat audio) — prompt screen capture for video
+            // and mix the source audio into the recording via Web Audio API.
+            console.log('[useBroadcastRecorder] Audio-only source — prompting getDisplayMedia for screen video')
+            try {
+              const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { displaySurface: 'browser', frameRate: 30 } as any,
+                audio: true,
+              })
+
+              const audioCtx = new AudioContext()
+              audioContextRef.current = audioCtx
+              const destination = audioCtx.createMediaStreamDestination()
+
+              resolvedStream.getAudioTracks().forEach(track => {
+                try {
+                  const source = audioCtx.createMediaStreamSource(new MediaStream([track]))
+                  source.connect(destination)
+                } catch (err) {
+                  console.warn('[useBroadcastRecorder] Failed to route audio track into mix:', err)
+                }
+              })
+
+              const mixedTracks = [
+                ...screenStream.getVideoTracks(),
+                ...destination.stream.getAudioTracks(),
+              ]
+              displayStream = new MediaStream(mixedTracks)
+              ownsSourceStreamRef.current = true
+
+              screenStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+                console.log('[useBroadcastRecorder] Screen share ended during recording')
+                if (mediaRecorderRef.current?.state === 'recording') {
+                  mediaRecorderRef.current.stop.call(mediaRecorderRef.current)
+                }
+              })
+            } catch (screenErr) {
+              console.warn('[useBroadcastRecorder] getDisplayMedia failed, falling back to audio-only:', screenErr)
+              displayStream = resolvedStream
+              ownsSourceStreamRef.current = sourceStreamCleanup
+            }
+          } else {
+            displayStream = resolvedStream
+            ownsSourceStreamRef.current = sourceStreamCleanup
+          }
+        } else {
+          // No source stream or URL — capture the entire screen the viewer sees
+          // (full Troll City UI: podcast room, gaming viewer, broadcast viewer, etc.)
+          // Uses getDisplayMedia which shows a one-time browser screen share picker
+          console.log('[useBroadcastRecorder] Capturing entire screen via getDisplayMedia')
+          displayStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: 'browser', frameRate: 30 } as any,
+            audio: true,
+          })
+          ownsSourceStreamRef.current = true
         }
 
         if (!displayStream.getVideoTracks().length) {
-          throw new Error('Active broadcast stream does not include a video track')
+          throw new Error('Recording stream does not include a video track')
         }
 
         if (!displayStream.getAudioTracks().length) {
-          console.warn('[useBroadcastRecorder] Active broadcast stream does not include an audio track')
+          console.warn('[useBroadcastRecorder] Recording stream does not include an audio track')
         }
 
         streamRef.current = displayStream
@@ -245,6 +358,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
             ) {
               clipBufferRef.current.shift()
             }
+            setRecordingSize(prev => prev + event.data.size)
           }
         }
 
@@ -291,23 +405,28 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
                   .select('title')
                   .eq('id', activeStreamId)
                   .maybeSingle()
-              await supabase
+              const replayTitle = replayTitlePrefix
+                ? `${replayTitlePrefix} — ${streamData?.title || 'Live Stream'}`
+                : streamData?.title || 'Live Stream'
+              // Build the replay record — only include columns that exist in the table
+              const replayRecord: Record<string, any> = {
+                stream_id: activeStreamId,
+                user_id: user.id,
+                title: replayTitle,
+                replay_url: publicUrl,
+                duration_seconds: durationSeconds,
+                file_size_bytes: blob.size,
+              }
+              // Only include source column if it exists (added in migration 20260620000000)
+              if (replaySource) {
+                replayRecord.source = replaySource
+              }
+              const { error: replayError } = await supabase
                 .from('broadcast_replays')
-                .upsert(
-                  {
-                    stream_id: activeStreamId,
-                    user_id: user.id,
-                    title:
-                      streamData?.title ||
-                      'Live Stream',
-                    replay_url: publicUrl,
-                    duration_seconds:
-                      durationSeconds,
-                  },
-                  {
-                    onConflict: 'stream_id',
-                  }
-                )
+                .insert(replayRecord)
+              if (replayError) {
+                console.error('[Recorder] Replay insert error:', replayError)
+              }
             }
             toast.success('Recording saved!')
           } catch (err) {
@@ -323,6 +442,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
           setIsRecording(false)
           setRecordingId(null)
           setRecordingDuration(0)
+          setRecordingSize(0)
           mediaRecorderRef.current = null
           streamIdRef.current = null
         }
@@ -354,7 +474,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
         toast.error(err?.message || 'Failed to start recording')
       }
     }
-  }, [sourceStream, sourceUrl, uploadBlobToStorage])
+  }, [sourceStream, sourceUrl, uploadBlobToStorage, replaySource, replayTitlePrefix])
 
   const stopRecording = useCallback(async (): Promise<Blob | null> => {
     if (!mediaRecorderRef.current || !streamIdRef.current) {
@@ -406,9 +526,10 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
       setIsRecording(false)
       setRecordingId(null)
       setRecordingDuration(0)
+      setRecordingSize(0)
       mediaRecorderRef.current = null
       streamIdRef.current = null
-      finalBlob = new Blob(chunksRef.current, {
+      let finalBlob: Blob | null = new Blob(chunksRef.current, {
         type: mimeTypeRef.current || mediaRecorder.mimeType || 'video/webm',
       })
 
@@ -475,6 +596,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
     isRecording,
     isUploading,
     recordingDuration,
+    recordingSize,
     recordingId,
     startRecording,
     stopRecording,

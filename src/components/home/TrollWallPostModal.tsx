@@ -397,6 +397,7 @@ export default function TrollWallPostModal({
                   badge: currentPost.badge,
                 }}
                 size="md"
+                onClick={() => navigate(`/profile/id/${currentPost.user_id}`)}
               />
             ) : (
               <span className="text-sm text-white/50">Deleted User</span>
@@ -420,7 +421,7 @@ export default function TrollWallPostModal({
                 type="button"
                 onClick={() => {
                   if (streamStatus === 'ended') {
-                    navigate(`/watch/${currentPost.metadata!.stream_id}`)
+                    navigate(`/replay/id/${currentPost.metadata!.stream_id}`)
                   } else {
                     navigate(`/stream/${currentPost.metadata!.stream_id}`)
                   }

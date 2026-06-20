@@ -83,6 +83,7 @@ interface GamingSetupProps {
   inlineAgreementChecked?: boolean
   onInlineAgreementChange?: (checked: boolean) => void
   streamId?: string | null
+  userId?: string | null
   saveBroadcastButton?: React.ReactNode
 }
 
@@ -131,6 +132,7 @@ export function GamingSetup({
   inlineAgreementChecked = false,
   onInlineAgreementChange,
   streamId,
+  userId,
   saveBroadcastButton,
 }: GamingSetupProps) {
   const [showGameSearch, setShowGameSearch] = React.useState(false)

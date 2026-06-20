@@ -91,57 +91,81 @@ ADD COLUMN IF NOT EXISTS credit_bytes BIGINT NOT NULL DEFAULT 0;
 CREATE OR REPLACE FUNCTION public.get_user_storage_replay_status(p_user_id UUID)
 RETURNS JSONB AS $$
 DECLARE
-    v_plan RECORD;
-    v_usage RECORD;
-    v_replay RECORD;
+    v_plan_tier_label TEXT;
+    v_plan_monthly_fee INTEGER;
+    v_plan_bytes_granted BIGINT;
+    v_plan_is_active BOOLEAN;
+    v_plan_next_billing_at TIMESTAMPTZ;
+    v_plan_top_up_bytes BIGINT;
+    v_plan_credit_bytes BIGINT;
+
+    v_usage_total_bytes BIGINT;
+
+    v_replay_balance BIGINT;
+    v_replay_minutes_today INTEGER;
+    v_replay_minutes_this_month INTEGER;
+    v_replay_coins_charged_today BIGINT;
+    v_replay_coins_charged_this_month BIGINT;
+    v_replay_status TEXT;
+
     v_total_limit BIGINT;
     v_total_used BIGINT;
     v_total_available BIGINT;
     v_storage_pct NUMERIC;
     v_renewal_date TEXT;
 BEGIN
-    -- Get active plan
-    SELECT * INTO v_plan
+    SELECT tier_label, monthly_fee, bytes_granted, is_active, next_billing_at, top_up_bytes, credit_bytes
+    INTO v_plan_tier_label, v_plan_monthly_fee, v_plan_bytes_granted, v_plan_is_active, v_plan_next_billing_at, v_plan_top_up_bytes, v_plan_credit_bytes
     FROM public.user_storage_purchases
     WHERE user_id = p_user_id AND is_active = true
     ORDER BY purchased_at DESC
     LIMIT 1;
 
-    -- Get usage
-    SELECT * INTO v_usage
+    IF NOT FOUND OR v_plan_is_active IS NULL THEN
+        RETURN jsonb_build_object(
+            'has_plan', false,
+            'plan_label', '', 'plan_storage_bytes', 0, 'top_up_bytes', 0, 'credit_bytes', 0,
+            'total_limit_bytes', 0, 'total_used_bytes', 0, 'total_available_bytes', 0,
+            'storage_percentage', 0, 'renewal_date', NULL, 'monthly_fee', 0,
+            'replay_balance', 0, 'replay_minutes_today', 0, 'replay_minutes_month', 0,
+            'replay_coins_today', 0, 'replay_coins_month', 0, 'replay_status', 'active',
+            'replay_cost_per_minute', 5
+        );
+    END IF;
+
+    SELECT total_bytes INTO v_usage_total_bytes
     FROM public.user_storage_usage
     WHERE user_id = p_user_id;
 
-    -- Get replay balance
-    SELECT * INTO v_replay
+    SELECT balance, minutes_today, minutes_this_month, coins_charged_today, coins_charged_this_month, status
+    INTO v_replay_balance, v_replay_minutes_today, v_replay_minutes_this_month, v_replay_coins_charged_today, v_replay_coins_charged_this_month, v_replay_status
     FROM public.replay_balances
     WHERE user_id = p_user_id;
 
-    -- Calculate totals
-    v_total_limit := COALESCE(v_plan.bytes_granted, 0) + COALESCE(v_plan.top_up_bytes, 0) + COALESCE(v_plan.credit_bytes, 0);
-    v_total_used := COALESCE(v_usage.total_bytes, 0);
+    v_total_limit := COALESCE(v_plan_bytes_granted, 0) + COALESCE(v_plan_top_up_bytes, 0) + COALESCE(v_plan_credit_bytes, 0);
+    v_total_used := COALESCE(v_usage_total_bytes, 0);
     v_total_available := GREATEST(0, v_total_limit - v_total_used);
     v_storage_pct := CASE WHEN v_total_limit > 0 THEN ROUND((v_total_used::NUMERIC / v_total_limit::NUMERIC) * 100, 1) ELSE 0 END;
-    v_renewal_date := CASE WHEN v_plan.next_billing_at IS NOT NULL THEN v_plan.next_billing_at::TEXT ELSE NULL END;
+    v_renewal_date := CASE WHEN v_plan_next_billing_at IS NOT NULL THEN v_plan_next_billing_at::TEXT ELSE NULL END;
 
     RETURN jsonb_build_object(
-        'has_plan', v_plan IS NOT NULL,
-        'plan_label', v_plan.tier_label,
-        'plan_storage_bytes', v_plan.bytes_granted,
-        'top_up_bytes', COALESCE(v_plan.top_up_bytes, 0),
-        'credit_bytes', COALESCE(v_plan.credit_bytes, 0),
+        'has_plan', true,
+        'plan_label', v_plan_tier_label,
+        'plan_storage_bytes', v_plan_bytes_granted,
+        'top_up_bytes', COALESCE(v_plan_top_up_bytes, 0),
+        'credit_bytes', COALESCE(v_plan_credit_bytes, 0),
         'total_limit_bytes', v_total_limit,
         'total_used_bytes', v_total_used,
         'total_available_bytes', v_total_available,
         'storage_percentage', v_storage_pct,
         'renewal_date', v_renewal_date,
-        'monthly_fee', v_plan.monthly_fee,
-        'replay_balance', COALESCE(v_replay.balance, 0),
-        'replay_minutes_today', COALESCE(v_replay.minutes_today, 0),
-        'replay_minutes_month', COALESCE(v_replay.minutes_this_month, 0),
-        'replay_coins_today', COALESCE(v_replay.coins_charged_today, 0),
-        'replay_coins_month', COALESCE(v_replay.coins_charged_this_month, 0),
-        'replay_status', COALESCE(v_replay.status, 'active'),
+        'monthly_fee', v_plan_monthly_fee,
+        'replay_balance', COALESCE(v_replay_balance, 0),
+        'replay_minutes_today', COALESCE(v_replay_minutes_today, 0),
+        'replay_minutes_month', COALESCE(v_replay_minutes_this_month, 0),
+        'replay_coins_today', COALESCE(v_replay_coins_charged_today, 0),
+        'replay_coins_month', COALESCE(v_replay_coins_charged_this_month, 0),
+        'replay_status', COALESCE(v_replay_status, 'active'),
         'replay_cost_per_minute', 5
     );
 END;

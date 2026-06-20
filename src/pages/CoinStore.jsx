@@ -2335,32 +2335,32 @@ useEffect(() => {
           )}
 
           {/* Storage Tab */}
-          {tab === 'storage' && (
-            <StorageTab
-              userId={user?.id}
-              trollCoins={troll_coins}
-              onPurchase={async (tierIndex, fee) => {
-                try {
-                  const { success, error } = await deductCoins({
-                    userId: user.id,
-                    amount: fee,
-                    type: 'storage_purchase',
-                    description: `Storage upgrade: ${STORAGE_TIERS[tierIndex].label}`,
-                     metadata: { tier_index: tierIndex, tier_label: STORAGE_TIERS[tierIndex].label, bytes_granted: STORAGE_TIERS[tierIndex].storageBytes },
-                    useCredit,
-                    supabaseClient: supabase,
-                  });
-                  if (!success) throw new Error(error || 'Purchase failed');
-                  toast.success(`Storage upgraded to ${STORAGE_TIERS[tierIndex].label}!`);
-                  showPurchaseCompleteOverlay();
-                  await refreshCoins();
-                } catch (err) {
-                  console.error('Storage purchase error:', err);
-                  toast.error(err?.message || 'Failed to purchase storage');
-                }
-              }}
-            />
-          )}
+{tab === 'storage' && (
+              <StorageTab
+                userId={user?.id}
+                trollCoins={troll_coins}
+                onPurchase={async (tierIndex, fee) => {
+                  try {
+                    const tier = STORAGE_TIERS[tierIndex];
+                    const { data, error } = await supabase.rpc('purchase_storage_upgrade', {
+                      p_user_id: user.id,
+                      p_tier_index: tierIndex,
+                      p_tier_label: tier.label,
+                      p_monthly_fee: fee,
+                      p_bytes_granted: tier.storageBytes,
+                    });
+                    if (error) throw error;
+                    if (!data?.success) throw new Error(data?.error || 'Purchase failed');
+                    toast.success(`Storage upgraded to ${tier.label}!`);
+                    showPurchaseCompleteOverlay();
+                    await refreshCoins();
+                  } catch (err) {
+                    console.error('Storage purchase error:', err);
+                    toast.error(err?.message || 'Failed to purchase storage');
+                  }
+                }}
+              />
+            )}
 
           {/* Call Minutes Tab */}
           {tab === 'calls' && (
@@ -2517,12 +2517,13 @@ useEffect(() => {
 }
 
 const STORAGE_TIERS = [
-  { index: 0, id: 'starter',    label: '25 GB',   shortLabel: 'Starter',   storageBytes: 25 * 1024 * 1024 * 1024,  monthlyFee: 900,  description: 'For casual streamers — save a few broadcasts',                 features: ['25 GB recording storage','~80 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
-  { index: 1, id: 'basic',      label: '50 GB',   shortLabel: 'Basic',     storageBytes: 50 * 1024 * 1024 * 1024,  monthlyFee: 1500, description: 'For regular streamers — save weekly broadcasts',              features: ['50 GB recording storage','~160 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
-  { index: 2, id: 'standard',   label: '100 GB',  shortLabel: 'Standard',  storageBytes: 100 * 1024 * 1024 * 1024, monthlyFee: 3000, description: 'For daily streamers — keep a full month of content',          features: ['100 GB recording storage','~320 hours of recordings','30-day auto-delete','Manual save to profile','Priority support'], highlight: true },
-  { index: 3, id: 'pro',        label: '200 GB',  shortLabel: 'Pro',       storageBytes: 200 * 1024 * 1024 * 1024, monthlyFee: 6500, description: 'For power users — broadcasts + gaming clips',                features: ['200 GB recording storage','~640 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included'], highlight: false },
-  { index: 4, id: 'premium',    label: '500 GB',  shortLabel: 'Premium',   storageBytes: 500 * 1024 * 1024 * 1024, monthlyFee: 9000, description: 'For heavy creators — full archive access',                    features: ['500 GB recording storage','~1,600 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history'], highlight: false },
-  { index: 5, id: 'unlimited',  label: '1 TB',    shortLabel: 'Unlimited', storageBytes: 1024 * 1024 * 1024 * 1024, monthlyFee: 18000, description: 'Maximum storage — no hard cap on your archives',             features: ['1 TB+ recording storage','No recording limit','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history','Early access to new features'], highlight: false },
+  { index: 0, id: 'free',         label: '5 GB',    shortLabel: 'Free',      storageBytes: 5 * 1024 * 1024 * 1024,  monthlyFee: 0,    egressIncludedBytes: 5 * 1024 * 1024 * 1024,  egressPerGbCost: 0,  description: 'Get started free — creator storage + viewer playback included',    features: ['5 GB total storage (creator + viewer)','~16 hours of recordings','30-day auto-delete','Free forever'], highlight: false },
+  { index: 1, id: 'starter',     label: '25 GB',   shortLabel: 'Starter',   storageBytes: 25 * 1024 * 1024 * 1024,  monthlyFee: 900,  egressIncludedBytes: 50 * 1024 * 1024 * 1024,  egressPerGbCost: 15,  description: 'For casual streamers — save a few broadcasts',                 features: ['25 GB recording storage','~80 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
+  { index: 2, id: 'basic',       label: '50 GB',   shortLabel: 'Basic',     storageBytes: 50 * 1024 * 1024 * 1024,  monthlyFee: 1500, egressIncludedBytes: 100 * 1024 * 1024 * 1024, egressPerGbCost: 12, description: 'For regular streamers — save weekly broadcasts',              features: ['50 GB recording storage','~160 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
+  { index: 3, id: 'standard',    label: '100 GB',  shortLabel: 'Standard',  storageBytes: 100 * 1024 * 1024 * 1024, monthlyFee: 3000, egressIncludedBytes: 200 * 1024 * 1024 * 1024, egressPerGbCost: 10, description: 'For daily streamers — keep a full month of content',          features: ['100 GB recording storage','~320 hours of recordings','30-day auto-delete','Manual save to profile','Priority support'], highlight: true },
+  { index: 4, id: 'pro',         label: '200 GB',  shortLabel: 'Pro',       storageBytes: 200 * 1024 * 1024 * 1024, monthlyFee: 6500, egressIncludedBytes: 400 * 1024 * 1024 * 1024, egressPerGbCost: 8,  description: 'For power users — broadcasts + gaming clips',                features: ['200 GB recording storage','~640 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included'], highlight: false },
+  { index: 5, id: 'premium',     label: '500 GB',  shortLabel: 'Premium',   storageBytes: 500 * 1024 * 1024 * 1024, monthlyFee: 9000, egressIncludedBytes: 1000 * 1024 * 1024 * 1024, egressPerGbCost: 6, description: 'For heavy creators — full archive access',                    features: ['500 GB recording storage','~1,600 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history'], highlight: false },
+  { index: 6, id: 'unlimited',   label: '1 TB',    shortLabel: 'Unlimited', storageBytes: 1024 * 1024 * 1024 * 1024, monthlyFee: 18000, egressIncludedBytes: 2000 * 1024 * 1024 * 1024, egressPerGbCost: 5, description: 'Maximum storage — no hard cap on your archives',             features: ['1 TB+ recording storage','No recording limit','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history','Early access to new features'], highlight: false },
 ];
 
 const STORAGE_TOP_UPS = [
@@ -2562,7 +2563,7 @@ function StorageTab({ userId, trollCoins, onPurchase }) {
 
   const handleBuyPlan = async (tierIndex) => {
     const tier = STORAGE_TIERS[tierIndex];
-    if (trollCoins < tier.monthlyFee) {
+    if (tier.monthlyFee > 0 && trollCoins < tier.monthlyFee) {
       toast.error(`Not enough Troll Coins. Need ${tier.monthlyFee.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
       return;
     }
@@ -2797,7 +2798,7 @@ function StorageTab({ userId, trollCoins, onPurchase }) {
                     : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/10'
                   }`}
                 >
-                  {isPurchasingThis ? 'Processing...' : isCurrent ? 'Active Plan' : canAfford ? 'Select Plan' : `Need ${(tier.monthlyFee - trollCoins).toLocaleString()} more`}
+                  {isPurchasingThis ? 'Processing...' : isCurrent ? 'Active Plan' : tier.monthlyFee === 0 ? 'Activate Free Plan' : canAfford ? 'Select Plan' : `Need ${(tier.monthlyFee - trollCoins).toLocaleString()} more`}
                 </button>
               </div>
             );

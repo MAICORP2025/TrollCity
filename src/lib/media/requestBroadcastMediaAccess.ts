@@ -4,6 +4,7 @@ export type MediaRequestStatus =
   | { status: 'microphone_denied' }
   | { status: 'no_camera_found' }
   | { status: 'no_microphone_found' }
+  | { status: 'device_in_use' }
   | { status: 'unsupported_browser' }
   | { status: 'insecure_context' }
   | { status: 'unknown_error'; error: any };
@@ -62,7 +63,7 @@ export async function requestBroadcastMediaAccess(): Promise<MediaRequestStatus>
     if (errBoth) {
       const name = errBoth.name || '';
       if (name === 'NotFoundError') return { status: 'no_camera_found' };
-      if (name === 'NotReadableError') return { status: 'no_camera_found' };
+      if (name === 'NotReadableError') return { status: 'device_in_use' };
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
         return { status: 'camera_denied' };
       }

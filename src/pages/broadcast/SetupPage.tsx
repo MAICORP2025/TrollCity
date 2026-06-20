@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
@@ -15,13 +15,6 @@ import { toast } from 'sonner';
 import { useBroadcastLockdown } from '@/hooks/useBroadcastLockdown';
 import { useBroadcastViewerCap } from '@/hooks/useBroadcastViewerCap';
 import { generateUUID } from '../../lib/uuid';
-import ThemeEffectLayer from '../../components/themes/ThemeEffectLayer';
-import {
-  DEFAULT_BROADCAST_THEME_ID,
-  getBroadcastTheme,
-  getSelectableBroadcastThemes,
-  isCeoThemeEligible,
-} from '../../lib/broadcastThemes';
 import { RANDOM_BATTLE_ENABLED } from '../../config/featureFlags';
 import { US_STATES, getStateName } from '../../config/usStates';
 import type { BattleModeType } from '../../types/stateBattle';
@@ -225,8 +218,6 @@ export default function SetupPage() {
   const { user, profile } = useAuthStore();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<BroadcastCategoryId>('general');
-  const [selectedTheme, setSelectedTheme] = useState<string>(DEFAULT_BROADCAST_THEME_ID);
-  const [ownedThemes, setOwnedThemes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean; unrestricted?: boolean; isStaffBypass?: boolean } | null>(null);
 const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
@@ -234,23 +225,6 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
   const [userState, setUserState] = useState<string | null>(null);
   const [showStateDropdown, setShowStateDropdown] = useState(false);
   const [isAssigningState, setIsAssigningState] = useState(false);
-  const canUseCeoTheme = isCeoThemeEligible(user?.id, user?.email ?? null);
-  const selectableThemes = useMemo(
-    () => getSelectableBroadcastThemes({ includeCeoTheme: canUseCeoTheme }),
-    [canUseCeoTheme],
-  );
-  const selectableThemeIds = useMemo(
-    () => selectableThemes.map((theme) => theme.id),
-    [selectableThemes],
-  );
-  const selectableThemeMap = useMemo(
-    () => new Map(selectableThemes.map((theme) => [theme.id, theme])),
-    [selectableThemes],
-  );
-
-  // Get the active broadcast theme for preview
-  const activeBroadcastTheme = getBroadcastTheme(selectedTheme, category);
-
   // Broadcast lockdown check
   const { isLocked: isBroadcastLocked, canBroadcast, isAdmin: isUserAdmin } = useBroadcastLockdown();
 
@@ -274,46 +248,6 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       setTitle(`${profile.username}'s Live`);
     }
   }, [profile?.username, title]);
-
-  // Load available themes and user preference
-  useEffect(() => {
-    setOwnedThemes(selectableThemeIds);
-    setSelectedTheme((current) => {
-      if (current === DEFAULT_BROADCAST_THEME_ID || selectableThemeIds.includes(current)) {
-        return current;
-      }
-      return DEFAULT_BROADCAST_THEME_ID;
-    });
-  }, [selectableThemeIds]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    let isCancelled = false;
-    const loadThemePreference = async () => {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('selected_theme_slug')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error loading theme preference:', error);
-        return;
-      }
-      if (isCancelled) return;
-
-      const savedTheme = data?.selected_theme_slug;
-      if (savedTheme && selectableThemeIds.includes(savedTheme)) {
-        setSelectedTheme(savedTheme);
-      }
-    };
-
-    loadThemePreference().catch((err) => console.error('Error loading theme preference:', err));
-    return () => {
-      isCancelled = true;
-    };
-  }, [user?.id, selectableThemeIds]);
 
   // Load user's assigned state
   useEffect(() => {
@@ -1071,7 +1005,11 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       return nativeStream;
     } catch (err: any) {
       console.error('[acquireMediaStream] Error creating media stream:', err);
-      toast.error('Failed to access camera/microphone: ' + err.message);
+      if (err.name === 'NotReadableError') {
+        toast.error('Device in use:\n\nClose any other apps or browser tabs that might be using your camera (FaceTime, Zoom, Teams, etc.), then try again.');
+      } else {
+        toast.error('Failed to access camera/microphone: ' + err.message);
+      }
       return null;
     }
   };
@@ -1664,6 +1602,10 @@ const handleStartStream = async () => {
           toast.error('No camera or microphone was found on this device.');
           setLoading(false);
           return;
+        } else if (result.status === 'device_in_use') {
+          toast.error('Device in use:\n\nClose any other apps or browser tabs that might be using your camera (FaceTime, Zoom, Teams, etc.), then try again.');
+          setLoading(false);
+          return;
         } else {
           toast.error('Failed to access camera/microphone. Please check your device and permissions.');
           setLoading(false);
@@ -1744,19 +1686,9 @@ const handleStartStream = async () => {
         roomName
       });
 
-      // Theme selection: enforce allowed options while preserving existing stream logic
-      const normalizedSelectedTheme =
-        selectedTheme !== DEFAULT_BROADCAST_THEME_ID && ownedThemes.includes(selectedTheme)
-          ? selectedTheme
-          : DEFAULT_BROADCAST_THEME_ID;
-      let selectedThemeUrl = null;
       const layoutMode = categoryConfig.layoutMode === 'debate' ? 'split' :
                        categoryConfig.layoutMode === 'classroom' ? 'grid' :
                        categoryConfig.layoutMode === 'spotlight' ? 'spotlight' : 'grid';
-
-      if (normalizedSelectedTheme !== DEFAULT_BROADCAST_THEME_ID) {
-        selectedThemeUrl = normalizedSelectedTheme;
-      }
 
         // Build insert object with optional password protection
          const insertData: Record<string, unknown> = {
@@ -1773,8 +1705,6 @@ const handleStartStream = async () => {
            started_at: null,
            box_count: categoryConfig.defaultBoxCount,
            layout_mode: layoutMode,
-           active_theme_url: selectedThemeUrl,
-           broadcast_theme_slug: normalizedSelectedTheme,
            random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' && battleMode === 'world' ? randomBattleQueueEnabled : false,
            random_battle_queued_at: null,
            state_battle_mode: RANDOM_BATTLE_ENABLED && category === 'general' && battleMode === 'state' && randomBattleQueueEnabled ? 'state' : 'none',
@@ -2075,12 +2005,6 @@ livekit_room_name: roomName,
 
 
   
-
-  // Render Theme Selector for broadcast themes
-  const renderThemeSelector = () => {
-    return null;
-  };
-
   // Render Religion Selector for Spiritual category
   const renderReligionSelector = () => {
     if (!categoryRequiresReligion) return null;
@@ -2214,23 +2138,9 @@ livekit_room_name: roomName,
         <div className="flex gap-3 flex-1 min-h-0" style={{ minHeight: '320px' }}>
 
           {/* Camera Preview Card - Large */}
-          <div className={cn(
-            "flex-[2.5] relative overflow-hidden bg-black shadow-2xl",
-            activeBroadcastTheme ? activeBroadcastTheme.shellClassName : "rounded-2xl border border-white/10"
-          )}>
-            {/* Theme overlay */}
-            {activeBroadcastTheme && <div className={cn('absolute inset-0 pointer-events-none', activeBroadcastTheme.overlayClassName)} />}
-            {activeBroadcastTheme && (
-              <ThemeEffectLayer
-                effectType={activeBroadcastTheme.effectType}
-                accentColor={activeBroadcastTheme.accentColor}
-              />
-            )}
+          <div className="flex-[2.5] relative overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
             {showPermissionPrompt ? (
-              <div className={cn(
-                "absolute inset-0 flex flex-col items-center justify-center p-6 text-center",
-                activeBroadcastTheme ? cn(activeBroadcastTheme.fallbackCardClassName, "bg-slate-900/90") : "bg-slate-900/90"
-              )}>
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 p-6 text-center">
                 <div className="w-14 h-14 bg-yellow-500/20 rounded-full flex items-center justify-center mb-3">
                   <Video size={28} className="text-yellow-400" />
                 </div>
@@ -2264,10 +2174,7 @@ livekit_room_name: roomName,
             ) : (
               <div
                 ref={videoContainerRef}
-                className={cn(
-                  "absolute inset-0 w-full h-full bg-black overflow-hidden",
-                  activeBroadcastTheme?.playerFrameClassName
-                )}
+                className="absolute inset-0 w-full h-full overflow-hidden bg-black"
                 style={{ zIndex: 1 }}
               >
                 {streamMode !== 'screen' && (
@@ -2602,9 +2509,6 @@ livekit_room_name: roomName,
 
         {/* Religion Selector */}
         {renderReligionSelector()}
-
-        {/* Theme Selector */}
-        {renderThemeSelector()}
 
         {/* Permission Warning */}
         {showPermissionPrompt && (

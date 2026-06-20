@@ -6,6 +6,7 @@ interface SaveBroadcastButtonProps {
   isRecording: boolean
   isUploading: boolean
   recordingDuration: number
+  recordingSize: number
   streamId: string | null
   onStartRecording: (streamId: string) => void
   onStopRecording: () => void
@@ -17,6 +18,7 @@ export function SaveBroadcastButton({
   isRecording,
   isUploading,
   recordingDuration,
+  recordingSize,
   streamId,
   onStartRecording,
   onStopRecording,
@@ -25,6 +27,20 @@ export function SaveBroadcastButton({
 }: SaveBroadcastButtonProps) {
   const minutes = Math.floor(recordingDuration / 60)
   const seconds = recordingDuration % 60
+
+  const formatSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B'
+    if (bytes >= 1024 * 1024 * 1024) {
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+    }
+    if (bytes >= 1024 * 1024) {
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+    }
+    if (bytes >= 1024) {
+      return (bytes / 1024).toFixed(1) + ' KB'
+    }
+    return bytes + ' B'
+  }
 
   if (isUploading) {
     return (
@@ -68,6 +84,8 @@ export function SaveBroadcastButton({
             <Circle className="h-3.5 w-3.5 fill-red-400 text-red-400 animate-pulse" />
           </span>
           REC {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
+          <span className="text-white/40">•</span>
+          <span className="text-amber-300/80">{formatSize(recordingSize)}</span>
           <Square className="h-3 w-3 fill-current" />
         </button>
       </div>

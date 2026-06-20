@@ -6,10 +6,12 @@ import {
   Crown,
   Gift,
   Heart,
+  Loader2,
   LogOut,
   Mic,
   MicOff,
   MessageSquare,
+  MonitorPlay,
   Plus,
   Share2,
   ShieldCheck,
@@ -74,6 +76,7 @@ import { useCityStatusOrb } from '../../lib/hooks/useCityStatusOrb'
 import SeatCityStatusOrb from '../../components/broadcast/SeatCityStatusOrb'
 import { useGhostMode } from '../../hooks/useGhostMode'
 import { useChatBlockStatus } from '../../hooks/useChatBlockStatus'
+import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -648,6 +651,13 @@ function ViewerPage() {
     const floatingChatContainerRef = useRef<HTMLDivElement>(null)
     const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(new Set())
     const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
+
+    // Use the same recorder as BroadcastPage — captures HLS playback if available, otherwise entire screen
+    const recorder = useBroadcastRecorder({
+      sourceUrl: stream?.hls_url || stream?.hls_path || null,
+      replaySource: 'broadcast',
+      replayTitlePrefix: 'Broadcast',
+    })
 
     // Load blocked usernames for chat filtering
     useEffect(() => {
@@ -3313,6 +3323,32 @@ useStreamRealtime(
               >
                 <Share2 className="h-4 w-4" />
                 Share
+              </button>
+              <button
+                onClick={() => {
+                  if (recorder.isRecording) {
+                    void recorder.stopRecording()
+                  } else if (streamId) {
+                    void recorder.startRecording(streamId)
+                  }
+                }}
+                disabled={recorder.isUploading}
+                className={cn(
+                  'inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black transition',
+                  recorder.isRecording
+                    ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+                    : recorder.isUploading
+                      ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
+                      : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]',
+                )}
+              >
+                {recorder.isUploading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                ) : recorder.isRecording ? (
+                  <><span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span> REC {Math.floor(recorder.recordingDuration / 60).toString().padStart(2, '0')}:{(recorder.recordingDuration % 60).toString().padStart(2, '0')}</>
+                ) : (
+                  <><MonitorPlay className="h-4 w-4" /> Record</>
+                )}
               </button>
               {isUserOnStage && (
                 <>

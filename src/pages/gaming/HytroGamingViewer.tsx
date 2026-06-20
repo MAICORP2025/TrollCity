@@ -62,6 +62,7 @@ import { cn, formatCompactNumber } from '@/lib/utils'
 import { useAgoraGamingViewer } from '@/hooks/useAgoraGamingViewer'
 import { useBroadcastRealtime } from '@/hooks/useBroadcastRealtime'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import { useBroadcastRecorder } from '@/hooks/useBroadcastRecorder'
 import GamingChat from '@/components/broadcast/GamingChat'
 import TipBanner from '@/components/broadcast/TipBanner'
 import StorageIndicator from '@/components/broadcast/StorageIndicator'
@@ -414,6 +415,12 @@ export default function HytroGamingViewer() {
 
   const agora = useAgoraGamingViewer()
 
+  // Use the same recorder as BroadcastPage — captures the entire screen via getDisplayMedia
+  const recorder = useBroadcastRecorder({
+    replaySource: 'hytro_gaming',
+    replayTitlePrefix: 'Hytro Gaming',
+  })
+
   // Use refs to always access the latest join/leave without causing re-renders
   const joinRef = useRef(agora.join)
   const leaveRef = useRef(agora.leave)
@@ -583,6 +590,8 @@ export default function HytroGamingViewer() {
       toast.error(err?.message || 'Payment failed')
     }
   }, [user])
+
+  const broadcasterFrame = useUserFrame(currentStream?.broadcaster_id)
 
   // Loading state
   if (loading) {
@@ -761,7 +770,7 @@ export default function HytroGamingViewer() {
               </button>
               <div className="h-9 w-9 shrink-0 rounded-xl border border-cyan-300/30 bg-cyan-400/10" style={{ overflow: 'visible' }}>
                 {currentStream.broadcaster_avatar ? (
-                  <ProfileFrame frame={useUserFrame(currentStream.broadcaster_id)} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="xs" fillParent />
+                  <ProfileFrame frame={broadcasterFrame} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="xs" fillParent />
                 ) : (
                   <div className="grid h-full w-full place-items-center rounded-xl">
                     <Gamepad2 className="h-5 w-5 text-cyan-300" />
@@ -787,6 +796,21 @@ export default function HytroGamingViewer() {
                   LIVE
                 </span>
               )}
+              {recorder.isRecording && (
+                <span className="flex items-center gap-1.5 rounded-full border border-red-400/40 bg-red-500/15 px-3 py-1 text-xs font-black text-red-200">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                  </span>
+                  REC {Math.floor(recorder.recordingDuration / 60).toString().padStart(2, '0')}:{(recorder.recordingDuration % 60).toString().padStart(2, '0')}
+                </span>
+              )}
+              {recorder.isUploading && (
+                <span className="flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-black text-amber-200">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Saving...
+                </span>
+              )}
               <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
                 <Eye className="h-3.5 w-3.5 text-cyan-300" />
                 {formatCompactNumber(viewerCount)}
@@ -808,7 +832,7 @@ export default function HytroGamingViewer() {
             {/* Streamer info overlay — bottom left */}
             <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2.5 rounded-xl border border-white/10 bg-black/60 px-3 py-2 backdrop-blur-xl">
               {currentStream.broadcaster_avatar ? (
-                <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(currentStream.broadcaster_id)} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="xs" /></div>
+                <div style={{ overflow: 'visible' }}><ProfileFrame frame={broadcasterFrame} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="xs" /></div>
               ) : (
                 <div className="grid h-8 w-8 place-items-center rounded-lg border border-purple-300/30 bg-purple-500/20 text-[10px] font-black">
                   {(currentStream.broadcaster_name || 'H').slice(0, 2).toUpperCase()}
@@ -832,6 +856,18 @@ export default function HytroGamingViewer() {
             <ActionButton icon={<Gift className="h-4 w-4" />} label="Tips" onClick={() => setShowTipPanel(!showTipPanel)} active={showTipPanel} />
             <ActionButton icon={<UserPlus className="h-4 w-4" />} label="Follow" />
             <ActionButton icon={<Share2 className="h-4 w-4" />} label="Share" />
+            <ActionButton
+              icon={recorder.isRecording ? <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span> : <MonitorPlay className="h-4 w-4" />}
+              label={recorder.isRecording ? 'Rec' : 'Record'}
+              onClick={() => {
+                if (recorder.isRecording) {
+                  void recorder.stopRecording()
+                } else if (streamId) {
+                  void recorder.startRecording(streamId)
+                }
+              }}
+              active={recorder.isRecording}
+            />
             <ActionButton icon={<MoreVertical className="h-4 w-4" />} label="More" />
           </div>
 
@@ -898,7 +934,7 @@ export default function HytroGamingViewer() {
             <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">About Creator</p>
             <div className="flex items-center gap-3">
               {currentStream.broadcaster_avatar ? (
-                <div style={{ overflow: 'visible' }}><ProfileFrame frame={useUserFrame(currentStream.broadcaster_id)} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="sm" /></div>
+                <div style={{ overflow: 'visible' }}><ProfileFrame frame={broadcasterFrame} avatarUrl={currentStream.broadcaster_avatar} username={currentStream.broadcaster_name || ''} size="sm" /></div>
               ) : (
                 <div className="grid h-12 w-12 place-items-center rounded-xl border border-purple-300/30 bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black">
                   {(currentStream.broadcaster_name || 'H').slice(0, 2).toUpperCase()}

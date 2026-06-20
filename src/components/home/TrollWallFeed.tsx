@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { MessageCircle, Heart, Gift, Send, Image, Smile, Video } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -64,6 +65,7 @@ interface TrollWallFeedProps {
 
 export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWallFeedProps) {
   const { user, profile } = useAuthStore()
+  const navigate = useNavigate()
   const [posts, setPosts] = useState<WallPost[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<WallPost | null>(null)
@@ -422,9 +424,20 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                           <PostAvatar userId={post.user_id} avatarUrl={avatarUrl} username={post.username || 'User'} />
                         )}
                         <div className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-bold text-white/80 group-hover:text-white">
-                            {post.is_system_generated ? 'Troll City System' : post.username || 'Unknown'}
-                          </span>
+                          {post.is_system_generated ? (
+                            <span className="block truncate text-xs font-bold text-white/80">
+                              Troll City System
+                            </span>
+                          ) : (
+                            <span
+                              onClick={(e) => { e.stopPropagation(); navigate(`/profile/id/${post.user_id}`); }}
+                              className="block truncate text-xs font-bold text-white/80 hover:text-cyan-300 transition-colors text-left cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                            >
+                              {post.username || 'Unknown'}
+                            </span>
+                          )}
                           <span className="text-[10px] text-white/30">{timeAgo(post.created_at)}</span>
                         </div>
                       </div>

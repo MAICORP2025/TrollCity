@@ -127,6 +127,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_profile_frames' AND policyname = 'Users can read own frames') THEN
     CREATE POLICY "Users can read own frames" ON public.user_profile_frames FOR SELECT USING (auth.uid() = user_id);
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_profile_frames' AND policyname = 'Anyone can view equipped frames') THEN
+    CREATE POLICY "Anyone can view equipped frames" ON public.user_profile_frames FOR SELECT USING (is_equipped = true);
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_profile_frames' AND policyname = 'Users can insert own frames') THEN
     CREATE POLICY "Users can insert own frames" ON public.user_profile_frames FOR INSERT WITH CHECK (auth.uid() = user_id);
   END IF;

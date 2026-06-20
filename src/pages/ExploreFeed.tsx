@@ -246,7 +246,7 @@ export default function ExploreFeed() {
 
   const handleBroadcastClick = (broadcast: Broadcast) => {
     if (broadcast.is_ended) {
-      navigate(`/watch/${broadcast.id}`, { state: { fromExplore: true, replay: true } });
+                        navigate(`/replay/id/${broadcast.id}`, { state: { fromExplore: true } });
     } else {
       navigate(`/watch/${broadcast.id}`, { state: { fromExplore: true } });
     }
