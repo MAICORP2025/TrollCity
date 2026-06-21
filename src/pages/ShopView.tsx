@@ -172,7 +172,7 @@ export default function ShopView() {
            platform_fee: platformFee,
            seller_earnings: sellerEarnings,
            purchase_date: new Date().toISOString(),
-           status: 'pending',
+           status: 'paid',
            item_type: item.category
          }])
          .select()
