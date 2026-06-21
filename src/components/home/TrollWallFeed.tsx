@@ -382,11 +382,15 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
                     )
                   : 0
 
+                const borderClasses = post.is_pinned
+                  ? 'border-yellow-400/80 shadow-[0_0_24px_rgba(250,204,21,0.24)] hover:border-yellow-400/90 hover:shadow-[0_0_30px_rgba(250,204,21,0.32)]'
+                  : 'border-white/[0.08] hover:border-cyan-400/30 hover:shadow-[0_0_24px_rgba(34,211,238,0.12)]'
+
                 return (
                     <button
                     key={post.id}
                     onClick={() => handlePostClick(post)}
-                    className="group relative flex h-[220px] w-[180px] shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-cyan-400/30 hover:shadow-[0_0_24px_rgba(34,211,238,0.12)]"
+                    className={`group relative flex h-[220px] w-[180px] shrink-0 flex-col overflow-hidden rounded-2xl border bg-[#080c1a]/95 text-left transition-all duration-200 ${borderClasses}`}
                   >
                     {boosted && (
                       <div className="absolute inset-x-0 top-0 z-10 h-[2px] bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 shadow-[0_0_18px_rgba(245,158,11,0.8)]" />

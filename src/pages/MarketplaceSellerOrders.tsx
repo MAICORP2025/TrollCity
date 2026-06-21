@@ -376,7 +376,8 @@ export default function MarketplaceSellerOrders() {
         return
       }
 
-      toast.success('Order shipped successfully. Payout is now in escrow.')
+      const isTrackingUpdate = selectedOrder.status === 'delivered' || selectedOrder.status === 'completed'
+      toast.success(isTrackingUpdate ? 'Tracking updated successfully.' : 'Order shipped successfully. Payout is now in escrow.')
       setShowShippingModal(false)
       setSelectedOrder(null)
       setTrackingNumber('')

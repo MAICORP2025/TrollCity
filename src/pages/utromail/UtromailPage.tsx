@@ -18,10 +18,10 @@ import {
   Video,
   X,
   CheckCheck,
+  Check,
   Ban,
   Flag,
   Trash2,
-  MoreVertical,
 } from 'lucide-react';
 import {
   getThreads,
@@ -91,6 +91,8 @@ export default function UtromailPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
   const [showCompose, setShowCompose] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -238,10 +240,11 @@ export default function UtromailPage() {
         thread_id: activeConversationId,
         sender_id: user.id,
         sender_mail_address: senderMail,
-        recipientId: recipientId,
-        recipientMail,
+        recipient_id: recipientId,
+        recipient_mail_address: recipientMail,
         subject: 'Direct Message',
         body: replyText.trim(),
+        body_html: '',
         message_type: 'normal',
         is_starred: false,
         is_draft: false,
@@ -388,20 +391,31 @@ export default function UtromailPage() {
     };
   }, [activeConversationId, user?.id]);
 
-  const handleDeleteConversation = async () => {
-    if (!activeConversationId || !user?.id) return;
+  const deleteThreads = async (threadIds: string[]) => {
+    if (!user?.id || threadIds.length === 0) return;
+
+    const confirmed = window.confirm(`Delete ${threadIds.length} conversation${threadIds.length === 1 ? '' : 's'}?`);
+    if (!confirmed) return;
+
     try {
-      await deleteThread(activeConversationId, user.id);
+      await Promise.all(threadIds.map(threadId => deleteThread(threadId, user.id)));
       toast.success('Conversation deleted');
-      setThreads(prev => prev.filter(t => t.id !== activeConversationId));
-      closeMobileChat();
-    } catch {
-      toast.error('Failed to delete');
+      setThreads(prev => prev.filter(thread => !threadIds.includes(thread.id)));
+      if (activeConversationId && threadIds.includes(activeConversationId)) {
+        closeMobileChat();
+      }
+      fetchThreadsRef.current?.();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete');
     }
   };
 
+  const handleDeleteConversation = () => {
+    if (!activeConversationId) return;
+    void deleteThreads([activeConversationId]);
+  };
+
   const activeThread = threads.find(t => t.id === activeConversationId);
-  const activeParticipant = activeThread ? getOtherParticipant(activeThread, user?.id || '') : null;
 
   const filteredThreads = threads.filter(t => {
     if (!searchQuery) return true;
@@ -413,6 +427,40 @@ export default function UtromailPage() {
                       false;
     return lastMsgPreview.includes(q) || nameMatch || t.subject?.toLowerCase().includes(q);
   });
+
+  const filteredThreadIds = filteredThreads.map(thread => thread.id);
+  const allFilteredThreadsSelected = filteredThreadIds.length > 0 && filteredThreadIds.every(threadId => selectedThreadIds.has(threadId));
+
+  const toggleThreadSelection = (threadId: string) => {
+    setSelectedThreadIds(prev => {
+      const next = new Set(prev);
+      if (next.has(threadId)) {
+        next.delete(threadId);
+      } else {
+        next.add(threadId);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllFilteredThreads = () => {
+    setSelectedThreadIds(prev => {
+      if (prev.size === filteredThreadIds.length && allFilteredThreadsSelected) {
+        return new Set();
+      }
+      return new Set(filteredThreadIds);
+    });
+  };
+
+  const handleDeleteFilteredThreads = () => {
+    if (selectedThreadIds.size === 0) return;
+    void deleteThreads(Array.from(selectedThreadIds));
+  };
+
+  const handleDeleteAllFilteredThreads = () => {
+    if (filteredThreadIds.length === 0) return;
+    void deleteThreads(filteredThreadIds);
+  };
 
   // Full-screen compose
   if (showCompose) {
@@ -568,12 +616,23 @@ export default function UtromailPage() {
           {/* Sidebar Header */}
           <div className="flex items-center justify-between border-b border-white/10 p-4">
             <h1 className="text-lg font-black text-white">Messages</h1>
-            <button
-              onClick={() => setShowCompose(true)}
-              className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 p-2 text-white shadow-[0_0_15px_rgba(16,185,129,0.25)] transition hover:scale-105"
-            >
-              <PenSquare className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setSelectMode(value => !value);
+                  setSelectedThreadIds(new Set());
+                }}
+                className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
+              >
+                {selectMode ? 'Done' : 'Select'}
+              </button>
+              <button
+                onClick={() => setShowCompose(true)}
+                className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 p-2 text-white shadow-[0_0_15px_rgba(16,185,129,0.25)] transition hover:scale-105"
+              >
+                <PenSquare className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Search */}
@@ -589,6 +648,34 @@ export default function UtromailPage() {
               />
             </div>
           </div>
+
+          {selectMode && (
+            <div className="px-4 pb-3">
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-2">
+                <span className="text-xs font-bold text-red-200">{selectedThreadIds.size} selected</span>
+                <button
+                  onClick={toggleAllFilteredThreads}
+                  className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-white/15"
+                >
+                  {allFilteredThreadsSelected ? 'Unselect All' : 'Select All'}
+                </button>
+                <button
+                  onClick={handleDeleteFilteredThreads}
+                  disabled={selectedThreadIds.size === 0}
+                  className="rounded-lg bg-red-500 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Delete Selected
+                </button>
+                <button
+                  onClick={handleDeleteAllFilteredThreads}
+                  disabled={filteredThreadIds.length === 0}
+                  className="rounded-lg bg-red-500/20 px-2.5 py-1.5 text-xs font-bold text-red-200 transition hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Delete All
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Message Requests Banner */}
           {requests.length > 0 && (
@@ -640,7 +727,13 @@ export default function UtromailPage() {
                   return (
                     <button
                       key={thread.id}
-                      onClick={() => openConversation(thread.id)}
+                      onClick={() => {
+                        if (selectMode) {
+                          toggleThreadSelection(thread.id);
+                          return;
+                        }
+                        openConversation(thread.id);
+                      }}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         if (thread.other_user_id) {
@@ -671,12 +764,30 @@ export default function UtromailPage() {
                         e.currentTarget.addEventListener('touchend', cleanup, { once: true });
                         e.currentTarget.addEventListener('touchmove', cleanup, { once: true });
                       }}
-                      className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${
-                        isActive
-                          ? 'bg-emerald-500/15'
-                          : 'hover:bg-white/[0.04]'
+                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                        selectedThreadIds.has(thread.id)
+                          ? 'border-red-400/50 bg-red-500/10'
+                          : isActive
+                            ? 'border-emerald-400/30 bg-emerald-500/15'
+                            : 'border-transparent hover:bg-white/[0.04]'
                       }`}
                     >
+                      {selectMode && (
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.stopPropagation();
+                            toggleThreadSelection(thread.id);
+                          }}
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
+                            selectedThreadIds.has(thread.id)
+                              ? 'border-red-400 bg-red-500 text-white'
+                              : 'border-white/20 text-transparent hover:border-white/50'
+                          }`}
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      )}
                       <div className="shrink-0">
                         {avatarUrl ? (
                           <img src={avatarUrl} alt="" className="h-12 w-12 rounded-full object-cover" />

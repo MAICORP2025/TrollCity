@@ -512,7 +512,7 @@ BEGIN
     RETURN 'Order not found';
   END IF;
   
-  IF v_order.status NOT IN ('paid', 'processing', 'shipped') THEN
+  IF v_order.status NOT IN ('paid', 'processing', 'shipped', 'delivered', 'completed') THEN
     RETURN 'Order cannot be fulfilled in current status';
   END IF;
   

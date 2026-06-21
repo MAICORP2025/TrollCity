@@ -25,7 +25,6 @@ import {
 import { useAuthStore } from '@/lib/store'
 import useSEO from '@/hooks/useSEO'
 import { websiteSchema, organizationSchema } from '@/utils/seoSchemas'
-import { isPrideMonth } from '@/lib/prideMonth'
 import { useIsPwa } from '@/lib/hooks/useIsPwa'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useLiveContent, type AuctionShow, type LiveItem } from '@/contexts/LiveContentContext'
@@ -71,36 +70,6 @@ const OriginalBackground = React.memo(() => {
   )
 })
 OriginalBackground.displayName = 'OriginalBackground'
-
-const PrideBackground = React.memo(() => {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-[#050715]" />
-      <div className="absolute inset-0 opacity-[0.20] [background:radial-gradient(circle_at_20%_10%,rgba(236,72,153,0.30),transparent_32%),radial-gradient(circle_at_80%_5%,rgba(34,211,238,0.25),transparent_30%),radial-gradient(circle_at_50%_92%,rgba(168,85,247,0.28),transparent_36%)]" />
-      <div className="absolute -left-[12%] top-[7%] h-[64vh] w-[72vw] -rotate-12 opacity-[0.38] blur-[1px]">
-        <div className="h-1/6 rounded-r-full bg-red-500/85" />
-        <div className="h-1/6 rounded-r-full bg-orange-400/85" />
-        <div className="h-1/6 rounded-r-full bg-yellow-300/85" />
-        <div className="h-1/6 rounded-r-full bg-green-400/85" />
-        <div className="h-1/6 rounded-r-full bg-blue-500/85" />
-        <div className="h-1/6 rounded-r-full bg-purple-600/85" />
-      </div>
-      <div className="absolute -right-[18%] top-[4%] h-[76vh] w-[70vw] rotate-12 opacity-[0.40] blur-[1px]">
-        <div className="h-1/6 rounded-l-full bg-red-500/85" />
-        <div className="h-1/6 rounded-l-full bg-orange-400/85" />
-        <div className="h-1/6 rounded-l-full bg-yellow-300/85" />
-        <div className="h-1/6 rounded-l-full bg-green-400/85" />
-        <div className="h-1/6 rounded-l-full bg-blue-500/85" />
-        <div className="h-1/6 rounded-l-full bg-purple-600/85" />
-      </div>
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.055)_1px,transparent_1px)] bg-[length:58px_58px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_26%,rgba(3,7,18,0.72)_100%)]" />
-      <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#09051a] via-[#09051a]/70 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#050715] via-[#050715]/70 to-transparent" />
-    </div>
-  )
-})
-PrideBackground.displayName = 'PrideBackground'
 
 const LiveGrid = React.memo(function LiveGrid({
   liveItems,
@@ -363,7 +332,7 @@ const handleScrollItemClick = useCallback((id: string) => {
 
   return (
     <div className="relative min-h-full w-full overflow-hidden text-white">
-      {isPrideMonth() ? <PrideBackground /> : <OriginalBackground />}
+      <OriginalBackground />
 
       {isLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#050715]/85 backdrop-blur-md">
@@ -400,12 +369,6 @@ const handleScrollItemClick = useCallback((id: string) => {
             >
               <X size={16} />
             </button>
-          </div>
-        )}
-
-        {isPrideMonth() && (
-          <div className="rounded-2xl border border-pink-300/25 bg-gradient-to-r from-pink-600/25 via-purple-600/25 to-cyan-500/25 px-4 py-3 text-center text-sm font-black text-white shadow-[0_0_28px_rgba(236,72,153,0.22)] backdrop-blur-xl">
-            🏳️‍🌈 Pride Month Theme Active · Theme automatically ends July 1st.
           </div>
         )}
 

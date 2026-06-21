@@ -495,7 +495,6 @@ import AudioSettings from "./pages/live/AudioSettings.js";
 import TrollCourt from "./pages/TrollCourt.js";
 import AuctionsPage from "./pages/AuctionsPage.js";
 import SearchPage from "./pages/SearchPage.tsx";
-import { logActiveChannels } from "./lib/realtimeChannelDiagnostics";
 import PodcastCentral from "./pages/PodcastCentral.js";
 import PodcastRoom from "./pages/PodcastRoom.js";
 import AuctionStudio from "./pages/auction/AuctionStudio.js";
@@ -531,6 +530,9 @@ import FamilyShop from "./pages/FamilyShop.js";
 import TrollOfficerLounge from "./pages/TrollOfficerLounge.js";
 import OfficerModeration from "./pages/OfficerModeration.js";
 import HomeNotificationPrompt from "./components/HomeNotificationPrompt.js";
+import { GhostDropInProvider } from "./context/GhostDropInContext";
+import GhostBanner from "./components/home/GhostBanner";
+
 
 function AppContent() {
   // Lightweight render counter (dev only)
@@ -802,7 +804,6 @@ function AppContent() {
   // Track route changes for session persistence
   useEffect(() => {
     updateRoute(location.pathname);
-    logActiveChannels(`App:nav:${location.pathname}`);
   }, [location.pathname]);
 
   // Check payouts unlock on mount
@@ -825,12 +826,12 @@ function AppContent() {
 
     hasNavigatedRef.current = true;
 
-    // Redirect to family home if troll_family role, otherwise to authenticated home
+    // Redirect to family home if troll_family role, otherwise stay on /
+    // Note: /home redirects back to /, so we avoid that loop by staying on /
     if (profileRole === 'troll_family') {
       navigate('/family/home', { replace: true });
-    } else {
-      navigate('/home', { replace: true });
     }
+    // For all other roles, stay on / (the homepage) — no redirect needed
   }, [location.pathname, userId, profile, profileRole, navigate]);
 
 
@@ -2647,7 +2648,10 @@ function App() {
             <TrollProvider>
               <ProfileFrameProvider>
                 <TabSwitchHandler>
-                  <AppContent />
+                  <GhostDropInProvider>
+                    <AppContent />
+                    <GhostBanner />
+                  </GhostDropInProvider>
                 </TabSwitchHandler>
                 {/* TM Family Invite Handler - shows pending invites as notifications */}
                 <TMFamilyInviteHandler />

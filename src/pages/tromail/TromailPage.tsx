@@ -20,13 +20,12 @@ import {
   Clock,
   FileText,
   Folder,
-  Search,
   CheckCircle2,
   UserCheck,
   Eye,
-  Download,
   ShieldCheck,
   Loader2,
+  Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -72,6 +71,7 @@ interface TromailAccount {
 interface TromailMessage {
   id: string
   message_id?: string
+  recipient_id?: string
   sender_user_id: string
   sender_role: string
   sender_tromail_address: string
@@ -127,22 +127,6 @@ interface TromailContract {
   created_at: string
 }
 
-interface OrganizationDocument {
-  id: string
-  user_id: string
-  uploaded_by: string | null
-  document_type: string
-  document_title: string
-  file_url: string
-  storage_path: string
-  source: string
-  related_contract_id: string | null
-  visibility: string
-  status?: string | null
-  metadata?: Record<string, any>
-  created_at: string
-}
-
 const tabs: Array<{ id: TromailTab; label: string; icon: any }> = [
   { id: 'inbox', label: 'Inbox', icon: Inbox },
   { id: 'sent', label: 'Sent', icon: Send },
@@ -177,6 +161,7 @@ function normalizeMessage(row: any): TromailMessage {
     return {
       id: row.id,
       message_id: row.message_id || nested.id,
+      recipient_id: row.recipient_user_id,
       sender_user_id: nested.sender_user_id,
       sender_role: nested.sender_role,
       sender_tromail_address: nested.sender_tromail_address,
@@ -235,6 +220,8 @@ export default function TromailPage() {
 
   const [activeTab, setActiveTab] = useState<TromailTab>('inbox')
   const [messages, setMessages] = useState<TromailMessage[]>([])
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
+  const [isSelectingMessages, setIsSelectingMessages] = useState(false)
   const [directory, setDirectory] = useState<TromailAccount[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -274,10 +261,6 @@ export default function TromailPage() {
   const [contractCustomNotes, setContractCustomNotes] = useState('')
   const [isCreatingContract, setIsCreatingContract] = useState(false)
 
-  const [fileCabinetUserId, setFileCabinetUserId] = useState('')
-  const [documents, setDocuments] = useState<OrganizationDocument[]>([])
-  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false)
-
   const messageIdFromUrl = searchParams.get('messageId') || searchParams.get('open')
 
   const profileRole = normalizeRole(profile?.role || profile?.troll_role || 'user')
@@ -289,10 +272,6 @@ export default function TromailPage() {
   const selectedTemplate = useMemo(() => {
     return contractTemplates.find((template) => template.id === selectedTemplateId) || null
   }, [contractTemplates, selectedTemplateId])
-
-  const selectedFileUser = useMemo(() => {
-    return directory.find((account) => account.user_id === fileCabinetUserId) || null
-  }, [directory, fileCabinetUserId])
 
   const meetingCanSubmit = Boolean(
     user?.id &&
@@ -431,32 +410,6 @@ export default function TromailPage() {
     }
   }, [user?.id])
 
-  const fetchDocumentsForUser = useCallback(async (selectedUserId: string) => {
-    if (!selectedUserId) {
-      setDocuments([])
-      return
-    }
-
-    setIsLoadingDocuments(true)
-
-    try {
-      const { data, error } = await supabase
-        .from('organization_documents')
-        .select('*')
-        .eq('user_id', selectedUserId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      setDocuments((data || []) as OrganizationDocument[])
-    } catch (err: any) {
-      console.error('[TromailPage] Error fetching user documents:', err)
-      toast.error(err?.message || 'Failed to load user documents.')
-    } finally {
-      setIsLoadingDocuments(false)
-    }
-  }, [])
-
   useEffect(() => {
     if (user && profile && !canAccessTromail(profile)) {
       toast.error('Access denied. Tromail requires an approved Troll City role.')
@@ -482,6 +435,11 @@ export default function TromailPage() {
   }, [fetchMessages])
 
   useEffect(() => {
+    setSelectedMessageIds(new Set())
+    setIsSelectingMessages(false)
+  }, [activeTab])
+
+  useEffect(() => {
     fetchMeetings()
   }, [fetchMeetings])
 
@@ -498,12 +456,6 @@ export default function TromailPage() {
       fetchDirectory()
     }
   }, [activeTab, fetchDirectory])
-
-  useEffect(() => {
-    if (fileCabinetUserId) {
-      fetchDocumentsForUser(fileCabinetUserId)
-    }
-  }, [fileCabinetUserId, fetchDocumentsForUser])
 
   useEffect(() => {
     if (!messageIdFromUrl || !hasTromailAccount || !user?.id) return
@@ -793,6 +745,120 @@ export default function TromailPage() {
     }
   }
 
+  const openContractPdf = async (contract: TromailContract) => {
+    try {
+      await supabase
+        .from('tromail_contracts')
+        .update({ viewed_at: new Date().toISOString() })
+        .eq('id', contract.id)
+
+      const { jsPDF } = await import('jspdf')
+      const doc = new jsPDF()
+
+      doc.setFontSize(18)
+      doc.text(doc.splitTextToSize(contract.title, 180), 14, 20)
+
+      doc.setFontSize(10)
+      const metadataLines = [
+        `Role: ${contract.role_label}`,
+        `Recipient: ${contract.recipient_tromail_address}`,
+        `Status: ${contract.status}`,
+        `Created: ${contract.created_at ? new Date(contract.created_at).toLocaleString() : ''}`,
+      ]
+      let y = 34
+      metadataLines.forEach((line) => {
+        doc.text(line, 14, y)
+        y += 7
+      })
+
+      y += 8
+      doc.line(14, y - 4, 196, y - 4)
+      y += 14
+
+      const bodyLines = doc.splitTextToSize(contract.body || '', 180)
+      for (const line of bodyLines) {
+        if (y > 275) {
+          doc.addPage()
+          y = 20
+        }
+        doc.text(line, 14, y)
+        y += 7
+      }
+
+      const blob = doc.output('blob')
+      const pdfUrl = URL.createObjectURL(blob)
+      window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000)
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to open contract PDF.')
+    }
+  }
+
+  const toggleMessageSelection = (messageId: string) => {
+    setSelectedMessageIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(messageId)) {
+        next.delete(messageId)
+      } else {
+        next.add(messageId)
+      }
+      return next
+    })
+  }
+
+  const toggleAllMessages = () => {
+    const ids = messages.map((message) => message.id)
+    setSelectedMessageIds((prev) => {
+      if (prev.size === ids.length && ids.every((id) => prev.has(id))) {
+        return new Set()
+      }
+      return new Set(ids)
+    })
+  }
+
+  const deleteTromailMessages = async (messageIds: string[]) => {
+    if (messageIds.length === 0) return
+
+    const confirmed = window.confirm(`Delete ${messageIds.length} message${messageIds.length === 1 ? '' : 's'}?`)
+    if (!confirmed) return
+
+    try {
+      if (activeTab === 'sent') {
+        const { error } = await supabase
+          .from('tromail_messages')
+          .update({ sender_deleted_at: new Date().toISOString() })
+          .in('id', messageIds)
+
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('tromail_recipients')
+          .update({ deleted_at: new Date().toISOString() })
+          .in('id', messageIds)
+
+        if (error) throw error
+      }
+
+      toast.success('Messages deleted.')
+      setSelectedMessageIds(new Set())
+      setIsSelectingMessages(false)
+      fetchMessages()
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete messages.')
+    }
+  }
+
+  const deleteAllTromailMessages = () => {
+    const ids = messages.map((message) => message.id)
+    void deleteTromailMessages(ids)
+  }
+
+  const deleteSelectedTromailMessages = () => {
+    void deleteTromailMessages(Array.from(selectedMessageIds))
+  }
+
+  const allMessagesSelected = messages.length > 0 && messages.every((message) => selectedMessageIds.has(message.id))
+
   const toggleMeetingRecipient = (account: TromailAccount) => {
     const realUserId = account.user_id
 
@@ -1058,6 +1124,49 @@ export default function TromailPage() {
 
         {['inbox', 'sent', 'important', 'admin'].includes(activeTab) && (
           <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setIsSelectingMessages((value) => !value)
+                  setSelectedMessageIds(new Set())
+                }}
+                className={ghostButtonClass}
+              >
+                {isSelectingMessages ? 'Done' : 'Select'}
+              </Button>
+              {isSelectingMessages && (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={toggleAllMessages}
+                    disabled={messages.length === 0}
+                    className={`${ghostButtonClass} disabled:opacity-40`}
+                  >
+                    {allMessagesSelected ? 'Unselect All' : 'Select All'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={deleteSelectedTromailMessages}
+                    disabled={selectedMessageIds.size === 0}
+                    className={`${ghostButtonClass} disabled:opacity-40`}
+                  >
+                    <Trash2 className="mr-1 h-4 w-4" />
+                    Delete Selected
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={deleteAllTromailMessages}
+                    disabled={messages.length === 0}
+                    className={`${ghostButtonClass} text-red-300 hover:text-red-200 disabled:opacity-40`}
+                  >
+                    Delete All
+                  </Button>
+                  <span className="text-xs text-slate-400">{selectedMessageIds.size} selected</span>
+                </>
+              )}
+            </div>
+
             {isLoading ? (
               <div className={`${panelClass} flex items-center justify-center py-12`}>
                 <RefreshCw className="h-6 w-6 animate-spin text-cyan-400" />
@@ -1074,10 +1183,35 @@ export default function TromailPage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className={`rounded-xl border bg-slate-900/60 p-4 hover:bg-slate-900/80 ${
-                    msg.is_important ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-cyan-500/20'
+                    selectedMessageIds.has(msg.id)
+                      ? 'border-red-400/40 bg-red-500/10'
+                      : msg.is_important
+                        ? 'border-yellow-500/40 bg-yellow-500/5'
+                        : 'border-cyan-500/20'
                   }`}
+                  onClick={() => {
+                    if (isSelectingMessages) {
+                      toggleMessageSelection(msg.id)
+                    }
+                  }}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    {isSelectingMessages && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          toggleMessageSelection(msg.id)
+                        }}
+                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
+                          selectedMessageIds.has(msg.id)
+                            ? 'border-red-400 bg-red-500 text-white'
+                            : 'border-white/20 text-transparent hover:border-white/50'
+                        }`}
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                      </button>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-bold text-white">{msg.subject}</h3>
@@ -1375,7 +1509,7 @@ export default function TromailPage() {
                               Send
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" className={ghostButtonClass}>
+                          <Button size="sm" variant="ghost" onClick={() => openContractPdf(contract)} className={ghostButtonClass}>
                             <Eye className="mr-1 h-4 w-4" />
                             View
                           </Button>
@@ -1390,80 +1524,15 @@ export default function TromailPage() {
         )}
 
         {activeTab === 'file-cabinet' && (
-          <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-            <div className={`${panelClass} p-5`}>
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold">
-                <Folder className="h-5 w-5 text-cyan-300" />
-                Select User
-              </h2>
-
-              <div className="space-y-2">
-                {directory.length === 0 ? (
-                  <p className="text-sm text-slate-400">No Tromail users found.</p>
-                ) : (
-                  directory.map((account) => (
-                    <button
-                      key={account.id}
-                      onClick={() => setFileCabinetUserId(account.user_id)}
-                      className={`w-full rounded-xl border p-3 text-left ${
-                        fileCabinetUserId === account.user_id
-                          ? 'border-cyan-400/40 bg-cyan-500/20'
-                          : 'border-white/5 bg-white/5 hover:bg-white/10'
-                      }`}
-                    >
-                      <p className="font-semibold text-white">{account.display_name || roleLabel(account.role)}</p>
-                      <p className="text-xs text-slate-400">{account.email_address}</p>
-                    </button>
-                  ))
-                )}
+          <div className={`${panelClass} p-5`}>
+            <div className="flex items-start gap-3">
+              <Folder className="mt-1 h-6 w-6 text-cyan-300" />
+              <div>
+                <h2 className="text-lg font-bold">File Cabinet</h2>
+                <p className="mt-2 text-sm text-slate-400">
+                  Organization documents are disabled for Tromail. Use the Contracts tab to review Tromail contracts.
+                </p>
               </div>
-            </div>
-
-            <div className={`${panelClass} p-5`}>
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold">
-                <FileText className="h-5 w-5 text-purple-300" />
-                {selectedFileUser ? `${selectedFileUser.display_name || roleLabel(selectedFileUser.role)} File Cabinet` : 'File Cabinet'}
-              </h2>
-
-              {!fileCabinetUserId ? (
-                <div className="py-12 text-center text-slate-500">
-                  <Search className="mx-auto mb-3 h-10 w-10" />
-                  Choose a user to view their organization documents.
-                </div>
-              ) : isLoadingDocuments ? (
-                <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="h-6 w-6 animate-spin text-cyan-400" />
-                </div>
-              ) : documents.length === 0 ? (
-                <div className="py-12 text-center text-slate-500">
-                  <Folder className="mx-auto mb-3 h-10 w-10" />
-                  No documents found for this user.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="font-bold text-white">{doc.document_title}</p>
-                          <p className="text-xs text-slate-400">
-                            {doc.document_type} • {doc.visibility} • {doc.created_at ? new Date(doc.created_at).toLocaleString() : ''}
-                          </p>
-                        </div>
-
-                        {doc.file_url && (
-                          <a href={doc.file_url} target="_blank" rel="noreferrer">
-                            <Button size="sm" className="bg-cyan-600 hover:bg-cyan-500">
-                              <Download className="mr-1 h-4 w-4" />
-                              Open
-                            </Button>
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         )}

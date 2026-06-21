@@ -565,10 +565,11 @@ export const getUnreadCount = async (userId: string): Promise<number> => {
 };
 
 export const moveThreadToFolder = async (threadId: string, userId: string, folder: MailFolder): Promise<void> => {
-  await supabase.from('utromail_thread_members')
+  const { error } = await supabase.from('utromail_thread_members')
     .update({ folder })
     .eq('thread_id', threadId)
     .eq('user_id', userId);
+  if (error) throw error;
 };
 
 export const deleteThread = async (threadId: string, userId: string): Promise<void> => {

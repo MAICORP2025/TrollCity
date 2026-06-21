@@ -559,6 +559,15 @@ function ViewerPage() {
   const isMobileViewer = hasMounted && isMobileWidth
   const { recordWatchTime } = useTrollFamilyActivity()
 
+  // Ghost drop-in mode: detect ?ghost=true from URL (set by GhostDropInRouter)
+  const [isGhostDropIn, setIsGhostDropIn] = useState(false)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('ghost') === 'true' && !user) {
+      setIsGhostDropIn(true)
+    }
+  }, [location.search, user])
+
   // Broadcast Text Popup (viewers can only receive, not send)
   const {
     activePopup: activeTextPopup,

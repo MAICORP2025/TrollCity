@@ -542,26 +542,27 @@ const [analyticsRange, setAnalyticsRange] = useState<1 | 7 | 30>(7);
     setEditUsernameValue('');
     try {
       if (type === 'online') {
-        const twoMinutesAgo = new Date(Date.now() - 120000).toISOString();
+        // Use onlineUserIds from the presence store (populated by GlobalPresenceTracker
+        // via Supabase Realtime Presence) instead of querying the user_presence DB table.
+        // The DB table is no longer written to by the presence tracker, so querying it
+        // returns stale/empty data even though onlineCount is correct.
+        const onlineUserIds = usePresenceStore.getState().onlineUserIds;
+        const userIds = Array.from(onlineUserIds);
+        if (userIds.length === 0) {
+          setUserList([]);
+          return;
+        }
         const { data } = await supabase
-            .from('user_presence')
-            .select('user_id, last_seen_at, user_profiles!inner(id, username, avatar_url, role, is_admin, walkie_talkie_page)')
-            .gt('last_seen_at', twoMinutesAgo)
-            .order('last_seen_at', { ascending: false })
+            .from('user_profiles')
+            .select('id, username, avatar_url, role, is_admin, walkie_talkie_page')
+            .in('id', userIds)
             .limit(200);
 
-         setUserList((data || []).map((row: any) => ({
-           id: row.user_profiles.id,
-           username: row.user_profiles.username || 'unknown',
-           avatar_url: row.user_profiles.avatar_url,
-           role: row.user_profiles.role || 'user',
-           is_admin: row.user_profiles.is_admin || false,
-           last_seen_at: row.last_seen_at,
-         })));
-        } else {
-          const { data } = await supabase.from('user_profiles').select('id, username, avatar_url, role, is_admin, walkie_talkie_page').order('created_at', { ascending: false }).limit(200);
-          setUserList((data || []) as UserListItem[]);
-        }
+        setUserList((data || []) as UserListItem[]);
+      } else {
+        const { data } = await supabase.from('user_profiles').select('id, username, avatar_url, role, is_admin, walkie_talkie_page').order('created_at', { ascending: false }).limit(200);
+        setUserList((data || []) as UserListItem[]);
+      }
     } catch (err) {
       console.error('[RTC Monitor] Error fetching user list:', err);
     } finally {
@@ -678,6 +679,12 @@ const openAction = useCallback((user: UserListItem, action: string) => {
 
  const executeAction = useCallback(async () => {
      if (!actionTarget || !activeAction) return;
+
+     // No one can act on themselves
+     if (actionTarget.id === profile?.id) {
+         toast.error(`Cannot ${activeAction} yourself`);
+         return;
+     }
 
      // Staff cannot arrest/kick/mute/ban admins unless they are full admins
      if (!isFullAdmin && isTargetAdmin(actionTarget) && ['arrest', 'kick', 'mute', 'ban'].includes(activeAction)) {

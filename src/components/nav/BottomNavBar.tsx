@@ -61,7 +61,6 @@ import { useAuthStore } from '@/lib/store';
 import { useCoins } from '@/lib/hooks/useCoins';
 import { useXPStore } from '@/stores/useXPStore';
 import { supabase, UserRole } from '@/lib/supabase';
-import { isPrideMonth } from '@/lib/prideMonth';
 import { toast } from 'sonner';
 import { useNavBadges } from '@/hooks/useNavBadges';
 
@@ -202,7 +201,6 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   }, [user?.id]);
   const displayName = profile?.display_name || profile?.username || 'Citizen';
   const avatarUrl = profile?.avatar_url;
-  const prideActive = isPrideMonth();
   const equippedFrame = useUserFrame(user?.id);
 
   if (collapsed) {
@@ -237,7 +235,7 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
             fillParent
           />
         ) : (
-          <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-14 md:w-14 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}>
+          <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-14 md:w-14 ring-cyan-400/50`}>
             {displayName.charAt(0).toUpperCase()}
           </div>
         )}
@@ -284,7 +282,6 @@ interface NavButtonProps {
 }
 
 function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = 'normal', badge, badgeKey, onBadgeDismiss }: NavButtonProps) {
-  const prideActive = isPrideMonth();
   const isLarge = size === 'large';
 
   const handleClick = () => {
@@ -298,9 +295,7 @@ function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = '
     group relative flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all duration-200
     ${isLarge ? 'h-14 w-14 md:h-20 md:w-20' : 'h-11 w-11 md:h-14 md:w-14'}
     ${active
-      ? prideActive
-        ? 'text-pink-300'
-        : 'text-cyan-300'
+      ? 'text-cyan-300'
       : 'text-slate-400 hover:text-white'
     }
     ${highlight
@@ -319,7 +314,7 @@ function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = '
         </span>
       )}
       {active && (
-        <span className={`absolute -bottom-0.5 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full ${prideActive ? 'bg-gradient-to-r from-pink-400 to-cyan-400' : 'bg-cyan-400'}`} />
+        <span className="absolute -bottom-0.5 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-cyan-400" />
       )}
     </>
   );
@@ -361,7 +356,6 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
     isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer,
   } = useRoleChecks(profile);
   const [search, setSearch] = useState('');
-  const prideActive = isPrideMonth();
 
   const allPages = useMemo(() => {
     const pages: { category: string; items: PageEntry[] }[] = [
@@ -568,7 +562,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className={`fixed inset-x-0 bottom-0 z-[210] max-h-[85vh] overflow-hidden rounded-t-3xl border-t border-white/10 ${prideActive ? 'bg-[#0a0520]/95' : 'bg-[#070b19]/95'} backdrop-blur-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.5)]`}
+            className="fixed inset-x-0 bottom-0 z-[210] max-h-[85vh] overflow-hidden rounded-t-3xl border-t border-white/10 bg-[#070b19]/95 backdrop-blur-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.5)]"
           >
             {/* Handle bar */}
             <div className="flex justify-center pt-3 pb-1">
@@ -604,7 +598,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
               <div className="space-y-6">
                 {filteredPages.map((cat) => (
                   <div key={cat.category}>
-                    <h3 className={`mb-3 text-[10px] font-black uppercase tracking-[0.2em] ${prideActive ? 'text-pink-300/70' : 'text-cyan-300/70'}`}>
+                    <h3 className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300/70">
                       {cat.category}
                     </h3>
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
@@ -664,7 +658,6 @@ export default function BottomNavBar() {
   const { user, profile } = useAuthStore();
   const { isBroadcaster } = useRoleChecks(profile);
   const [morePagesOpen, setMorePagesOpen] = useState(false);
-  const prideActive = isPrideMonth();
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const badges = useNavBadges();
 
