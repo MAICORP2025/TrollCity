@@ -218,7 +218,12 @@ export function useAgoraRoom({
         debugAgora('🎬 Creating local tracks for publisher');
 
         const videoTrack = await AgoraRTC.createCameraVideoTrack();
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+          encoderConfig: 'speech_standard',
+          AEC: true,
+          ANS: true,
+          AGC: true,
+        });
 
         await client.publish([videoTrack, audioTrack]);
 

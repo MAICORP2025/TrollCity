@@ -236,17 +236,66 @@ function CoinSalesPanel({
   loading: boolean
   onRefresh: () => void
 }) {
-  const [selectedTx, setSelectedTx] = useState<CoinPurchaseRow | null>(null)
-  const totalUsd = purchases.reduce((sum, p) => sum + Number(p.amount_usd || 0), 0)
-  const totalCoins = purchases.reduce((sum, p) => sum + Number(p.amount_coins || 0), 0)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedUser, setSelectedUser] = useState<string | null>(null)
 
-  const handleRowClick = (row: CoinPurchaseRow) => {
-    setSelectedTx(row)
-  }
+  const groupedByUser = useMemo(() => {
+    const map = new Map<string, {
+      user_id: string
+      buyerName: string
+      payerEmail?: string
+      totalCoins: number
+      totalUsd: number
+      purchaseCount: number
+      lastPurchase: string
+      purchases: CoinPurchaseRow[]
+    }>()
 
-  const handleCloseModal = () => {
-    setSelectedTx(null)
-  }
+    for (const p of purchases) {
+      const uid = p.user_id || 'unknown'
+      const existing = map.get(uid)
+
+      if (existing) {
+        existing.totalCoins += p.amount_coins
+        existing.totalUsd += p.amount_usd
+        existing.purchaseCount += 1
+        if (p.created_at && (!existing.lastPurchase || p.created_at > existing.lastPurchase)) {
+          existing.lastPurchase = p.created_at
+        }
+        existing.purchases.push(p)
+      } else {
+        map.set(uid, {
+          user_id: uid,
+          buyerName: p.username,
+          payerEmail: p.payer_email || undefined,
+          totalCoins: p.amount_coins,
+          totalUsd: p.amount_usd,
+          purchaseCount: 1,
+          lastPurchase: p.created_at,
+          purchases: [p],
+        })
+      }
+    }
+
+    return Array.from(map.values())
+  }, [purchases])
+
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return groupedByUser
+    const q = searchQuery.toLowerCase()
+    return groupedByUser.filter((u) => {
+      const buf = `${u.buyerName} ${u.user_id} ${u.payerEmail || ''}`
+      return buf.toLowerCase().includes(q)
+    })
+  }, [groupedByUser, searchQuery])
+
+  const selectedUserData = useMemo(() => {
+    if (!selectedUser) return null
+    return groupedByUser.find((u) => u.user_id === selectedUser) || null
+  }, [selectedUser, groupedByUser])
+
+  const grandTotalUsd = purchases.reduce((sum, p) => sum + Number(p.amount_usd || 0), 0)
+  const grandTotalCoins = purchases.reduce((sum, p) => sum + Number(p.amount_coins || 0), 0)
 
   return (
     <section className={glassPanel}>
@@ -259,7 +308,7 @@ function CoinSalesPanel({
             <div>
               <h2 className="text-xl font-black text-white">Coin Store Sales Ledger</h2>
               <p className="text-sm text-slate-400">
-                PayPal / coin-store purchases pulled from public.transactions.
+                PayPal / coin-store purchases grouped by user. Search by username, UUID, or payer email.
               </p>
             </div>
           </div>
@@ -275,46 +324,60 @@ function CoinSalesPanel({
       </div>
 
       <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-3">
-        <MoneyMetric icon={DollarSign} label="Recent Sales" value={`$${totalUsd.toFixed(2)}`} sub={`${purchases.length} transactions loaded`} />
-        <MoneyMetric icon={Coins} label="Coins Sold" value={totalCoins.toLocaleString()} sub="recent purchased coin volume" />
-        <MoneyMetric icon={Activity} label="Source" value="PayPal" sub="coin store checkout feed" />
+        <MoneyMetric icon={DollarSign} label="Recent Sales" value={`$${grandTotalUsd.toFixed(2)}`} sub={`${purchases.length} transactions loaded`} />
+        <MoneyMetric icon={Coins} label="Coins Sold" value={grandTotalCoins.toLocaleString()} sub="recent purchased coin volume" />
+        <MoneyMetric icon={Activity} label="Buyers" value={String(groupedByUser.length)} sub="unique payers" />
       </div>
 
       <div className="px-5 pb-5">
+        <div className="mb-4">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by username, UUID, or payer email..."
+              className="w-full rounded-xl border border-white/10 bg-black/40 py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-600 focus:border-cyan-400/50 focus:outline-none"
+            />
+          </div>
+        </div>
+
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
           <div className="grid grid-cols-12 border-b border-white/10 bg-white/[0.035] px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
-            <div className="col-span-3">Buyer</div>
+            <div className="col-span-4">Buyer</div>
             <div className="col-span-2">Coins</div>
             <div className="col-span-2">USD</div>
-            <div className="col-span-2">Source</div>
-            <div className="col-span-3">Date</div>
+            <div className="col-span-2">Buys</div>
+            <div className="col-span-2">Last Purchase</div>
           </div>
 
           {loading ? (
             <div className="p-8 text-center text-slate-400">Loading coin sales...</div>
-          ) : purchases.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">No coin purchase rows found yet.</div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="p-8 text-center text-slate-500">
+              {searchQuery.trim() ? 'No buyers match your search.' : 'No coin purchase rows found yet.'}
+            </div>
           ) : (
-            <div className="max-h-[360px] divide-y divide-white/10 overflow-y-auto">
-              {purchases.map((row) => (
+            <div className="max-h-[270px] divide-y divide-white/10 overflow-y-auto">
+              {filteredUsers.map((u) => (
                 <div
-                  key={row.id}
-                  onClick={() => handleRowClick(row)}
+                  key={u.user_id}
+                  onClick={() => setSelectedUser(u.user_id)}
                   className="grid grid-cols-12 cursor-pointer items-center px-4 py-3 text-sm hover:bg-cyan-400/5"
                 >
-                  <div className="col-span-3 min-w-0">
-                    <p className="truncate font-bold text-white">{row.username}</p>
-                    {row.payer_email && <p className="truncate text-xs text-slate-500">{row.payer_email}</p>}
+                  <div className="col-span-4 min-w-0">
+                    <p className="truncate font-bold text-white">{u.buyerName}</p>
+                    <p className="truncate font-mono text-xs text-slate-500">{u.user_id}</p>
+                    {u.payerEmail && <p className="truncate text-xs text-slate-500">{u.payerEmail}</p>}
                   </div>
-                  <div className="col-span-2 font-black text-cyan-200">{row.amount_coins.toLocaleString()}</div>
-                  <div className="col-span-2 font-black text-emerald-300">${row.amount_usd.toFixed(2)}</div>
-                  <div className="col-span-2">
-                    <span className="rounded-full border border-purple-300/20 bg-purple-400/10 px-2 py-1 text-xs font-bold text-purple-200">
-                      {row.source}
-                    </span>
-                  </div>
-                  <div className="col-span-3 text-xs text-slate-400">
-                    {row.created_at ? new Date(row.created_at).toLocaleString() : '-'}
+                  <div className="col-span-2 font-black text-cyan-200">{u.totalCoins.toLocaleString()}</div>
+                  <div className="col-span-2 font-black text-emerald-300">${u.totalUsd.toFixed(2)}</div>
+                  <div className="col-span-2 text-xs text-slate-400">{u.purchaseCount}</div>
+                  <div className="col-span-2 text-xs text-slate-400">
+                    {u.lastPurchase ? new Date(u.lastPurchase).toLocaleDateString() : '-'}
                   </div>
                 </div>
               ))}
@@ -322,20 +385,30 @@ function CoinSalesPanel({
           )}
         </div>
 
-<p className="mt-3 text-xs text-slate-500">
-           Tip: for the most accurate dashboard, make PayPal verification write metadata.amount_paid,
-           metadata.coins_awarded, metadata.paypal_order_id, and metadata.paypal_capture_id into public.transactions.
-         </p>
+        <p className="mt-3 text-xs text-slate-500">
+          Click a buyer to view all their coin store transactions.
+        </p>
       </div>
 
-      {/* Transaction Detail Modal */}
-      {selectedTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg bg-slate-900 border border-cyan-400/20 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-cyan-400/10 bg-slate-900/80">
-              <h3 className="text-lg font-black text-white">Transaction Details</h3>
+      {/* Per-User Transaction Detail Modal */}
+      {selectedUserData && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedUser(null)
+          }}
+        >
+          <div className="relative w-full max-w-3xl max-h-[85vh] overflow-y-auto bg-slate-900 border border-cyan-400/20 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-cyan-400/10 bg-slate-900/80 backdrop-blur-sm">
+              <div>
+                <h3 className="text-lg font-black text-white">{selectedUserData.buyerName}</h3>
+                <p className="font-mono text-xs text-slate-500">{selectedUserData.user_id}</p>
+                {selectedUserData.payerEmail && (
+                  <p className="text-xs text-slate-500">{selectedUserData.payerEmail}</p>
+                )}
+              </div>
               <button
-                onClick={handleCloseModal}
+                onClick={() => setSelectedUser(null)}
                 className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -344,90 +417,82 @@ function CoinSalesPanel({
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-slate-500">Transaction ID</p>
-                  <p className="font-mono text-white">{selectedTx.id}</p>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className={`${card} p-3`}>
+                  <p className="text-xs text-slate-500">Total Purchases</p>
+                  <p className="text-xl font-black text-white">{selectedUserData.purchaseCount}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500">User ID</p>
-                  <p className="text-white">{selectedTx.user_id || '-'}</p>
+                <div className={`${card} p-3`}>
+                  <p className="text-xs text-slate-500">Total Coins</p>
+                  <p className="text-xl font-black text-cyan-200">{selectedUserData.totalCoins.toLocaleString()}</p>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-slate-500">Buyer</p>
-                  <p className="font-bold text-white">{selectedTx.username}</p>
+                <div className={`${card} p-3`}>
+                  <p className="text-xs text-slate-500">Total Spent</p>
+                  <p className="text-xl font-black text-emerald-300">${selectedUserData.totalUsd.toFixed(2)}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500">Amount</p>
-                  <p className="text-cyan-200 font-bold">{selectedTx.amount_coins.toLocaleString()} coins</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-slate-500">USD Amount</p>
-                  <p className="text-emerald-300 font-bold">${selectedTx.amount_usd.toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Source</p>
-                  <span className={`rounded-full border px-2 py-1 text-xs font-bold ${
-                    selectedTx.source === 'paypal'
-                      ? 'border-blue-400/20 bg-blue-400/10 text-blue-200'
-                      : 'border-purple-300/20 bg-purple-400/10 text-purple-200'
-                  }`}>
-                    {selectedTx.source}
-                  </span>
+                <div className={`${card} p-3`}>
+                  <p className="text-xs text-slate-500">Last Purchase</p>
+                  <p className="text-sm font-bold text-white">
+                    {selectedUserData.lastPurchase ? new Date(selectedUserData.lastPurchase).toLocaleDateString() : '-'}
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-slate-500">Package ID</p>
-                  <p className="text-white">{selectedTx.package_id || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Type</p>
-                  <p className="text-white">{selectedTx.type}</p>
-                </div>
-              </div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">All Transactions</p>
 
-              {selectedTx.paypal_order_id && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-slate-500">PayPal Order ID</p>
-                    <p className="font-mono text-xs text-white">{selectedTx.paypal_order_id}</p>
+              {selectedUserData.purchases.map((tx) => (
+                <div key={tx.id} className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
+                  <div className="grid grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-slate-500">Date</p>
+                      <p className="text-white">{new Date(tx.created_at).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Coins</p>
+                      <p className="font-black text-cyan-200">{tx.amount_coins.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">USD</p>
+                      <p className="font-black text-emerald-300">${tx.amount_usd.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Status</p>
+                      <p className="text-xs font-bold text-slate-400">{tx.status || '-'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500">PayPal Capture ID</p>
-                    <p className="font-mono text-xs text-white">{selectedTx.paypal_capture_id || '-'}</p>
+                  <div className="grid grid-cols-2 gap-3 text-xs text-slate-400">
+                    <div>
+                      <span className="text-slate-600">Transaction ID:</span>{' '}
+                      <span className="font-mono text-white">{tx.id}</span>
+                    </div>
+                    {tx.paypal_order_id && (
+                      <div>
+                        <span className="text-slate-600">PayPal Order:</span>{' '}
+                        <span className="font-mono text-white">{tx.paypal_order_id}</span>
+                      </div>
+                    )}
+                    {tx.paypal_capture_id && (
+                      <div>
+                        <span className="text-slate-600">Capture ID:</span>{' '}
+                        <span className="font-mono text-white">{tx.paypal_capture_id}</span>
+                      </div>
+                    )}
+                    {tx.package_id && (
+                      <div>
+                        <span className="text-slate-600">Package:</span>{' '}
+                        <span className="text-white">{tx.package_id}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-slate-600">Source:</span>{' '}
+                      <span className="rounded-full border border-purple-300/20 bg-purple-400/10 px-2 py-0.5 font-bold text-purple-200">
+                        {tx.source}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              )}
-
-              {selectedTx.payer_email && (
-                <div>
-                  <p className="text-xs text-slate-500">Payer Email</p>
-                  <p className="text-white">{selectedTx.payer_email}</p>
-                </div>
-              )}
-
-              <div>
-                <p className="text-xs text-slate-500">Date</p>
-                <p className="text-white">{selectedTx.created_at ? new Date(selectedTx.created_at).toLocaleString() : '-'}</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 p-4 border-t border-cyan-400/10 bg-slate-900/50">
-              <button
-                onClick={handleCloseModal}
-                className="px-4 py-2 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-800 transition"
-              >
-                Close
-              </button>
+              ))}
             </div>
           </div>
         </div>
@@ -624,10 +689,15 @@ export default function AdminDashboard() {
 
       // Track sources for each row
       const rowSources = new Map<string, string>()
+      const seenPaypalOrderIds = new Set<string>()
+      const seenPaypalCaptureIds = new Set<string>()
 
-      // Mark public.transactions rows
+      // Mark public.transactions rows and collect paypal IDs for dedup
       for (const r of data) {
         rowSources.set(r.id, 'public.transactions')
+        const meta = r.metadata || {}
+        if (meta.paypal_order_id) seenPaypalOrderIds.add(meta.paypal_order_id)
+        if (meta.paypal_capture_id) seenPaypalCaptureIds.add(meta.paypal_capture_id)
       }
 
       // Merge all sources; prefer public.transactions rows but include store/paypal rows that aren't present
@@ -636,50 +706,66 @@ export default function AdminDashboard() {
 
       // Merge coin_store_sales
       for (const s of storeRows) {
-        if (!existingIds.has(s.id)) {
-          combined.push({
-            id: s.id,
-            user_id: s.user_id,
-            type: 'purchase',
-            transaction_type: 'purchase',
-            coins_used: s.amount_coins,
-            amount: s.amount_usd,
-            description: 'Coin Store purchase',
-            status: s.status,
-            metadata: {
-              package_id: s.package_id,
-              paypal_order_id: s.paypal_order_id,
-              paypal_capture_id: s.paypal_capture_id,
-              payer_email: s.payer_email,
-            },
-            created_at: s.created_at,
-          })
-          rowSources.set(s.id, 'coin_store_sales')
-          existingIds.add(s.id)
-        }
+        const sPaypalOrder = (s as any).paypal_order_id
+        const sPaypalCapture = (s as any).paypal_capture_id
+        const isDuplicateByPaypal =
+          (sPaypalOrder && seenPaypalOrderIds.has(sPaypalOrder)) ||
+          (sPaypalCapture && seenPaypalCaptureIds.has(sPaypalCapture))
+
+        if (isDuplicateByPaypal || existingIds.has(s.id)) continue
+
+        combined.push({
+          id: s.id,
+          user_id: s.user_id,
+          type: 'purchase',
+          transaction_type: 'purchase',
+          coins_used: s.amount_coins,
+          amount: s.amount_usd,
+          description: 'Coin Store purchase',
+          status: s.status,
+          metadata: {
+            package_id: s.package_id,
+            paypal_order_id: s.paypal_order_id,
+            paypal_capture_id: s.paypal_capture_id,
+            payer_email: s.payer_email,
+          },
+          created_at: s.created_at,
+        })
+        rowSources.set(s.id, 'coin_store_sales')
+        existingIds.add(s.id)
+        if (sPaypalOrder) seenPaypalOrderIds.add(sPaypalOrder)
+        if (sPaypalCapture) seenPaypalCaptureIds.add(sPaypalCapture)
       }
 
       // Merge paypal_transactions
       for (const p of paypalRows) {
-        if (!existingIds.has(p.id)) {
-          combined.push({
-            id: p.id,
-            user_id: p.user_id,
-            type: 'purchase',
-            transaction_type: 'purchase',
-            coins_used: p.coins,
-            amount: p.amount,
-            description: 'PayPal transaction',
-            status: p.status,
-            metadata: {
-              paypal_order_id: p.paypal_order_id,
-              paypal_capture_id: p.paypal_capture_id,
-            },
-            created_at: p.created_at,
-          })
-          rowSources.set(p.id, 'paypal.transactions')
-          existingIds.add(p.id)
-        }
+        const pPaypalOrder = p.paypal_order_id
+        const pPaypalCapture = p.paypal_capture_id
+        const isDuplicateByPaypal =
+          (pPaypalOrder && seenPaypalOrderIds.has(pPaypalOrder)) ||
+          (pPaypalCapture && seenPaypalCaptureIds.has(pPaypalCapture))
+
+        if (isDuplicateByPaypal || existingIds.has(p.id)) continue
+
+        combined.push({
+          id: p.id,
+          user_id: p.user_id,
+          type: 'purchase',
+          transaction_type: 'purchase',
+          coins_used: p.coins,
+          amount: p.amount,
+          description: 'PayPal transaction',
+          status: p.status,
+          metadata: {
+            paypal_order_id: p.paypal_order_id,
+            paypal_capture_id: p.paypal_capture_id,
+          },
+          created_at: p.created_at,
+        })
+        rowSources.set(p.id, 'paypal.transactions')
+        existingIds.add(p.id)
+        if (pPaypalOrder) seenPaypalOrderIds.add(pPaypalOrder)
+        if (pPaypalCapture) seenPaypalCaptureIds.add(pPaypalCapture)
       }
 
       const txRows = (combined || []) as TransactionRow[]
@@ -721,10 +807,15 @@ export default function AdminDashboard() {
 
         const usd = Number(tx.amount || 0)
 
+        // Get username: try profile first, then payer_email, then shorten UUID
+        const username = tx.user_id 
+          ? (userMap.get(tx.user_id) || meta.payer_email || (tx.user_id.length > 20 ? tx.user_id.slice(0, 20) + '…' : tx.user_id))
+          : 'Unknown buyer'
+
         return {
           id: tx.id,
           user_id: tx.user_id || null,
-          username: tx.user_id ? userMap.get(tx.user_id) || tx.user_id : 'Unknown buyer',
+          username: username,
           amount_coins: Math.abs(coins),
           amount_usd: Math.abs(usd),
           type: tx.transaction_type || tx.type || 'purchase',
@@ -1209,57 +1300,12 @@ export default function AdminDashboard() {
           onSendNotifications={handleSendNotifications}
           onSystemMaintenance={handleSystemMaintenance}
           onViewAnalytics={handleViewAnalytics}
-          onExportData={handleExportData}
-          onManualOrders={handleOpenManualOrders}
-        />
+          onManualOrders={handleOpenManualOrders} onExportData={function (): void {
+            throw new Error('Function not implemented.')
+          } }        />
 
         <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-          <header className={glassPanel}>
-            <div className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-purple-700 via-cyan-500 to-pink-600 shadow-[0_0_28px_rgba(45,212,191,0.25)]">
-                  <Shield className="h-7 w-7 text-white" />
-                </div>
-
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200/70">Executive Admin Console</p>
-                  <h1 className="bg-gradient-to-r from-white via-cyan-100 to-pink-200 bg-clip-text text-3xl font-black text-transparent md:text-4xl">
-                    Troll City Command Center
-                  </h1>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Professional operations, finance, safety, and platform control for Troll City.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-2 font-bold text-red-200 transition hover:bg-red-500/20"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </button>
-
-                <button
-                  onClick={handleResetApp}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-yellow-400/25 bg-yellow-500/10 px-4 py-2 font-bold text-yellow-200 transition hover:bg-yellow-500/20"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reset App
-                </button>
-              </div>
-            </div>
-
-<div className="grid grid-cols-1 gap-4 border-t border-cyan-400/10 p-5 md:grid-cols-4">
-               <MoneyMetric icon={Activity} label="Realtime" value={isConnected ? 'Online' : 'Offline'} sub={lastSync ? `Last sync ${new Date(lastSync).toLocaleTimeString()}` : 'Awaiting sync'} />
-               <MoneyMetric icon={Radio} label="Live Streams" value={Number(dashboardMetrics.activeStreams || liveStreams.length).toLocaleString()} sub="active broadcasts" />
-               <MoneyMetric icon={DollarSign} label="Coin Revenue" value={`$${Number(stats.coinSalesRevenue || 0).toFixed(2)}`} sub="from public.transactions" />
-               <MoneyMetric icon={Coins} label="Coins Sold" value={Number(stats.purchasedCoins || 0).toLocaleString()} sub="purchased coin balance" />
-</div>
-           </header>
-
-           <CoinSalesPanel purchases={coinPurchases} loading={coinPurchasesLoading} onRefresh={loadCoinPurchases} />
+          <CoinSalesPanel purchases={coinPurchases} loading={coinPurchasesLoading} onRefresh={loadCoinPurchases} />
 
            <ErrorBoundary>
              <FinanceEconomyCenter
@@ -1326,4 +1372,8 @@ export default function AdminDashboard() {
       </div>
     </div>
   )
+}
+
+function setSelectedTx(arg0: null) {
+  throw new Error('Function not implemented.')
 }

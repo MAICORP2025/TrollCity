@@ -1,4 +1,4 @@
-﻿import { type ChangeEvent, useCallback } from 'react'
+﻿import { type ChangeEvent, useCallback, useEffect, useRef } from 'react'
 import { ArrowUpRight, Pause, Play, Volume2, VolumeX, X } from 'lucide-react'
 import { usePodcastAgora } from '@/hooks/usePodcastAgora'
 
@@ -12,6 +12,7 @@ interface ActivePodcast {
   listener_count: number
   agora_channel_name: string
   host_username?: string
+  recordingUrl?: string | null
 }
 
 interface MiniPodcastPlayerProps {
@@ -25,7 +26,11 @@ interface MiniPodcastPlayerProps {
   onVolumeChange: (volume: number) => void
   onClose: () => void
   onExpand: () => void
+  onElapsedTimeChange?: (time: number) => void
 }
+
+const LIVE_PODCAST_STATUSES: PodcastStatus[] = ['live', 'active']
+type PodcastStatus = 'scheduled' | 'live' | 'active' | 'ended' | 'archived' | 'draft' | 'paused' | 'cancelled'
 
 const containerStyles =
   'fixed bottom-4 left-1/2 z-50 w-[min(96vw,460px)] -translate-x-1/2 rounded-[2rem] border border-white/10 bg-slate-950/95 p-4 shadow-2xl shadow-black/35 backdrop-blur-xl sm:left-auto sm:right-4 sm:-translate-x-0'
@@ -44,7 +49,12 @@ export default function MiniPodcastPlayer({
   onVolumeChange,
   onClose,
   onExpand,
+  onElapsedTimeChange,
 }: MiniPodcastPlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const isArchived = !LIVE_PODCAST_STATUSES.includes(podcast.status)
+  const hasRecording = Boolean(podcast.recordingUrl)
+
   const {
     isConnected,
     isJoining,
@@ -54,17 +64,21 @@ export default function MiniPodcastPlayer({
     toggleMute: hookToggleMute,
     setVolume: hookSetVolume,
   } = usePodcastAgora({
-    channelName: podcast.agora_channel_name,
-    enabled: Boolean(podcast.agora_channel_name),
+    channelName: isArchived ? '' : podcast.agora_channel_name,
+    enabled: !isArchived && Boolean(podcast.agora_channel_name),
     podcastId: podcast.id,
     isHost: false,
+    playing: !isArchived && isPlaying,
   })
 
-  // Use hook's internal play state for accurate audio status
-  const effectiveIsPlaying = hookIsPlaying && isConnected
+  const effectiveIsPlaying = isArchived ? isPlaying : hookIsPlaying && isConnected
 
   const statusText = error
     ? 'Connection error'
+    : isArchived
+    ? hasRecording
+      ? isPlaying ? 'Playing recording' : 'Recording ready'
+      : 'No recording available'
     : isJoining
     ? 'Joining...'
     : isConnected
@@ -79,6 +93,55 @@ export default function MiniPodcastPlayer({
     },
     [onVolumeChange, hookSetVolume]
   )
+
+  // Manage audio element for archived recordings
+  useEffect(() => {
+    if (!isArchived || !podcast.recordingUrl) {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      return
+    }
+
+    const audio = new Audio()
+    audioRef.current = audio
+
+    const syncTime = () => {
+      onElapsedTimeChange?.(Math.floor(audio.currentTime || 0))
+    }
+
+    audio.addEventListener('timeupdate', syncTime)
+    audio.addEventListener('loadedmetadata', syncTime)
+
+    audio.src = podcast.recordingUrl
+    audio.volume = volume
+    audio.muted = isMuted
+
+    if (isPlaying) {
+      audio.play().catch(() => {})
+    }
+
+    return () => {
+      audio.removeEventListener('timeupdate', syncTime)
+      audio.removeEventListener('loadedmetadata', syncTime)
+      audio.pause()
+    }
+  }, [isArchived, podcast.recordingUrl, isPlaying, volume, isMuted, onElapsedTimeChange])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !podcast.recordingUrl) return
+
+    audio.volume = volume
+  }, [volume, podcast.recordingUrl])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !podcast.recordingUrl) return
+
+    audio.muted = isMuted
+  }, [isMuted, podcast.recordingUrl])
 
   return (
     <div className={containerStyles}>
@@ -115,7 +178,7 @@ export default function MiniPodcastPlayer({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/5 p-3">
           <div>
             <p className="text-sm font-semibold text-slate-200">{statusText}</p>
-            <p className="text-xs text-slate-500">Channel: {podcast.agora_channel_name}</p>
+            <p className="text-xs text-slate-500">Channel: {podcast.agora_channel_name || 'archived'}</p>
           </div>
           <div className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
             {elapsedTime}s
@@ -126,10 +189,13 @@ export default function MiniPodcastPlayer({
           <button
             type="button"
             onClick={() => {
-              hookTogglePlay()
+              if (!isArchived) {
+                hookTogglePlay()
+              }
               onPlayPause()
             }}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 via-cyan-500 to-sky-500 px-4 py-3 text-sm font-black text-white transition hover:opacity-95"
+            disabled={isArchived && !hasRecording}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 via-cyan-500 to-sky-500 px-4 py-3 text-sm font-black text-white transition hover:opacity-95 disabled:opacity-50"
           >
             {effectiveIsPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             {effectiveIsPlaying ? 'Pause' : 'Play'}

@@ -50,7 +50,16 @@ export default function OfficerModeration() {
         status_filter: statusFilter === 'all' ? null : statusFilter
       })
       if (response.success) {
-        setReports(response.reports || [])
+        const normalizedReports = (response.reports || []).map((report: any) => ({
+          ...report,
+          id: report.id || report.report_id,
+          target_user_id: report.target_user_id || report.reported_user_id,
+          target_username: report.target_username || report.reported_username,
+          reason: report.reason || report.report_reason,
+          description: report.description || report.report_details,
+          reviewer_username: report.reviewer_username || report.resolved_by_username,
+        }))
+        setReports(normalizedReports)
       } else {
         toast.error(response.error || 'Failed to load reports')
       }
@@ -290,8 +299,8 @@ export default function OfficerModeration() {
                         </tr>
                         </thead>
                         <tbody>
-                        {filteredReports.map((report) => (
-                            <tr key={report.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                        {filteredReports.map((report, index) => (
+                            <tr key={report.id || `${report.reporter_username || ''}-${report.target_username || ''}-${report.created_at || ''}-${index}`} className="border-b border-gray-800 hover:bg-gray-800/50">
                             <td className="py-2 text-blue-400">{report.reporter_username || 'Unknown'}</td>
                             <td className="py-2 text-purple-400">{report.target_username || report.stream_title || '—'}</td>
                             <td className="py-2 text-gray-300">{report.reason}</td>
@@ -454,8 +463,8 @@ export default function OfficerModeration() {
                         </tr>
                         </thead>
                         <tbody>
-                        {logs.map((log) => (
-                            <tr key={log.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                        {logs.map((log, index) => (
+                            <tr key={log.id || `${log.created_at || ''}-${log.moderator_id || ''}-${log.target_id || ''}-${index}`} className="border-b border-gray-800 hover:bg-gray-800/50">
                                 <td className="py-2 text-gray-500 text-xs">{new Date(log.created_at).toLocaleString()}</td>
                                 <td className="py-2 font-medium text-blue-400">{log.moderator_username}</td>
                                 <td className="py-2">

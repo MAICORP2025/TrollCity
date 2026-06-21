@@ -19,6 +19,7 @@ import { isStaffProfile } from '../../lib/staff';
 import { shouldAutoHideMessage, canControlSlowMode, shouldShowGoldenBanner } from '../../lib/perkEffects';
 import { useChatBlockStatus } from '../../hooks/useChatBlockStatus';
 import { useStreamRealtime } from '../../hooks/useStreamRealtime';
+import { getBroadcastChatLockRemainingMs, isBroadcastChatLockActive } from '../../lib/broadcastModeration';
 
 interface Message {
   id: string;
@@ -471,7 +472,20 @@ export default function BroadcastChat({
   const isChatFocusedRef = useRef(isChatFocused);
   const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null);
   const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
-  const [hostChatDisabledByOfficer, setHostChatDisabledByOfficer] = useState(false);
+  const [hostChatDisabledByOfficerState, setHostChatDisabledByOfficerState] = useState(false);
+  const [hostChatDisabledUntil, setHostChatDisabledUntil] = useState<string | null>(null);
+  const [hostChatDisabledStreamId, setHostChatDisabledStreamId] = useState<string | null>(null);
+  const [hostChatDisableRemainingMs, setHostChatDisableRemainingMs] = useState(0);
+
+  const hostChatDisabledByOfficer = useMemo(
+    () => isBroadcastChatLockActive({
+      disabled: hostChatDisabledByOfficerState,
+      until: hostChatDisabledUntil,
+      streamId,
+      lockedStreamId: hostChatDisabledStreamId,
+    }),
+    [hostChatDisabledByOfficerState, hostChatDisabledUntil, hostChatDisabledStreamId, streamId],
+  );
   const [streamEnded, setStreamEnded] = useState(false);
   const [showModActions, setShowModActions] = useState(false);
   const [modActionTargetUser, setModActionTargetUser] = useState<{ id: string; username: string; avatar_url?: string | null; role?: string | null; troll_role?: string | null } | null>(null);
@@ -736,12 +750,14 @@ export default function BroadcastChat({
     const fetchHostModerationState = async () => {
       const { data } = await supabase
         .from('user_profiles')
-        .select('broadcast_chat_disabled')
+        .select('broadcast_chat_disabled, broadcast_chat_disabled_until, broadcast_chat_disabled_stream_id')
         .eq('id', hostId)
         .maybeSingle();
 
       if (mounted) {
-        setHostChatDisabledByOfficer(!!data?.broadcast_chat_disabled);
+        setHostChatDisabledByOfficerState(!!data?.broadcast_chat_disabled);
+        setHostChatDisabledUntil(data?.broadcast_chat_disabled_until ?? null);
+        setHostChatDisabledStreamId(data?.broadcast_chat_disabled_stream_id ?? null);
       }
     };
 
@@ -754,6 +770,17 @@ export default function BroadcastChat({
       window.clearInterval(moderationTimer);
     };
   }, [hostId]);
+
+  useEffect(() => {
+    const updateRemaining = () => {
+      setHostChatDisableRemainingMs(getBroadcastChatLockRemainingMs(hostChatDisabledUntil));
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [hostChatDisabledUntil]);
 
   useStreamRealtime(streamId, {
     onStream: (event) => {
@@ -1165,7 +1192,11 @@ const fetchMessages = async () => {
         return;
     }
     if (hostChatDisabledByOfficer) {
-        toast.error('Chat is disabled for this broadcaster by officer control');
+        toast.error(
+          hostChatDisableRemainingMs
+            ? `Chat is disabled for this broadcaster by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
+            : 'Chat is disabled for this broadcaster by officer control'
+        );
         return;
     }
 
@@ -1472,76 +1503,6 @@ const fetchMessages = async () => {
                 </button>
             )}
         </div>
-        
-        {/* Users in seats are shown on the broadcast grid; keep chat focused on messages. */}
-        {false && (() => {
-          const seatUsers: { id: string; username: string; avatar_url: string | null; isBroadcaster: boolean }[] = [];
-          
-          // Add broadcaster first
-          seatUsers.push({
-            id: hostId,
-            username: broadcasterProfile?.username || 'Host',
-            avatar_url: broadcasterProfile?.avatar_url || null,
-            isBroadcaster: true
-          });
-          
-          // Add other seated users
-          Object.values(seats).forEach((seat) => {
-            const userId = seat?.user_id || seat?.guest_id;
-            if (userId && userId !== hostId) {
-              seatUsers.push({
-                id: userId,
-                username: seat?.user_profile?.username || 'User',
-                avatar_url: seat?.user_profile?.avatar_url || null,
-                isBroadcaster: false
-              });
-            }
-          });
-          
-          if (seatUsers.length === 0) return null;
-          
-          return (
-              <div className="flex gap-1.5 px-3 py-2 overflow-x-auto border-b border-white/5 bg-transparent scrollbar-hide">
-              {seatUsers.map((seatUser) => (
-                <button
-                  key={seatUser.id}
-                  onClick={() => {
-                    if (isOfficer) {
-                      openModActionsForUser(seatUser.id, seatUser.username, seatUser.avatar_url || undefined);
-                    } else {
-                      setGiftRecipientId(seatUser.id);
-                      setIsGiftModalOpen(true);
-                    }
-                  }}
-                  className="flex flex-col items-center gap-0.5 min-w-[48px] group"
-                  title={isOfficer ? `Mod actions for ${seatUser.username}` : `Gift ${seatUser.username}`}
-                >
-                  <div className={`relative w-9 h-9 rounded-full overflow-hidden border-2 transition-all group-hover:scale-110 group-hover:shadow-lg ${
-                    seatUser.isBroadcaster 
-                      ? 'border-yellow-500 group-hover:shadow-yellow-500/30' 
-                      : 'border-white/20 group-hover:border-yellow-400/60 group-hover:shadow-yellow-400/20'
-                  }`}>
-                    {seatUser.avatar_url ? (
-                      <img src={seatUser.avatar_url} alt={seatUser.username} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-purple-600 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
-                        {seatUser.username.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    {seatUser.isBroadcaster && (
-                      <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[7px] font-bold px-1 rounded-sm">
-                        HOST
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[9px] text-zinc-400 truncate max-w-[48px] group-hover:text-yellow-400 transition-colors">
-                    {seatUser.username}
-                  </span>
-                </button>
-              ))}
-            </div>
-          );
-        })()}
         
          <div className="flex-1 min-h-0 relative overflow-y-auto">
             {/* Challenge Notifications Section - Show active challenges */}

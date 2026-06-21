@@ -64,7 +64,7 @@ export default function TrollWallCard({ post, onClick, className }: TrollWallCar
           <Link
             to={`/profile/${post.user_id}`}
             onClick={(e) => e.stopPropagation()}
-            className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10 hover:ring-purple-400/50 transition-all"
+            className="w-6 h-6 rounded-full flex-shrink-0 overflow-visible ring-1 ring-white/10 hover:ring-purple-400/50 transition-all"
           >
             {post.avatar_url ? (
               <ProfileFrame frame={useUserFrame(post.user_id)} avatarUrl={post.avatar_url} username={post.username || 'User'} size="xs" fillParent />

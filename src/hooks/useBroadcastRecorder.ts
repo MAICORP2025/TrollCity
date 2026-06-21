@@ -43,7 +43,6 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
   const playbackVideoRef = useRef<HTMLVideoElement | null>(null)
   const playbackStreamRef = useRef<MediaStream | null>(null)
   const ownsPlaybackStreamRef = useRef(false)
-  const audioContextRef = useRef<AudioContext | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const clipBufferRef = useRef<Blob[]>([])
   const mimeTypeRef = useRef<string | undefined>(undefined)
@@ -77,10 +76,6 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
       }
       playbackStreamRef.current = null
       ownsPlaybackStreamRef.current = false
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => {})
-        audioContextRef.current = null
-      }
     }
   }, [])
 
@@ -155,6 +150,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
         if (sourceUrl) {
           const video = document.createElement('video')
           video.playsInline = true
+          video.muted = true
           video.src = sourceUrl
           playbackVideoRef.current = video
 
@@ -167,7 +163,6 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
 
           await video.play()
 
-          // Capture video from the <video> element
           const captureStream =
             typeof video.captureStream === 'function'
               ? video.captureStream()
@@ -177,94 +172,24 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
             throw new Error('Browser does not support capturing video playback for recording')
           }
 
-          // captureStream() from a <video> only carries video tracks, not audio.
-          // To include audio, route the video element through a silent Web Audio
-          // destination and merge the audio tracks into the recording stream.
-          const audioTracks: MediaStreamTrack[] = []
-
-          try {
-            const audioCtx = new AudioContext()
-            audioContextRef.current = audioCtx
-            const audioDestination = audioCtx.createMediaStreamDestination()
-            const silentGain = audioCtx.createGain()
-            silentGain.gain.value = 0 // silent — prevents feedback loop
-            const source = audioCtx.createMediaElementSource(video)
-            source.connect(silentGain)
-            silentGain.connect(audioDestination)
-            audioTracks.push(...audioDestination.stream.getAudioTracks())
-          } catch (audioErr) {
-            console.warn('[useBroadcastRecorder] Web Audio routing failed, recording without audio:', audioErr)
-          }
-
-          // Mute the <video> element itself so the user doesn't hear it
-          // (the audio is already routed silently above)
-          video.muted = true
-
-          if (audioTracks.length > 0) {
-            displayStream = new MediaStream([
-              ...captureStream.getVideoTracks(),
-              ...audioTracks,
-            ])
-          } else {
-            displayStream = captureStream
-          }
-
-          playbackStreamRef.current = displayStream
+          displayStream = captureStream
+          playbackStreamRef.current = captureStream
           ownsPlaybackStreamRef.current = true
         } else if (resolvedStream?.getTracks().length) {
-          // Check if the resolved stream has video or is audio-only
-          const hasVideo = resolvedStream.getVideoTracks().length > 0
-          const hasAudio = resolvedStream.getAudioTracks().length > 0
-
-          if (hasVideo) {
-            // Full stream with video+audio — use directly (e.g. LiveKit tracks)
-            displayStream = resolvedStream
-            ownsSourceStreamRef.current = sourceStreamCleanup
-          } else if (hasAudio) {
-            // Audio-only stream (e.g. LiveKit mic + seat audio) — prompt screen capture for video
-            // and mix the source audio into the recording via Web Audio API.
-            console.log('[useBroadcastRecorder] Audio-only source — prompting getDisplayMedia for screen video')
-            try {
-              const screenStream = await navigator.mediaDevices.getDisplayMedia({
-                video: { displaySurface: 'browser', frameRate: 30 } as any,
-                audio: true,
-              })
-
-              const audioCtx = new AudioContext()
-              audioContextRef.current = audioCtx
-              const destination = audioCtx.createMediaStreamDestination()
-
-              resolvedStream.getAudioTracks().forEach(track => {
-                try {
-                  const source = audioCtx.createMediaStreamSource(new MediaStream([track]))
-                  source.connect(destination)
-                } catch (err) {
-                  console.warn('[useBroadcastRecorder] Failed to route audio track into mix:', err)
-                }
-              })
-
-              const mixedTracks = [
-                ...screenStream.getVideoTracks(),
-                ...destination.stream.getAudioTracks(),
-              ]
-              displayStream = new MediaStream(mixedTracks)
-              ownsSourceStreamRef.current = true
-
-              screenStream.getVideoTracks()[0]?.addEventListener('ended', () => {
-                console.log('[useBroadcastRecorder] Screen share ended during recording')
-                if (mediaRecorderRef.current?.state === 'recording') {
-                  mediaRecorderRef.current.stop.call(mediaRecorderRef.current)
-                }
-              })
-            } catch (screenErr) {
-              console.warn('[useBroadcastRecorder] getDisplayMedia failed, falling back to audio-only:', screenErr)
-              displayStream = resolvedStream
-              ownsSourceStreamRef.current = sourceStreamCleanup
-            }
-          } else {
-            displayStream = resolvedStream
-            ownsSourceStreamRef.current = sourceStreamCleanup
-          }
+          // Source stream provided (e.g. LiveKit local + remote tracks).
+          // Capture the full screen via getDisplayMedia for the Troll City UI,
+          // then merge in audio tracks from the source stream (mic + seat users).
+          console.log('[useBroadcastRecorder] Capturing screen via getDisplayMedia, merging source audio')
+          const screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: 'browser', frameRate: 30 } as any,
+            audio: false,
+          })
+          const combinedTracks: MediaStreamTrack[] = [
+            ...screenStream.getVideoTracks(),
+            ...resolvedStream.getAudioTracks(),
+          ]
+          displayStream = new MediaStream(combinedTracks)
+          ownsSourceStreamRef.current = true
         } else {
           // No source stream or URL — capture the entire screen the viewer sees
           // (full Troll City UI: podcast room, gaming viewer, broadcast viewer, etc.)

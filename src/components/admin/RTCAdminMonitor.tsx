@@ -1617,7 +1617,7 @@ const renderFloatingButton = () => {
                 <div className="py-4 text-center text-gray-500">No users found</div>
                ) : (
                  filteredUsers.map((user) => (
-                   <div key={user.id} className="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
+                   <div key={user.id} className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 hover:bg-white/5 cursor-pointer" onClick={() => navigate(`/profile/${user.id}`)}>
                      <div className="flex items-center justify-between gap-2">
                        <div className="min-w-0 flex-1">
                           {editingUserId === user.id ? (
@@ -1660,10 +1660,22 @@ const renderFloatingButton = () => {
                             </>
                           )}
                         </div>
-                        <div className="relative">
+                        <div className="relative flex items-center gap-1">
                           <button
                             type="button"
                             onClick={(e) => {
+                              e.stopPropagation();
+                              openAction(user, 'warn');
+                            }}
+                            className="rounded bg-slate-600 p-1.5 text-yellow-400 hover:bg-slate-500 hover:text-yellow-300"
+                            title="Mod Actions"
+                          >
+                            <Shield className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const rect = e.currentTarget.getBoundingClientRect();
                               const menuWidth = 144;
                               const menuHeight = 260;

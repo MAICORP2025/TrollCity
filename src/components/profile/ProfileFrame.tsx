@@ -1028,9 +1028,9 @@ export default function ProfileFrame({
     const borderW = dims.borderWidth;
     return (
       <div
-        className={`relative flex flex-col items-center gap-1 ${className}`}
+        className={`relative flex flex-col items-center justify-center gap-1 ${className}`}
         onClick={onClick}
-        style={{ width: '100%', height: '100%', overflow: 'visible' }}
+        style={{ width: '100%', height: '100%', overflow: 'visible', aspectRatio: '1 / 1' }}
       >
         {/* Glow behind the avatar */}
         {frame && glowStyle !== 'none' && (
@@ -1108,7 +1108,7 @@ export default function ProfileFrame({
 
   return (
     <div
-      className={`relative flex flex-col items-center gap-1 ${className}`}
+      className={`relative flex flex-col items-center justify-center gap-1 ${className}`}
       onClick={onClick}
       style={{ overflow: 'visible' }}
     >

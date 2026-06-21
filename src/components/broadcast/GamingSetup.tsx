@@ -522,6 +522,9 @@ export function GamingSetup({
                 <StatusMetric label="Engine" value="Agora" icon={<Radio className="h-3 w-3" />} />
                 <StatusMetric label="Status" value={isLive ? 'LIVE' : isPreviewing ? 'Preview' : 'Ready'} good={isLive || isPreviewing} icon={<Eye className="h-3 w-3" />} />
               </div>
+              {saveBroadcastButton && (
+                <div className="border-t border-white/10 px-4 py-3">{saveBroadcastButton}</div>
+              )}
             </Panel>
           </div>
         </section>

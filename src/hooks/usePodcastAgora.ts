@@ -14,6 +14,7 @@ interface PodcastAgoraConfig {
   enabled: boolean
   isHost?: boolean
   podcastId?: string
+  playing?: boolean
   onUserJoined?: (user: IAgoraRTCRemoteUser) => void
   onUserLeft?: (user: IAgoraRTCRemoteUser) => void
   onError?: (error: string) => void
@@ -33,6 +34,7 @@ export function usePodcastAgora({
   enabled,
   isHost = false,
   podcastId,
+  playing,
   onUserJoined,
   onUserLeft,
   onError,
@@ -60,7 +62,7 @@ export function usePodcastAgora({
 
   const isMutedRef = useRef(false)
   const isPlayingRef = useRef(false)
-  const volumeRef = useRef(1)
+  const volumeRef = useRef(1.875)
 
   const getAgoraAppId = () => import.meta.env.VITE_AGORA_APP_ID
 
@@ -87,6 +89,14 @@ export function usePodcastAgora({
       }
     })
   }, [])
+
+  useEffect(() => {
+    if (playing === undefined || isPlayingRef.current === playing) return
+
+    isPlayingRef.current = playing
+    setIsPlaying(playing)
+    applyAudioState()
+  }, [playing, applyAudioState])
 
   const initAgoraClient = useCallback(async () => {
     try {
@@ -237,7 +247,12 @@ export function usePodcastAgora({
 
       if (isHost) {
         try {
-          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack()
+          const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: 'speech_standard',
+            AEC: true,
+            ANS: true,
+            AGC: true,
+          })
           audioTrackRef.current = audioTrack
           await client.publish([audioTrack])
           debugAgora('[PodcastAgora] Published local microphone track as host')
@@ -365,8 +380,11 @@ export function usePodcastAgora({
     applyAudioState()
   }, [applyAudioState])
 
+  const VOLUME_BOOST = 1.25
+
   const handleSetVolume = useCallback((newVolume: number) => {
-    volumeRef.current = newVolume
+    const boostedVolume = Math.min(newVolume * VOLUME_BOOST, 2.0)
+    volumeRef.current = boostedVolume
     setVolume(newVolume)
 
     if (!isMutedRef.current && isPlayingRef.current) {
@@ -376,7 +394,7 @@ export function usePodcastAgora({
         if (allRemoteUsers) {
           allRemoteUsers.forEach((remoteUser) => {
             if (remoteUser.audioTrack) {
-              remoteUser.audioTrack.setVolume(newVolume)
+              remoteUser.audioTrack.setVolume(boostedVolume)
             }
           })
         }

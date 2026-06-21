@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { normalizeTextArray } from '@/lib/courtUtils'
+import { isBroadcastChatLockActive } from '@/lib/broadcastModeration'
 
 import StreamWatchModal from '@/components/broadcast/StreamWatchModal'
 import UserNameWithAge from '@/components/UserNameWithAge'
@@ -50,13 +51,16 @@ interface StreamRow {
   title: string
   room_name?: string
   livekit_room_name?: string
-  streamChannel?: string
+  streamChannel: string
   hls_url?: string
   agora_channel?: string
   broadcaster: {
     username: string
     avatar_url: string
     broadcast_chat_disabled?: boolean
+    broadcast_chat_disabled_until?: string | null
+    broadcast_chat_disable_strike_count?: number
+    broadcast_chat_disabled_stream_id?: string | null
     broadcast_mic_muted?: boolean
   }
   active_officers?: OfficerLog[]
@@ -83,6 +87,25 @@ interface StreamParticipant {
   avatar_url?: string
   is_active: boolean
   summonable?: boolean
+}
+
+function isCurrentStreamChatDisabled(stream: StreamRow) {
+  return isBroadcastChatLockActive({
+    disabled: stream.broadcaster?.broadcast_chat_disabled,
+    until: stream.broadcaster?.broadcast_chat_disabled_until,
+    streamId: stream.id,
+    lockedStreamId: stream.broadcaster?.broadcast_chat_disabled_stream_id,
+  })
+}
+
+function getChatLockRemainingSeconds(stream: StreamRow) {
+  const until = stream.broadcaster?.broadcast_chat_disabled_until
+  if (!until) return null
+
+  const remainingMs = Date.parse(until) - Date.now()
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return null
+
+  return Math.max(1, Math.ceil(remainingMs / 1000))
 }
 
 export default function GovernmentStreams() {
@@ -138,6 +161,9 @@ export default function GovernmentStreams() {
             username,
             avatar_url,
             broadcast_chat_disabled,
+            broadcast_chat_disabled_until,
+            broadcast_chat_disable_strike_count,
+            broadcast_chat_disabled_stream_id,
             broadcast_mic_muted
           )
         `)
@@ -345,18 +371,71 @@ export default function GovernmentStreams() {
         return
       }
 
-      const nextDisabled =
-        !stream.broadcaster?.broadcast_chat_disabled
+      const currentlyDisabled = isCurrentStreamChatDisabled(stream)
+
+      if (currentlyDisabled) {
+        const { data, error } = await supabase.rpc(
+          'set_broadcaster_moderation_lock',
+          {
+            p_broadcaster_id: broadcasterId,
+            p_chat_disabled: false,
+            p_chat_disabled_until: null,
+            p_chat_disable_strike_count: 0,
+            p_chat_disabled_stream_id: stream.id,
+            p_mic_muted: null,
+            p_reason: 'Government chat unlock',
+          }
+        )
+
+        if (error) throw error
+        if (data?.success === false) {
+          throw new Error(data.error)
+        }
+
+        setStreams((prev) =>
+          prev.map((s) => {
+            const sid = s.broadcaster_id || s.user_id
+
+            if (sid !== broadcasterId) return s
+
+            return {
+              ...s,
+              broadcaster: {
+                ...s.broadcaster,
+                broadcast_chat_disabled: false,
+                broadcast_chat_disabled_until: null,
+                broadcast_chat_disable_strike_count: 0,
+                broadcast_chat_disabled_stream_id: null,
+              },
+            }
+          })
+        )
+
+        toast.success('Chat enabled')
+        return
+      }
+
+      const storedStrikeCount =
+        stream.broadcaster?.broadcast_chat_disabled_stream_id === stream.id
+          ? stream.broadcaster?.broadcast_chat_disable_strike_count ?? 0
+          : 0
+      const nextStrikeCount = Math.min(storedStrikeCount + 1, 3)
+      const durationMs = nextStrikeCount === 1 ? 30_000 : 60_000
+      const chatDisabledUntil = new Date(Date.now() + durationMs).toISOString()
 
       const { data, error } = await supabase.rpc(
         'set_broadcaster_moderation_lock',
         {
           p_broadcaster_id: broadcasterId,
-          p_chat_disabled: nextDisabled,
+          p_chat_disabled: true,
+          p_chat_disabled_until: chatDisabledUntil,
+          p_chat_disable_strike_count: nextStrikeCount,
+          p_chat_disabled_stream_id: stream.id,
           p_mic_muted: null,
-          p_reason: nextDisabled
-            ? 'Government chat lock'
-            : 'Government chat unlock',
+          p_reason:
+            nextStrikeCount === 1
+              ? 'Government chat lock: 30 seconds'
+              : 'Government chat lock: 60 seconds',
         }
       )
 
@@ -375,16 +454,38 @@ export default function GovernmentStreams() {
             ...s,
             broadcaster: {
               ...s.broadcaster,
-              broadcast_chat_disabled: nextDisabled,
+              broadcast_chat_disabled: true,
+              broadcast_chat_disabled_until: chatDisabledUntil,
+              broadcast_chat_disable_strike_count: nextStrikeCount,
+              broadcast_chat_disabled_stream_id: stream.id,
             },
           }
         })
       )
 
-      toast.success(
-        nextDisabled
-          ? 'Chat disabled'
-          : 'Chat enabled'
+      if (nextStrikeCount >= 3) {
+        toast.warning('Third chat lock. Ending broadcast.')
+
+        const { error: endError } = await supabase
+          .from('streams')
+          .update({
+            is_live: false,
+            status: 'ended',
+            ended_at: new Date().toISOString(),
+          })
+          .eq('id', stream.id)
+
+        if (endError) throw endError
+
+        toast.success('Broadcast ended')
+        fetchStreams()
+        return
+      }
+
+      toast.warning(
+        nextStrikeCount === 1
+          ? 'Chat disabled for 30 seconds'
+          : 'Second chat lock. Chat disabled for 1 minute'
       )
     } catch (err) {
       console.error(err)
@@ -795,9 +896,13 @@ function StreamCard({
                 />
               )}
 
-              {stream.broadcaster?.broadcast_chat_disabled && (
+              {isCurrentStreamChatDisabled(stream) && (
                 <StatusBadge
-                  label="Chat Disabled"
+                  label={
+                    getChatLockRemainingSeconds(stream)
+                      ? `Chat Locked ${getChatLockRemainingSeconds(stream)}s`
+                      : 'Chat Locked'
+                  }
                   color="pink"
                 />
               )}
@@ -894,13 +999,13 @@ function StreamCard({
 
         <ActionButton
           color={
-            stream.broadcaster?.broadcast_chat_disabled
+            isCurrentStreamChatDisabled(stream)
               ? 'green'
               : 'pink'
           }
           icon={MessageSquareOff}
           label={
-            stream.broadcaster?.broadcast_chat_disabled
+            isCurrentStreamChatDisabled(stream)
               ? 'Enable Chat'
               : 'Disable Chat'
           }

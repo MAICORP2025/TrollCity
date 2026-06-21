@@ -21,6 +21,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/lib/store'
 import { useLiveKitRoom } from '@/hooks/useLiveKitRoom'
+import { useBroadcastRecorder } from '@/hooks/useBroadcastRecorder'
 import { getLiveKitRoomName } from '@/lib/liveUtils'
 
 const TABS = [
@@ -178,6 +179,25 @@ export default function NightWatchDashboard() {
   const [reports, setReports] = useState<PatrolReport[]>([])
   const [recordings, setRecordings] = useState<PatrolRecording[]>([])
   const [liveKitError, setLiveKitError] = useState<string | null>(null)
+
+  // Full-screen auto-recording for Night Watch shifts
+  const recorder = useBroadcastRecorder({
+    sourceStream: async () => {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 30 },
+          audio: true,
+          selfBrowserSurface: 'include',
+        })
+        return stream
+      } catch (err: any) {
+        console.warn('[NightWatch] Screen capture denied or failed:', err?.message)
+        return null
+      }
+    },
+    replaySource: 'night_watch',
+    replayTitlePrefix: 'Night Watch',
+  })
 
   const selectedStreamId = selectedStream?.id || ''
 
@@ -454,7 +474,19 @@ export default function NightWatchDashboard() {
 
     setShiftId((data as NightWatchShift)?.id ?? null)
     toast.success('Night Watch shift started')
-  }, [officerId, selectedStream?.id, shiftActive])
+
+    // Auto-start full-screen recording for the shift
+    if (selectedStream?.id) {
+      try {
+        await recorder.startRecording(selectedStream.id)
+        setRecordingActive(true)
+        toast.success('Auto screen recording started')
+      } catch (err: any) {
+        console.warn('[NightWatch] Auto-recording failed to start:', err?.message)
+        toast.error('Could not auto-start screen recording. You can start manually.')
+      }
+    }
+  }, [officerId, selectedStream?.id, shiftActive, recorder])
 
   const handleEndShift = useCallback(async () => {
     if (!shiftActive && !shiftId) {
@@ -499,11 +531,20 @@ export default function NightWatchDashboard() {
       }
     }
 
+    // Auto-stop the screen recording
+    if (recorder.isRecording) {
+      try {
+        await recorder.stopRecording()
+      } catch (err: any) {
+        console.warn('[NightWatch] Auto-recording stop error:', err?.message)
+      }
+    }
+
     setShiftId(null)
     setRecordingActive(false)
     setRecordingSessionId(null)
     toast.success('Night Watch shift ended')
-  }, [officerId, recordingActive, recordingSessionId, shiftActive, shiftId])
+  }, [officerId, recordingActive, recordingSessionId, shiftActive, shiftId, recorder])
 
   const handleToggleRecording = useCallback(async () => {
     if (!selectedStream) {

@@ -64,6 +64,7 @@ import { TopSubscribersBar } from '../../components/broadcast/TopSubscribersBar'
 import { useSubscriberUsernames } from '../../hooks/useCreatorSubscription'
 import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
 import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
+import { getBroadcastChatLockRemainingMs, isBroadcastChatLockActive } from '../../lib/broadcastModeration'
 import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
 import { useBroadcastTextPopup } from '../../hooks/useBroadcastTextPopup'
 import { useBroadcastViewerCap } from '../../hooks/useBroadcastViewerCap'
@@ -648,9 +649,23 @@ function ViewerPage() {
    }
    const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
    const [chatInput, setChatInput] = useState('')
+   const [hostChatDisabledByOfficerState, setHostChatDisabledByOfficerState] = useState(false)
+   const [hostChatDisabledUntil, setHostChatDisabledUntil] = useState<string | null>(null)
+   const [hostChatDisabledStreamId, setHostChatDisabledStreamId] = useState<string | null>(null)
+   const [hostChatDisableRemainingMs, setHostChatDisableRemainingMs] = useState(0)
     const floatingChatContainerRef = useRef<HTMLDivElement>(null)
     const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(new Set())
     const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
+
+    const hostChatDisabledByOfficer = useMemo(
+      () => isBroadcastChatLockActive({
+        disabled: hostChatDisabledByOfficerState,
+        until: hostChatDisabledUntil,
+        streamId,
+        lockedStreamId: hostChatDisabledStreamId,
+      }),
+      [hostChatDisabledByOfficerState, hostChatDisabledUntil, hostChatDisabledStreamId, streamId],
+    )
 
     // Use the same recorder as BroadcastPage — captures HLS playback if available, otherwise entire screen
     const recorder = useBroadcastRecorder({
@@ -683,6 +698,50 @@ function ViewerPage() {
         setBlockedUsernames(names)
       }).catch(() => {})
     }, [user?.id])
+
+    useEffect(() => {
+      const broadcasterId = stream?.user_id
+      if (!streamId || !broadcasterId) {
+        setHostChatDisabledByOfficerState(false)
+        setHostChatDisabledUntil(null)
+        setHostChatDisabledStreamId(null)
+        return
+      }
+
+      let mounted = true
+      const fetchHostChatLock = async () => {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('broadcast_chat_disabled, broadcast_chat_disabled_until, broadcast_chat_disabled_stream_id')
+          .eq('id', broadcasterId)
+          .maybeSingle()
+
+        if (!mounted) return
+
+        setHostChatDisabledByOfficerState(!!data?.broadcast_chat_disabled)
+        setHostChatDisabledUntil(data?.broadcast_chat_disabled_until ?? null)
+        setHostChatDisabledStreamId(data?.broadcast_chat_disabled_stream_id ?? null)
+      }
+
+      void fetchHostChatLock()
+      const interval = window.setInterval(fetchHostChatLock, 30_000)
+
+      return () => {
+        mounted = false
+        window.clearInterval(interval)
+      }
+    }, [streamId, stream?.user_id])
+
+    useEffect(() => {
+      const updateRemaining = () => {
+        setHostChatDisableRemainingMs(getBroadcastChatLockRemainingMs(hostChatDisabledUntil))
+      }
+
+      updateRemaining()
+      const interval = window.setInterval(updateRemaining, 1000)
+
+      return () => window.clearInterval(interval)
+    }, [hostChatDisabledUntil])
 
   // Desktop floating chat: always scroll to top so newest messages are visible
   useEffect(() => {
@@ -1119,6 +1178,41 @@ function ViewerPage() {
     await joinSeat(availableSeatIndex, availableSeatPrice)
   }, [availableSeatIndex, availableSeatPrice, joinSeat])
 
+  // Add a new seat to the stage (for staff/CEO/admin/roles)
+  const handleAddSeat = useCallback(async () => {
+    if (!streamId || !user?.id) {
+      toast.error('Not connected to a live stream')
+      return
+    }
+    try {
+      const currentBoxCount = Number((stream as any)?.box_count ?? effectiveBoxCount ?? 1)
+      const currentSeatPrices = Array.isArray((stream as any)?.seat_prices)
+        ? (stream as any).seat_prices
+        : []
+      const desiredBoxCount = Math.min(6, currentBoxCount + 1)
+      const newSeatPrices = [...currentSeatPrices]
+      while (newSeatPrices.length < desiredBoxCount) {
+        newSeatPrices.push(0)
+      }
+      const { error: updateError } = await supabase
+        .from('streams')
+        .update({
+          box_count: desiredBoxCount,
+          seat_prices: newSeatPrices,
+        })
+        .eq('id', streamId)
+      if (updateError) throw updateError
+      setStream((current) => current ? {
+        ...current,
+        box_count: desiredBoxCount,
+        seat_prices: newSeatPrices,
+      } : current)
+      toast.success('Seat added to stage')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to add seat')
+    }
+  }, [streamId, user?.id, stream, effectiveBoxCount])
+
   const handleJoinSeatByIndex = useCallback(async (seatIndex: number) => {
     if (typeof seatIndex !== 'number') return
     const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
@@ -1216,7 +1310,6 @@ const isActive = isStreamActive(stream)
       unpublishLocalTracks,
       setMicEnabled,
       setCameraEnabled,
-      getMicEnabled,
       room: liveKitRoom,
       lastJoinDebug,
     } = useLiveKitRoom({
@@ -1422,15 +1515,19 @@ const isActive = isStreamActive(stream)
   // Mic mute callbacks for walkie-talkie integration (for users on stage)
   const handleToggleMic = useCallback(async () => {
     if (!isUserOnStage) return
-    await setMicEnabled(false)
-    console.log('[ViewerPage] seat mic muted')
-  }, [isUserOnStage, setMicEnabled])
+    const nextMicOn = !seatMicOn
+    const ok = await setMicEnabled(nextMicOn)
+    if (ok) setSeatMicOn(nextMicOn)
+    console.log('[ViewerPage] seat mic toggled', nextMicOn)
+  }, [isUserOnStage, seatMicOn, setMicEnabled])
 
   const handleToggleCamera = useCallback(async () => {
     if (!isUserOnStage) return
-    await setCameraEnabled(false)
-    console.log('[ViewerPage] seat camera disabled')
-  }, [isUserOnStage, setCameraEnabled])
+    const nextCamOn = !seatCamOn
+    const ok = await setCameraEnabled(nextCamOn)
+    if (ok) setSeatCamOn(nextCamOn)
+    console.log('[ViewerPage] seat camera toggled', nextCamOn)
+  }, [isUserOnStage, seatCamOn, setCameraEnabled])
 
   
   const hostParticipant = useMemo(() => {
@@ -1459,12 +1556,48 @@ const isActive = isStreamActive(stream)
     return participantWithCamera || null
   }, [remoteParticipants, hostId])
 
+  // Check if current user is CEO
+  const isCEO = Boolean(
+    profile?.role === 'ceo' ||
+      (profile as any)?.is_ceo ||
+      profile?.role === 'admin' ||
+      profile?.is_admin
+  )
+
   const isOfficer = Boolean(
     profile?.role === 'admin' ||
       (profile as any)?.is_admin ||
       (profile?.role as string) === 'officer' ||
       (profile as any)?.is_troll_officer ||
-      (profile as any)?.is_lead_officer,
+      (profile as any)?.is_lead_officer ||
+      profile?.role === 'ceo' ||
+      (profile as any)?.is_ceo,
+  )
+
+  // Staff/CEO/admin/roles can add seats to any broadcast
+  const canManageSeats = Boolean(
+    isOfficer ||
+    isStaffProfile(profile) ||
+    isCEO ||
+    profile?.role === 'ceo' ||
+    profile?.role === 'admin' ||
+    profile?.role === 'secretary' ||
+    profile?.role === 'troll_officer' ||
+    profile?.role === 'lead_troll_officer' ||
+    profile?.role === 'moderator' ||
+    profile?.role === 'owner' ||
+    profile?.role === 'president' ||
+    profile?.role === 'vice_president' ||
+    (profile as any)?.is_admin ||
+    (profile as any)?.is_troll_officer ||
+    (profile as any)?.is_lead_officer ||
+    (profile as any)?.is_ceo ||
+    profile?.troll_role === 'ceo' ||
+    profile?.troll_role === 'admin' ||
+    profile?.troll_role === 'lead_officer' ||
+    profile?.troll_role === 'secretary' ||
+    profile?.troll_role === 'pastor' ||
+    profile?.troll_role === 'troll_officer'
   )
 
   // Debug panel: show last join debug when in dev and user toggles overlay
@@ -1488,14 +1621,6 @@ const isActive = isStreamActive(stream)
       profile?.troll_role === 'moderator' ||
       profile?.role === 'admin' ||
       profile?.troll_role === 'admin'
-  )
-
-  // Check if current user is CEO
-  const isCEO = Boolean(
-    profile?.role === 'ceo' ||
-    (profile as any)?.is_ceo ||
-    profile?.role === 'admin' ||
-    profile?.is_admin
   )
 
   // Ghost Mode hook for CEOs
@@ -2676,8 +2801,19 @@ useStreamRealtime(
                       Seat coins deduct automatically when a viewer joins.
                     </p>
                   </div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-black text-slate-200">
-                    {seatCards.filter((seat) => !seat.isOccupied).length} open
+                  <div className="flex items-center gap-2">
+                    {canManageSeats && (
+                      <button
+                        type="button"
+                        onClick={handleAddSeat}
+                        className="rounded-lg border border-cyan-300/30 bg-cyan-500/15 px-3 py-1 text-xs font-black text-cyan-100 transition hover:bg-cyan-500/25"
+                      >
+                        + Add Seat
+                      </button>
+                    )}
+                    <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-black text-slate-200">
+                      {seatCards.filter((seat) => !seat.isOccupied).length} open
+                    </div>
                   </div>
                 </div>
 
@@ -3014,6 +3150,15 @@ useStreamRealtime(
                  const text = chatInput.trim()
                  if (!text) return
 
+                 if (hostChatDisabledByOfficer) {
+                   toast.error(
+                     hostChatDisableRemainingMs
+                       ? `Chat is disabled by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
+                       : 'Chat is disabled by officer control'
+                   )
+                   return
+                 }
+
                  if (userChatDisabled) {
                    toast.error(
                      chatDisabledRemainingMinutes
@@ -3071,11 +3216,18 @@ useStreamRealtime(
                     >
                       <input
                         type="text"
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Say something�"
-                        className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
-                        maxLength={280} />
+                         value={chatInput}
+                         onChange={(e) => setChatInput(e.target.value)}
+                         placeholder={
+                           hostChatDisabledByOfficer
+                             ? 'Chat disabled by officer control'
+                             : userChatDisabled
+                               ? 'Chat disabled'
+                               : 'Say something�'
+                         }
+                         disabled={hostChatDisabledByOfficer || userChatDisabled}
+                         readOnly={hostChatDisabledByOfficer || userChatDisabled}
+                         className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50" maxLength={280} />
                     </form>
                   </div>
                 ) : chatTab === 'league' ? (
@@ -3202,6 +3354,15 @@ useStreamRealtime(
                 const text = chatInput.trim()
                 if (!text) return
 
+                if (hostChatDisabledByOfficer) {
+                  toast.error(
+                    hostChatDisableRemainingMs
+                      ? `Chat is disabled by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
+                      : 'Chat is disabled by officer control'
+                  )
+                  return
+                }
+
                 if (!user && !reserveAnonymousChatSlot()) {
                   toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
                   navigate('/auth?mode=login')
@@ -3252,19 +3413,26 @@ useStreamRealtime(
                  type="text"
                  value={chatInput}
                  onChange={(e) => setChatInput(e.target.value)}
-                 placeholder={userChatDisabled ? 'Chat disabled' : 'Say something�'}
-                 disabled={userChatDisabled}
+                 placeholder={
+                   hostChatDisabledByOfficer
+                     ? 'Chat disabled by officer control'
+                     : userChatDisabled
+                       ? 'Chat disabled'
+                       : 'Say something�'
+                 }
+                 disabled={hostChatDisabledByOfficer || userChatDisabled}
+                 readOnly={hostChatDisabledByOfficer || userChatDisabled}
                  className={cn(
-                   "h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20",
-                   userChatDisabled && "opacity-50 cursor-not-allowed"
+                   "h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50",
+                   (hostChatDisabledByOfficer || userChatDisabled) && "opacity-50 cursor-not-allowed"
                  )}
                  maxLength={280} />
                <button
                  type="submit"
-                 disabled={!chatInput.trim() || userChatDisabled}
+                 disabled={!chatInput.trim() || hostChatDisabledByOfficer || userChatDisabled}
                  className={cn(
-                   'inline-flex h-11 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-black',
-                   chatInput.trim() && !userChatDisabled
+                   'inline-flex h-11 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50',
+                   chatInput.trim() && !hostChatDisabledByOfficer && !userChatDisabled
                      ? 'border border-cyan-400/30 bg-cyan-500/20 text-cyan-300'
                      : 'border border-white/10 bg-white/5 text-white/30'
                  )}
@@ -3373,6 +3541,16 @@ useStreamRealtime(
                     {seatCamOn ? 'Cam On' : 'Cam Off'}
                   </button>
                 </>
+              )}
+              {canManageSeats && (
+                <button
+                  type="button"
+                  onClick={handleAddSeat}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-500/15 px-4 text-sm font-black text-cyan-100 transition hover:bg-cyan-500/25"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Seat
+                </button>
               )}
               <button
                 onClick={isUserOnStage ? handleLeaveSeat : handleLeave}

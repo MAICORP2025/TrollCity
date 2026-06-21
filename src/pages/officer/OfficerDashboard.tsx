@@ -47,6 +47,14 @@ export default function OfficerDashboard() {
   const [shiftActionLoading, setShiftActionLoading] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [togglingGhost, setTogglingGhost] = useState(false)
+  const [localGhostMode, setLocalGhostMode] = useState(profile?.is_ghost_mode ?? false)
+
+  // Sync local ghost mode state when profile changes
+  useEffect(() => {
+    if (profile?.is_ghost_mode !== undefined) {
+      setLocalGhostMode(profile.is_ghost_mode)
+    }
+  }, [profile?.is_ghost_mode])
 
   const loadData = useCallback(async () => {
     if (!user) return
@@ -140,11 +148,12 @@ export default function OfficerDashboard() {
   )
 
   const toggleGhostMode = async () => {
-    if (!user || !profile) return
+    if (!user) return
 
     setTogglingGhost(true)
     try {
-      const newEnabled = !profile.is_ghost_mode
+      // Toggle based on local state (always up-to-date)
+      const newEnabled = !localGhostMode
       const { error } = await supabase
         .from('user_profiles')
         .update({ is_ghost_mode: newEnabled })
@@ -152,6 +161,9 @@ export default function OfficerDashboard() {
 
       if (error) throw error
 
+      // Update local state immediately for instant UI feedback
+      setLocalGhostMode(newEnabled)
+      // Also refresh the store profile in background
       if (refreshProfile) await refreshProfile()
       toast.success(newEnabled ? 'Ghost mode enabled' : 'Ghost mode disabled')
     } catch (error: any) {
@@ -199,16 +211,16 @@ export default function OfficerDashboard() {
         <div className={`${trollCityTheme.backgrounds.card} ${trollCityTheme.borders.glass} rounded-lg p-6 flex flex-col justify-between`}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Ghost className={`w-6 h-6 ${profile?.is_ghost_mode ? 'text-purple-400 animate-pulse' : trollCityTheme.text.muted}`} />
+              <Ghost className={`w-6 h-6 ${localGhostMode ? 'text-purple-400 animate-pulse' : trollCityTheme.text.muted}`} />
               <h2 className="text-xl font-bold">Ghost Mode</h2>
-              {profile?.is_ghost_mode && (
+              {localGhostMode && (
                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-400/30">
                   ACTIVE
                 </span>
               )}
             </div>
             <p className={`text-sm ${trollCityTheme.text.muted}`}>
-              {profile?.is_ghost_mode 
+              {localGhostMode 
                 ? 'You are invisible to regular users. They cannot see your role in the audience bar or viewer list.' 
                 : 'Become invisible to users while keeping all moderation tools active.'
               }
@@ -218,14 +230,14 @@ export default function OfficerDashboard() {
             onClick={toggleGhostMode}
             disabled={togglingGhost}
             className={`mt-4 w-full py-3 rounded-xl font-bold transition-all ${
-              profile?.is_ghost_mode 
+              localGhostMode 
                 ? `${trollCityTheme.interactive.active} hover:bg-slate-700/70 ${trollCityTheme.borders.glass}` 
                 : `${trollCityTheme.gradients.button} text-white`
             }`}
           >
             {togglingGhost 
               ? 'Toggling...' 
-              : profile?.is_ghost_mode 
+              : localGhostMode 
                 ? '👻 GHOST ON - Click to Disable' 
                 : '🛡 Activate Ghost Mode'
             }
@@ -275,8 +287,8 @@ export default function OfficerDashboard() {
             <div className={`text-sm ${trollCityTheme.text.muted}`}>Status</div>
           </div>
           <div className="text-2xl font-bold">
-            {!profile?.is_officer_active 
-              ? 'Suspended' 
+            {profile?.is_troll_officer && !profile?.is_officer_active
+              ? 'Pending' 
               : (workSessions[0]?.clock_out === null 
                   ? (workSessions[0]?.status === 'break' ? 'On Break' : 'On Duty') 
                   : 'Off Duty')

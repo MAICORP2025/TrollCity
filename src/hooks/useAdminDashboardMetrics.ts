@@ -69,9 +69,13 @@ export function useAdminDashboardMetrics() {
 
   async function loadCoinPurchaseMetrics(): Promise<Partial<DashboardMetrics>> {
     try {
-      const { data, error } = await supabase
+      // Track processed paypal_order_ids to avoid double counting
+      const processedOrderIds = new Set<string>()
+
+      // Primary source: public.transactions
+      const { data: txData } = await supabase
         .from('transactions')
-        .select('amount, coins_used, description, metadata')
+        .select('amount, coins_used, description, metadata, paypal_order_id')
         .or([
           'transaction_type.eq.purchase',
           'type.eq.purchase',
@@ -82,12 +86,17 @@ export function useAdminDashboardMetrics() {
           'metadata->>package_id.not.is.null',
         ].join(','))
 
-      if (error) throw error
+      // Secondary source: paypal_transactions (authoritative PayPal data)
+      const { data: paypalTxData } = await supabase
+        .from('paypal_transactions')
+        .select('amount, coins, status, paypal_order_id')
+        .in('status', ['completed', 'credited'])
 
       let totalRevenue = 0
       let totalCoins = 0
 
-      for (const tx of data || []) {
+      // Process public.transactions
+      for (const tx of txData || []) {
         const amount = Number(tx.amount || 0)
         totalRevenue += amount
 
@@ -112,10 +121,36 @@ export function useAdminDashboardMetrics() {
             }
           }
         }
+
+        // Track PayPal orders to avoid duplicate counting
+        if (tx.paypal_order_id) {
+          processedOrderIds.add(tx.paypal_order_id)
+        }
+      }
+
+      // Process paypal_transactions (only if not already in transactions)
+      for (const p of paypalTxData || []) {
+        if (p.paypal_order_id && processedOrderIds.has(p.paypal_order_id)) {
+          continue // Skip duplicates
+        }
+
+        const amount = Number(p.amount || 0)
+        const coins = Number(p.coins || 0)
+
+        totalRevenue += amount
+        if (coins > 0) {
+          totalCoins += coins
+        } else {
+          totalCoins += Math.round(amount * 100)
+        }
+
+        if (p.paypal_order_id) {
+          processedOrderIds.add(p.paypal_order_id)
+        }
       }
 
       if (import.meta.env.DEV) {
-        console.log('[AdminDashboardMetrics] Coin purchase metrics:', { totalRevenue, totalCoins })
+        console.log('[AdminDashboardMetrics] Coin purchase metrics:', { totalRevenue, totalCoins, txCount: txData?.length, ppCount: paypalTxData?.length })
       }
 
       return {

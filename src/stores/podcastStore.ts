@@ -12,6 +12,9 @@ interface PodcastState {
     title: string
     agora_channel_name: string
     host_username?: string
+    recordingUrl?: string | null
+    videoUrl?: string | null
+    episodeId?: string | null
     status: 'live' | 'active' | 'ended' | 'scheduled' | 'archived'
   } | null
   showMiniPlayer: boolean
@@ -37,7 +40,7 @@ export const usePodcastStore = create<PodcastState>()(
       showMiniPlayer: false,
       isPlaying: false,
       isMuted: false,
-      volume: 1,
+      volume: 0.5,
       elapsedTime: 0,
 
       setActivePodcast: (podcast) => set({ activePodcast: podcast }),

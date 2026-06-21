@@ -17,6 +17,7 @@ export default function ReportDetailsModal({
   onActionTaken
 }: ReportDetailsModalProps) {
   const navigate = useNavigate()
+  const reportId = report.id || report.report_id
   const [actionType, setActionType] = useState<'warn' | 'suspend_stream' | 'ban_user' | 'reject' | ''>('')
   const [actionReason, setActionReason] = useState('')
   const [actionDetails, setActionDetails] = useState('')
@@ -31,13 +32,18 @@ export default function ReportDetailsModal({
       return
     }
 
+    if (!reportId) {
+      toast.error('Report ID is missing')
+      return
+    }
+
     if (actionType === 'reject') {
       // Handle reject separately
       setLoading(true)
       try {
         const response = await api.post('/moderation', {
           action: 'reject_report',
-          report_id: report.id
+          report_id: reportId
         })
 
         if (response.success) {
@@ -66,7 +72,7 @@ export default function ReportDetailsModal({
       }
 
       const payload: TakeActionPayload = {
-        report_id: report.id,
+        report_id: reportId,
         action_type: actionType as 'warn' | 'suspend_stream' | 'ban_user',
         target_user_id: report.target_user_id || null,
         stream_id: report.stream_id || null,

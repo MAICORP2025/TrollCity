@@ -72,7 +72,6 @@ import {
 } from '@/lib/anonymousIdentity'
 import useSEO from '@/hooks/useSEO'
 import ProfileFrame from '@/components/profile/ProfileFrame'
-import { useUserFrame } from '@/hooks/useUserFrame'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -897,35 +896,29 @@ export default function HytroGamingViewer() {
           )}
 
           {/* Top Supporters */}
-          {topSupporters.length > 0 && (
-            <div className="border-b border-white/5 p-3">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Top Supporters</p>
-              <div className="space-y-2">
-                {topSupporters.map((supporter) => (
-                  <div key={supporter.rank} className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-500">{supporter.rank}.</span>
-                    {supporter.avatar_url ? (
-                      <div style={{ overflow: 'visible' }}>
-                        <TopSupporterAvatar
-                          userId={supporter.user_id}
-                          avatarUrl={supporter.avatar_url}
-                          name={supporter.name}
-                        />
-                      </div>
-                    ) : (
-                      <div className="grid h-6 w-6 place-items-center rounded-lg bg-purple-500/20 text-[8px] font-black">
-                        {supporter.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-300">{supporter.name}</span>
-                    <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-300">
-                      <Coins className="h-2.5 w-2.5" />{formatCompactNumber(supporter.coins_sent)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+{topSupporters.length > 0 && (
+             <div className="border-b border-white/5 p-3">
+               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">Top Supporters</p>
+               <div className="space-y-2">
+                 {topSupporters.map((supporter) => (
+                   <div key={supporter.rank} className="flex items-center gap-2">
+                     <span className="text-xs font-bold text-slate-500">{supporter.rank}.</span>
+                     {supporter.avatar_url ? (
+                       <div style={{ overflow: 'visible' }}><ProfileFrame frame={null} avatarUrl={supporter.avatar_url} username={supporter.name} size="xs" /></div>
+                     ) : (
+                       <div className="grid h-6 w-6 place-items-center rounded-lg bg-purple-500/20 text-[8px] font-black">
+                         {supporter.name.slice(0, 2).toUpperCase()}
+                       </div>
+                     )}
+                     <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-300">{supporter.name}</span>
+                     <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-300">
+                       <Coins className="h-2.5 w-2.5" />{formatCompactNumber(supporter.coins_sent)}
+                     </span>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           )}
 
           {/* Stream Stats */}
           <div className="border-b border-white/5 p-3">
@@ -1430,26 +1423,7 @@ function TopStreamersList({ streamId }: { streamId: string }) {
   )
 }
 
-function TopSupporterAvatar({
-  userId,
-  avatarUrl,
-  name,
-}: {
-  userId: string
-  avatarUrl: string | null
-  name: string
-}) {
-  const frame = useUserFrame(userId)
 
-  return (
-    <ProfileFrame
-      frame={frame}
-      avatarUrl={avatarUrl}
-      username={name}
-      size="xs"
-    />
-  )
-}
 
 // ─── Action Button ───────────────────────────────────────────────────────────
 

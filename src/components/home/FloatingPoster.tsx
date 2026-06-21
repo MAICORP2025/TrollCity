@@ -382,11 +382,11 @@ export default function FloatingPoster({ className }: FloatingPosterProps) {
                 </div>
 
                 <button
-                  onClick={() => navigate('/wallet')}
+                  onClick={() => navigate('/mai-pay')}
                   className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gradient-to-r from-green-600/80 to-emerald-600/80 hover:from-green-500 hover:to-emerald-500 text-white text-xs font-semibold transition-all"
                 >
                   <DollarSign className="w-3.5 h-3.5" />
-                  Go to Wallet / Request Cashout
+                  Go to Mai Pay
                   <ChevronRight className="w-3 h-3" />
                 </button>
               </>

@@ -204,6 +204,7 @@ function BroadcastControls({
     profile?.role === 'secretary' ||
     profile?.role === 'lead_troll_officer' ||
     profile?.role === 'troll_officer' ||
+    profile?.role === 'ceo' ||
     profile?.is_admin === true ||
     profile?.is_troll_officer === true ||
     profile?.is_lead_officer === true ||
@@ -211,6 +212,7 @@ function BroadcastControls({
     profile?.troll_role === 'lead_officer' ||
     profile?.troll_role === 'secretary' ||
     profile?.troll_role === 'pastor' ||
+    profile?.troll_role === 'ceo' ||
     false;
   const canEditElectionBoxes = !isElectionCategory || isOfficerOrAdmin;
 
@@ -789,8 +791,8 @@ function BroadcastControls({
           />
         )}
 
-        {/* Open Stage Pass (host) */}
-        {isHost && onOpenStagePass && (
+        {/* Open Stage Pass (host or staff/CEO/admin) */}
+        {(isHost || isOfficerOrAdmin) && onOpenStagePass && (
           <OrbBtn
             active={false}
             onClick={onOpenStagePass}

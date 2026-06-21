@@ -196,6 +196,9 @@ export interface UserProfile {
   mic_muted_until?: string | null
   muted_until?: string | null
   broadcast_chat_disabled?: boolean
+  broadcast_chat_disabled_until?: string | null
+  broadcast_chat_disable_strike_count?: number
+  broadcast_chat_disabled_stream_id?: string | null
   broadcast_mic_muted?: boolean
   live_restricted_until?: string | null
   ban_expires_at?: string | null
@@ -231,6 +234,10 @@ export interface UserProfile {
   // Officer Work Credit (OWC) fields
   owc_balance?: number // Current OWC balance
   total_owc_earned?: number // Lifetime OWC earned
+
+  // Ghost Mode fields
+  is_ghost_mode?: boolean
+  ghost_mode_until?: string | null
 
   // Admin field
   is_admin?: boolean

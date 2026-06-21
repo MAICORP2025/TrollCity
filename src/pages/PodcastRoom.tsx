@@ -52,6 +52,8 @@ interface Podcast {
   created_at?: string
   updated_at?: string
   host_username?: string | null
+  recording_url?: string | null
+  video_url?: string | null
 }
 
 const LIVE_STATUSES: PodcastStatus[] = ['live', 'active']
@@ -207,6 +209,7 @@ export default function PodcastRoom() {
       started_at: podcast.started_at || new Date().toISOString(),
       listener_count: podcast.listener_count || 0,
       host_username: podcast.host_username || profile?.username || undefined,
+      recordingUrl: podcast.recording_url || null,
     })
 
     setPlaying(isLive)

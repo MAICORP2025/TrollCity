@@ -43,6 +43,7 @@ type Officer = {
   email?: string
   is_lead_officer: boolean
   is_troll_officer: boolean
+  is_officer_active: boolean
   created_at?: string
 }
 
@@ -211,9 +212,8 @@ export default function LeadOfficerDashboard() {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, username, email, is_lead_officer, is_troll_officer, created_at')
+        .select('id, username, email, is_lead_officer, is_troll_officer, is_officer_active, created_at')
         .or('is_troll_officer.eq.true,is_lead_officer.eq.true')
-        .eq('is_officer_active', true)
         .neq('role', 'admin')
 
       if (error) throw error
@@ -226,6 +226,7 @@ export default function LeadOfficerDashboard() {
           created_at: officer.created_at,
           is_lead_officer: officer.is_lead_officer || false,
           is_troll_officer: officer.is_troll_officer || false,
+          is_officer_active: officer.is_officer_active || false,
         }))
       )
     } catch (error) {
@@ -762,11 +763,14 @@ export default function LeadOfficerDashboard() {
                 <EmptyText>No active officers yet.</EmptyText>
               ) : (
                 <DataTable
-                  headers={['User', 'Role', 'Actions']}
+                  headers={['User', 'Role', 'Status', 'Actions']}
                   rows={officers.map((officer) => [
                     <UserNameWithAge key="user" user={{ username: officer.username, id: officer.id, created_at: officer.created_at }} />,
                     <span key="role" className={`rounded-full border px-3 py-1 text-xs font-black ${officer.is_lead_officer ? 'border-fuchsia-400/20 bg-fuchsia-500/10 text-fuchsia-200' : 'border-cyan-400/20 bg-cyan-500/10 text-cyan-200'}`}>
                       {officer.is_lead_officer ? 'Lead Officer' : 'Officer'}
+                    </span>,
+                    <span key="status" className={`rounded-full border px-3 py-1 text-xs font-black ${officer.is_officer_active ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200' : 'border-amber-400/20 bg-amber-500/10 text-amber-200'}`}>
+                      {officer.is_officer_active ? 'Active' : 'Pending'}
                     </span>,
                     <div key="actions" className="flex flex-wrap justify-end gap-2">
                       <ActionButton label="Fire" color="red" disabled={loading} onClick={() => act('fire_officer', officer.id)} />

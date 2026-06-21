@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
+import { UserRole } from '@/lib/supabase';
 
 export interface NavBadges {
   home: number;
@@ -195,7 +196,7 @@ const TAB_NOTIFICATION_TYPES: Record<keyof NavBadges, string[]> = {
 };
 
 export function useNavBadges(): NavBadges & { dismissed: Set<keyof NavBadges>; dismiss: (tab: keyof NavBadges) => void } {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const [badgeCounts, setBadgeCounts] = useState<NavBadges>({
     home: 0,
     chats: 0,
@@ -214,6 +215,8 @@ export function useNavBadges(): NavBadges & { dismissed: Set<keyof NavBadges>; d
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const notifChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isMountedRef = useRef(true);
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
 
   const fetchNotificationCounts = useCallback(async (userId: string) => {
     // Fetch all unread notifications for this user in one query
@@ -229,7 +232,7 @@ export function useNavBadges(): NavBadges & { dismissed: Set<keyof NavBadges>; d
           ...prev,
           home: 0,
           alerts: 0,
-          coins: 0,
+          coins: prev.coins,
           auctions: 0,
           court: 0,
           neighborhood: 0,
@@ -355,6 +358,32 @@ export function useNavBadges(): NavBadges & { dismissed: Set<keyof NavBadges>; d
         () => fetchNotificationCounts(userId),
       )
       .subscribe();
+
+    // Admin-only realtime subscription for coin purchases (flashes Coins tab)
+    const setupCoinPurchaseSubscription = async () => {
+      const profile = profileRef.current;
+      const role = String(profile?.role || '');
+      const isAdmin = role === String(UserRole.ADMIN) || role === 'superadmin' || role === 'ceo' || (profile as any)?.is_admin;
+
+      if (isAdmin) {
+        supabase
+          .channel('admin-coin-purchases')
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'paypal_transactions',
+            },
+            () => {
+              setBadgeCounts((prev) => ({ ...prev, coins: (prev.coins || 0) + 1 }));
+            },
+          )
+          .subscribe();
+      }
+    };
+
+    setupCoinPurchaseSubscription();
 
     // Realtime subscription for chat messages
     const setupChatSubscription = async () => {

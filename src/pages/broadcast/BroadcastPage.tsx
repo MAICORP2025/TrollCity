@@ -15,6 +15,7 @@ import { useStreamStore } from '../../lib/streamStore'
 import { useLiveTimer } from '../../hooks/useLiveTimer'
 import { cn } from '../../lib/utils'
 import { getLiveKitRoomName } from '../../lib/liveUtils'
+import { getBroadcastChatLockRemainingMs, isBroadcastChatLockActive } from '../../lib/broadcastModeration'
 import {
   getAnonymousDisplayName,
   isAnonymousDisplayName,
@@ -441,6 +442,36 @@ function matchesNormalizedIdentity(identity: string, candidate?: string | null):
 }
 
 
+function GhostAudioTrack({ participant }: { participant: any }) {
+  const audioEl = React.useRef<HTMLAudioElement | null>(null)
+  const audioTrack = getAudioTrackFromRemoteParticipant(participant)
+
+  React.useEffect(() => {
+    const el = audioEl.current
+    if (!el || !audioTrack) return
+
+    try {
+      audioTrack.attach(el)
+      el.play().catch(() => {})
+    } catch (err) {
+      console.warn('[BroadcastPage] Failed to attach ghost audio:', err)
+    }
+
+    return () => {
+      try { audioTrack.detach(el) } catch {}
+    }
+  }, [audioTrack])
+
+  return (
+    <audio
+      ref={audioEl}
+      autoPlay
+      muted={false}
+      style={{ position: 'absolute', left: '-9999px' }}
+    />
+  )
+}
+
 import BroadcastStageLayout from '../../components/broadcast/BroadcastStageLayout'
 
 import ShareModal from '@/components/broadcast/ShareModal'
@@ -738,6 +769,8 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   const livekitRoomDisconnectedCountRef = useRef(0)
   const localTrackCreatedCountRef = useRef(0)
   const localTrackPublishedCountRef = useRef(0)
+  const cameraToggleQueueRef = useRef<Promise<unknown>>(Promise.resolve())
+  const microphoneToggleQueueRef = useRef<Promise<unknown>>(Promise.resolve())
   const [cameraEnabled, setCameraEnabled] = useState(true)
   const [micEnabled, setMicEnabled] = useState(true)
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user')
@@ -1238,7 +1271,7 @@ useEffect(() => {
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
    const [isSeatsModalOpen, setIsSeatsModalOpen] = useState(false)
    const [seatModalCount, setSeatModalCount] = useState(1)
-   const [seatModalPrices, setSeatModalPrices] = useState<number[]>([0])
+   const [seatModalPrices, setSeatModalPrices] = useState<number[]>([])
    const [selectedSeatIndex, setSelectedSeatIndex] = useState(0)
    const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
     const [chatTab, setChatTab] = useState<'chat' | 'progress' | 'league' | 'gifts' | 'top-fans' | 'settings'>('chat')
@@ -1318,11 +1351,69 @@ const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{
      createdAt: number
    }
 
-    const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
-    const [messages, setMessages] = useState<Array<{id: string; username: string; content: string; createdAt: number}>>([])
-    const [chatInput, setChatInput] = useState('')
-    const floatingChatContainerRef = useRef<HTMLDivElement>(null)
-    const chatContainerRef = useRef<HTMLDivElement>(null)
+     const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
+     const [messages, setMessages] = useState<Array<{id: string; username: string; content: string; createdAt: number}>>([])
+     const [chatInput, setChatInput] = useState('')
+     const [hostChatDisabledByOfficerState, setHostChatDisabledByOfficerState] = useState(false)
+     const [hostChatDisabledUntil, setHostChatDisabledUntil] = useState<string | null>(null)
+     const [hostChatDisabledStreamId, setHostChatDisabledStreamId] = useState<string | null>(null)
+     const [hostChatDisableRemainingMs, setHostChatDisableRemainingMs] = useState(0)
+     const floatingChatContainerRef = useRef<HTMLDivElement>(null)
+     const chatContainerRef = useRef<HTMLDivElement>(null)
+
+     const hostChatDisabledByOfficer = useMemo(
+       () => isBroadcastChatLockActive({
+         disabled: hostChatDisabledByOfficerState,
+         until: hostChatDisabledUntil,
+         streamId,
+         lockedStreamId: hostChatDisabledStreamId,
+       }),
+       [hostChatDisabledByOfficerState, hostChatDisabledUntil, hostChatDisabledStreamId, streamId],
+     )
+
+     useEffect(() => {
+       const broadcasterId = stream?.user_id
+       if (!streamId || !broadcasterId) {
+         setHostChatDisabledByOfficerState(false)
+         setHostChatDisabledUntil(null)
+         setHostChatDisabledStreamId(null)
+         return
+       }
+
+       let mounted = true
+       const fetchHostChatLock = async () => {
+         const { data } = await supabase
+           .from('user_profiles')
+           .select('broadcast_chat_disabled, broadcast_chat_disabled_until, broadcast_chat_disabled_stream_id')
+           .eq('id', broadcasterId)
+           .maybeSingle()
+
+         if (!mounted) return
+
+         setHostChatDisabledByOfficerState(!!data?.broadcast_chat_disabled)
+         setHostChatDisabledUntil(data?.broadcast_chat_disabled_until ?? null)
+         setHostChatDisabledStreamId(data?.broadcast_chat_disabled_stream_id ?? null)
+       }
+
+       void fetchHostChatLock()
+       const interval = window.setInterval(fetchHostChatLock, 30_000)
+
+       return () => {
+         mounted = false
+         window.clearInterval(interval)
+       }
+     }, [streamId, stream?.user_id])
+
+     useEffect(() => {
+       const updateRemaining = () => {
+         setHostChatDisableRemainingMs(getBroadcastChatLockRemainingMs(hostChatDisabledUntil))
+       }
+
+       updateRemaining()
+       const interval = window.setInterval(updateRemaining, 1000)
+
+       return () => window.clearInterval(interval)
+     }, [hostChatDisabledUntil])
 
    useEffect(() => {
      const broadcasterId = stream?.user_id;
@@ -2347,7 +2438,6 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
           seat_prices: nextSeatPrices,
         })
         .eq('id', streamId)
-        .eq('user_id', user.id)
 
       if (updateError) {
         throw updateError
@@ -3498,27 +3588,43 @@ useStreamRealtime(streamId, {
        ])
 
   const toggleCamera = useCallback(async () => {
-    if (!roomRef.current || !roomRef.current.localParticipant) return
-    
-    const isEnabled = roomRef.current.localParticipant.isCameraEnabled
-    if (isEnabled) {
-      await roomRef.current.localParticipant.setCameraEnabled(false)
-      setCameraEnabled(false)
-    } else {
-      await roomRef.current.localParticipant.setCameraEnabled(true, { facingMode: cameraFacingMode } as any)
-      setCameraEnabled(true)
-    }
-    
-    const tracks = roomRef.current.localParticipant.videoTrackPublications.values()
-    let nextVideoTrack: LocalVideoTrack | null = null
-    for (const pub of tracks) {
-      if (pub.track && pub.track.kind === 'video') {
-        nextVideoTrack = pub.track as LocalVideoTrack
-        break
+    const participant = roomRef.current?.localParticipant
+    if (!participant) return
+
+    const runCameraToggle = async () => {
+      const currentParticipant = roomRef.current?.localParticipant
+      if (!currentParticipant) return
+
+      if (currentParticipant.isCameraEnabled) {
+        await currentParticipant.setCameraEnabled(false)
+      } else {
+        await currentParticipant.setCameraEnabled(true, { facingMode: cameraFacingMode } as any)
       }
+
+      const nextEnabled = Boolean(currentParticipant.isCameraEnabled)
+      setCameraEnabled(nextEnabled)
+
+      const nextVideoTrack = Array.from(currentParticipant.videoTrackPublications.values())
+        .find((pub) => pub.track && pub.track.kind === 'video')?.track as LocalVideoTrack | null
+
+      setLocalTracks((prev) => prev ? [prev[0], nextEnabled ? nextVideoTrack || prev[1] : null] : prev)
     }
-    setLocalTracks(prev => prev ? [prev[0], isEnabled ? null : nextVideoTrack || prev[1]] : prev) // Update original localTracks
-  }, [cameraFacingMode])
+
+    const previous = cameraToggleQueueRef.current.catch(() => {})
+    const next = previous
+      .then(runCameraToggle, runCameraToggle)
+      .catch((err) => {
+        console.error('[BroadcastPage] Error toggling camera:', err)
+      })
+      .finally(() => {
+        if (cameraToggleQueueRef.current === previous) {
+          cameraToggleQueueRef.current = Promise.resolve()
+        }
+      })
+
+    cameraToggleQueueRef.current = next
+    return next
+  }, [cameraFacingMode, setLocalTracks])
 
   const flipCamera = useCallback(async () => {
     const participant = roomRef.current?.localParticipant
@@ -3545,39 +3651,64 @@ useStreamRealtime(streamId, {
         console.error('[BroadcastPage] Failed to restore camera after flip:', restoreError)
       }
     }
-  }, [cameraFacingMode])
+  }, [cameraFacingMode, setLocalTracks])
 
 const toggleMicrophone = useCallback(async () => {
-    if (!roomRef.current || !roomRef.current.localParticipant) return
+    const participant = roomRef.current?.localParticipant
+    if (!participant) return
 
-    const isEnabled = roomRef.current.localParticipant.isMicrophoneEnabled
-    if (isEnabled) {
-      await roomRef.current.localParticipant.setMicrophoneEnabled(false)
-      setMicEnabled(false)
-    } else {
-      if (stream?.id && user?.id) {
-        const { data: activeMute } = await supabase
-          .from('stream_mutes')
-          .select('expires_at')
-          .eq('stream_id', stream.id)
-          .eq('user_id', user.id)
-          .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
-          .maybeSingle()
+    const runMicrophoneToggle = async () => {
+      const currentParticipant = roomRef.current?.localParticipant
+      if (!currentParticipant) return
 
-        if (activeMute) {
-          const expiresAt = activeMute.expires_at ? new Date(activeMute.expires_at).getTime() : null
-          const now = Date.now()
-          const remaining = expiresAt ? Math.max(1, Math.ceil((expiresAt - now) / 60000)) : null
-          const message = remaining
-            ? `You are muted by a moderator. Try again in ${remaining} minute(s).`
-            : 'You are muted by a moderator.'
-          toast.error(message)
-          return
+      if (!currentParticipant.isMicrophoneEnabled) {
+        if (stream?.id && user?.id) {
+          const { data: activeMute } = await supabase
+            .from('stream_mutes')
+            .select('expires_at')
+            .eq('stream_id', stream.id)
+            .eq('user_id', user.id)
+            .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
+            .maybeSingle()
+
+          if (activeMute) {
+            const expiresAt = activeMute.expires_at ? new Date(activeMute.expires_at).getTime() : null
+            const now = Date.now()
+            const remaining = expiresAt ? Math.max(1, Math.ceil((expiresAt - now) / 60000)) : null
+            const message = remaining
+              ? `You are muted by a moderator. Try again in ${remaining} minute(s).`
+              : 'You are muted by a moderator.'
+            toast.error(message)
+            return false
+          }
         }
       }
-      await roomRef.current.localParticipant.setMicrophoneEnabled(true)
-      setMicEnabled(true)
+
+      if (currentParticipant.isMicrophoneEnabled) {
+        await currentParticipant.setMicrophoneEnabled(false)
+      } else {
+        await currentParticipant.setMicrophoneEnabled(true)
+      }
+
+      setMicEnabled(Boolean(currentParticipant.isMicrophoneEnabled))
+      return true
     }
+
+    const previous = microphoneToggleQueueRef.current.catch(() => {})
+    const next = previous
+      .then(runMicrophoneToggle, runMicrophoneToggle)
+      .catch((err) => {
+        console.error('[BroadcastPage] Error toggling microphone:', err)
+        return false
+      })
+      .finally(() => {
+        if (microphoneToggleQueueRef.current === previous) {
+          microphoneToggleQueueRef.current = Promise.resolve()
+        }
+      })
+
+    microphoneToggleQueueRef.current = next
+    return next
   }, [stream?.id, user?.id])
 
   const onLiveKitMicMute = useCallback(async () => {
@@ -4698,6 +4829,23 @@ const handleLike = useCallback(async () => {
 
       const doKick = async () => {
         try {
+          // ── Role-based protection: CEO, admin, and all staff/roles cannot be kicked ──
+          if (targetUserId) {
+            const { data: targetProfile } = await supabase
+              .from('user_profiles')
+              .select('role, troll_role, is_admin, is_troll_officer, is_lead_officer, is_staff, is_superadmin')
+              .eq('id', targetUserId)
+              .maybeSingle()
+
+            if (targetProfile) {
+              const isProtected = isStaffProfile(targetProfile)
+              if (isProtected) {
+                toast.error('Cannot remove staff members, CEO, admins, or officers from the stage.')
+                return
+              }
+            }
+          }
+
           let kicked = false
           let removedSeatIndex: number | undefined
           let removedUserId: string | null = targetUserId || null
@@ -5473,6 +5621,15 @@ const handleLike = useCallback(async () => {
                           const text = chatInput.trim()
                           if (!text) return
 
+                          if (hostChatDisabledByOfficer) {
+                            toast.error(
+                              hostChatDisableRemainingMs
+                                ? `Chat is disabled by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
+                                : 'Chat is disabled by officer control'
+                            )
+                            return
+                          }
+
                           if (!user && !reserveAnonymousChatSlot()) {
                             toast.error('You�ve used your 5 anonymous chats. Sign in to keep chatting.')
                             navigate('/auth?mode=login')
@@ -5526,8 +5683,14 @@ const handleLike = useCallback(async () => {
                           type="text"
                           value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Say something�"
-                          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                          placeholder={
+                            hostChatDisabledByOfficer
+                              ? 'Chat disabled by officer control'
+                              : 'Say something�'
+                          }
+                          disabled={hostChatDisabledByOfficer}
+                          readOnly={hostChatDisabledByOfficer}
+                          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
                           maxLength={280}
                         />
                       </form>
@@ -5753,34 +5916,7 @@ const handleLike = useCallback(async () => {
               {/* Ghost mode audio tracks - hidden audio elements for ghost participants whose audio must be heard */}
               {ghostAudioParticipants.map((participant: any) => {
                 const identity = participant.identity
-                const audioTrack = getAudioTrackFromRemoteParticipant(participant)
-                const audioEl = React.useRef<HTMLAudioElement>(null)
-                
-                React.useEffect(() => {
-                  const el = audioEl.current
-                  if (!el || !audioTrack) return
-                  
-                  try {
-                    audioTrack.attach(el)
-                    el.play().catch(() => {})
-                  } catch (err) {
-                    console.warn('[BroadcastPage] Failed to attach ghost audio:', err)
-                  }
-                  
-                  return () => {
-                    try { audioTrack.detach(el) } catch {}
-                  }
-                }, [audioTrack])
-                
-                return (
-                  <audio
-                    key={`ghost-audio-${identity}`}
-                    ref={audioEl}
-                    autoPlay
-                    muted={false}
-                    style={{ position: 'absolute', left: '-9999px' }}
-                  />
-                )
+                return <GhostAudioTrack key={`ghost-audio-${identity}`} participant={participant} />
               })}
                {/* Stage pass requests panel for broadcasters - TEMPORARILY DISABLED */}
                    {/* <StagePassRequestsPanel
@@ -5908,10 +6044,11 @@ const handleLike = useCallback(async () => {
                                 <input
                                   type="number"
                                   min={0}
-                                  value={seatModalCount > 0 ? seatModalPrices[selectedSeatIndex] ?? 0 : 0}
+                                  value={seatModalCount > 0 ? (seatModalPrices[selectedSeatIndex] ?? '') : ''}
                                   onChange={(event) => handleSeatPriceInput(selectedSeatIndex, event.target.value)}
                                   disabled={seatModalCount <= 0}
-                                  className="w-full bg-transparent text-lg font-black text-white outline-none disabled:cursor-not-allowed disabled:text-white/20"
+                                  placeholder="0"
+                                  className="w-full bg-transparent text-lg font-black text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed disabled:text-white/20"
                                   aria-label={`Price for seat ${selectedSeatIndex + 1}`}
                                 />
                                 <span className="text-sm font-bold text-white/60">coins</span>

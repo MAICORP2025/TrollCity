@@ -1,10 +1,12 @@
 // TypeScript types for Moderation System
 
 export interface ModerationReport {
-  id: string
+  id?: string
+  report_id?: string
   reporter_id: string
   reporter_username?: string
   target_user_id?: string | null
+  reported_user_id?: string | null
   target_username?: string | null
   stream_id?: string | null
   stream_title?: string | null

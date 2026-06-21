@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useMissionProgress } from './useMissionProgress';
 import { useChatBlockStatus } from './useChatBlockStatus';
 import { isStaffProfile } from '../lib/staff';
+import { getBroadcastChatLockRemainingMs, isBroadcastChatLockActive } from '../lib/broadcastModeration';
 
 export interface Message {
   id: string;
@@ -62,7 +63,20 @@ const getDisplayName = (profileLike: any): string => {
 
 export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [hostChatDisabledByOfficer, setHostChatDisabledByOfficer] = useState(false);
+  const [hostChatDisabledByOfficerState, setHostChatDisabledByOfficerState] = useState(false);
+  const [hostChatDisabledUntil, setHostChatDisabledUntil] = useState<string | null>(null);
+  const [hostChatDisabledStreamId, setHostChatDisabledStreamId] = useState<string | null>(null);
+  const [hostChatDisableRemainingMs, setHostChatDisableRemainingMs] = useState(0);
+
+  const hostChatDisabledByOfficer = useMemo(
+    () => isBroadcastChatLockActive({
+      disabled: hostChatDisabledByOfficerState,
+      until: hostChatDisabledUntil,
+      streamId,
+      lockedStreamId: hostChatDisabledStreamId,
+    }),
+    [hostChatDisabledByOfficerState, hostChatDisabledUntil, hostChatDisabledStreamId, streamId],
+  );
   const { user, profile } = useAuthStore();
   const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -84,12 +98,14 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
     const fetchHostModerationState = async () => {
       const { data } = await supabase
         .from('user_profiles')
-        .select('broadcast_chat_disabled')
+        .select('broadcast_chat_disabled, broadcast_chat_disabled_until, broadcast_chat_disabled_stream_id')
         .eq('id', hostId)
         .maybeSingle();
 
       if (mounted) {
-        setHostChatDisabledByOfficer(!!data?.broadcast_chat_disabled);
+        setHostChatDisabledByOfficerState(!!data?.broadcast_chat_disabled);
+        setHostChatDisabledUntil(data?.broadcast_chat_disabled_until ?? null);
+        setHostChatDisabledStreamId(data?.broadcast_chat_disabled_stream_id ?? null);
       }
     };
 
@@ -106,7 +122,9 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
           filter: `id=eq.${hostId}`
         },
         (payload: any) => {
-          setHostChatDisabledByOfficer(!!payload?.new?.broadcast_chat_disabled);
+          setHostChatDisabledByOfficerState(!!payload?.new?.broadcast_chat_disabled);
+          setHostChatDisabledUntil(payload?.new?.broadcast_chat_disabled_until ?? null);
+          setHostChatDisabledStreamId(payload?.new?.broadcast_chat_disabled_stream_id ?? null);
         }
       )
       .subscribe();
@@ -116,6 +134,17 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
       supabase.removeChannel(moderationChannel);
     };
   }, [hostId]);
+
+  useEffect(() => {
+    const updateRemaining = () => {
+      setHostChatDisableRemainingMs(getBroadcastChatLockRemainingMs(hostChatDisabledUntil));
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [hostChatDisabledUntil]);
 
   useEffect(() => {
     if (!streamId) return;
@@ -259,7 +288,11 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
     }
     if (!content.trim()) return;
     if (hostChatDisabledByOfficer) {
-      toast.error('Chat is disabled for this broadcaster by officer control');
+      toast.error(
+        hostChatDisableRemainingMs
+          ? `Chat is disabled for this broadcaster by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
+          : 'Chat is disabled for this broadcaster by officer control'
+      );
       return;
     }
     if (userChatDisabled) {
@@ -362,7 +395,7 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
     } finally {
       setIsSendingMessage(false);
     }
-  }, [user, profile, streamId, hostChatDisabledByOfficer, userChatDisabled, chatDisabledRemainingMinutes]);
+  }, [user, profile, streamId, hostChatDisabledByOfficer, hostChatDisableRemainingMs, userChatDisabled, chatDisabledRemainingMinutes]);
 
   return {
     messages: messages.filter(msg => {

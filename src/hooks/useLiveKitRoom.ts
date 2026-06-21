@@ -60,6 +60,8 @@ export function useLiveKitRoom({
     const joiningRef = useRef(false); // Track joining state to prevent race conditions
     const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
     const localVideoTrackRef = useRef<LocalVideoTrack | null>(null);
+    const cameraToggleQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+    const microphoneToggleQueueRef = useRef<Promise<unknown>>(Promise.resolve());
     const prewarmedAudioTrackRef = useRef<LocalAudioTrack | null>(null);
     const prewarmedVideoTrackRef = useRef<LocalVideoTrack | null>(null);
     const prewarmCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1165,34 +1167,151 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
     }
   }, [])
 
-  // Toggle camera
-  const toggleCamera = useCallback(async () => {
-    if (!roomRef.current) return;
+  const setCameraEnabled = useCallback(async (enabled: boolean) => {
+    if (audioOnly || roomType === 'pod') return false
 
-    try {
-      if (localVideoTrack) {
-        if (!localVideoTrack.isMuted) {
-          await roomRef.current.localParticipant.unpublishTrack(localVideoTrack);
-          localVideoTrack.stop();
-          localVideoTrackRef.current = null;
-          setLocalVideoTrack(null);
-        } else {
-          await roomRef.current.localParticipant.publishTrack(localVideoTrack);
+    const room = roomRef.current
+    const participant = room?.localParticipant
+    if (!room || !participant) return false
+
+    const runCameraToggle = async () => {
+      const currentParticipant = roomRef.current?.localParticipant
+      if (!currentParticipant) {
+        setLocalVideoTrack(null)
+        return false
+      }
+
+      let track = localVideoTrackRef.current
+
+      if (!track || track.mediaStreamTrack?.readyState === 'ended') {
+        if (!enabled) {
+          setLocalVideoTrack(null)
+          return true
         }
-      } else {
-        const { createLocalVideoTrack } = await import('livekit-client');
-        const newTrack = await createLocalVideoTrack({
+
+        const { createLocalVideoTrack } = await import('livekit-client')
+        track = await createLocalVideoTrack({
           ...videoPreset,
           facingMode: 'user',
-        });
-        setLocalVideoTrack(newTrack);
-        localVideoTrackRef.current = newTrack;
-        await roomRef.current.localParticipant.publishTrack(newTrack);
+        })
+        localVideoTrackRef.current = track
       }
-    } catch (err) {
-      console.error(`[useLiveKitRoom] Error toggling camera: ${safeStringify(err)}`);
+
+      const isPublished = Array.from(currentParticipant.videoTrackPublications.values())
+        .some((pub) => pub.track === track)
+
+      if (enabled) {
+        if (track.isMuted) {
+          await track.unmute()
+        }
+
+        if (!isPublished) {
+          await currentParticipant.publishTrack(track)
+        }
+
+        setLocalVideoTrack(track)
+        return true
+      }
+
+      if (isPublished) {
+        await currentParticipant.unpublishTrack(track)
+      }
+
+      if (!track.isMuted) {
+        await track.mute()
+      }
+
+      setLocalVideoTrack(null)
+      return true
     }
-  }, [localVideoTrack, videoPreset]);
+
+    const previous = cameraToggleQueueRef.current.catch(() => {})
+    const next = previous
+      .then(runCameraToggle, runCameraToggle)
+      .catch((err) => {
+        console.error(`[useLiveKitRoom] Error setting camera enabled: ${safeStringify(err)}`)
+        return false
+      })
+      .finally(() => {
+        if (cameraToggleQueueRef.current === previous) {
+          cameraToggleQueueRef.current = Promise.resolve()
+        }
+      })
+
+    cameraToggleQueueRef.current = next
+    return next
+  }, [audioOnly, roomType, safeStringify, videoPreset])
+
+  // Toggle camera
+  const toggleCamera = useCallback(async () => {
+    const participant = roomRef.current?.localParticipant
+    const track = localVideoTrackRef.current
+
+    if (!participant || !track) return false
+
+    const isPublished = Array.from(participant.videoTrackPublications.values())
+      .some((pub) => pub.track === track)
+    const isEnabled = isPublished && !track.isMuted
+
+    return setCameraEnabled(!isEnabled)
+  }, [setCameraEnabled])
+
+  // Set mic enabled/disabled (for walkie-talkie integration)
+  const setMicEnabled = useCallback(async (enabled: boolean) => {
+    const runMicrophoneToggle = async () => {
+      let track = localAudioTrackRef.current
+
+      if (!track || track.mediaStreamTrack?.readyState === 'ended') {
+        if (!enabled) {
+          setLocalAudioTrack(null)
+          return true
+        }
+
+        track = await createLocalAudioTrack({
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        })
+        localAudioTrackRef.current = track
+      }
+
+      if (enabled) {
+        if (track.isMuted) {
+          await track.unmute()
+        }
+      } else if (!track.isMuted) {
+        await track.mute()
+      }
+
+      setLocalAudioTrack(track)
+      return true
+    }
+
+    const previous = microphoneToggleQueueRef.current.catch(() => {})
+    const next = previous
+      .then(runMicrophoneToggle, runMicrophoneToggle)
+      .catch((err) => {
+        console.error(`[useLiveKitRoom] Error setting mic enabled: ${safeStringify(err)}`)
+        return false
+      })
+      .finally(() => {
+        if (microphoneToggleQueueRef.current === previous) {
+          microphoneToggleQueueRef.current = Promise.resolve()
+        }
+      })
+
+    microphoneToggleQueueRef.current = next
+    return next
+  }, [safeStringify])
+
+  // Toggle microphone - with error handling to prevent disconnects
+  const toggleMicrophone = useCallback(async () => {
+    const track = localAudioTrackRef.current
+    if (!track) return false
+
+    const isEnabled = !track.isMuted
+    return setMicEnabled(!isEnabled)
+  }, [setMicEnabled])
 
 // Wait for room to be connected
     const waitForRoomConnected = useCallback(async (room: Room, timeoutMs = 5000) => {
@@ -1226,63 +1345,6 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
         room.on(RoomEvent.Connected, onConnected);
       });
     }, []);
-
-  // Toggle microphone - with error handling to prevent disconnects
-  const toggleMicrophone = useCallback(async () => {
-    const track = localAudioTrack;
-    if (!track) {
-      return;
-    }
-    
-    // Just toggle the track directly - doesn't need room
-    try {
-      if (track.isMuted) {
-        await track.unmute();
-      } else {
-        await track.mute();
-      }
-    } catch (err) {
-      console.warn('[useLiveKitRoom] Toggle mic error:', err);
-    }
-  }, [localAudioTrack]);
-
-  // Set mic enabled/disabled (for walkie-talkie integration)
-  const setMicEnabled = useCallback(async (enabled: boolean) => {
-    const track = localAudioTrackRef.current;
-    if (!track) return false;
-    
-    try {
-      if (enabled) {
-        await track.unmute();
-      } else {
-        await track.mute();
-      }
-      setLocalAudioTrack(track);
-      return true;
-    } catch (err) {
-      console.error(`[useLiveKitRoom] Error setting mic enabled: ${safeStringify(err)}`);
-      return false;
-    }
-  }, []);
-
-  // Set camera enabled/disabled for seat users
-  const setCameraEnabled = useCallback(async (enabled: boolean) => {
-    const track = localVideoTrackRef.current;
-    if (!track) return false;
-    
-    try {
-      if (enabled) {
-        await track.unmute();
-      } else {
-        await track.mute();
-      }
-      setLocalVideoTrack(track);
-      return true;
-    } catch (err) {
-      console.error(`[useLiveKitRoom] Error setting camera enabled: ${safeStringify(err)}`);
-      return false;
-    }
-  }, []);
 
   // Get current mic state
   const getMicEnabled = useCallback(() => {

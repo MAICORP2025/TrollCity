@@ -208,7 +208,7 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <div className="flex items-center gap-2 px-2" style={{ overflow: 'visible' }}>
-        <div className="relative h-10 w-10" style={{ overflow: 'visible' }}>
+        <div className="relative h-10 w-10 flex items-center justify-center" style={{ overflow: 'visible' }}>
           {avatarUrl ? (
             <ProfileFrame frame={equippedFrame} avatarUrl={avatarUrl} username={displayName} size="sm" />
           ) : (
@@ -227,13 +227,14 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex items-center gap-2 px-2 py-1.5" style={{ overflow: 'visible' }}>
       {/* Avatar */}
-      <div className="relative shrink-0 h-12 w-12 md:h-14 md:w-14" style={{ overflow: 'visible' }}>
+      <div className="relative shrink-0 h-12 w-12 md:h-14 md:w-14 flex items-start justify-start" style={{ overflow: 'visible' }}>
         {avatarUrl ? (
           <ProfileFrame
             frame={equippedFrame}
             avatarUrl={avatarUrl}
             username={displayName}
             size="sm"
+            fillParent
           />
         ) : (
           <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 md:h-14 md:w-14 ${prideActive ? 'ring-pink-400/60' : 'ring-cyan-400/50'}`}>
@@ -409,6 +410,11 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
            { label: 'Elections', icon: ClipboardList, path: '/government' },
           ...(isOfficer || isSecretary || isAdmin
             ? [{ label: 'City Government', icon: Landmark as any, path: '/government' }]
+            : []),
+          ...(isOfficer || isAdmin || isSecretary || isLead
+            ? [
+                { label: 'Night Watch', icon: Eye as any, path: '/admin/night-watch' },
+              ]
             : []),
           ...(isOfficer
             ? [
@@ -718,16 +724,9 @@ export default function BottomNavBar() {
               <ProfileModule collapsed={false} />
             </div>
 
-            {/* Mobile collapsed profile (left on mobile) */}
-            {isMobile && (
-              <div className="shrink-0">
-                <ProfileModule collapsed={true} />
-              </div>
-            )}
-
             {/* CENTER: Nav buttons */}
             {isMobile ? (
-              /* MOBILE: 6 tiles — Home, Go Live, Coins, Chats, Treelz, More */
+              /* MOBILE: 7 tiles — Home, Go Live, Coins, Chats, Treelz, Podcast, More */
               <nav className="flex flex-1 items-center justify-around">
                 <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />

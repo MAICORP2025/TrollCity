@@ -8,6 +8,7 @@ interface HorizontalScrollRowProps {
   children: React.ReactNode
   onViewAll?: () => void
   className?: string
+  right?: React.ReactNode
 }
 
 export default function HorizontalScrollRow({
@@ -16,6 +17,7 @@ export default function HorizontalScrollRow({
   icon,
   children,
   onViewAll,
+  right,
   className = '',
 }: HorizontalScrollRowProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -48,6 +50,7 @@ export default function HorizontalScrollRow({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          {right}
           {onViewAll && (
             <button
               onClick={onViewAll}

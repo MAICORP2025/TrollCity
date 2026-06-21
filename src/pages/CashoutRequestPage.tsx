@@ -360,8 +360,8 @@ export default function CashoutRequestPage() {
       // Refresh profile to update balances
       await refreshProfile();
 
-      // Redirect to wallet or stay and show success
-      navigate('/wallet');
+      // Redirect to Mai Pay
+      navigate('/mai-pay');
     } catch (err: any) {
       console.error('Cashout submission error:', err);
       toast.error('Failed to submit cashout request: ' + (err.message || 'Unknown error'));

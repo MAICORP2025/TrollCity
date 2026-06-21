@@ -13,6 +13,22 @@ const CURRENT_KID = "k1";
 const SAMPLE_RATE_DEFAULT = 20; // 20%
 const HOT_STREAM_THRESHOLD = 5000;
 
+function isBroadcastChatLockActive(lock: {
+  broadcast_chat_disabled?: boolean | null;
+  broadcast_chat_disabled_until?: string | null;
+  broadcast_chat_disabled_stream_id?: string | null;
+}, streamId: string) {
+  if (!lock?.broadcast_chat_disabled) return false;
+  if (lock.broadcast_chat_disabled_stream_id && lock.broadcast_chat_disabled_stream_id !== streamId) return false;
+
+  if (lock.broadcast_chat_disabled_until) {
+    const expiresAt = Date.parse(lock.broadcast_chat_disabled_until);
+    if (!Number.isNaN(expiresAt)) return expiresAt > Date.now();
+  }
+
+  return true;
+}
+
 // --- Transport Abstraction ---
 
 interface TransportAdapter {
@@ -426,11 +442,11 @@ serve(async (req) => {
       if (hostId) {
         const { data: hostModerationLock } = await supabase
           .from("user_profiles")
-          .select("broadcast_chat_disabled")
+          .select("broadcast_chat_disabled, broadcast_chat_disabled_until, broadcast_chat_disabled_stream_id")
           .eq("id", hostId)
           .maybeSingle();
 
-        if (hostModerationLock?.broadcast_chat_disabled) {
+        if (isBroadcastChatLockActive(hostModerationLock, stream_id)) {
           return new Response(JSON.stringify({ error: "Chat is disabled for this broadcaster", code: "CHAT_DISABLED" }), {
             status: 403,
             headers: { ...headers, "Content-Type": "application/json" },

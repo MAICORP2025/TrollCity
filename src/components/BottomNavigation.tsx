@@ -673,6 +673,12 @@ export default function BottomNavigation() {
       )
     }
 
+    if (isOfficer || isAdmin || isLead || isSecretary) {
+      pages.push(
+        { category: 'Government', label: 'Night Watch', icon: Eye, path: '/admin/night-watch' },
+      )
+    }
+
     if (isLead) {
       pages.push(
         { category: 'Government', label: 'Creator Approvals', icon: ClipboardList, path: '/admin/creator-approvals' },

@@ -11,6 +11,7 @@ import { TROLLMOND_CASHBACK_ENABLED } from '../config/featureFlags';
 import { processGiftXp } from '../lib/xp';
 import { createCityActivityEvent } from '../lib/events/createCityActivityEvent';
 import { queueSideEffect } from '../lib/events/queueSideEffects';
+import { isBroadcastChatLockActive } from '../lib/broadcastModeration';
 
 type GiftBroadcastChannel = ReturnType<typeof supabase.channel>;
 
@@ -302,13 +303,18 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
 
        const hostId = streamRow?.user_id;
       if (hostId && user.id !== hostId) {
-        const { data: hostProfile } = await supabase
-          .from('user_profiles')
-          .select('broadcast_chat_disabled')
-          .eq('id', hostId)
-          .maybeSingle();
+         const { data: hostProfile } = await supabase
+           .from('user_profiles')
+           .select('broadcast_chat_disabled, broadcast_chat_disabled_until, broadcast_chat_disabled_stream_id')
+           .eq('id', hostId)
+           .maybeSingle();
 
-        if (hostProfile?.broadcast_chat_disabled) {
+         if (isBroadcastChatLockActive({
+           disabled: hostProfile?.broadcast_chat_disabled,
+           until: hostProfile?.broadcast_chat_disabled_until,
+           streamId,
+           lockedStreamId: hostProfile?.broadcast_chat_disabled_stream_id,
+         })) {
           console.warn('[GiftSystem] sendGift blocked: hostChatDisabledByOfficer', { hostId, streamId });
           toast.error('Chat is disabled for this broadcaster by officer control');
           return false;
@@ -339,7 +345,6 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
       });
 
        // Now send the gift via the appropriate RPC
-       let data, error;
        
        const totalGiftAmount = gift.coinCost * quantity;
 

@@ -24,6 +24,7 @@ export const STAFF_ROLES: UserRole[] = [
   UserRole.TROLL_CITY_TREASURER,
   UserRole.PRESIDENT,
   UserRole.VICE_PRESIDENT,
+  UserRole.CEO,
 ];
 
 /**
