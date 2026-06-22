@@ -3,7 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuthStore } from '../../../lib/store'
 import { jobPositions } from '../../../lib/trollJobsData'
 import { toast } from 'sonner'
-import { Check, X, Shield, RefreshCw, AlertTriangle, FileText } from 'lucide-react'
+import { Check, X, Shield, RefreshCw, AlertTriangle, FileText, DollarSign } from 'lucide-react'
 
 import UserNameWithAge from '../../../components/UserNameWithAge'
 
@@ -109,6 +109,32 @@ interface AuctioneerApplication {
   }
 }
 
+interface FastPayApplication {
+  id: string
+  user_id: string
+  payout_method: string
+  payout_username: string
+  payout_email?: string | null
+  cashtag?: string | null
+  venmo_handle?: string | null
+  user_level: number
+  account_age_days: number
+  has_verified_identity: boolean
+  has_violations: boolean
+  has_fraud_history: boolean
+  id_verification_url?: string | null
+  id_verification_uploaded_at?: string | null
+  status: 'pending' | 'under_review' | 'approved' | 'rejected'
+  admin_notes?: string | null
+  rejection_reason?: string | null
+  created_at: string
+  updated_at: string
+  user_profiles?: {
+    username: string
+    email?: string
+  }
+}
+
 export default function AdminApplications() {
   const { user, refreshProfile } = useAuthStore()
   const [applications, setApplications] = useState<Application[]>([])
@@ -116,6 +142,7 @@ export default function AdminApplications() {
   const [attorneyApps, setAttorneyApps] = useState<AttorneyApplication[]>([])
   const [prosecutorApps, setProsecutorApps] = useState<ProsecutorApplication[]>([])
   const [auctioneerApps, setAuctioneerApps] = useState<AuctioneerApplication[]>([])
+  const [fastPayApplications, setFastPayApplications] = useState<FastPayApplication[]>([])
   const [jobApplications, setJobApplications] = useState<JobApplication[]>([])
   const [loading, setLoading] = useState(false)
   const [positionFilled, setPositionFilled] = useState(false)
@@ -136,12 +163,13 @@ export default function AdminApplications() {
     if (!skipLoadingState) setLoading(true)
 
     try {
-      const [appRes, appealRes, attorneyRes, prosecutorRes, auctioneerRes, jobAppRes] = await Promise.all([
+      const [appRes, appealRes, attorneyRes, prosecutorRes, auctioneerRes, fastPayRes, jobAppRes] = await Promise.all([
         supabase.functions.invoke('admin-actions', { body: { action: 'get_applications' } }),
         supabase.functions.invoke('admin-actions', { body: { action: 'get_seller_appeals' } }),
         supabase.from('attorney_applications').select('*').order('created_at', { ascending: false }),
         supabase.from('prosecutor_applications').select('*').order('created_at', { ascending: false }),
         supabase.from('auctioneer_applications').select('*').order('created_at', { ascending: false }),
+        supabase.from('fast_pay_applications').select('*, user_profiles!user_id(username, email)').order('created_at', { ascending: false }),
         supabase.from('job_applications').select('id, user_id, position_id, status, created_at, updated_at, reviewed_by, reviewed_at, user_profiles!user_id(username, email)').order('created_at', { ascending: false })
       ])
 
@@ -150,6 +178,7 @@ export default function AdminApplications() {
       const { data: attorneyData, error: attorneyError } = attorneyRes
       const { data: prosecutorData, error: prosecutorError } = prosecutorRes
       const { data: auctioneerData, error: auctioneerError } = auctioneerRes
+      const { data: fastPayData, error: fastPayError } = fastPayRes
 
       if (appError) throw appError
       if (appData?.error) throw new Error(appData.error)
@@ -224,6 +253,12 @@ export default function AdminApplications() {
         setAuctioneerApps([])
       }
 
+      if (!fastPayError && fastPayData) {
+        setFastPayApplications(fastPayData)
+      } else {
+        setFastPayApplications([])
+      }
+
       const { data: jobAppData, error: jobAppError } = jobAppRes
       if (!jobAppError && jobAppData) {
         setJobApplications(jobAppData)
@@ -255,6 +290,7 @@ export default function AdminApplications() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attorney_applications' }, handleRealtimeUpdate)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prosecutor_applications' }, handleRealtimeUpdate)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'job_applications' }, handleRealtimeUpdate)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fast_pay_applications' }, handleRealtimeUpdate)
       .subscribe()
 
     return () => {
@@ -695,6 +731,61 @@ export default function AdminApplications() {
     }
   }, [user, loadApplications, refreshProfile])
 
+  const handleApproveFastPayApplication = useCallback(async (app: FastPayApplication) => {
+    if (!user) return toast.error("You must be logged in")
+
+    try {
+      setLoading(true)
+
+      const { error } = await supabase.rpc('review_fast_pay_application', {
+        p_application_id: app.id,
+        p_new_status: 'approved',
+        p_admin_notes: 'Approved from admin applications dashboard',
+      })
+
+      if (error) throw error
+
+      toast.success("Fast Pay application approved. User can now request cashouts.")
+      const scrollY = window.scrollY
+      await loadApplications()
+      requestAnimationFrame(() => window.scrollTo(0, scrollY))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to approve Fast Pay application"
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [user, loadApplications])
+
+  const handleRejectFastPayApplication = useCallback(async (app: FastPayApplication) => {
+    if (!user) return toast.error("You must be logged in")
+
+    const reason = window.prompt('Rejection reason')
+    if (reason === null) return
+
+    try {
+      setLoading(true)
+
+      const { error } = await supabase.rpc('review_fast_pay_application', {
+        p_application_id: app.id,
+        p_new_status: 'rejected',
+        p_rejection_reason: reason || 'Rejected from admin applications dashboard',
+      })
+
+      if (error) throw error
+
+      toast.error("Fast Pay application denied.")
+      const scrollY = window.scrollY
+      await loadApplications()
+      requestAnimationFrame(() => window.scrollTo(0, scrollY))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to deny Fast Pay application"
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [user, loadApplications])
+
   const handleApproveOverride = useCallback(async (app: Application) => {
     if (!user) return toast.error("You must be logged in")
 
@@ -1005,6 +1096,112 @@ export default function AdminApplications() {
               )
             })}
           </div>
+
+          {/* FAST PAY APPLICATIONS */}
+          {activeTab === 'pending' && (
+            <div className="space-y-3 mt-6">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-400" />
+                MAI Pay Cashout Applications Waiting for Review ({fastPayApplications.filter((app) => app.status === 'pending' || app.status === 'under_review').length})
+              </h3>
+
+              {fastPayApplications.filter((app) => app.status === 'pending' || app.status === 'under_review').map((app) => (
+                <div key={app.id} className="bg-[#1A1A1A] border border-emerald-500/30 rounded-lg p-4">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <UserNameWithAge
+                          user={{
+                            username: app.user_profiles?.username || 'Unknown User',
+                            email: app.user_profiles?.email,
+                          }}
+                          className="text-white font-semibold"
+                        />
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          app.status === 'under_review' ? 'bg-blue-900 text-blue-300' : 'bg-emerald-900 text-emerald-300'
+                        }`}>
+                          {app.status.toUpperCase().replace('_', ' ')}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-gray-500 mb-3">
+                        Applied: {new Date(app.created_at).toLocaleDateString()} • Level {app.user_level} • Account age {app.account_age_days} days
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-gray-400">Payout method</p>
+                          <p className="text-white capitalize">{app.payout_method.replace('_', ' ')}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">Payout details</p>
+                          <p className="text-white break-all">{app.cashtag || app.venmo_handle || app.payout_email || app.payout_username || 'Not provided'}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-gray-400 mt-3">
+                        <p>ID verified snapshot: {app.has_verified_identity ? 'Yes' : 'No'}</p>
+                        <p>Violations snapshot: {app.has_violations ? 'Yes' : 'No'}</p>
+                        <p>Fraud snapshot: {app.has_fraud_history ? 'Yes' : 'No'}</p>
+                      </div>
+
+                      {app.id_verification_uploaded_at && (
+                        <div className="mt-3 rounded border border-emerald-500/20 bg-emerald-500/10 p-2 text-xs text-emerald-200">
+                          ID uploaded: {new Date(app.id_verification_uploaded_at).toLocaleString()}
+                        </div>
+                      )}
+                      {app.admin_notes && (
+                        <div className="mt-3 text-xs text-gray-400">
+                          <span className="text-gray-500">Admin notes:</span> {app.admin_notes}
+                        </div>
+                      )}
+                      {app.rejection_reason && (
+                        <div className="mt-3 text-xs text-red-300">
+                          <span className="text-red-400">Rejection reason:</span> {app.rejection_reason}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 md:flex-col">
+                      {(app.status === 'pending' || app.status === 'under_review') && (
+                        <>
+                          <button
+                            onClick={() => handleApproveFastPayApplication(app)}
+                            className="px-3 py-2 bg-green-600 text-white text-xs rounded-lg"
+                          >
+                            APPROVE CASHOUTS
+                          </button>
+                          <button
+                            onClick={() => handleRejectFastPayApplication(app)}
+                            className="px-3 py-2 bg-red-600 text-white text-xs rounded-lg"
+                          >
+                            DENY
+                          </button>
+                        </>
+                      )}
+                      {app.status === 'approved' && (
+                        <div className="text-green-400 text-sm flex items-center gap-1">
+                          <Check className="w-4" /> Approved
+                        </div>
+                      )}
+                      {app.status === 'rejected' && (
+                        <div className="text-red-400 text-sm flex items-center gap-1">
+                          <X className="w-4" /> Denied
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {fastPayApplications.filter((app) => app.status === 'pending' || app.status === 'under_review').length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <div className="w-12 h-12 mx-auto mb-2 opacity-20 text-emerald-400">💵</div>
+                  <p>No pending MAI Pay cashout applications</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* SELLER APPEALS */}
           {activeTab === 'pending' && (

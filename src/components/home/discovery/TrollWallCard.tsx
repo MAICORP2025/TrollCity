@@ -62,7 +62,7 @@ export default function TrollWallCard({ post, onClick, className }: TrollWallCar
         {/* User row */}
         <div className="flex items-center gap-2 mb-1.5">
           <Link
-            to={`/profile/${post.user_id}`}
+            to={`/profile/${post.username}`}
             onClick={(e) => e.stopPropagation()}
             className="w-6 h-6 rounded-full flex-shrink-0 overflow-visible ring-1 ring-white/10 hover:ring-purple-400/50 transition-all"
           >
@@ -78,7 +78,7 @@ export default function TrollWallCard({ post, onClick, className }: TrollWallCar
           </Link>
           <div className="min-w-0 flex-1">
             <Link
-              to={`/profile/${post.user_id}`}
+              to={`/profile/${post.username}`}
               onClick={(e) => e.stopPropagation()}
               className="text-[10px] font-bold text-white truncate block hover:text-cyan-300 transition-colors"
             >

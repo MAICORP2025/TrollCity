@@ -187,11 +187,29 @@ BEGIN
             -- Credit seller (previous owner) with 97% of winning bid (platform keeps 3%)
             IF v_seller_id IS NOT NULL AND v_auction.current_bid > 0 THEN
                 v_seller_net := floor(v_auction.current_bid * 0.97)::bigint;
+
+                INSERT INTO public.coin_ledger (
+                    user_id, delta, bucket, source, ref_id, metadata, direction
+                ) VALUES (
+                    v_seller_id,
+                    v_seller_net,
+                    'auction_earnings',
+                    'auction_payout',
+                    v_auction.id,
+                    jsonb_build_object(
+                      'auction_id', v_auction.id,
+                      'winning_bid', v_auction.current_bid,
+                      'platform_fee', v_auction.current_bid - v_seller_net
+                    ),
+                    'in'
+                );
+
                 UPDATE public.user_profiles
-                SET troll_coins = troll_coins + v_seller_net
+                SET troll_coins = COALESCE(troll_coins, 0) + v_seller_net,
+                    earned_balance = COALESCE(earned_balance, 0) + v_seller_net,
+                    total_earned_coins = COALESCE(total_earned_coins, 0) + v_seller_net,
+                    updated_at = now()
                 WHERE id = v_seller_id;
-                
-                -- Log payout to seller (optional ledger entry could be added here)
             END IF;
         ELSE
             -- No winner: no payout; asset remains with platform? (no action)

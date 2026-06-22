@@ -15,6 +15,7 @@ import {
   MapPin,
   MessageCircle,
   Package,
+  Receipt,
   Search,
   ShieldAlert,
   Truck,
@@ -198,6 +199,9 @@ export default function BuyerOrders() {
   const [trollCourtClaimAmount, setTrollCourtClaimAmount] = useState(0)
   const [isFilingLawsuit, setIsFilingLawsuit] = useState(false)
 
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
+  const [receiptOrder, setReceiptOrder] = useState<MarketplacePurchase | null>(null)
+
   const fetchOrders = useCallback(async () => {
     if (!user?.id) {
       setOrders([])
@@ -245,20 +249,35 @@ export default function BuyerOrders() {
         .eq('buyer_id', user.id)
         .order('created_at', { ascending: false })
 
-      // Also fetch auction wins that may not be in marketplace_purchases yet
-      const { data: auctionWins } = await supabase
-        .from('auction_lots')
+      // Also fetch auction orders for this buyer
+      const { data: auctionOrders } = await supabase
+        .from('auction_orders')
         .select(`
           id,
-          title,
-          image_url,
-          current_highest_bid,
-          starting_bid,
-          winner_user_id,
+          order_number,
           auction_show_id,
-          condition,
-          auction_shows!inner(
-            id,
+          lot_id,
+          winner_user_id,
+          sale_amount,
+          shipping_cost,
+          payment_status,
+          fulfillment_status,
+          shipping_name,
+          shipping_line1,
+          shipping_line2,
+          shipping_city,
+          shipping_state,
+          shipping_zip,
+          shipping_carrier,
+          tracking_number,
+          shipped_at,
+          delivered_at,
+          created_at,
+          auction_lots(
+            title,
+            image_urls
+          ),
+          auction_shows(
             title,
             auctioneer_id,
             auctioneer:auctioneer_profiles(
@@ -272,54 +291,46 @@ export default function BuyerOrders() {
           )
         `)
         .eq('winner_user_id', user.id)
-        .eq('status', 'sold')
-        .order('queue_position', { ascending: true })
+        .order('created_at', { ascending: false })
 
       if (error) throw error
 
       const marketplaceOrders = (data || []) as MarketplacePurchase[]
-
-      // Convert auction wins to marketplace purchase format for unified display
-      const auctionOrderItems: MarketplacePurchase[] = (auctionWins || [])
-        .filter((aw: any) => {
-          // Only include if not already in marketplace_purchases
-          return !marketplaceOrders.some((mo) => mo.item_id === aw.id)
-        })
-        .map((aw: any) => {
-          const show = aw.auction_shows
-          const auctioneerProfile = show?.auctioneer?.user_profiles
+      const auctionOrderItems: MarketplacePurchase[] = (auctionOrders || [])
+        .map((order: any) => {
+          const auctioneerProfile = order.auction_shows?.auctioneer?.user_profiles
           return {
-            id: `auction-${aw.id}`,
+            id: order.id,
             buyer_id: user.id,
-            seller_id: show?.auctioneer?.user_id || '',
-            item_id: aw.id,
-            price_paid: aw.current_highest_bid || aw.starting_bid || 0,
+            seller_id: order.auction_shows?.auctioneer?.user_id || '',
+            item_id: order.lot_id,
+            price_paid: Number(order.sale_amount || 0),
             platform_fee: 0,
-            seller_earnings: aw.current_highest_bid || aw.starting_bid || 0,
-            status: 'paid' as const,
-            fulfillment_status: 'awaiting_fulfillment' as any,
-            tracking_number: null,
+            seller_earnings: Number(order.sale_amount || 0),
+            status: order.payment_status === 'held' ? 'pending' : (order.payment_status as OrderStatus),
+            fulfillment_status: order.fulfillment_status as any,
+            tracking_number: order.tracking_number,
             tracking_url: null,
-            shipping_carrier: null,
-            shipped_at: null,
-            delivered_at: null,
+            shipping_carrier: order.shipping_carrier,
+            shipped_at: order.shipped_at,
+            delivered_at: order.delivered_at,
             cancellation_requested_at: null,
             cancelled_at: null,
             refunded_at: null,
-            shipping_name: null,
-            shipping_address: null,
-            shipping_city: null,
-            shipping_state: null,
-            shipping_zip: null,
-            created_at: new Date().toISOString(),
+            shipping_name: order.shipping_name,
+            shipping_address: order.shipping_line1,
+            shipping_city: order.shipping_city,
+            shipping_state: order.shipping_state,
+            shipping_zip: order.shipping_zip,
+            created_at: order.created_at,
             appeal_id: null,
             troll_court_case_id: null,
             source: 'auction',
             marketplace_item: {
-              id: aw.id,
-              title: aw.title,
+              id: order.lot_id,
+              title: order.auction_lots?.title || 'Auction Item',
               description: null,
-              thumbnail_url: aw.image_url,
+              thumbnail_url: order.auction_lots?.image_urls?.[0] || null,
               type: 'auction',
             },
             seller_profile: auctioneerProfile
@@ -440,10 +451,9 @@ export default function BuyerOrders() {
 
   const handleContactSeller = (order: MarketplacePurchase) => {
     if (!order.seller_id || !order.marketplace_item) return
+    const itemTitle = encodeURIComponent(order.marketplace_item.title || 'Marketplace Item')
     navigate(
-      `/tcps?user=${order.seller_id}&itemId=${order.item_id}&itemTitle=${encodeURIComponent(
-        order.marketplace_item.title || 'Marketplace Item'
-      )}`
+      `/utromail/compose?recipientId=${order.seller_id}&subject=${itemTitle}`
     )
   }
 
@@ -769,6 +779,16 @@ export default function BuyerOrders() {
                         </div>
 
                         <div className="flex flex-wrap justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setReceiptOrder(order)
+                              setShowReceiptModal(true)
+                            }}
+                            className={tcButton}
+                          >
+                            <Receipt className="mr-2 inline h-4 w-4" />
+                            View Receipt
+                          </button>
                           {order.seller_id !== user?.id && (
                             <button onClick={() => handleContactSeller(order)} className={tcButton}>
                               <MessageCircle className="mr-2 inline h-4 w-4" />
@@ -794,7 +814,7 @@ export default function BuyerOrders() {
                             </button>
                           )}
                           {order.appeal_id && (
-                            <button onClick={() => navigate('/appeals')} className="rounded-lg bg-orange-600/50 px-4 py-2 text-white transition hover:bg-orange-600">
+                            <button onClick={() => navigate('/city-registry?tab=history')} className="rounded-lg bg-orange-600/50 px-4 py-2 text-white transition hover:bg-orange-600">
                               View Appeal
                             </button>
                           )}
@@ -950,6 +970,141 @@ export default function BuyerOrders() {
             </button>
           </div>
         </ActionModal>
+      )}
+
+      {/* Receipt Modal */}
+      {showReceiptModal && receiptOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0a1628] p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-lg font-black text-white">
+                <Receipt className="h-5 w-5 text-emerald-400" />
+                Order Receipt
+              </h3>
+              <button
+                onClick={() => {
+                  setShowReceiptModal(false)
+                  setReceiptOrder(null)
+                }}
+                className="rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Brand header */}
+            <div className="mb-5 rounded-xl border border-cyan-300/15 bg-cyan-400/5 p-4 text-center">
+              <p className="text-xs font-black uppercase tracking-widest text-cyan-300">Troll City LLC</p>
+              <p className="mt-0.5 text-[10px] text-slate-500">Official Transaction Receipt</p>
+            </div>
+
+            {/* Item */}
+            <div className="mb-4 rounded-xl border border-white/5 bg-white/[0.02] p-4">
+              <div className="flex items-center gap-3">
+                {receiptOrder.marketplace_item?.thumbnail_url && (
+                  <img
+                    src={receiptOrder.marketplace_item.thumbnail_url}
+                    alt={receiptOrder.marketplace_item.title || ''}
+                    className="h-14 w-14 rounded-lg object-cover"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold text-white">{receiptOrder.marketplace_item?.title || 'Item'}</p>
+                  <p className="text-xs text-slate-500">
+                    Seller: {receiptOrder.seller_profile?.username || 'Unknown'}
+                  </p>
+                  {(receiptOrder as any).source === 'auction' && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-purple-300/25 bg-purple-400/10 px-2 py-0.5 text-[10px] font-black uppercase text-purple-100">
+                      <Gavel className="h-2.5 w-2.5" />
+                      Auction Win
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Transaction details */}
+            <div className="mb-4 space-y-2 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Item Price</span>
+                <span className="font-bold text-yellow-400">{receiptOrder.price_paid.toLocaleString()} coins</span>
+              </div>
+              {(receiptOrder as any).shipping_cost > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Shipping</span>
+                  <span className="font-bold text-cyan-300">{(receiptOrder as any).shipping_cost.toLocaleString()} coins</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-white/10 pt-2 font-bold">
+                <span className="text-white">Total Paid</span>
+                <span className="text-emerald-400">
+                  {(Number(receiptOrder.price_paid) + Number((receiptOrder as any).shipping_cost || 0)).toLocaleString()} coins
+                </span>
+              </div>
+            </div>
+
+            {/* Order info */}
+            <div className="mb-5 space-y-2 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Order ID</span>
+                <span className="font-mono text-slate-300">{receiptOrder.id.slice(0, 12)}...</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status</span>
+                <span className="font-bold capitalize text-slate-300">{receiptOrder.status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Fulfillment</span>
+                <span className="font-bold capitalize text-slate-300">{receiptOrder.fulfillment_status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Date</span>
+                <span className="text-slate-300">{new Date(receiptOrder.created_at).toLocaleString()}</span>
+              </div>
+              {receiptOrder.shipping_name && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Ship To</span>
+                  <span className="text-right text-slate-300">
+                    {receiptOrder.shipping_name}
+                    {receiptOrder.shipping_address && `, ${receiptOrder.shipping_address}`}
+                    {receiptOrder.shipping_city && `, ${receiptOrder.shipping_city}`}
+                    {receiptOrder.shipping_state && ` ${receiptOrder.shipping_state}`}
+                    {receiptOrder.shipping_zip && ` ${receiptOrder.shipping_zip}`}
+                  </span>
+                </div>
+              )}
+              {receiptOrder.tracking_number && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tracking</span>
+                  <span className="font-mono text-cyan-300">
+                    {receiptOrder.shipping_carrier ? `${receiptOrder.shipping_carrier.toUpperCase()} ` : ''}
+                    {receiptOrder.tracking_number}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="mb-5 text-center">
+              <p className="text-[10px] text-slate-600">
+                This receipt is auto-generated by Troll City LLC.
+              </p>
+              <p className="text-[10px] text-slate-600">
+                For disputes, file an appeal or escalate to Troll Court.
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowReceiptModal(false)
+                setReceiptOrder(null)
+              }}
+              className="w-full rounded-lg bg-cyan-600 py-3 font-bold text-white transition hover:bg-cyan-500"
+            >
+              Close Receipt
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

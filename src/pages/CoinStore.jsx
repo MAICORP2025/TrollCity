@@ -485,8 +485,12 @@ function ProfileFramesStoreEmbed() {
   const handlePurchase = async (frame) => {
     if (!user) return;
     if (ownedIds.has(frame.id)) return;
-    if ((troll_coins || 0) < frame.coinCost) {
+    if (!useCredit && (troll_coins || 0) < frame.coinCost) {
       toast.error(`Need ${frame.coinCost.toLocaleString()} coins`);
+      return;
+    }
+    if (useCredit && (creditInfo?.available || 0) < frame.coinCost) {
+      toast.error(`Need ${frame.coinCost.toLocaleString()} credit`);
       return;
     }
     setPurchasing(frame.id);
@@ -498,6 +502,7 @@ function ProfileFramesStoreEmbed() {
         type: 'frame_purchase',
         description: `Purchased Profile Frame: ${frame.name}`,
         metadata: { frame_id: frame.id, frame_name: frame.name },
+        useCredit,
         supabaseClient: supabase,
       });
 
@@ -2339,18 +2344,34 @@ useEffect(() => {
               <StorageTab
                 userId={user?.id}
                 trollCoins={troll_coins}
+                useCredit={useCredit}
+                creditInfo={creditInfo}
                 onPurchase={async (tierIndex, fee) => {
                   try {
                     const tier = STORAGE_TIERS[tierIndex];
-                    const { data, error } = await supabase.rpc('purchase_storage_upgrade', {
-                      p_user_id: user.id,
-                      p_tier_index: tierIndex,
-                      p_tier_label: tier.label,
-                      p_monthly_fee: fee,
-                      p_bytes_granted: tier.storageBytes,
-                    });
-                    if (error) throw error;
-                    if (!data?.success) throw new Error(data?.error || 'Purchase failed');
+                    if (useCredit) {
+                      // Use credit card via deductCoins
+                      const { success, error: deductError } = await deductCoins({
+                        userId: user.id,
+                        amount: fee,
+                        type: 'storage_purchase',
+                        description: `Purchased Storage Plan: ${tier.label}`,
+                        metadata: { tier_label: tier.label, tier_index: tierIndex, bytes_granted: tier.storageBytes },
+                        useCredit: true,
+                        supabaseClient: supabase,
+                      });
+                      if (!success) throw new Error(deductError || 'Credit payment failed');
+                    } else {
+                      const { data, error } = await supabase.rpc('purchase_storage_upgrade', {
+                        p_user_id: user.id,
+                        p_tier_index: tierIndex,
+                        p_tier_label: tier.label,
+                        p_monthly_fee: fee,
+                        p_bytes_granted: tier.storageBytes,
+                      });
+                      if (error) throw error;
+                      if (!data?.success) throw new Error(data?.error || 'Purchase failed');
+                    }
                     toast.success(`Storage upgraded to ${tier.label}!`);
                     showPurchaseCompleteOverlay();
                     await refreshCoins();
@@ -2534,7 +2555,7 @@ const STORAGE_TOP_UPS = [
   { id: 'ultimate', label: 'Ultimate', gb: 500, coins: 8000, description: '+500 GB' },
 ];
 
-function StorageTab({ userId, trollCoins, onPurchase }) {
+function StorageTab({ userId, trollCoins, onPurchase, useCredit, creditInfo }) {
   const [purchasing, setPurchasing] = useState(null);
   const [topUpPurchasing, setTopUpPurchasing] = useState(null);
   const [replayPurchasing, setReplayPurchasing] = useState(false);
@@ -2563,8 +2584,12 @@ function StorageTab({ userId, trollCoins, onPurchase }) {
 
   const handleBuyPlan = async (tierIndex) => {
     const tier = STORAGE_TIERS[tierIndex];
-    if (tier.monthlyFee > 0 && trollCoins < tier.monthlyFee) {
+    if (!useCredit && tier.monthlyFee > 0 && trollCoins < tier.monthlyFee) {
       toast.error(`Not enough Troll Coins. Need ${tier.monthlyFee.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
+      return;
+    }
+    if (useCredit && (creditInfo?.available || 0) < tier.monthlyFee) {
+      toast.error(`Not enough Credit. Need ${tier.monthlyFee.toLocaleString()}, available ${creditInfo?.available?.toLocaleString()}`);
       return;
     }
     setPurchasing(tierIndex);
@@ -2577,8 +2602,12 @@ function StorageTab({ userId, trollCoins, onPurchase }) {
   };
 
   const handleBuyTopUp = async (topUp) => {
-    if (trollCoins < topUp.coins) {
+    if (!useCredit && trollCoins < topUp.coins) {
       toast.error(`Not enough Troll Coins. Need ${topUp.coins.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
+      return;
+    }
+    if (useCredit && (creditInfo?.available || 0) < topUp.coins) {
+      toast.error(`Not enough Credit. Need ${topUp.coins.toLocaleString()}, available ${creditInfo?.available?.toLocaleString()}`);
       return;
     }
     if (!storageStatus?.has_plan) {
@@ -2587,18 +2616,50 @@ function StorageTab({ userId, trollCoins, onPurchase }) {
     }
     setTopUpPurchasing(topUp.id);
     try {
-      const { data, error } = await supabase.rpc('purchase_storage_top_up', {
-        p_user_id: userId,
-        p_gb_amount: topUp.gb,
-        p_coins_cost: topUp.coins,
-      });
-      if (error) throw error;
-      if (data?.success) {
-        toast.success(`Added ${topUp.description} to your storage!`);
-        await fetchStatus();
+      if (useCredit) {
+        // Pay via credit card
+        const { success, error: deductError } = await deductCoins({
+          userId,
+          amount: topUp.coins,
+          type: 'storage_purchase',
+          description: `Storage Top-Up: ${topUp.description}`,
+          metadata: { gb_amount: topUp.gb, top_up_id: topUp.id },
+          useCredit: true,
+          supabaseClient: supabase,
+        });
+        if (!success) throw new Error(deductError || 'Credit payment failed');
+        // Grant storage directly (bypass RPC since it requires troll_coins)
+        const { data: planData } = await supabase
+          .from('user_storage_purchases')
+          .select('id, top_up_bytes')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('purchased_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (planData?.id) {
+          const bytesToAdd = topUp.gb * 1024 * 1024 * 1024;
+          await supabase
+            .from('user_storage_purchases')
+            .update({ top_up_bytes: (planData.top_up_bytes || 0) + bytesToAdd })
+            .eq('id', planData.id);
+          await supabase.from('storage_top_ups').insert({
+            user_id: userId,
+            gb_added: topUp.gb,
+            coins_charged: topUp.coins,
+          });
+        }
       } else {
-        toast.error(data?.error || 'Purchase failed');
+        const { data, error } = await supabase.rpc('purchase_storage_top_up', {
+          p_user_id: userId,
+          p_gb_amount: topUp.gb,
+          p_coins_cost: topUp.coins,
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Purchase failed');
       }
+      toast.success(`Added ${topUp.description} to your storage!`);
+      await fetchStatus();
     } catch (err) {
       toast.error(err?.message || 'Purchase failed');
     } finally {
@@ -2611,23 +2672,53 @@ function StorageTab({ userId, trollCoins, onPurchase }) {
       toast.error('Minimum purchase is 50 coins.');
       return;
     }
-    if (trollCoins < replayAmount) {
+    if (!useCredit && trollCoins < replayAmount) {
       toast.error(`Not enough Troll Coins. Need ${replayAmount.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
+      return;
+    }
+    if (useCredit && (creditInfo?.available || 0) < replayAmount) {
+      toast.error(`Not enough Credit. Need ${replayAmount.toLocaleString()}, available ${creditInfo?.available?.toLocaleString()}`);
       return;
     }
     setReplayPurchasing(true);
     try {
-      const { data, error } = await supabase.rpc('add_replay_balance', {
-        p_user_id: userId,
-        p_coins_amount: replayAmount,
-      });
-      if (error) throw error;
-      if (data?.success) {
-        toast.success(`Added ${replayAmount.toLocaleString()} coins to replay balance!`);
-        await fetchStatus();
+      if (useCredit) {
+        // Pay via credit card
+        const { success, error: deductError } = await deductCoins({
+          userId,
+          amount: replayAmount,
+          type: 'replay_purchase',
+          description: `Replay balance purchase: ${replayAmount} coins`,
+          metadata: { coins: replayAmount },
+          useCredit: true,
+          supabaseClient: supabase,
+        });
+        if (!success) throw new Error(deductError || 'Credit payment failed');
+        // Grant replay balance directly (bypass RPC since it requires troll_coins)
+        // Use read-then-upsert pattern for atomic increment
+        const { data: existingReplay } = await supabase
+          .from('replay_balances')
+          .select('balance, status')
+          .eq('user_id', userId)
+          .maybeSingle();
+        const newBalance = (existingReplay?.balance || 0) + replayAmount;
+        const newStatus = existingReplay?.status === 'restricted' && newBalance > 0 ? 'active' : (existingReplay?.status || 'active');
+        await supabase.from('replay_balances').upsert({
+          user_id: userId,
+          balance: newBalance,
+          status: newStatus,
+          last_updated: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
       } else {
-        toast.error(data?.error || 'Purchase failed');
+        const { data, error } = await supabase.rpc('add_replay_balance', {
+          p_user_id: userId,
+          p_coins_amount: replayAmount,
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Purchase failed');
       }
+      toast.success(`Added ${replayAmount.toLocaleString()} coins to replay balance!`);
+      await fetchStatus();
     } catch (err) {
       toast.error(err?.message || 'Purchase failed');
     } finally {

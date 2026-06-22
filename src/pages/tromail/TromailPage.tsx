@@ -110,6 +110,20 @@ interface ContractTemplate {
   created_at?: string
 }
 
+interface FileCabinetDocument {
+  id: string
+  document_type_id?: string | null
+  document_type_slug: string
+  title: string
+  status: string
+  submitted_by?: string | null
+  created_at: string
+  version?: number | null
+  storage_path?: string | null
+  pdf_path?: string | null
+  metadata?: Record<string, any>
+}
+
 interface TromailContract {
   id: string
   template_id: string
@@ -226,6 +240,7 @@ export default function TromailPage() {
   const [isLoading, setIsLoading] = useState(false)
 
   const [hasTromailAccount, setHasTromailAccount] = useState(false)
+  const [isCheckingTromailAccount, setIsCheckingTromailAccount] = useState(false)
   const [currentAccount, setCurrentAccount] = useState<TromailAccount | null>(null)
   const [displayName, setDisplayName] = useState(profile?.full_name || profile?.username || '')
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
@@ -261,6 +276,9 @@ export default function TromailPage() {
   const [contractCustomNotes, setContractCustomNotes] = useState('')
   const [isCreatingContract, setIsCreatingContract] = useState(false)
 
+  const [fileCabinetDocuments, setFileCabinetDocuments] = useState<FileCabinetDocument[]>([])
+  const [isFileCabinetLoading, setIsFileCabinetLoading] = useState(false)
+
   const messageIdFromUrl = searchParams.get('messageId') || searchParams.get('open')
 
   const profileRole = normalizeRole(profile?.role || profile?.troll_role || 'user')
@@ -291,9 +309,15 @@ export default function TromailPage() {
   const checkTromailAccount = useCallback(async () => {
     if (!user?.id) return
 
-    const account = await getUserTromailAccount(user.id)
-    setCurrentAccount(account as TromailAccount | null)
-    setHasTromailAccount(Boolean(account))
+    setIsCheckingTromailAccount(true)
+
+    try {
+      const account = await getUserTromailAccount(user.id)
+      setCurrentAccount(account as TromailAccount | null)
+      setHasTromailAccount(Boolean(account))
+    } finally {
+      setIsCheckingTromailAccount(false)
+    }
   }, [user?.id])
 
   const fetchDirectory = useCallback(async () => {
@@ -410,6 +434,26 @@ export default function TromailPage() {
     }
   }, [user?.id])
 
+  const fetchFileCabinetDocuments = useCallback(async () => {
+    setIsFileCabinetLoading(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('id, document_type_id, document_type_slug, title, status, submitted_by, created_at, version, storage_path, pdf_path, metadata')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      setFileCabinetDocuments((data || []) as FileCabinetDocument[])
+    } catch (err: any) {
+      console.error('[TromailPage] Error fetching file cabinet documents:', err)
+      toast.error(err?.message || 'Failed to load file cabinet documents.')
+    } finally {
+      setIsFileCabinetLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (user && profile && !canAccessTromail(profile)) {
       toast.error('Access denied. Tromail requires an approved Troll City role.')
@@ -453,9 +497,9 @@ export default function TromailPage() {
 
   useEffect(() => {
     if (activeTab === 'file-cabinet') {
-      fetchDirectory()
+      fetchFileCabinetDocuments()
     }
-  }, [activeTab, fetchDirectory])
+  }, [activeTab, fetchFileCabinetDocuments])
 
   useEffect(() => {
     if (!messageIdFromUrl || !hasTromailAccount || !user?.id) return
@@ -877,6 +921,14 @@ export default function TromailPage() {
   }
 
   if (!user || !profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0A0814] text-white">
+        <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
+      </div>
+    )
+  }
+
+  if (isCheckingTromailAccount) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0A0814] text-white">
         <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
@@ -1527,11 +1579,69 @@ export default function TromailPage() {
           <div className={`${panelClass} p-5`}>
             <div className="flex items-start gap-3">
               <Folder className="mt-1 h-6 w-6 text-cyan-300" />
-              <div>
+              <div className="flex-1">
                 <h2 className="text-lg font-bold">File Cabinet</h2>
                 <p className="mt-2 text-sm text-slate-400">
-                  Organization documents are disabled for Tromail. Use the Contracts tab to review Tromail contracts.
+                  Role and staff documents for Tromail.
                 </p>
+
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <p className="text-xs text-slate-400">
+                    {fileCabinetDocuments.length} {fileCabinetDocuments.length === 1 ? 'document' : 'documents'} available
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void fetchFileCabinetDocuments()}
+                    disabled={isFileCabinetLoading}
+                    className={ghostButtonClass}
+                  >
+                    {isFileCabinetLoading ? 'Loading...' : 'Refresh'}
+                  </Button>
+                </div>
+
+                {isFileCabinetLoading ? (
+                  <div className="mt-5 flex items-center gap-2 text-sm text-slate-400">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading file cabinet...
+                  </div>
+                ) : fileCabinetDocuments.length === 0 ? (
+                  <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4 text-center text-sm text-slate-500">
+                    No role or staff documents found.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {fileCabinetDocuments.map((document) => (
+                      <div key={document.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="font-bold text-white">{document.title || 'Untitled document'}</p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              {roleLabel(document.document_type_slug)} • {roleLabel(document.status)} • Version {document.version || 1}
+                            </p>
+                            <p className="mt-1 text-[11px] text-white/35">
+                              Submitted {document.created_at ? new Date(document.created_at).toLocaleString() : 'recently'}
+                            </p>
+                          </div>
+                          {(document.pdf_path || document.storage_path) ? (
+                            <a
+                              href={document.pdf_path || document.storage_path || ''}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-9 items-center justify-center rounded-lg border border-cyan-300/25 bg-cyan-500/10 px-3 text-xs font-bold text-cyan-100 transition hover:bg-cyan-500/20"
+                            >
+                              Open file
+                            </a>
+                          ) : (
+                            <span className="inline-flex h-9 items-center justify-center rounded-lg border border-white/10 px-3 text-xs font-bold text-white/40">
+                              No file link
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

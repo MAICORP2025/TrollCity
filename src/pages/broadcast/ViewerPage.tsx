@@ -2229,7 +2229,10 @@ useStreamRealtime(
    useEffect(() => {
     if (!streamId || !user?.id) return
 
-    void joinAudience()
+    // Don't join audience presence if user has ghost mode enabled
+    if (!profile?.is_ghost_mode) {
+      void joinAudience()
+    }
 
     const heartbeat = window.setInterval(() => {
       void heartbeatAudience()
@@ -2239,7 +2242,7 @@ useStreamRealtime(
       window.clearInterval(heartbeat)
       void leaveAudience()
     }
-  }, [streamId, user?.id, joinAudience, heartbeatAudience, leaveAudience])
+  }, [streamId, user?.id, profile?.is_ghost_mode, joinAudience, heartbeatAudience, leaveAudience])
 
   useEffect(() => {
 

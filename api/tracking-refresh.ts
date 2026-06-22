@@ -48,19 +48,85 @@ async function fetchUSPSTracking(trackingNumber: string): Promise<CarrierTrackin
   }
   
   try {
-    // USPS API implementation would go here
-    // This is a placeholder - implement actual API call
-    const response = await fetch(`https://api.usps.com/tracking/v1/tracks/${trackingNumber}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
-    })
-    
+    const xml = `<TrackRequest USERID="${apiKey}"><TrackID ID="${trackingNumber}"></TrackID></TrackRequest>`
+    const url = `https://secure.shippingapis.com/ShippingAPI.dll?API=TrackV2&XML=${encodeURIComponent(xml)}`
+    const response = await fetch(url)
     if (!response.ok) return null
-    return await response.json()
+    const text = await response.text()
+    const parsed = parseUSPSTrackResponse(text, trackingNumber)
+    return parsed
   } catch {
     return null
   }
+}
+
+function parseUSPSTrackResponse(xml: string, trackingNumber: string): CarrierTrackingResponse | null {
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(xml, 'text/xml')
+    const error = doc.querySelector('Error')
+    if (error) {
+      const description = error.querySelector('Description')?.textContent || 'USPS error'
+      console.warn('USPS tracking error:', description)
+      return null
+    }
+
+    const trackInfo = doc.querySelector('TrackInfo')
+    if (!trackInfo) return null
+
+    const statusEl = trackInfo.querySelector('TrackSummary')
+    const events: Array<{ status: string; description: string; location?: string; timestamp: string }> = []
+
+    const summaryText = statusEl?.textContent?.trim() || ''
+    const status = detectStatusFromSummary(summaryText)
+    const estimatedMatch = summaryText.match(/Expected Delivery(?: by)?(?: is)?(?: on)?\s*(?:January|February|March|April|May|June|July|August|September|October|November|December)?\s*([\d\/]+)/i)
+    const estimatedDelivery = estimatedMatch ? estimatedMatch[1] : undefined
+
+    const detailEls = trackInfo.querySelectorAll('TrackDetail')
+    detailEls.forEach((el) => {
+      const eventText = el.textContent?.trim() || ''
+      if (eventText) {
+        const parts = eventText.split(', ')
+        events.push({
+          status: status,
+          description: parts[0] || eventText,
+          location: parts[1] || parts[2] || undefined,
+          timestamp: new Date().toISOString(),
+        })
+      }
+    })
+
+    if (events.length === 0) {
+      events.push({
+        status,
+        description: summaryText || 'Tracking information unavailable',
+        timestamp: new Date().toISOString(),
+      })
+    }
+
+    return {
+      status,
+      description: summaryText || undefined,
+      location: undefined,
+      estimatedDelivery,
+      events,
+    }
+  } catch {
+    return null
+  }
+}
+
+function detectStatusFromSummary(summary: string): string {
+  const s = summary.toLowerCase()
+  if (s.includes('delivered') || s.includes('your item was delivered')) return 'delivered'
+  if (s.includes('out for delivery')) return 'out_for_delivery'
+  if (s.includes('pre-shipment') || s.includes('label created') || s.includes('shipment accepted')) return 'label_created'
+  if (s.includes('accepted') || s.includes('picked up')) return 'accepted'
+  if (s.includes('in transit') || s.includes('arrived') || s.includes('departed') || s.includes('processed')) return 'in_transit'
+  if (s.includes('exception') || s.includes('attempted') || s.includes('could not')) return 'exception'
+  if (s.includes('return') || s.includes('returned')) return 'returned'
+  if (s.includes('delivered') || s.includes('picked up')) return 'delivered'
+  return 'in_transit'
 }
 
 async function fetchUPSTracking(trackingNumber: string): Promise<CarrierTrackingResponse | null> {

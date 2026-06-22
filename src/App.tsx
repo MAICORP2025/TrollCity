@@ -84,6 +84,7 @@ const AdminEarningsDashboard = lazyWithRetry(() => import("./pages/admin/AdminEa
 const AdminDashboard = lazyWithRetry(() => import("./pages/admin/AdminDashboard"));
 const ApplicationsPage = lazyWithRetry(() => import("./pages/admin/Applications"));
 const AdminMarketplace = lazyWithRetry(() => import("./pages/admin/AdminMarketplace"));
+const MarketplaceReleaseRequests = lazyWithRetry(() => import("./pages/admin/MarketplaceReleaseRequests"));
 const AdminOfficerReports = lazyWithRetry(() => import("./pages/admin/AdminOfficerReports"));
 const StoreDebug = lazyWithRetry(() => import("./pages/admin/StoreDebug"));
 const Changelog = lazyWithRetry(() => import("./pages/Changelog"));
@@ -109,6 +110,7 @@ const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
 const BonusesPage = lazyWithRetry(() => import("./pages/Bonuses"));
 const CashoutPage = lazyWithRetry(() => import("./pages/CashoutPage"));
 const CashoutRequestPage = lazyWithRetry(() => import("./pages/CashoutRequestPage"));
+const FastPayApplication = lazyWithRetry(() => import("./pages/FastPayApplication"));
 const MaiPayPage = lazyWithRetry(() => import("./pages/MaiPayPage"));
 const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
 
@@ -374,20 +376,38 @@ const isPublicRoute = (pathname: string) => {
     
     // Do not force profile editing after login. Missing usernames are handled inside profile surfaces.
     
-    if (
+if (
       profile && // Add this check
-       profile?.application_required &&
-       !profile?.application_submitted &&
-       location.pathname !== "/apply"
-     ) {
-       return <Navigate to="/apply" replace />;
+        profile?.application_required &&
+        !profile?.application_submitted &&
+        location.pathname !== "/apply"
+      ) {
+        return <Navigate to="/apply" replace />;
+      }
+
+    // Neighborhood setup guard - redirect users without neighborhood_id to setup
+    if (
+      profile &&
+      !profile?.neighborhood_id &&
+      (location.pathname === "/map" || location.pathname === "/neighborhood-map") &&
+      !isPublicRoute(location.pathname)
+    ) {
+      const hasNeighborhood = !!(profile?.neighborhood_id && profile.neighborhood_id !== '')
+      console.log('[RequireAuth] Redirecting to neighborhood-setup. profile:', { 
+        neighborhood_id: profile?.neighborhood_id,
+        hasNeighborhood,
+        pathname: location.pathname,
+        profileId: profile?.id 
+      });
+      return <Navigate to="/neighborhood-setup" replace />;
     }
+
     return (
-      <>
-        
-        <Outlet />
-      </>
-    );
+        <>
+          
+          <Outlet />
+        </>
+      );
   };
 
   // 🔒 Internal Route Guard — prevents direct URL access to pages that should only be reached via internal navigation
@@ -1653,6 +1673,7 @@ const handleVisibilityChange = async () => {
                    <Route path="/match" element={<MatchPage />} />
           <Route path="/city-hall" element={<Navigate to="/home" replace />} />
                   <Route path="/city-registry" element={<CityRegistry />} />
+                  <Route path="/appeals" element={<Navigate to="/city-registry" replace />} />
                   <Route path="/city-registry/advertise" element={<AdvertisePage />} />
                 <Route path="/universe-event" element={<UniverseEventPage />} />
                 <Route path="/events/universe" element={<Navigate to="/universe-event" replace />} />
@@ -1943,8 +1964,9 @@ const handleVisibilityChange = async () => {
 
                   <Route path="/bonuses" element={<BonusesPage />} />
                    <Route path="/cashout" element={<CashoutPage />} />
-                   <Route path="/cashout-request" element={<CashoutRequestPage />} />
-                   <Route path="/mai-pay" element={<MaiPayPage />} />
+                    <Route path="/cashout-request" element={<CashoutRequestPage />} />
+                    <Route path="/fast-pay-application" element={<FastPayApplication />} />
+                    <Route path="/mai-pay" element={<MaiPayPage />} />
                    <Route path="/withdraw" element={<Withdraw />} />
 
                   <Route path="/shop-partner" element={<ShopPartnerPage />} />
@@ -2179,6 +2201,14 @@ const handleVisibilityChange = async () => {
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <AdminMarketplace />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/marketplace/release-requests"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <MarketplaceReleaseRequests />
                         </RequireRole>
                       }
                     />

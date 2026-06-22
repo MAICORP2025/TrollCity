@@ -28,7 +28,7 @@ export default function NewUserCard({ user, onFollow, className }: NewUserCardPr
         className
       )}
     >
-      <Link to={`/profile/${user.id}`} className="block">
+      <Link to={`/profile/${user.username}`} className="block">
         <div className="relative mx-auto w-14 h-14 mb-2">
           {user.avatar_url ? (
             <img

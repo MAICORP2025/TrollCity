@@ -19,6 +19,7 @@ import {
   Search,
   ShieldCheck,
   Truck,
+  Unlock,
   X,
 } from 'lucide-react'
 
@@ -240,6 +241,11 @@ export default function MarketplaceSellerOrders() {
   const [showRefundModal, setShowRefundModal] = useState(false)
   const [isRefunding, setIsRefunding] = useState(false)
 
+  const [showReleaseRequestModal, setShowReleaseRequestModal] = useState(false)
+  const [releaseRequestOrder, setReleaseRequestOrder] = useState<MarketplacePurchase | null>(null)
+  const [releaseNotes, setReleaseNotes] = useState('')
+  const [isRequestingRelease, setIsRequestingRelease] = useState(false)
+
   const fetchOrders = useCallback(async () => {
     if (!user?.id) {
       setOrders([])
@@ -348,10 +354,9 @@ export default function MarketplaceSellerOrders() {
 
   const handleContactBuyer = (order: MarketplacePurchase) => {
     if (!order.buyer_id || !order.marketplace_item) return
+    const itemTitle = encodeURIComponent(order.marketplace_item.title || 'Marketplace Item')
     navigate(
-      `/tcps?user=${order.buyer_id}&itemId=${order.item_id}&itemTitle=${encodeURIComponent(
-        order.marketplace_item.title || 'Marketplace Item'
-      )}`
+      `/utromail/compose?recipientId=${order.buyer_id}&subject=${itemTitle}`
     )
   }
 
@@ -446,6 +451,55 @@ export default function MarketplaceSellerOrders() {
     } catch (err: any) {
       console.error('[MarketplaceSellerOrders] Error refreshing tracking:', err)
       toast.error(err?.message || 'Failed to refresh tracking')
+    }
+  }
+
+  const handleOpenReleaseRequest = (order: MarketplacePurchase) => {
+    setReleaseRequestOrder(order)
+    setReleaseNotes('')
+    setShowReleaseRequestModal(true)
+  }
+
+  const handleSubmitReleaseRequest = async () => {
+    if (!releaseRequestOrder || !user?.id) return
+
+    const shipment = getShipment(releaseRequestOrder)
+    const trackingNumber = releaseRequestOrder.tracking_number || shipment?.tracking_number
+    const carrier = releaseRequestOrder.shipping_carrier || shipment?.carrier
+
+    if (!trackingNumber) {
+      toast.error('Tracking number is required before requesting payout release')
+      return
+    }
+
+    setIsRequestingRelease(true)
+    try {
+      const { data, error } = await supabase.rpc('request_marketplace_payout_release', {
+        p_order_id: releaseRequestOrder.id,
+        p_seller_id: user.id,
+        p_tracking_number: trackingNumber,
+        p_carrier: carrier || 'usps',
+        p_seller_notes: releaseNotes || null,
+      })
+
+      if (error) throw error
+
+      const result = data as any
+      if (result?.success) {
+        toast.success('Payout release request submitted! An admin will review your tracking. You need at least 10 completed sales with no open appeals.')
+      } else {
+        toast.error(result?.error || 'Failed to submit release request')
+      }
+
+      setShowReleaseRequestModal(false)
+      setReleaseRequestOrder(null)
+      setReleaseNotes('')
+      await fetchOrders()
+    } catch (err: any) {
+      console.error('[MarketplaceSellerOrders] Error requesting release:', err)
+      toast.error(err?.message || 'Failed to request payout release')
+    } finally {
+      setIsRequestingRelease(false)
     }
   }
 
@@ -778,9 +832,20 @@ export default function MarketplaceSellerOrders() {
                           )}
 
                           {order.payout_status === 'held' && (
-                            <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-400">
-                              <ShieldCheck className="h-4 w-4" />
-                              Coins held until delivery
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-xs text-orange-400">
+                                <ShieldCheck className="h-4 w-4" />
+                                Coins held until delivery
+                              </div>
+                              {(order.tracking_number || getShipment(order)?.tracking_number) && (
+                                <button
+                                  onClick={() => handleOpenReleaseRequest(order)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-400 transition-colors"
+                                >
+                                  <Unlock className="h-3.5 w-3.5" />
+                                  Request Release
+                                </button>
+                              )}
                             </div>
                           )}
                           {order.payout_status === 'released' && (
@@ -929,6 +994,61 @@ export default function MarketplaceSellerOrders() {
               className="flex-1 rounded-lg bg-red-600 py-3 text-white transition hover:bg-red-700 disabled:opacity-50"
             >
               {isRefunding ? 'Refunding...' : 'Confirm Refund'}
+            </button>
+          </div>
+        </ActionModal>
+      )}
+
+      {showReleaseRequestModal && releaseRequestOrder && (
+        <ActionModal
+          title="Request Payout Release"
+          icon={<Unlock className="h-5 w-5 text-amber-400" />}
+          onClose={() => {
+            setShowReleaseRequestModal(false)
+            setReleaseRequestOrder(null)
+            setReleaseNotes('')
+          }}
+        >
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <p className="text-sm text-amber-400">
+              Request admin release of <strong>{(releaseRequestOrder.seller_earnings || 0).toLocaleString()} coins</strong> from escrow.
+              Tracking: <code className="bg-white/10 px-1.5 py-0.5 rounded text-xs text-white">{releaseRequestOrder.tracking_number || (getShipment(releaseRequestOrder)?.tracking_number)}</code> ({releaseRequestOrder.shipping_carrier || getShipment(releaseRequestOrder)?.carrier})
+            </p>
+            <p className="mt-2 text-xs text-amber-400/80">
+              Your order must have tracking and item delivered. Admins will verify tracking before approving. You need at least 10 completed sales with no open appeals to be eligible.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-2 block text-sm text-slate-400">Notes for Admin (optional)</label>
+              <textarea
+                value={releaseNotes}
+                onChange={(e) => setReleaseNotes(e.target.value)}
+                placeholder="e.g. Buyer confirmed receipt, package in good condition..."
+                rows={3}
+                className={cn(tcInput, 'h-20 resize-none')}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={() => {
+                setShowReleaseRequestModal(false)
+                setReleaseRequestOrder(null)
+                setReleaseNotes('')
+              }}
+              className="flex-1 rounded-lg bg-slate-800 py-3 text-white"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmitReleaseRequest}
+              disabled={isRequestingRelease}
+              className="flex-1 rounded-lg bg-amber-600 py-3 text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRequestingRelease ? 'Submitting...' : 'Submit Release Request'}
             </button>
           </div>
         </ActionModal>

@@ -56,6 +56,10 @@ export default function PayPalPaymentModal({
   const paypalOrderIdRef = useRef<string | null>(null)
   const paypalInstanceRef = useRef<any>(null)
   const renderKeyRef = useRef<string>('')
+  // Track whether a PayPal checkout flow is actively in progress so we
+  // can prevent the Dialog from closing (via onOpenChange) while the
+  // user is completing the PayPal popup.
+  const paypalFlowActiveRef = useRef(false)
 
   const coins = pkg?.coins ?? pkg?.coin_amount ?? pkg?.coinAmount ?? 0
   const rawPrice = pkg?.price_usd ?? pkg?.amount_usd ?? pkg?.price ?? 0
@@ -162,6 +166,8 @@ export default function PayPalPaymentModal({
 
     const buttonsConfig: any = {
       createOrder: async () => {
+        // Mark flow as active so the Dialog won't auto-close
+        paypalFlowActiveRef.current = true
         try {
           const { data, error } = await supabase.functions.invoke('create-paypal-order', {
             body: {
@@ -183,6 +189,8 @@ export default function PayPalPaymentModal({
         } catch (err: any) {
           console.error('[PayPalPaymentModal] PayPal order creation error:', err)
           toast.error(err?.message || 'Failed to create PayPal order')
+          // Flow failed – allow dialog to close again
+          paypalFlowActiveRef.current = false
           throw err
         }
       },
@@ -214,6 +222,9 @@ export default function PayPalPaymentModal({
           console.error('[PayPalPaymentModal] PayPal payment verification error:', err)
           toast.error(err?.message || 'Payment verification failed')
           setStep('select')
+        } finally {
+          // PayPal flow finished – re-enable dialog close
+          paypalFlowActiveRef.current = false
         }
       },
 
@@ -228,11 +239,15 @@ export default function PayPalPaymentModal({
         console.error('[PayPalPaymentModal] PayPal error:', err)
         toast.error('PayPal payment failed. Please try again.')
         setStep('select')
+        // Flow errored – allow dialog to close again
+        paypalFlowActiveRef.current = false
       },
 
       onCancel: () => {
         toast.info('Payment cancelled')
         setStep('select')
+        // User cancelled – allow dialog to close again
+        paypalFlowActiveRef.current = false
       },
     }
 
@@ -335,6 +350,12 @@ export default function PayPalPaymentModal({
   }, [clearPayPalContainer, safelyClosePayPalButtons])
 
   const handleClose = useCallback(() => {
+    // If a PayPal checkout is in progress (popup open / verifying),
+    // ignore the close request so the user isn't kicked out mid-payment.
+    if (paypalFlowActiveRef.current) {
+      console.warn('[PayPalPaymentModal] Close requested during active PayPal flow – ignoring.')
+      return
+    }
     setStep('select')
     setPaymentResult(null)
     paypalOrderIdRef.current = null
@@ -346,7 +367,7 @@ export default function PayPalPaymentModal({
   if (!pkg) return null
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose() }}>
       <DialogContent className="sm:max-w-md bg-zinc-900 border-zinc-800 text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">

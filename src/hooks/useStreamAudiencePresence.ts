@@ -135,6 +135,9 @@ const { data, error } = await supabase
   const joinAudience = useCallback(async () => {
     if (!effectiveUserId || !streamId) return
 
+    // Don't join audience presence if user has ghost mode enabled
+    if (profile?.is_ghost_mode) return
+
     const now = new Date().toISOString()
     const username = profile?.username || user?.email?.split('@')?.[0] || effectiveUserId
     const avatarUrl = profile?.avatar_url ?? null

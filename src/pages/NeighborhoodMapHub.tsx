@@ -20,6 +20,7 @@ import { useNeighborhood, useHouseRaids } from '../lib/hooks/useNeighborhood'
 import { useVehicleSystem } from '../lib/hooks/useVehicleSystem'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 import useSEO from '@/hooks/useSEO';
 
 type PropertyStatus = 'owned' | 'available' | 'raided' | 'locked'
@@ -99,11 +100,20 @@ const districtZones = [
 
 export default function NeighborhoodMapHub() {
    const { neighborhood, members, house, loading } = useNeighborhood()
-   const profile = useAuthStore((s) => s.profile)
-   const { vehicles } = useVehicleSystem()
-   const { raids, isRaided } = useHouseRaids(house?.id || null)
+    const profile = useAuthStore((s) => s.profile)
+    const { vehicles } = useVehicleSystem()
+    const { raids, isRaided } = useHouseRaids(house?.id || null)
+    const navigate = useNavigate();
 
-  useSEO({
+    // Redirect users without neighborhood_id to setup
+    useEffect(() => {
+      if (!loading && !profile?.neighborhood_id) {
+        console.log('[NeighborhoodMapHub] No neighborhood_id, redirecting to setup');
+        navigate('/neighborhood-setup', { replace: true });
+      }
+    }, [loading, profile?.neighborhood_id, navigate]);
+
+    useSEO({
     title: 'Neighborhoods | Online Digital Communities & Social Groups | Troll City',
     description: 'Explore Troll City neighborhoods. Join digital communities, own virtual property, participate in house raids, and connect with neighbors in our social metaverse.',
     keywords: [

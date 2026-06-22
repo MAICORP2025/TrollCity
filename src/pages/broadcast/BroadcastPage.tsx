@@ -47,6 +47,30 @@ import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
 const guestLabel = 'rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]'
 const sectionLabel = 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm font-bold text-white/70 backdrop-blur'
 
+type SeatModalPrice = number | ''
+
+function normalizeSeatPrice(value: unknown): SeatModalPrice {
+  if (value === undefined || value === null || value === '') return ''
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : ''
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return ''
+
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : ''
+  }
+
+  return ''
+}
+
+function seatPriceToNumber(value: SeatModalPrice): number {
+  return value === '' ? 0 : Math.max(0, Number(value) || 0)
+}
+
 function getRemoteParticipantIdentity(participant: any): string {
   return String(
     participant?.identity ||
@@ -950,7 +974,36 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
       next.set(participant.identity, participant)
       return next
     })
-  }, [])
+
+    // Ensure host receives audio from every subscribed seat participant. LiveKit
+    // can leave audio subscriptions muted by default for host pages when the
+    // participant is only matched by metadata, so force subscribe once per seat.
+    const metadata = getRemoteParticipantMetadata(participant)
+    const participantUserId = String(metadata?.user_id || metadata?.userId || participant?.user_id || participant?.userId || '')
+    const participantSeatIndex = Number(metadata?.seat_index ?? metadata?.seatIndex ?? participant?.seatIndex ?? NaN)
+    const seatMatchedBySeats = Object.values(seats).some((seat: any) => {
+      const seatUserId = String(seat?.user_id || seat?.guest_id || '')
+      const seatIdentity = String(seat?.livekit_participant_identity || seat?.participant_identity || seat?.livekit_identity || '')
+      const normalizedSeatIndex = Number(seat?.seat_index ?? seat?.seatIndex ?? NaN)
+      return (
+        participantSeatIndex > 0 && normalizedSeatIndex === participantSeatIndex ||
+        (seatUserId && participantUserId && seatUserId === participantUserId) ||
+        (seatIdentity && participant.identity && participant.identity === seatIdentity)
+      )
+    })
+
+    if (seatMatchedBySeats) {
+      participant.audioTrackPublications?.forEach?.((pub: any) => {
+        try {
+          if (pub?.setSubscribed && !pub.isSubscribed) {
+            pub.setSubscribed(true)
+          }
+        } catch (err) {
+          console.warn('[BroadcastPage] Failed to subscribe host to seat audio:', err)
+        }
+      })
+    }
+  }, [seats])
 
   const handleLiveKitTrackUnsubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
     DEBUG_COUNTERS.trackUnsubscribedCount++
@@ -1271,7 +1324,7 @@ useEffect(() => {
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
    const [isSeatsModalOpen, setIsSeatsModalOpen] = useState(false)
    const [seatModalCount, setSeatModalCount] = useState(1)
-   const [seatModalPrices, setSeatModalPrices] = useState<number[]>([])
+   const [seatModalPrices, setSeatModalPrices] = useState<SeatModalPrice[]>([])
    const [selectedSeatIndex, setSelectedSeatIndex] = useState(0)
    const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
     const [chatTab, setChatTab] = useState<'chat' | 'progress' | 'league' | 'gifts' | 'top-fans' | 'settings'>('chat')
@@ -1287,17 +1340,15 @@ useEffect(() => {
 
    useEffect(() => {
      setSeatModalPrices((current) => {
-       const fallbackPrice = Math.max(0, Number(stream?.seat_price ?? current[0] ?? 0))
-       const next = [...current].slice(0, seatModalCount)
+       const next = current.slice(0, seatModalCount)
 
        while (next.length < seatModalCount) {
-         const lastPrice = next.length > 0 ? next[next.length - 1] : fallbackPrice
-         next.push(Math.max(0, Number(lastPrice ?? fallbackPrice)))
+         next.push('')
        }
 
        return next
      })
-   }, [seatModalCount, stream?.seat_price])
+   }, [seatModalCount])
 
    useEffect(() => {
      setSelectedSeatIndex((current) => Math.max(0, Math.min(current, Math.max(0, seatModalCount - 1))))
@@ -2371,13 +2422,16 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
       }
     }, [streamId]);
    const handleOpenSeatsModal = useCallback(() => {
-     const fallbackPrice = Math.max(0, Number(stream?.seat_price ?? 0))
-     const existingSeatPrices = Array.isArray(stream?.seat_prices)
+     const fallbackPrice = normalizeSeatPrice(stream?.seat_price)
+     const hasSeatPrices = Array.isArray(stream?.seat_prices)
+     const existingSeatPrices = hasSeatPrices
        ? stream.seat_prices.slice(1, 1 + Math.max(0, currentViewerSeatCount))
        : []
      const normalizedPrices = Array.from({ length: Math.max(0, currentViewerSeatCount) }, (_, index) => {
        const existingPrice = existingSeatPrices[index]
-       return Math.max(0, Number(typeof existingPrice === 'number' ? existingPrice : fallbackPrice))
+       if (existingPrice !== undefined) return normalizeSeatPrice(existingPrice)
+       if (!hasSeatPrices) return fallbackPrice
+       return ''
      })
 
      setSeatModalCount(Math.max(0, Math.min(6, currentViewerSeatCount)))
@@ -2392,20 +2446,36 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
      if (seatModalCount <= 0 || seatIndex < 0 || seatIndex >= seatModalCount) return
      setSeatModalPrices((current) => {
        const next = [...current]
-       next[seatIndex] = Math.max(0, Number(next[seatIndex] ?? 0) + delta)
+       const nextValue = Math.max(0, seatPriceToNumber(next[seatIndex]) + delta)
+       next[seatIndex] = nextValue > 0 ? nextValue : ''
        return next
      })
    }, [seatModalCount])
-   const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
-     if (seatModalCount <= 0 || seatIndex < 0 || seatIndex >= seatModalCount) return
-     setSeatModalPrices((current) => {
-       const next = [...current]
-       next[seatIndex] = Math.max(0, Number(value || 0))
-       return next
-     })
-   }, [seatModalCount])
+const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
+      if (seatModalCount <= 0 || seatIndex < 0 || seatIndex >= seatModalCount) return
+      const cleanValue = value.trim()
+      if (!cleanValue) {
+        setSeatModalPrices((current) => {
+          const next = [...current]
+          next[seatIndex] = ''
+          return next
+        })
+        return
+      }
 
-  const handleApplySeatConfiguration = useCallback(async (count: number, prices: number[]) => {
+      let val = Math.max(0, Number(cleanValue))
+      if (val > 5000) {
+        toast.error('Seat Price is too High')
+        val = 5000
+      }
+      setSeatModalPrices((current) => {
+        const next = [...current]
+        next[seatIndex] = val > 0 ? val : ''
+        return next
+      })
+    }, [seatModalCount])
+
+  const handleApplySeatConfiguration = useCallback(async (count: number, prices: SeatModalPrice[]) => {
     try {
       if (!streamId || !user?.id) {
         toast.error('Not connected to a live stream');
@@ -2415,7 +2485,7 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
       const desiredViewerSeats = Math.max(0, Math.min(6, count));
       const totalBoxes = desiredViewerSeats + 1;
       const normalizedPrices = Array.from({ length: desiredViewerSeats }, (_, index) =>
-        Math.max(0, Number(prices[index] ?? 0)),
+        seatPriceToNumber(prices[index]),
       )
       const nextSeatPrices = [0, ...normalizedPrices]
 
@@ -5779,7 +5849,7 @@ const handleLike = useCallback(async () => {
                           {allTimeTopGifters.map((fan, index) => (
                             <Link
                               key={fan.sender_id}
-                              to={`/profile/${fan.sender_id}`}
+                              to={`/profile/${fan.sender_username}`}
                               className="block rounded-2xl border border-white/10 bg-black/20 p-3 transition-all hover:border-cyan-300/40 hover:bg-cyan-500/10"
                             >
                               <div className="flex items-center justify-between gap-3">
@@ -6005,7 +6075,7 @@ const handleLike = useCallback(async () => {
                             {Array.from({ length: 6 }, (_, index) => {
                               const active = index < seatModalCount
                               const selected = index === selectedSeatIndex
-                              const price = seatModalPrices[index] ?? 0
+                               const price = seatModalPrices[index]
                               return (
                                 <button
                                   key={index}
@@ -6022,7 +6092,7 @@ const handleLike = useCallback(async () => {
                                   )}
                                 >
                                   <span className="text-[11px] font-black uppercase tracking-[0.18em]">Seat {index + 1}</span>
-                                  <span className="mt-2 text-lg font-black">{active ? `${price} coins` : 'Hidden'}</span>
+                                  <span className="mt-2 text-lg font-black">{active ? `${price === '' ? 0 : price} coins` : 'Hidden'}</span>
                                 </button>
                               )
                             })}
@@ -6047,7 +6117,6 @@ const handleLike = useCallback(async () => {
                                   value={seatModalCount > 0 ? (seatModalPrices[selectedSeatIndex] ?? '') : ''}
                                   onChange={(event) => handleSeatPriceInput(selectedSeatIndex, event.target.value)}
                                   disabled={seatModalCount <= 0}
-                                  placeholder="0"
                                   className="w-full bg-transparent text-lg font-black text-white outline-none placeholder:text-white/30 disabled:cursor-not-allowed disabled:text-white/20"
                                   aria-label={`Price for seat ${selectedSeatIndex + 1}`}
                                 />

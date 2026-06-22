@@ -440,7 +440,7 @@ export default function AgencyProfilePage() {
                 {members.map((member) => (
                   <Link
                     key={member.user_id}
-                    to={`/profile/${member.user_id}`}
+                     to={`/profile/${member.user_profiles?.username}`}
                     className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4 transition hover:border-cyan-400/40"
                   >
                     <div className="flex items-center gap-3">
@@ -549,7 +549,7 @@ export default function AgencyProfilePage() {
                   {topCreators.map((creator) => (
                     <Link
                       key={creator.user_id}
-                      to={`/profile/${creator.user_id}`}
+                       to={`/profile/${creator.user_profiles?.username}`}
                       className="rounded-xl border border-slate-700/50 bg-slate-900/70 p-4 transition hover:border-cyan-400/40"
                     >
                       <div className="flex items-center gap-3">

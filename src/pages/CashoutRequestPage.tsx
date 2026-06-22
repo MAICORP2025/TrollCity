@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   DollarSign,
   Coins,
-  Upload,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -81,8 +80,6 @@ function getPreferredPayoutMethod(rawProfile: any): PayoutMethod {
 
 const MAX_MONTHLY_CASHOUTS = 4;
 
-const ID_BUCKET = 'verification_docs';
-
 export default function CashoutRequestPage() {
   const authStore = useAuthStore() as any;
   const profile = authStore.profile as any;
@@ -96,9 +93,6 @@ export default function CashoutRequestPage() {
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('paypal');
   const [providerUsername, setProviderUsername] = useState('');
   const [userTag, setUserTag] = useState('');
-  const [idFile, setIdFile] = useState<File | null>(null);
-  const [idUploading, setIdUploading] = useState(false);
-  const [idUrl, setIdUrl] = useState<string | null>(null);
   const [lastApprovedAt, setLastApprovedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -106,6 +100,7 @@ export default function CashoutRequestPage() {
   const [monthlyCashoutCount, setMonthlyCashoutCount] = useState(0);
   const [activeGamingLoan, setActiveGamingLoan] = useState<any>(null);
   const [checkingLoan, setCheckingLoan] = useState(true);
+  const [fastPayApproved, setFastPayApproved] = useState(false);
 
   const fastPayLevel = Number(xpStore.level || 1);
   const fastPayTier = getFastPayTier(fastPayLevel);
@@ -119,8 +114,6 @@ export default function CashoutRequestPage() {
     return new Date(lastApprovedAt).getTime() >= Date.now() - 30 * 24 * 60 * 60 * 1000;
   }, [lastApprovedAt]);
 
-  const requiresIdUpload = !hasRecentApprovedPayout;
-
    // Derived state for display
    const feeCoins = selectedTier ? calculateFeeCoins(selectedTier.coins) : 0;
    const netCoins = selectedTier ? calculateNetCoins(selectedTier.coins, feeCoins) : 0;
@@ -130,7 +123,7 @@ export default function CashoutRequestPage() {
      const isStandardTierRestricted = fastPayTier === 'standard' && !isCashoutWindow;
      const monthlyCapReached = monthlyCashoutCount >= MAX_MONTHLY_CASHOUTS;
      const hasActiveGamingLoan = activeGamingLoan?.has_active_loan === true;
-     const canRequest = !isStandardTierRestricted && eligibleCoins >= (selectedTier?.coins || 0) && (!requiresIdUpload || idUrl) && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
+     const canRequest = (!isStandardTierRestricted || fastPayApproved) && eligibleCoins >= (selectedTier?.coins || 0) && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
 
   // Load user's troll_coins balance and recent payout requests
   const getSavedPayoutUsername = useCallback((method: PayoutMethod) => {
@@ -187,6 +180,16 @@ export default function CashoutRequestPage() {
 
         if (lastApprovedError) throw lastApprovedError;
         setLastApprovedAt(lastApprovedData?.[0]?.created_at || null);
+
+        const { data: approvedApplicationData, error: approvedApplicationError } = await supabase
+          .from('fast_pay_applications')
+          .select('id')
+          .eq('user_id', profile.id)
+          .eq('status', 'approved')
+          .maybeSingle();
+
+        if (approvedApplicationError) throw approvedApplicationError;
+        setFastPayApproved(Boolean(profile.cashout_approved || approvedApplicationData?.id));
 
         // Count this month's cashouts (non-rejected)
         const now = new Date();
@@ -257,57 +260,9 @@ export default function CashoutRequestPage() {
     };
   }, [profile]);
 
-  // Handle ID file upload
-  const handleIdUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !profile) return;
-
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error('Only JPG, PNG, WebP, or PDF files are allowed for ID upload');
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('File must be less than 5MB');
-      return;
-    }
-
-    try {
-      setIdUploading(true);
-
-      // Upload to Supabase Storage
-      const fileName = `verification_docs/${profile.id}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from(ID_BUCKET)
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get signed URL (verification_docs is private)
-      const { data: urlData, error: signError } = await supabase.storage
-        .from(ID_BUCKET)
-        .createSignedUrl(fileName, 600);
-      if (signError) throw signError;
-
-      setIdUrl(urlData.signedUrl);
-      toast.success('ID uploaded successfully');
-    } catch (err: any) {
-      console.error('ID upload error:', err);
-      toast.error('Failed to upload ID: ' + (err.message || 'Unknown error'));
-    } finally {
-      setIdUploading(false);
-    }
-  }, [profile]);
-
   // Handle cashout submission
   const handleSubmit = useCallback(async () => {
-    if (!profile || !selectedTier || (requiresIdUpload && !idUrl)) {
+    if (!profile || !selectedTier) {
       toast.error('Missing required fields');
       return;
     }
@@ -340,13 +295,13 @@ export default function CashoutRequestPage() {
     try {
       setSubmitting(true);
 
-       const { data, error } = await supabase.rpc('request_friday_cashout', {
+         const { data, error } = await supabase.rpc('request_friday_cashout', {
          p_user_id: profile.id,
          p_coins_to_redeem: selectedTier.coins,
          p_provider_type: payoutMethod,
          p_provider_username: providerUsername.trim(),
          p_user_tag: userTag.trim() || null,
-         p_id_verification_url: idUrl || null,
+         p_id_verification_url: null,
        });
 
       if (error) throw error;
@@ -368,7 +323,7 @@ export default function CashoutRequestPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [profile, selectedTier, payoutMethod, providerUsername, userTag, idUrl, eligibleCoins, refreshProfile, navigate]);
+  }, [profile, selectedTier, payoutMethod, providerUsername, userTag, eligibleCoins, refreshProfile, navigate]);
 
   if (loading) {
     return (
@@ -401,7 +356,7 @@ export default function CashoutRequestPage() {
           </div>
 
           {/* Friday Gating Warning */}
-           {fastPayTier === 'standard' && !isCashoutWindow && (
+           {fastPayTier === 'standard' && !isCashoutWindow && !fastPayApproved && (
              <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
                <Lock className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
                <div>
@@ -583,70 +538,19 @@ export default function CashoutRequestPage() {
             </div>
           </div>
 
-          {/* ID Verification Upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Upload ID Verification
-              {requiresIdUpload ? (
-                <span className="text-red-400 ml-1">*</span>
-              ) : (
-                <span className="text-green-400 ml-1">(optional for this request)</span>
-              )}
-            </label>
-            <p className="text-xs text-gray-500 mb-2">
-              For security, we require a photo of your government-issued ID. This will be reviewed by our admin team.
-            </p>
-            {!requiresIdUpload && lastApprovedAt && (
-              <p className="text-sm text-green-300 mb-2">
-                Your last approved payout was on {new Date(lastApprovedAt).toLocaleDateString()}. ID upload is optional for 30 days after approval.
-              </p>
-            )}
-
-            {!idUrl ? (
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-purple-500/40 rounded-lg cursor-pointer bg-[#171427] hover:bg-purple-900/20 transition-colors">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  {idUploading ? (
-                    <>
-                      <div className="w-8 h-8 border-4 border-t-troll-gold border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin mb-2" />
-                      <p className="text-sm text-troll-gold">Uploading...</p>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-400">
-                        <span className="font-semibold">Click to upload</span> ID photo or PDF
-                      </p>
-                      <p className="text-xs text-gray-500">JPG, PNG, PDF (max 5MB)</p>
-                    </>
-                  )}
+          {fastPayApproved && (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-400 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-emerald-300">Cashout Approval Active</p>
+                  <p className="text-xs text-emerald-200/80">
+                    Your application has been approved, so ID upload is not required for cashout requests.
+                  </p>
                 </div>
-                <input
-                  type="file"
-                  className="hidden"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  onChange={handleIdUpload}
-                  disabled={idUploading || (fastPayTier === 'standard' && !isCashoutWindow)}
-                />
-              </label>
-            ) : (
-              <div className="flex items-center gap-3 p-3 bg-green-900/20 border border-green-700 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-400" />
-                <div className="flex-1 text-sm">
-                  <p className="text-green-300 font-medium">ID uploaded</p>
-                  <p className="text-green-500/80 text-xs truncate">{idUrl}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setIdUrl(null);
-                    // Optionally delete from storage
-                  }}
-                  className="text-sm text-red-400 hover:text-red-300"
-                >
-                  Remove
-                </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Submit Button */}
           <button
@@ -663,7 +567,7 @@ export default function CashoutRequestPage() {
                   <div className="w-5 h-5 border-2 border-t-troll-purple-900 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
                   Submitting...
                 </>
-              ) : fastPayTier === 'standard' && !isCashoutWindow ? (
+              ) : fastPayTier === 'standard' && !isCashoutWindow && !fastPayApproved ? (
                 <>
                   <Clock className="w-5 h-5" />
                   Standard Payout Window Closed
@@ -682,11 +586,6 @@ export default function CashoutRequestPage() {
                <>
                  <AlertCircle className="w-5 h-5" />
                  Insufficient Eligible Coins
-               </>
-             ) : !idUrl ? (
-               <>
-                 <Upload className="w-5 h-5" />
-                 Upload ID Required
                </>
              ) : !providerUsername.trim() ? (
                <>

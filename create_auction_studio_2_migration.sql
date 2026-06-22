@@ -24,7 +24,8 @@ ALTER TABLE auction_lots
   ADD COLUMN IF NOT EXISTS reserve_price BIGINT,
   ADD COLUMN IF NOT EXISTS bid_increment BIGINT DEFAULT 100,
   ADD COLUMN IF NOT EXISTS buy_now_price BIGINT,
-  ADD COLUMN IF NOT EXISTS quantity INTEGER DEFAULT 1;
+  ADD COLUMN IF NOT EXISTS quantity INTEGER DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS shipping_base_price BIGINT NOT NULL DEFAULT 0;
 
 -- Generate lot numbers and barcodes for existing lots
 DO $$
@@ -35,15 +36,27 @@ DECLARE
   v_barcode TEXT;
 BEGIN
   FOR v_lot IN SELECT id FROM auction_lots WHERE lot_number IS NULL ORDER BY created_at LOOP
-    v_counter := v_counter + 1;
-    v_lot_number := 'TC-LOT-' || LPAD(v_counter::TEXT, 6, '0');
-    v_barcode := v_lot_number;
+    LOOP
+      v_counter := v_counter + 1;
+      v_lot_number := 'TC-LOT-' || LPAD(v_counter::TEXT, 6, '0');
+      EXIT WHEN NOT EXISTS (
+        SELECT 1 FROM auction_lots WHERE id <> v_lot.id AND lot_number = v_lot_number
+      );
+    END LOOP;
+
+    LOOP
+      v_barcode := 'TC-LOT-' || LPAD(v_counter::TEXT, 6, '0');
+      EXIT WHEN NOT EXISTS (
+        SELECT 1 FROM auction_lots WHERE id <> v_lot.id AND barcode = v_barcode
+      );
+      v_counter := v_counter + 1;
+    END LOOP;
 
     UPDATE auction_lots
     SET lot_number = v_lot_number,
         barcode = v_barcode,
         barcode_data = v_lot_number,
-         status_extended = CASE status
+        status_extended = CASE status
           WHEN 'upcoming' THEN 'queued'
           WHEN 'live' THEN 'live'
           WHEN 'sold' THEN 'sold'
@@ -73,6 +86,8 @@ CREATE TABLE IF NOT EXISTS auction_orders (
   winner_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   auctioneer_id UUID NOT NULL REFERENCES auctioneer_profiles(id),
   sale_amount BIGINT NOT NULL DEFAULT 0,
+  shipping_cost BIGINT NOT NULL DEFAULT 0,
+  batch_id UUID,
   payment_status TEXT NOT NULL DEFAULT 'pending'
     CHECK (payment_status IN ('pending', 'held', 'paid', 'refunded', 'failed', 'disputed')),
   fulfillment_status TEXT NOT NULL DEFAULT 'pending'
@@ -96,14 +111,179 @@ CREATE TABLE IF NOT EXISTS auction_orders (
 CREATE INDEX IF NOT EXISTS idx_auction_orders_winner ON auction_orders(winner_user_id);
 CREATE INDEX IF NOT EXISTS idx_auction_orders_show ON auction_orders(auction_show_id);
 CREATE INDEX IF NOT EXISTS idx_auction_orders_lot ON auction_orders(lot_id);
+CREATE INDEX IF NOT EXISTS idx_auction_orders_batch ON auction_orders(batch_id);
 CREATE INDEX IF NOT EXISTS idx_auction_orders_payment ON auction_orders(payment_status);
 CREATE INDEX IF NOT EXISTS idx_auction_orders_fulfillment ON auction_orders(fulfillment_status);
 CREATE INDEX IF NOT EXISTS idx_auction_orders_number ON auction_orders(order_number);
+
+ALTER TABLE auction_orders
+  ADD COLUMN IF NOT EXISTS batch_id UUID;
 
 -- Trigger for updated_at
 CREATE TRIGGER trigger_auction_orders_updated_at
   BEFORE UPDATE ON auction_orders
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+-- ============================================================================
+-- ORDER RECEIPTS — auto-generated Troll City LLC receipts
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS order_receipts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  receipt_number TEXT UNIQUE NOT NULL,
+  order_id UUID NOT NULL REFERENCES auction_orders(id) ON DELETE CASCADE,
+  order_number TEXT NOT NULL,
+  buyer_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  auction_show_id UUID NOT NULL REFERENCES auction_shows(id) ON DELETE CASCADE,
+  lot_id UUID NOT NULL REFERENCES auction_lots(id) ON DELETE CASCADE,
+  seller_id UUID NOT NULL REFERENCES auctioneer_profiles(id) ON DELETE CASCADE,
+  item_title TEXT NOT NULL,
+  item_image_url TEXT,
+  sale_amount BIGINT NOT NULL DEFAULT 0,
+  shipping_cost BIGINT NOT NULL DEFAULT 0,
+  total_amount BIGINT NOT NULL DEFAULT 0,
+  payment_status TEXT NOT NULL,
+  fulfillment_status TEXT NOT NULL,
+  shipping_name TEXT,
+  shipping_line1 TEXT,
+  shipping_line2 TEXT,
+  shipping_city TEXT,
+  shipping_state TEXT,
+  shipping_zip TEXT,
+  shipping_country TEXT DEFAULT 'US',
+  metadata JSONB DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_receipts_order ON order_receipts(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_receipts_buyer ON order_receipts(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_order_receipts_number ON order_receipts(receipt_number);
+
+CREATE OR REPLACE FUNCTION generate_receipt_number()
+RETURNS TEXT AS $$
+DECLARE
+  v_number TEXT;
+BEGIN
+  LOOP
+    v_number := 'TCRC-' || LPAD(FLOOR(RANDOM() * 900000 + 100000)::TEXT, 6, '0');
+    IF NOT EXISTS (SELECT 1 FROM order_receipts WHERE receipt_number = v_number) THEN
+      RETURN v_number;
+    END IF;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION create_order_receipt()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_receipt_number TEXT;
+BEGIN
+  SELECT id INTO v_receipt_number
+  FROM order_receipts
+  WHERE order_id = NEW.id;
+
+  IF v_receipt_number IS NULL THEN
+    v_receipt_number := generate_receipt_number();
+
+    INSERT INTO order_receipts (
+      receipt_number,
+      order_id,
+      order_number,
+      buyer_id,
+      auction_show_id,
+      lot_id,
+      seller_id,
+      item_title,
+      item_image_url,
+      sale_amount,
+      shipping_cost,
+      total_amount,
+      payment_status,
+      fulfillment_status,
+      shipping_name,
+      shipping_line1,
+      shipping_line2,
+      shipping_city,
+      shipping_state,
+      shipping_zip,
+      shipping_country,
+      metadata
+    )
+    SELECT
+      v_receipt_number,
+      NEW.id,
+      NEW.order_number,
+      NEW.winner_user_id,
+      NEW.auction_show_id,
+      NEW.lot_id,
+      NEW.auctioneer_id,
+      COALESCE(al.title, 'Auction Item'),
+      al.image_urls->>0,
+      NEW.sale_amount,
+      NEW.shipping_cost,
+      COALESCE(NEW.sale_amount, 0) + COALESCE(NEW.shipping_cost, 0),
+      NEW.payment_status,
+      NEW.fulfillment_status,
+      NEW.shipping_name,
+      NEW.shipping_line1,
+      NEW.shipping_line2,
+      NEW.shipping_city,
+      NEW.shipping_state,
+      NEW.shipping_zip,
+      COALESCE(NEW.shipping_country, 'US'),
+      jsonb_build_object(
+        'brand', 'Troll City LLC',
+        'source', 'auction_order',
+        'batch_id', NEW.batch_id
+      )
+    FROM auction_lots al
+    WHERE al.id = NEW.lot_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_create_order_receipt ON auction_orders;
+CREATE TRIGGER trigger_create_order_receipt
+  AFTER INSERT ON auction_orders
+  FOR EACH ROW EXECUTE FUNCTION create_order_receipt();
+
+CREATE OR REPLACE FUNCTION refresh_order_receipt()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE order_receipts
+  SET order_number = NEW.order_number,
+      sale_amount = NEW.sale_amount,
+      shipping_cost = NEW.shipping_cost,
+      total_amount = COALESCE(NEW.sale_amount, 0) + COALESCE(NEW.shipping_cost, 0),
+      payment_status = NEW.payment_status,
+      fulfillment_status = NEW.fulfillment_status,
+      shipping_name = NEW.shipping_name,
+      shipping_line1 = NEW.shipping_line1,
+      shipping_line2 = NEW.shipping_line2,
+      shipping_city = NEW.shipping_city,
+      shipping_state = NEW.shipping_state,
+      shipping_zip = NEW.shipping_zip,
+      shipping_country = COALESCE(NEW.shipping_country, 'US'),
+      metadata = jsonb_set(
+        COALESCE(metadata, '{}'::JSONB),
+        '{batch_id}',
+        to_jsonb(COALESCE(NEW.batch_id::TEXT, 'null')),
+        true
+      ),
+      updated_at = now()
+  WHERE order_id = NEW.id;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_refresh_order_receipt ON auction_orders;
+CREATE TRIGGER trigger_refresh_order_receipt
+  AFTER UPDATE ON auction_orders
+  FOR EACH ROW EXECUTE FUNCTION refresh_order_receipt();
 
 -- ============================================================================
 -- PART 3: AUCTION DEVICES — scanner & printer management
@@ -190,7 +370,8 @@ ALTER TABLE auction_wins
   ADD COLUMN IF NOT EXISTS shipping_country TEXT DEFAULT 'US',
   ADD COLUMN IF NOT EXISTS tracking_number TEXT,
   ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS shipping_cost BIGINT NOT NULL DEFAULT 0;
 
 -- ============================================================================
 -- PART 7: RPC FUNCTIONS
@@ -235,6 +416,7 @@ BEGIN
         winner_user_id,
         auctioneer_id,
         sale_amount,
+        shipping_cost,
         payment_status,
         fulfillment_status
       ) VALUES (
@@ -244,6 +426,7 @@ BEGIN
         NEW.winner_user_id,
         (SELECT auctioneer_id FROM auction_shows WHERE id = NEW.auction_show_id),
         COALESCE(NEW.current_highest_bid, NEW.starting_bid, 0),
+        COALESCE(NEW.shipping_base_price, 0),
         'held',
         'pending'
       );
@@ -254,6 +437,7 @@ BEGIN
         lot_id,
         winner_user_id,
         final_bid,
+        shipping_cost,
         payment_status,
         fulfillment_status
       ) VALUES (
@@ -261,6 +445,7 @@ BEGIN
         NEW.id,
         NEW.winner_user_id,
         COALESCE(NEW.current_highest_bid, NEW.starting_bid, 0),
+        COALESCE(NEW.shipping_base_price, 0),
         'held',
         'pending'
       )
@@ -410,6 +595,7 @@ RETURNS JSONB AS $$
 DECLARE
   v_lot auction_lots%ROWTYPE;
   v_order auction_orders%ROWTYPE;
+  v_receipt order_receipts%ROWTYPE;
   v_winner RECORD;
 BEGIN
   -- Find the lot
@@ -426,6 +612,14 @@ BEGIN
   SELECT * INTO v_order
   FROM auction_orders
   WHERE lot_id = v_lot.id;
+
+  -- Get receipt info if available
+  IF v_order.id IS NOT NULL THEN
+    SELECT * INTO v_receipt
+    FROM order_receipts
+    WHERE order_id = v_order.id
+    LIMIT 1;
+  END IF;
 
   -- Get winner info if sold
   IF v_lot.winner_user_id IS NOT NULL THEN
@@ -460,6 +654,35 @@ BEGIN
         'shipping_city', v_order.shipping_city,
         'shipping_state', v_order.shipping_state,
         'shipping_zip', v_order.shipping_zip
+      )
+    ELSE NULL END,
+    'receipt', CASE WHEN v_receipt.id IS NOT NULL THEN
+      jsonb_build_object(
+        'id', v_receipt.id,
+        'receipt_number', v_receipt.receipt_number,
+        'order_id', v_receipt.order_id,
+        'order_number', v_receipt.order_number,
+        'buyer_id', v_receipt.buyer_id,
+        'seller_id', v_receipt.seller_id,
+        'item_title', v_receipt.item_title,
+        'item_image_url', v_receipt.item_image_url,
+        'sale_amount', v_receipt.sale_amount,
+        'shipping_cost', v_receipt.shipping_cost,
+        'total_amount', v_receipt.total_amount,
+        'payment_status', v_receipt.payment_status,
+        'fulfillment_status', v_receipt.fulfillment_status,
+        'shipping_name', v_receipt.shipping_name,
+        'shipping_line1', v_receipt.shipping_line1,
+        'shipping_city', v_receipt.shipping_city,
+        'shipping_state', v_receipt.shipping_state,
+        'shipping_zip', v_receipt.shipping_zip,
+        'shipping_country', v_receipt.shipping_country,
+        'tracking_number', v_order.tracking_number,
+        'shipping_carrier', v_order.shipping_carrier,
+        'shipped_at', v_order.shipped_at,
+        'delivered_at', v_order.delivered_at,
+        'created_at', v_receipt.created_at,
+        'metadata', v_receipt.metadata
       )
     ELSE NULL END,
     'winner', CASE WHEN v_winner.id IS NOT NULL THEN

@@ -42,7 +42,9 @@ interface AuctionWin {
   show_id: string
   show_title: string
   won_at: string
-  payment_status: 'pending' | 'paid' | 'refunded'
+  payment_status: 'pending' | 'held' | 'paid' | 'refunded'
+  fulfillment_status: string | null
+  shipping_cost: number
   shipping_name: string | null
   shipping_address: string | null
   shipping_city: string | null
@@ -52,6 +54,7 @@ interface AuctionWin {
   tracking_number: string | null
   shipped_at: string | null
   delivered_at: string | null
+  batch_id: string | null
 }
 
 const shell =
@@ -149,7 +152,8 @@ export default function AuctionBidders() {
           current_highest_bid,
           winner_user_id,
           auction_show_id,
-          condition
+          condition,
+          shipping_base_price
         `)
         .in('auction_show_id', sIds)
         .eq('status', 'sold')
@@ -173,6 +177,14 @@ export default function AuctionBidders() {
 
       const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
 
+      const lotIds = soldLots.map((lot) => lot.id)
+      const { data: existingOrders } = await supabase
+        .from('auction_orders')
+        .select('id, lot_id, batch_id, payment_status, fulfillment_status, shipping_cost')
+        .in('lot_id', lotIds)
+
+      const orderMap = new Map((existingOrders || []).map((o: any) => [o.lot_id, o]))
+
       // Group wins by user
       const winnerMap = new Map<string, AuctionWinner>()
 
@@ -180,16 +192,19 @@ export default function AuctionBidders() {
         const uid = lot.winner_user_id!
         const profile = profileMap.get(uid)
         const show = shows?.find((s) => s.id === lot.auction_show_id)
+        const existingOrder = orderMap.get(lot.id)
 
         const win: AuctionWin = {
           lot_id: lot.id,
           lot_title: lot.title,
           lot_image_url: lot.image_url,
-          final_bid: lot.current_highest_bid || lot.starting_bid,
+          final_bid: Number(existingOrder?.sale_amount ?? lot.current_highest_bid ?? lot.starting_bid ?? 0),
           show_id: lot.auction_show_id,
           show_title: show?.title || 'Unknown Show',
           won_at: new Date().toISOString(),
-          payment_status: 'pending',
+          payment_status: (existingOrder?.payment_status as AuctionWin['payment_status']) || 'pending',
+          fulfillment_status: existingOrder?.fulfillment_status || null,
+          shipping_cost: Number(existingOrder?.shipping_cost ?? lot.shipping_base_price ?? 0),
           shipping_name: null,
           shipping_address: null,
           shipping_city: null,
@@ -199,6 +214,7 @@ export default function AuctionBidders() {
           tracking_number: null,
           shipped_at: null,
           delivered_at: null,
+          batch_id: existingOrder?.batch_id || null,
         }
 
         if (winnerMap.has(uid)) {
@@ -215,8 +231,8 @@ export default function AuctionBidders() {
             wins: [win],
             total_owed: win.final_bid,
             total_items: 1,
-            batch_status: 'none',
-            batch_id: null,
+            batch_status: win.batch_id ? 'batched' : 'none',
+            batch_id: win.batch_id,
           })
         }
       }
@@ -288,26 +304,37 @@ export default function AuctionBidders() {
         const winner = winners.find((w) => w.user_id === userId)
         if (!winner || winner.wins.length <= 1) continue
 
-        // Create a batch order record
         const batchId = crypto.randomUUID()
-        const totalAmount = winner.total_owed
 
-        // Insert into marketplace_purchases as a batched auction order
         for (const win of winner.wins) {
-          const { error } = await supabase.from('marketplace_purchases').insert({
-            buyer_id: userId,
-            seller_id: user!.id,
-            item_id: win.lot_id,
-            price_paid: win.final_bid,
-            status: 'paid',
-            fulfillment_status: 'awaiting_fulfillment',
-            source: 'auction',
-            batch_id: batchId,
-            batch_total: totalAmount,
-          })
+          const { error: updateError, count } = await supabase
+            .from('auction_orders')
+            .update({
+              batch_id: batchId,
+              fulfillment_status: 'pending',
+            })
+            .eq('lot_id', win.lot_id)
 
-          if (error) {
-            console.error('[AuctionBidders] Batch insert error:', error)
+          if (updateError) {
+            console.error('[AuctionBidders] Batch update error:', updateError)
+          }
+
+          if (count === 0) {
+            const { error: insertError } = await supabase.from('auction_orders').insert({
+              auction_show_id: win.show_id,
+              lot_id: win.lot_id,
+              winner_user_id: userId,
+              auctioneer_id: auctioneerId,
+              sale_amount: win.final_bid,
+              shipping_cost: win.shipping_cost || 0,
+              batch_id: batchId,
+              payment_status: 'held',
+              fulfillment_status: 'pending',
+            })
+
+            if (insertError) {
+              console.error('[AuctionBidders] Batch insert error:', insertError)
+            }
           }
         }
       }

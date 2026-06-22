@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { SellerTier } from '../../lib/sellerTiers';
 import { evaluateSellerTier, recordFraudFlag, recordDispute } from '../../lib/sellerApi';
@@ -23,6 +23,22 @@ interface SellerProfile {
   created_at: string;
 }
 
+interface SellerReleaseRequest {
+  id: string;
+  order_id: string;
+  status: string;
+  created_at: string;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  admin_notes: string | null;
+}
+
+interface SellerMarketSummary {
+  actualSales: number;
+  pendingReleaseRequests: number;
+  releaseRequests: SellerReleaseRequest[];
+}
+
 export default function SellerManagement() {
   const [sellers, setSellers] = useState<SellerProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +46,8 @@ export default function SellerManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeller, setSelectedSeller] = useState<SellerProfile | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [marketDataLoading, setMarketDataLoading] = useState(false);
+  const [sellerMarketSummary, setSellerMarketSummary] = useState<Record<string, SellerMarketSummary>>({});
 
   const loadSellers = useCallback(async () => {
     setLoading(true);
@@ -71,9 +89,61 @@ export default function SellerManagement() {
     }
   }, [selectedTier]);
 
+  const loadSellerMarketData = useCallback(async (sellerId: string) => {
+    setMarketDataLoading(true);
+    try {
+      const { data: purchaseData, error: purchaseError } = await supabase
+        .from('marketplace_purchases')
+        .select('id, status')
+        .eq('seller_id', sellerId)
+        .in('status', ['delivered', 'completed']);
+
+      if (purchaseError) throw purchaseError;
+
+      const actualSales = purchaseData?.length ?? 0;
+
+      const { data: requestData, error: requestError } = await supabase
+        .from('marketplace_payout_release_requests')
+        .select('id, order_id, status, created_at, reviewed_at, admin_notes, rejection_reason')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false });
+
+      if (requestError) throw requestError;
+
+      const releaseRequests: SellerReleaseRequest[] = (requestData || []).map((request) => ({
+        id: request.id,
+        order_id: request.order_id,
+        status: request.status,
+        created_at: request.created_at,
+        reviewed_at: request.reviewed_at,
+        rejection_reason: request.rejection_reason,
+        admin_notes: request.admin_notes,
+      }));
+
+      setSellerMarketSummary((prev) => ({
+        ...prev,
+        [sellerId]: {
+          actualSales,
+          pendingReleaseRequests: releaseRequests.filter((request) => request.status === 'pending').length,
+          releaseRequests,
+        },
+      }));
+    } catch (err) {
+      console.error('Error loading marketplace data:', err);
+    } finally {
+      setMarketDataLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadSellers();
   }, [selectedTier, loadSellers]);
+
+  useEffect(() => {
+    if (selectedSeller) {
+      loadSellerMarketData(selectedSeller.id);
+    }
+  }, [selectedSeller, loadSellerMarketData]);
 
   const handleManualTierChange = async (sellerId: string, newTier: SellerTier) => {
     setActionLoading(true);
@@ -258,7 +328,7 @@ export default function SellerManagement() {
                         <SellerTierBadge tier={seller.seller_tier} size="sm" />
                       </div>
                       <div className="text-sm text-gray-500">
-                        {seller.completed_sales} sales • {seller.total_reviews || 0} reviews
+                        {seller.completed_sales} stored sales • {seller.total_reviews || 0} reviews
                       </div>
                     </div>
                     
@@ -325,9 +395,23 @@ export default function SellerManagement() {
                 <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                   <h3 className="font-medium mb-2">Statistics</h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>Completed Sales:</div>
+                    <div>Completed Sales (stored):</div>
                     <div className="font-semibold">{selectedSeller.completed_sales}</div>
-                    
+
+                    <div>Actual Marketplace Sales:</div>
+                    <div className="font-semibold">
+                      {marketDataLoading && !sellerMarketSummary[selectedSeller.id]
+                        ? 'Loading...'
+                        : sellerMarketSummary[selectedSeller.id]?.actualSales ?? 'N/A'}
+                    </div>
+
+                    <div>Pending Release Requests:</div>
+                    <div className="font-semibold">
+                      {marketDataLoading && !sellerMarketSummary[selectedSeller.id]
+                        ? 'Loading...'
+                        : sellerMarketSummary[selectedSeller.id]?.pendingReleaseRequests ?? 0}
+                    </div>
+
                     <div>Fraud Flags:</div>
                     <div className={`font-semibold ${selectedSeller.fraud_flags > 0 ? 'text-red-500' : ''}`}>
                       {selectedSeller.fraud_flags}
@@ -355,6 +439,36 @@ export default function SellerManagement() {
                     <div className="font-semibold text-red-500">
                       {selectedSeller.total_negative_reviews || 0}
                     </div>
+                  </div>
+                </div>
+
+                {/* Marketplace Release Requests */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <h3 className="font-medium mb-2">Marketplace Release Requests</h3>
+                  {marketDataLoading && !sellerMarketSummary[selectedSeller.id] ? (
+                    <div className="text-sm text-gray-500">Loading manual release request data...</div>
+                  ) : sellerMarketSummary[selectedSeller.id]?.releaseRequests.length ? (
+                    <div className="space-y-3 text-sm">
+                      {sellerMarketSummary[selectedSeller.id].releaseRequests.map((request) => (
+                        <div key={request.id} className="rounded-lg bg-gray-50 dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
+                          <div className="font-medium">Request {request.id.slice(0, 8)}</div>
+                          <div className="text-gray-500">Order: {request.order_id.slice(0, 8)}</div>
+                          <div className="text-gray-500">Status: {request.status}</div>
+                          <div className="text-gray-500">Created: {new Date(request.created_at).toLocaleString()}</div>
+                          {request.status !== 'pending' && request.reviewed_at && (
+                            <div className="text-gray-500">Reviewed: {new Date(request.reviewed_at).toLocaleString()}</div>
+                          )}
+                          {request.rejection_reason && (
+                            <div className="text-red-500">Rejected: {request.rejection_reason}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">No manual release requests found for this seller.</div>
+                  )}
+                  <div className="mt-3 text-xs text-blue-600 dark:text-blue-300">
+                    <a href="/admin/marketplace/release-requests">View all release requests</a>
                   </div>
                 </div>
 

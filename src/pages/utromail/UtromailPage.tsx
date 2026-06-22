@@ -3,7 +3,7 @@
 // ============================================================
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import {
@@ -84,6 +84,7 @@ function getOtherParticipant(thread: UtromailThread, userId: string) {
 export default function UtromailPage() {
   const navigate = useNavigate();
   const { threadId } = useParams();
+  const [searchParams] = useSearchParams();
   const { user, profile } = useAuthStore();
   const [threads, setThreads] = useState<UtromailThread[]>([]);
   const [requests, setRequests] = useState<UtromailRequest[]>([]);
@@ -462,12 +463,21 @@ export default function UtromailPage() {
     void deleteThreads(filteredThreadIds);
   };
 
+  // Auto-open compose when navigating from marketplace or other external links
+  const recipientId = searchParams.get('recipientId') || undefined;
+  const subject = searchParams.get('subject') || undefined;
+  const autoCompose = !!(recipientId && threadId === undefined);
+
   // Full-screen compose
-  if (showCompose) {
+  if (showCompose || autoCompose) {
+    const replyTo = recipientId
+      ? { recipientId, subject, recipientMail: undefined }
+      : undefined;
     return (
       <UtromailCompose
+        replyTo={replyTo}
         onSent={() => { setShowCompose(false); setRefreshKey(k => k + 1); }}
-        onCancel={() => setShowCompose(false)}
+        onCancel={() => { setShowCompose(false); navigate('/utromail'); }}
       />
     );
   }

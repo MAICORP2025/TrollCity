@@ -48,13 +48,15 @@ interface WeeklyLimit {
 interface Order {
   id: string;
   order_number: string;
-  shop_id: string;
+  shop_id?: string;
   total_coins: number;
   status: string;
-  escrow_status: string;
-  delivery_status: string;
+  escrow_status: string | null;
+  delivery_status: string | null;
   created_at: string;
   shop_name?: string;
+  item_title?: string;
+  source: 'shop' | 'marketplace';
 }
 
 const CATEGORY_LABELS: Record<AppealCategory, string> = {
@@ -122,31 +124,73 @@ export default function CityRegistry() {
     
     setLoading(true);
     try {
-      // Fetch user's orders that are eligible for appeal (has escrow or issues)
-      const { data: ordersData } = await supabase
+      // Fetch user's shop orders that are eligible for appeal
+      const { data: shopOrdersData } = await supabase
         .from('shop_orders')
         .select('id, order_number, shop_id, total_coins, status, escrow_status, delivery_status, created_at')
         .eq('buyer_id', user.id)
         .or('status.eq.completed,status.eq.shipped,status.eq.disputed')
         .order('created_at', { ascending: false })
         .limit(50);
-      
-      // Get shop names
-      if (ordersData && ordersData.length > 0) {
-        const shopIds = [...new Set(ordersData.map(o => o.shop_id))];
+
+      const shopOrders: Order[] = []
+      if (shopOrdersData && shopOrdersData.length > 0) {
+        const shopIds = [...new Set(shopOrdersData.map((o) => o.shop_id))];
         const { data: shopsData } = await supabase
           .from('trollcity_shops')
           .select('id, shop_name')
           .in('id', shopIds);
-        
-        const shopMap = new Map(shopsData?.map(s => [s.id, s.shop_name]) || []);
-        setOrders(ordersData.map(o => ({
-          ...o,
-          shop_name: shopMap.get(o.shop_id) || 'Unknown Shop'
-        })));
-      } else {
-        setOrders([]);
+        const shopMap = new Map(shopsData?.map((s) => [s.id, s.shop_name]) || []);
+
+        shopOrders.push(
+          ...shopOrdersData.map((o) => ({
+            ...o,
+            shop_name: shopMap.get(o.shop_id) || 'Unknown Shop',
+            escrow_status: o.escrow_status || 'held',
+            delivery_status: o.delivery_status || 'pending',
+            source: 'shop' as const,
+          }))
+        );
       }
+
+      // Fetch user's marketplace purchases that can also be appealed
+      const { data: marketplaceOrdersData } = await supabase
+        .from('marketplace_purchases')
+        .select(`
+          id,
+          order_number,
+          price_paid,
+          status,
+          fulfillment_status,
+          shipping_name,
+          shipping_address,
+          shipping_city,
+          shipping_state,
+          shipping_zip,
+          created_at,
+          marketplace_item ( title ),
+          seller_profile: user_profiles!marketplace_purchases_seller_id_fkey ( username )
+        `)
+        .eq('buyer_id', user.id)
+        .in('status', ['paid', 'processing', 'shipped', 'delivered', 'completed'])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const marketplaceOrders: Order[] = (marketplaceOrdersData || []).map((o: any) => ({
+        id: o.id,
+        order_number: o.order_number || o.id,
+        total_coins: o.price_paid || 0,
+        status: o.status || 'paid',
+        escrow_status: 'held',
+        delivery_status: o.fulfillment_status || 'pending',
+        created_at: o.created_at,
+        shop_name: o.marketplace_item?.title || 'Marketplace Purchase',
+        item_title: o.marketplace_item?.title || 'Marketplace Purchase',
+        source: 'marketplace',
+      }))
+
+      const combinedOrders = [...shopOrders, ...marketplaceOrders]
+      setOrders(combinedOrders)
       
       // Fetch user's appeals
       const { data: appealsData } = await supabase
@@ -199,40 +243,56 @@ export default function CityRegistry() {
       toast.error('Please select an order');
       return;
     }
-    
+
     if (!description.trim()) {
       toast.error('Please provide a description');
       return;
     }
-    
+
     if (weeklyLimit && weeklyLimit.appeals_filled >= weeklyLimit.max_appeals) {
       toast.error('You have reached your weekly appeal limit (5 per week)');
       return;
     }
-    
+
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc('create_transaction_appeal', {
-        p_user_id: user.id,
-        p_order_id: selectedOrder.id,
-        p_category: category,
-        p_description: description,
-        p_desired_resolution: desiredResolution || null,
-        p_evidence_urls: []
-      });
-      
-      if (error) throw error;
-      
-      if (data?.success) {
-        toast.success('Appeal filed successfully!');
-        setSelectedOrder(null);
-        setDescription('');
-        setDesiredResolution('');
-        setActiveTab('history');
-        fetchData();
+      if (selectedOrder.source === 'marketplace') {
+        const { data, error } = await supabase.rpc('create_marketplace_appeal', {
+          p_order_id: selectedOrder.id,
+          p_user_id: user.id,
+          p_category: category,
+          p_description: description,
+          p_desired_resolution: desiredResolution || null,
+        });
+
+        if (error) throw error;
+        if (!data) {
+          toast.error('Failed to file appeal');
+          return;
+        }
       } else {
-        toast.error(data?.error || 'Failed to file appeal');
+        const { data, error } = await supabase.rpc('create_transaction_appeal', {
+          p_user_id: user.id,
+          p_order_id: selectedOrder.id,
+          p_category: category,
+          p_description: description,
+          p_desired_resolution: desiredResolution || null,
+          p_evidence_urls: []
+        });
+
+        if (error) throw error;
+        if (!data?.success) {
+          toast.error(data?.error || 'Failed to file appeal');
+          return;
+        }
       }
+
+      toast.success('Appeal filed successfully!');
+      setSelectedOrder(null);
+      setDescription('');
+      setDesiredResolution('');
+      setActiveTab('history');
+      fetchData();
     } catch (error: any) {
       toast.error(error.message || 'Failed to file appeal');
     } finally {

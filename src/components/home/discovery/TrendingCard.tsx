@@ -40,7 +40,7 @@ export default function TrendingCard({ post, className }: TrendingCardProps) {
       {/* User */}
       <div className="flex items-center gap-1.5 mb-2">
         <Link
-          to={`/profile/${post.id}`}
+          to={`/profile/${post.username}`}
           className="w-5 h-5 rounded-full flex-shrink-0 overflow-hidden ring-1 ring-white/10"
         >
           {post.avatar_url ? (

@@ -24,6 +24,7 @@ type ShippingCarrier = 'usps' | 'ups' | 'fedex' | 'dhl' | 'other'
 
 interface SaleRecord {
   id: string
+  order_number: string
   lot_id: string
   lot_title: string
   lot_image_url: string | null
@@ -33,8 +34,9 @@ interface SaleRecord {
   winner_username: string | null
   winner_avatar_url: string | null
   final_bid: number
-  payment_status: 'pending' | 'paid' | 'refunded'
-  fulfillment_status: 'pending' | 'awaiting_fulfillment' | 'fulfilled' | 'delivered' | 'cancelled'
+  shipping_cost: number
+  payment_status: 'pending' | 'held' | 'paid' | 'refunded' | 'failed' | 'disputed'
+  fulfillment_status: 'pending' | 'packed' | 'ready_to_ship' | 'shipped' | 'delivered' | 'disputed' | 'awaiting_fulfillment' | 'cancelled'
   shipping_name: string | null
   shipping_address: string | null
   shipping_city: string | null
@@ -58,9 +60,12 @@ const CARRIERS: { id: ShippingCarrier; name: string }[] = [
 
 const FULFILLMENT_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   pending: { label: 'Pending', color: 'border-slate-400/30 bg-slate-500/10 text-slate-200' },
+  packed: { label: 'Packed', color: 'border-cyan-300/30 bg-cyan-400/10 text-cyan-100' },
+  ready_to_ship: { label: 'Ready to Ship', color: 'border-amber-300/30 bg-amber-400/10 text-amber-100' },
   awaiting_fulfillment: { label: 'Awaiting Shipment', color: 'border-amber-300/30 bg-amber-400/10 text-amber-100' },
-  fulfilled: { label: 'Shipped', color: 'border-purple-300/30 bg-purple-400/10 text-purple-100' },
+  shipped: { label: 'Shipped', color: 'border-purple-300/30 bg-purple-400/10 text-purple-100' },
   delivered: { label: 'Delivered', color: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100' },
+  disputed: { label: 'Disputed', color: 'border-orange-300/30 bg-orange-400/10 text-orange-100' },
   cancelled: { label: 'Cancelled', color: 'border-red-300/30 bg-red-500/10 text-red-100' },
 }
 
@@ -144,27 +149,48 @@ export default function AuctionSales() {
       }
 
       // Get all sold lots
-      const { data: soldLots } = await supabase
-        .from('auction_lots')
+      const { data: orders } = await supabase
+        .from('auction_orders')
         .select(`
           id,
-          title,
-          image_url,
-          current_highest_bid,
+          order_number,
+          auction_show_id,
+          lot_id,
           winner_user_id,
-          auction_show_id
+          sale_amount,
+          shipping_cost,
+          payment_status,
+          fulfillment_status,
+          shipping_name,
+          shipping_line1,
+          shipping_line2,
+          shipping_city,
+          shipping_state,
+          shipping_zip,
+          shipping_carrier,
+          tracking_number,
+          shipped_at,
+          delivered_at,
+          batch_id,
+          created_at,
+          auction_lots (
+            title,
+            image_urls
+          ),
+          auction_shows (
+            title
+          )
         `)
         .in('auction_show_id', showIds)
-        .eq('status', 'sold')
-        .not('winner_user_id', 'is', null)
+        .order('created_at', { ascending: false })
 
-      if (!soldLots || soldLots.length === 0) {
+      if (!orders || orders.length === 0) {
         setSales([])
         setLoading(false)
         return
       }
 
-      const winnerIds = [...new Set(soldLots.map((l) => l.winner_user_id).filter(Boolean))] as string[]
+      const winnerIds = [...new Set(orders.map((o) => o.winner_user_id).filter(Boolean))] as string[]
 
       const { data: profiles } = await supabase
         .from('user_profiles')
@@ -172,45 +198,35 @@ export default function AuctionSales() {
         .in('id', winnerIds)
 
       const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
-      const showMap = new Map((shows || []).map((s) => [s.id, s.title]))
 
-      // Check for existing marketplace purchases (batched orders)
-      const lotIds = soldLots.map((l) => l.id)
-      const { data: purchases } = await supabase
-        .from('marketplace_purchases')
-        .select('item_id, batch_id, fulfillment_status, shipping_carrier, tracking_number, shipped_at, delivered_at')
-        .in('item_id', lotIds)
-
-      const purchaseMap = new Map((purchases || []).map((p) => [p.item_id, p]))
-
-      const saleRecords: SaleRecord[] = soldLots.map((lot) => {
-        const profile = profileMap.get(lot.winner_user_id!)
-        const purchase = purchaseMap.get(lot.id)
-
+      const saleRecords: SaleRecord[] = (orders || []).map((order: any) => {
+        const profile = profileMap.get(order.winner_user_id)
         return {
-          id: `${lot.id}-${lot.winner_user_id}`,
-          lot_id: lot.id,
-          lot_title: lot.title,
-          lot_image_url: lot.image_url,
-          show_id: lot.auction_show_id,
-          show_title: showMap.get(lot.auction_show_id) || 'Unknown',
-          winner_user_id: lot.winner_user_id!,
+          id: order.id,
+          order_number: order.order_number,
+          lot_id: order.lot_id,
+          lot_title: order.auction_lots?.title || 'Unknown Item',
+          lot_image_url: order.auction_lots?.image_urls?.[0] || null,
+          show_id: order.auction_show_id,
+          show_title: order.auction_shows?.title || 'Unknown',
+          winner_user_id: order.winner_user_id,
           winner_username: profile?.username || 'Unknown',
           winner_avatar_url: profile?.avatar_url || null,
-          final_bid: lot.current_highest_bid || 0,
-          payment_status: 'paid',
-          fulfillment_status: purchase?.fulfillment_status || 'pending',
-          shipping_name: null,
-          shipping_address: null,
-          shipping_city: null,
-          shipping_state: null,
-          shipping_zip: null,
-          shipping_carrier: purchase?.shipping_carrier || null,
-          tracking_number: purchase?.tracking_number || null,
-          shipped_at: purchase?.shipped_at || null,
-          delivered_at: purchase?.delivered_at || null,
-          created_at: new Date().toISOString(),
-          batch_id: purchase?.batch_id || null,
+          final_bid: Number(order.sale_amount || 0),
+          shipping_cost: Number(order.shipping_cost || 0),
+          payment_status: order.payment_status,
+          fulfillment_status: order.fulfillment_status || 'pending',
+          shipping_name: order.shipping_name,
+          shipping_address: order.shipping_line1,
+          shipping_city: order.shipping_city,
+          shipping_state: order.shipping_state,
+          shipping_zip: order.shipping_zip,
+          shipping_carrier: order.shipping_carrier,
+          tracking_number: order.tracking_number,
+          shipped_at: order.shipped_at,
+          delivered_at: order.delivered_at,
+          created_at: order.created_at,
+          batch_id: order.batch_id,
         }
       })
 
@@ -249,9 +265,12 @@ export default function AuctionSales() {
       const statusOrder: Record<string, number> = {
         pending: 0,
         awaiting_fulfillment: 1,
-        fulfilled: 2,
+        ready_to_ship: 1,
+        packed: 1,
+        shipped: 2,
         delivered: 3,
-        cancelled: 4,
+        disputed: 4,
+        cancelled: 5,
       }
       return (statusOrder[a.fulfillment_status] || 0) - (statusOrder[b.fulfillment_status] || 0)
     })
@@ -260,10 +279,10 @@ export default function AuctionSales() {
   const stats = useMemo(() => {
     return {
       total: sales.length,
-      totalRevenue: sales.reduce((sum, s) => sum + s.final_bid, 0),
+      totalRevenue: sales.reduce((sum, s) => sum + s.final_bid + s.shipping_cost, 0),
       pending: sales.filter((s) => s.fulfillment_status === 'pending').length,
-      awaiting: sales.filter((s) => s.fulfillment_status === 'awaiting_fulfillment').length,
-      shipped: sales.filter((s) => s.fulfillment_status === 'fulfilled').length,
+      awaiting: sales.filter((s) => s.fulfillment_status === 'awaiting_fulfillment' || s.fulfillment_status === 'ready_to_ship').length,
+      shipped: sales.filter((s) => s.fulfillment_status === 'shipped').length,
       delivered: sales.filter((s) => s.fulfillment_status === 'delivered').length,
     }
   }, [sales])
@@ -283,16 +302,12 @@ export default function AuctionSales() {
 
     setSubmittingShipping(true)
     try {
-      // Update the marketplace purchase with shipping info
-      const { error } = await supabase
-        .from('marketplace_purchases')
-        .update({
-          shipping_carrier: carrier,
-          tracking_number: trackingNumber.trim(),
-          fulfillment_status: 'fulfilled',
-          shipped_at: new Date().toISOString(),
-        })
-        .eq('item_id', selectedSale.lot_id)
+      const { error } = await supabase.rpc('update_order_fulfillment', {
+        p_order_id: selectedSale.id,
+        p_status: 'shipped',
+        p_tracking_number: trackingNumber.trim(),
+        p_carrier: carrier,
+      })
 
       if (error) throw error
 
@@ -309,13 +324,10 @@ export default function AuctionSales() {
 
   const markDelivered = async (sale: SaleRecord) => {
     try {
-      const { error } = await supabase
-        .from('marketplace_purchases')
-        .update({
-          fulfillment_status: 'delivered',
-          delivered_at: new Date().toISOString(),
-        })
-        .eq('item_id', sale.lot_id)
+      const { error } = await supabase.rpc('update_order_fulfillment', {
+        p_order_id: sale.id,
+        p_status: 'delivered',
+      })
 
       if (error) throw error
 
@@ -439,7 +451,7 @@ export default function AuctionSales() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Add Tracking</p>
-                <h2 className="mt-1 text-xl font-black text-white">{selectedSale.lot_title}</h2>
+                <h2 className="mt-1 text-xl font-black text-white">{selectedSale.lot_title} · {selectedSale.order_number}</h2>
               </div>
               <button
                 onClick={() => setShippingModal(false)}
@@ -454,6 +466,7 @@ export default function AuctionSales() {
               <p className="text-sm font-black text-white">{selectedSale.winner_username}</p>
               <p className="mt-2 text-xs font-bold text-slate-400">Amount</p>
               <p className="text-lg font-black text-cyan-100">{formatCoins(selectedSale.final_bid)} coins</p>
+              <p className="text-xs text-slate-500">Shipping {formatCoins(selectedSale.shipping_cost)} TC</p>
             </div>
 
             <div className="space-y-4">
@@ -554,26 +567,24 @@ function SaleCard({
         <div className="text-right">
           <p className="text-[10px] font-bold uppercase text-slate-500">Sale Price</p>
           <p className="text-lg font-black text-cyan-100">{formatCoins(sale.final_bid)}</p>
+          <p className="text-xs text-slate-500">Shipping {formatCoins(sale.shipping_cost)} TC</p>
+          <div className="text-right mt-2">
+            <span className={cn('inline-block rounded-full border px-3 py-1 text-[10px] font-black uppercase', statusConfig.color)}>
+              {statusConfig.label}
+            </span>
+          </div>
         </div>
-
-        {/* Status */}
-        <div className="text-right">
-          <span className={cn('inline-block rounded-full border px-3 py-1 text-[10px] font-black uppercase', statusConfig.color)}>
-            {statusConfig.label}
-          </span>
-        </div>
-      </div>
 
       {/* Action buttons */}
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/8 pt-3">
-        {(sale.fulfillment_status === 'pending' || sale.fulfillment_status === 'awaiting_fulfillment') && (
+        {(sale.fulfillment_status === 'pending' || sale.fulfillment_status === 'awaiting_fulfillment' || sale.fulfillment_status === 'ready_to_ship' || sale.fulfillment_status === 'packed') && (
           <button onClick={onOpenShipping} className={cn(primary, 'text-sm')}>
             <Truck className="h-4 w-4" />
             Add Tracking & Ship
           </button>
         )}
 
-        {sale.fulfillment_status === 'fulfilled' && (
+        {sale.fulfillment_status === 'shipped' && (
           <button onClick={onMarkDelivered} className={cn(secondary, 'text-sm')}>
             <CheckCircle2 className="h-4 w-4" />
             Mark Delivered
@@ -592,6 +603,7 @@ function SaleCard({
         <span className="text-xs text-slate-500">
           {sale.shipped_at ? `Shipped ${formatDate(sale.shipped_at)}` : formatDate(sale.created_at)}
         </span>
+      </div>
       </div>
     </div>
   )

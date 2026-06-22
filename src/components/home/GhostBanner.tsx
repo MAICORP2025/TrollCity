@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGhostDropIn } from '@/context/GhostDropInContext';
+import { useAuthStore } from '@/lib/store';
 import { X, UserPlus, Sparkles } from 'lucide-react';
 
 export default function GhostBanner() {
-  const { state, dismissPrompt, signUpFromGhost } = useGhostDropIn();
+  const { state, dismissPrompt, signUpFromGhost, clearGhost } = useGhostDropIn();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [visible, setVisible] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
+  // If user is signed in, never show the ghost signup popup
   useEffect(() => {
+    if (user && visible) {
+      clearGhost();
+      setVisible(false);
+    }
+  }, [user, visible, clearGhost]);
+
+  useEffect(() => {
+    if (user) return; // Don't show ghost popup to signed-in users
     if (state.promptShown && !state.signUpClicked) {
       setVisible(true);
       setCountdown(10);

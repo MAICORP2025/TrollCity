@@ -310,6 +310,33 @@ BEGIN
       payout_released_at = now(),
       updated_at = now()
   WHERE id = p_order_id;
+
+  -- Credit seller earnings, update earned balances, and insert ledger entry
+  v_seller_earnings := COALESCE(v_order.seller_earnings, v_hold.amount, 0);
+  IF v_order.seller_id IS NOT NULL AND v_seller_earnings > 0 THEN
+    INSERT INTO public.coin_ledger (
+      user_id, delta, bucket, source, ref_id, metadata, direction
+    ) VALUES (
+      v_order.seller_id,
+      v_seller_earnings,
+      'marketplace_earnings',
+      'marketplace_payout',
+      v_hold.id,
+      jsonb_build_object(
+        'order_id', p_order_id,
+        'release_reason', p_release_reason,
+        'released_by', p_released_by
+      ),
+      'in'
+    );
+
+    UPDATE public.user_profiles
+    SET troll_coins = COALESCE(troll_coins, 0) + v_seller_earnings,
+        earned_balance = COALESCE(earned_balance, 0) + v_seller_earnings,
+        total_earned_coins = COALESCE(total_earned_coins, 0) + v_seller_earnings,
+        updated_at = now()
+    WHERE id = v_order.seller_id;
+  END IF;
   
   RETURN 'Payout released successfully';
 END;

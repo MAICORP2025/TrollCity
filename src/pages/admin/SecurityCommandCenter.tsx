@@ -600,7 +600,7 @@ export default function SecurityCommandCenter() {
                       <EventCard key={event.id} event={event}
                         onOpen={() => setSelectedEvent(event)}
                         onCopy={() => void copyEventId(event.id)}
-                        onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)} />
+                        onUser={() => event.user_id && navigate(`/profile/id/${event.user_id}`)} />
                     ))
                   )}
                 </div>
@@ -617,7 +617,7 @@ export default function SecurityCommandCenter() {
                       .sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0))
                       .slice(0, 6)
                       .map((score) => <RiskUserCard key={score.id || score.user_id || Math.random()} score={score}
-                        onProfile={() => score.user_id && navigate(`/profile/${score.user_id}`)} />)
+                        onProfile={() => score.user_id && navigate(`/profile/id/${score.user_id}`)} />)
                   )}
                 </div>
               </div>
@@ -667,7 +667,7 @@ export default function SecurityCommandCenter() {
                     <EventCard key={event.id} event={event} detailed saving={savingEventId === event.id}
                       onOpen={() => setSelectedEvent(event)}
                       onCopy={() => void copyEventId(event.id)}
-                      onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)}
+                      onUser={() => event.user_id && navigate(`/profile/id/${event.user_id}`)}
                       onInvestigate={() => void updateEventStatus(event, 'investigating')}
                       onResolve={() => void updateEventStatus(event, 'resolved')}
                       onIgnore={() => void updateEventStatus(event, 'ignored')}
@@ -691,7 +691,7 @@ export default function SecurityCommandCenter() {
                 typedRiskScores.slice()
                   .sort((a, b) => Number(b.risk_score || 0) - Number(a.risk_score || 0))
                   .map((score) => <RiskUserCard key={score.id || score.user_id || Math.random()} score={score}
-                    onProfile={() => score.user_id && navigate(`/profile/${score.user_id}`)} detailed />)
+                    onProfile={() => score.user_id && navigate(`/profile/id/${score.user_id}`)} detailed />)
               )}
             </div>
           </section>
@@ -766,7 +766,7 @@ export default function SecurityCommandCenter() {
                       <EventCard key={event.id} event={event} detailed
                         onOpen={() => setSelectedEvent(event)}
                         onCopy={() => void copyEventId(event.id)}
-                        onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)} />
+                        onUser={() => event.user_id && navigate(`/profile/id/${event.user_id}`)} />
                     ))}
                   </div>
                 )}
@@ -875,7 +875,7 @@ export default function SecurityCommandCenter() {
                       <EventCard key={event.id} event={event} detailed
                         onOpen={() => setSelectedEvent(event)}
                         onCopy={() => void copyEventId(event.id)}
-                        onUser={() => event.user_id && navigate(`/profile/${event.user_id}`)}
+                        onUser={() => event.user_id && navigate(`/profile/id/${event.user_id}`)}
                         onInvestigate={() => void updateEventStatus(event, 'investigating')}
                         onResolve={() => void updateEventStatus(event, 'resolved')}
                         onIgnore={() => void updateEventStatus(event, 'ignored')}
@@ -986,7 +986,7 @@ export default function SecurityCommandCenter() {
         event={selectedEvent}
         onClose={() => setSelectedEvent(null)}
         onCopy={() => selectedEvent?.id && void copyEventId(selectedEvent.id)}
-        onUser={() => selectedEvent?.user_id && navigate(`/profile/${selectedEvent.user_id}`)}
+        onUser={() => selectedEvent?.user_id && navigate(`/profile/id/${selectedEvent.user_id}`)}
         onRetryNotification={() => selectedEvent && void sendRetryNotification(selectedEvent)}
       />
 

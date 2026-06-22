@@ -1375,11 +1375,11 @@ const renderFloatingButton = () => {
                   <button
                     key={log.id}
                     type="button"
-                    onClick={() => log.target_user_id && navigate(`/profile/${log.target_user_id}`)}
+                    onClick={() => log.target_user_id && navigate(`/profile/id/${log.target_user_id}`)}
                     className="w-full rounded border border-white/10 bg-black/20 px-3 py-2 text-left hover:bg-white/5"
                   >
                      <div className="flex items-center justify-between gap-2">
-                       <span className="truncate text-xs font-bold text-white cursor-pointer hover:text-blue-300" onClick={() => log.target?.user_id && navigate(`/profile/${log.target?.user_id}`)}>
+                        <span className="truncate text-xs font-bold text-white cursor-pointer hover:text-blue-300" onClick={() => log.target?.user_id && navigate(`/profile/id/${log.target?.user_id}`)}>
                          @{log.target?.username || log.target_user_id || 'unknown'}
                        </span>
                        <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] uppercase text-cyan-200">
@@ -1844,7 +1844,7 @@ const renderFloatingButton = () => {
                  <div className="space-y-2">
                    {streamViewers.map((viewer) => (
                      <div key={viewer.user_id} className="flex items-center justify-between rounded bg-white/5 px-3 py-2">
-                       <span className="truncate text-sm text-white cursor-pointer hover:text-blue-300" onClick={() => navigate(`/profile/${viewer.user_id}`)}>@{viewer.username}</span>
+                        <span className="truncate text-sm text-white cursor-pointer hover:text-blue-300" onClick={() => navigate(`/profile/id/${viewer.user_id}`)}>@{viewer.username}</span>
                        <div className="flex gap-1">
                          <button type="button" onClick={() => kickUserFromStream(viewer.user_id, viewer.username)} className="rounded bg-red-600 px-2 py-1 text-xs text-white">Kick</button>
                          <button type="button" onClick={() => summonFromStream(viewer.user_id, viewer.username)} className="rounded bg-purple-600 px-2 py-1 text-xs text-white">Court</button>

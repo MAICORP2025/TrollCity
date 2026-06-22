@@ -357,6 +357,8 @@ export interface UserProfile {
   court_recording_consent?: boolean
   application_required?: boolean
   application_submitted?: boolean
+  cashout_approved?: boolean
+  cashout_approved_at?: string | null
   
   tax_status?: string
   tax_last_updated?: string

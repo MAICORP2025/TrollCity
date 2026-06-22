@@ -377,6 +377,18 @@ export default function NeighborhoodOnboarding() {
 
         if (!isMountedRef.current) return
 
+        console.log('[NeighborhoodOnboarding] checkUserStatus:', {
+          hasNeighborhood,
+          hasHouse,
+          hasVehicle,
+          hasPlate,
+          hasLicense,
+          hasRestorableLicense,
+          carInsuranceValid,
+          homeInsuranceValid,
+          profileNeighborhoodId: profileAny?.neighborhood_id,
+        });
+
         let nextScene: OnboardingScene = 'street'
         let nextMessage = ''
 
@@ -955,6 +967,21 @@ export default function NeighborhoodOnboarding() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-[#0d1222] to-[#1c1334] px-4 py-6 text-white">
+      {/* Debug: Show profile setup status */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="text-sm font-semibold text-amber-200">Debug: Neighborhood Setup Status</div>
+          <div className="mt-2 text-xs text-slate-300">
+            <p>neighborhood_id: {profile?.neighborhood_id || 'NOT SET'}</p>
+            <p>house_id: {profile?.house_id || 'NOT SET'}</p>
+            <p>vehicle_id: {profile?.vehicle_id || 'NOT SET'}</p>
+            <p>license_plate: {profile?.license_plate || 'NOT SET'}</p>
+            <p>license_status: {profile?.license_status || 'none'}</p>
+            <p>car_insurance_expiry: {profile?.car_insurance_expiry || 'NOT SET'}</p>
+            <p>Current scene: {currentScene}</p>
+          </div>
+        </div>
+      )}
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>

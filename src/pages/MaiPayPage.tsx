@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { CASHOUT_TIERS as TIERS, type CashoutTier } from '../config/coinConfig';
 import type { CashoutRequest, PayoutMethod } from '../types/cashout';
 import FastPayProgram from '../components/FastPayProgram';
+import FastPayApplication from './FastPayApplication';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ interface RedemptionRecord {
   updated_at: string;
 }
 
-type MaiPayTab = 'overview' | 'crowns' | 'gifted' | 'cashout' | 'requests' | 'transactions';
+type MaiPayTab = 'overview' | 'application' | 'crowns' | 'gifted' | 'cashout' | 'requests' | 'transactions';
 
 interface CoinTransaction {
   id: string;
@@ -89,7 +90,7 @@ export default function MaiPayPage() {
   const navigate = useNavigate();
 
   // ── State ────────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<MaiPayTab>('overview');
+  const [activeTab, setActiveTab] = useState<MaiPayTab>('application');
   const [loading, setLoading] = useState(true);
 
   // Coin balances
@@ -418,7 +419,8 @@ export default function MaiPayPage() {
         {/* Tabs */}
         <div className="max-w-4xl mx-auto px-4">
           <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-hide">
-            {([
+              {([
+              { key: 'application', label: 'Application', icon: <FileText className="w-4 h-4" /> },
               { key: 'overview', label: 'Overview', icon: <WalletIcon className="w-4 h-4" /> },
               { key: 'crowns', label: 'Crowns', icon: <Crown className="w-4 h-4" /> },
               { key: 'gifted', label: 'Gifted', icon: <Send className="w-4 h-4" /> },
@@ -519,6 +521,13 @@ export default function MaiPayPage() {
               <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <button
+                  onClick={() => setActiveTab('application')}
+                  className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors text-center"
+                >
+                  <FileText className="w-6 h-6 text-cyan-400 mx-auto mb-2" />
+                  <span className="text-sm font-semibold">Cashout Application</span>
+                </button>
+                <button
                   onClick={() => setActiveTab('crowns')}
                   className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-colors text-center"
                 >
@@ -549,6 +558,11 @@ export default function MaiPayPage() {
               </div>
             </div>
           </>
+        )}
+
+        {/* ─── Application Tab ────────────────────────────────────────────── */}
+        {activeTab === 'application' && (
+          <FastPayApplication />
         )}
 
         {/* ─── Crowns Tab ───────────────────────────────────────────────── */}

@@ -229,6 +229,13 @@ export function GhostDropInProvider({ children }: { children: React.ReactNode })
     initGhostDropIn();
   }, [user, state.isGhost, state.isLoading, location.pathname, findAndRouteToContent]);
 
+  // Clear ghost state when user signs in (prevents ghost popup for signed-in users)
+  useEffect(() => {
+    if (user && state.isGhost) {
+      clearGhost();
+    }
+  }, [user, state.isGhost, clearGhost]);
+
   // If user just signed up from ghost mode, return them to the broadcast
   useEffect(() => {
     if (user && state.signUpClicked) {

@@ -324,7 +324,7 @@ export const FloatingUserBackground: React.FC<FloatingUserBackgroundProps> = ({
     if (user.isLive && user.streamId) {
       navigate(user.isGaming ? `/gaming/watch/${user.streamId}` : `/watch/${user.streamId}`);
     } else {
-      navigate(`/profile/${user.id}`);
+      navigate(`/profile/${user.username}`);
     }
   }, [navigate]);
 

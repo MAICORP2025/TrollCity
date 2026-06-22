@@ -268,6 +268,53 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // --- Marketplace Payout Release ---
+      case "approve_marketplace_release": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { requestId, adminNotes } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const { data, error } = await supabaseAdmin.rpc("admin_approve_marketplace_release", {
+          p_request_id: requestId,
+          p_admin_id: user.id,
+          p_admin_notes: adminNotes || null,
+        });
+
+        if (error) throw error;
+
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "approve_marketplace_release",
+          p_target_id: requestId,
+          p_details: { admin_notes: adminNotes },
+        });
+
+        result = data;
+        break;
+      }
+
+      case "reject_marketplace_release": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { requestId, rejectionReason } = params;
+        if (!requestId) throw new Error("Missing requestId");
+
+        const { data, error } = await supabaseAdmin.rpc("admin_reject_marketplace_release", {
+          p_request_id: requestId,
+          p_admin_id: user.id,
+          p_rejection_reason: rejectionReason || null,
+        });
+
+        if (error) throw error;
+
+        await supabaseAdmin.rpc("log_admin_action", {
+          p_action_type: "reject_marketplace_release",
+          p_target_id: requestId,
+          p_details: { rejectionReason: rejectionReason },
+        });
+
+        result = data;
+        break;
+      }
+
       // --- Executive Intake ---
       case "assign_intake": {
         const { requestId, assigneeId } = params;

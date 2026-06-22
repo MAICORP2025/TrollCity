@@ -26,7 +26,7 @@ type Donation = {
   user_created_at?: string
 }
 
-const POOL_TARGET = 10_000_000
+const POOL_TARGET = 10_000_000_000_000_000
 const TROLLMONDS_PER_100_COINS = 100
 
 function calculateTrollmonds(coins: number) {
@@ -322,7 +322,7 @@ export default function PublicPool() {
     }
 
     if (coins < 100) {
-      toast.error('Minimum donation is 100 Troll Coins')
+      toast.error('Minimum donation is 1 Troll Coins')
       return
     }
 

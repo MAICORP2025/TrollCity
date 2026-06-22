@@ -43,6 +43,27 @@ interface ScannedLotData {
     shipping_state: string | null
     shipping_zip: string | null
   } | null
+  receipt: {
+    id: string
+    receipt_number: string
+    order_number: string
+    sale_amount: number
+    shipping_cost: number
+    total_amount: number
+    payment_status: string
+    fulfillment_status: string
+    shipping_name: string | null
+    shipping_line1: string | null
+    shipping_city: string | null
+    shipping_state: string | null
+    shipping_zip: string | null
+    shipping_country: string | null
+    tracking_number: string | null
+    shipping_carrier: string | null
+    shipped_at: string | null
+    delivered_at: string | null
+    created_at: string
+  } | null
   winner: {
     id: string
     username: string | null
