@@ -262,10 +262,10 @@ export function useBattleRealtime(battleId: string | null | undefined) {
     fetchInitial();
 
     // ── Fast score sync ──────────────────────────────────────────────────
-    // During active battles, poll the score every 2s as a safety net.
+    // During active battles, poll the score every 10s as a safety net.
     // The postgres_changes handler above handles most updates, but rapid
     // RPC-driven score changes (e.g. from gifts) can occasionally be missed
-    // by realtime. This ensures the score overlay never lags more than 2s.
+    // by realtime. This ensures the score overlay never lags more than 10s.
     if (scorePollRef.current) {
       clearInterval(scorePollRef.current);
       scorePollRef.current = null;
@@ -298,7 +298,7 @@ export function useBattleRealtime(battleId: string | null | undefined) {
           });
         }
       } catch {}
-    }, 2000);
+    }, 5000);
 
     return () => {
       if (channelRef.current) {

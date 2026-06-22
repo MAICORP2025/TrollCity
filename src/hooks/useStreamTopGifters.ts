@@ -20,7 +20,7 @@ interface UseStreamTopGiftersOptions {
 export function useStreamTopGifters({
   streamId,
   limit = 8,
-  refreshIntervalMs = 15000,
+  refreshIntervalMs = 60000,
 }: UseStreamTopGiftersOptions) {
   const [topGifters, setTopGifters] = useState<TopGifter[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -153,6 +153,10 @@ export function useStreamTopGifters({
     const scheduleRefresh = () => {
       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current)
       refreshTimeoutRef.current = setTimeout(() => {
+        if (document.visibilityState !== 'visible') {
+          scheduleRefresh()
+          return
+        }
         fetchTopGifters()
         lastRefreshRef.current = Date.now()
         scheduleRefresh()

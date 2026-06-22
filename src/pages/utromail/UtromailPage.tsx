@@ -795,7 +795,7 @@ export default function UtromailPage() {
   );
 
   return (
-    <div className="mx-auto flex h-full max-w-7xl flex-col p-4">
+    <div className="mx-auto flex h-full max-w-7xl flex-col p-4 lg:p-4">
       <div className="flex flex-1 gap-4 min-h-0">
         {/* Left Sidebar - Conversation List */}
         <div className={`${glass} flex w-full shrink-0 flex-col rounded-2xl lg:w-[350px] min-h-0 ${showMobileChat ? 'hidden lg:flex' : 'flex'}`}>
@@ -1015,6 +1015,12 @@ export default function UtromailPage() {
         <div className={`${glass} flex flex-1 flex-col overflow-hidden rounded-2xl min-h-0 ${showMobileChat ? 'flex' : 'hidden lg:flex'}`}>
           {chatPanel}
         </div>
+        {/* Mobile Chat Overlay - full screen on mobile PWA */}
+        {showMobileChat && (
+          <div className={`${glass} fixed inset-0 z-50 flex flex-col overflow-hidden rounded-none border-none lg:hidden`}>
+            {chatPanel}
+          </div>
+        )}
       </div>
 
       {/* Thread Context Menu Modal */}

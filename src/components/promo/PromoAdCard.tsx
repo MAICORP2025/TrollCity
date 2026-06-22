@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { CityAd } from '../../types/cityAds';
 import { supabase } from '../../lib/supabase';
+import { queueCityAdClick } from '../../lib/batchWrites';
 
 const AUTO_REDIRECT_DELAY = 5000;
 
@@ -98,20 +99,8 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
       }, AUTO_REDIRECT_DELAY);
     }
 
-    // Track click in background without blocking UI
-    try {
-      await supabase.rpc('increment_ad_clicks', { ad_id: ad.id });
-    } catch (e) {
-      // Fallback: direct update
-      try {
-        await supabase
-          .from('city_ads')
-          .update({ clicks_count: (ad.clicks_count || 0) + 1 })
-          .eq('id', ad.id);
-      } catch (err) {
-        console.error('Failed to track ad click:', err);
-      }
-    }
+    // Track click in background — batched to reduce DB writes
+    queueCityAdClick(ad.id);
   };
   
   const closeLightbox = () => {

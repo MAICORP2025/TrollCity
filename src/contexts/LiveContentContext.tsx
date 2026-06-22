@@ -164,49 +164,50 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
     fetchLiveContent()
     fetchLiveAuctions()
 
-    const streamInterval = setInterval(fetchLiveContent, 60000)
-    const auctionInterval = setInterval(fetchLiveAuctions, 30000)
-
-    const channel = supabase.channel('home:live-streams')
-    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
-      try {
-        const oldRow = (payload.old || null) as any
-        const newRow = (payload.new || null) as any
-        const relevantChange = (() => {
-          if (!oldRow && newRow) return newRow.is_live === true
-          if (oldRow && !newRow) return oldRow.is_live === true
-          if (oldRow && newRow) {
-            if ((oldRow.is_live || newRow.is_live) && oldRow.is_live !== newRow.is_live) return true
-            const keys = ['current_viewers','viewer_count','is_featured','battle_mode','battle_format','battle_status']
-            return keys.some(k => (oldRow as any)[k] !== (newRow as any)[k])
-          }
-          return false
-        })()
-        if (relevantChange) fetchLiveContent()
-      } catch (e) {
-        console.warn('home:live-streams handler error', e)
-      }
-    })
-    channel.subscribe()
-
-    const auctionChannel = supabase.channel('home:live-auctions')
-    auctionChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'auction_shows' }, () => {
-      fetchLiveAuctions()
-    })
-    auctionChannel.subscribe()
-
-    const visibilityChannel = supabase.channel('home:visibility-scores')
-    visibilityChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, () => {
+    // Visibility-gated polling: slow down when tab is backgrounded
+    const streamInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       fetchLiveContent()
-    })
-    visibilityChannel.subscribe()
+    }, 60000)
+    const auctionInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      fetchLiveAuctions()
+    }, 30000)
+
+    // Consolidated single channel for home page (replaces 3 separate channels)
+    const homeChannel = supabase.channel('home:global')
+    homeChannel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
+        try {
+          const oldRow = (payload.old || null) as any
+          const newRow = (payload.new || null) as any
+          const relevantChange = (() => {
+            if (!oldRow && newRow) return newRow.is_live === true
+            if (oldRow && !newRow) return oldRow.is_live === true
+            if (oldRow && newRow) {
+              if ((oldRow.is_live || newRow.is_live) && oldRow.is_live !== newRow.is_live) return true
+              const keys = ['current_viewers','viewer_count','is_featured','battle_mode','battle_format','battle_status']
+              return keys.some(k => (oldRow as any)[k] !== (newRow as any)[k])
+            }
+            return false
+          })()
+          if (relevantChange) fetchLiveContent()
+        } catch (e) {
+          console.warn('home:global streams handler error', e)
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_shows' }, () => {
+        fetchLiveAuctions()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, () => {
+        fetchLiveContent()
+      })
+      .subscribe()
 
     return () => {
       clearInterval(streamInterval)
       clearInterval(auctionInterval)
-      try { supabase.removeChannel(channel) } catch {}
-      try { supabase.removeChannel(auctionChannel) } catch {}
-      try { supabase.removeChannel(visibilityChannel) } catch {}
+      try { supabase.removeChannel(homeChannel) } catch {}
     }
   }, [fetchLiveContent, fetchLiveAuctions])
 

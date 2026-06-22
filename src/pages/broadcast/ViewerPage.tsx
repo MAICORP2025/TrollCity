@@ -8,18 +8,11 @@ import {
   Heart,
   Loader2,
   LogOut,
-  Mic,
-  MicOff,
-  MessageSquare,
-  MonitorPlay,
   Plus,
   Share2,
-  ShieldCheck,
-  Sparkles,
-  Skull,
   Users,
   Video,
-  VideoOff,
+  MonitorPlay,
 } from 'lucide-react'
 import type { LocalAudioTrack, LocalVideoTrack, RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from 'livekit-client'
 import { RoomEvent, Track } from 'livekit-client'
@@ -31,8 +24,7 @@ import { supabase, getBlockedUserIds } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
 import { getLiveKitRoomName } from '../../lib/liveUtils'
-import { isStaffProfile } from '../../lib/staff'
-import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton'
+import { cn } from '../../lib/utils'
 import {
   getAnonymousDisplayName,
   isAnonymousDisplayName,
@@ -1916,6 +1908,7 @@ const handleLeaveSeat = useCallback(async () => {
     }
 
     watchTimeIntervalRef.current = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       void recordWatchActivity()
     }, 60 * 1000)
 
@@ -2235,8 +2228,9 @@ useStreamRealtime(
     }
 
     const heartbeat = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       void heartbeatAudience()
-    }, 30_000)
+    }, 60_000)
 
     return () => {
       window.clearInterval(heartbeat)
@@ -2448,13 +2442,19 @@ useStreamRealtime(
     return `calc(100dvh - ${reserved}px - env(safe-area-inset-bottom))`
   }, [isMobileViewer])
 
-  // ── Channel diagnostics (dev only) ──
+  // ── Channel diagnostics (dev only, admin only) ──
+  const isStreamAdmin = !!(profile && (
+    profile.role === 'admin' || profile.is_admin ||
+    profile.is_superadmin || profile.role === 'owner'
+  ));
   useEffect(() => {
+    if (!isStreamAdmin) return;
     logActiveChannels(`ViewerPage:mount:${streamId}`);
     return () => logActiveChannels(`ViewerPage:unmount:${streamId}`);
   }, [streamId]);
 
   useEffect(() => {
+    if (!isStreamAdmin) return;
     if (stream?.is_battle && stream?.battle_id) {
       logActiveChannels(`ViewerPage:battle-active:${stream.battle_id}`);
     } else {
@@ -3455,125 +3455,71 @@ useStreamRealtime(
           </div>
         )}
 
-        {/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
-
-        <div
-  className={cn(
-    'relative z-20 shrink-0 px-4 py-3',
-    theme.bottomBar,
-    isMobileViewer
-      ? 'fixed inset-x-0 border-none bg-transparent shadow-none rounded-none'
-      : 'border-t border-white/10'
-  )}
-  style={
-    isMobileViewer
-      ? {
-          // Sit flush with broadcaster box bottom, just above chat input
-          bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
-          paddingBottom: `calc(4px + env(safe-area-inset-bottom))`,
-        }
-      : undefined
-  }
->
-          <div className={cn('flex items-center justify-between', isMobileViewer ? 'mx-3' : 'mx-auto max-w-7xl')}>
-
-<div className="flex w-full items-center justify-end gap-2 md:w-auto">
-                <StaffWalkieTalkieButton 
-                  showFullControls={false} 
-                  onLiveKitMicMute={onLiveKitMicMute}
-                  onLiveKitMicUnmute={onLiveKitMicUnmute}
-                />
-               <button
-                 onClick={handleLike}
-                 className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.pinkButton)}
-               >
-                 <Heart className="h-4 w-4" />
-                 Like
-               </button>
-              <button
-                onClick={() => onGift(hostId)}
-                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.purpleButton)}
-              >
-                <Gift className="h-4 w-4" />
-                Gift
-              </button>
-              <button
-                onClick={handleShare}
-                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.cyanButton)}
-              >
-                <Share2 className="h-4 w-4" />
-                Share
-              </button>
-              <button
-                onClick={() => {
-                  if (recorder.isRecording) {
-                    void recorder.stopRecording()
-                  } else if (streamId) {
-                    void recorder.startRecording(streamId)
-                  }
-                }}
-                disabled={recorder.isUploading}
-                className={cn(
-                  'inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black transition',
-                  recorder.isRecording
-                    ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
-                    : recorder.isUploading
-                      ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
-                      : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]',
-                )}
-              >
-                {recorder.isUploading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-                ) : recorder.isRecording ? (
-                  <><span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span> REC {Math.floor(recorder.recordingDuration / 60).toString().padStart(2, '0')}:{(recorder.recordingDuration % 60).toString().padStart(2, '0')}</>
-                ) : (
-                  <><MonitorPlay className="h-4 w-4" /> Record</>
-                )}
-              </button>
-              {isUserOnStage && (
-                <>
-                  <button
-                    onClick={handleToggleMic}
-                    className={cn(
-                      'inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black',
-                      seatMicOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                    )}
-                  >
-                    {seatMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-                    {seatMicOn ? 'Mic On' : 'Muted'}
-                  </button>
-                  <button
-                    onClick={handleToggleCamera}
-                    className={cn(
-                      'inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black',
-                      seatCamOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                    )}
-                  >
-                    {seatCamOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-                    {seatCamOn ? 'Cam On' : 'Cam Off'}
-                  </button>
-                </>
-              )}
-              {canManageSeats && (
-                <button
-                  type="button"
-                  onClick={handleAddSeat}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-500/15 px-4 text-sm font-black text-cyan-100 transition hover:bg-cyan-500/25"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Seat
-                </button>
-              )}
-              <button
-                onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
-                className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black', theme.danger)}
-              >
-                <LogOut className="h-4 w-4" />
-                Leave
-              </button>
-            </div>
-          </div>
-        </div>
+{/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
+         <div
+   className={cn(
+     'relative z-20 shrink-0 px-4 py-3',
+     theme.bottomBar,
+     isMobileViewer
+       ? 'fixed inset-x-0 border-none bg-transparent shadow-none rounded-none'
+       : 'border-t border-white/10'
+   )}
+   style={
+     isMobileViewer
+       ? {
+           bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
+           paddingBottom: `calc(4px + env(safe-area-inset-bottom))`,
+         }
+       : undefined
+   }
+ >
+   <div className={cn('flex items-center justify-center gap-3', isMobileViewer ? 'mx-3' : 'mx-auto max-w-7xl')}>
+     <button
+       onClick={() => onGift(hostId)}
+       className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.purpleButton)}
+     >
+       <Gift className="h-5 w-5" />
+     </button>
+     <button
+       onClick={handleShare}
+       className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.cyanButton)}
+     >
+       <Share2 className="h-5 w-5" />
+     </button>
+     <button
+       onClick={() => {
+         if (recorder.isRecording) {
+           void recorder.stopRecording()
+         } else if (streamId) {
+           void recorder.startRecording(streamId)
+         }
+       }}
+       disabled={recorder.isUploading}
+       className={cn(
+         'inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold transition',
+         recorder.isRecording
+           ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+           : recorder.isUploading
+             ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
+             : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+       )}
+     >
+       {recorder.isUploading ? (
+         <Loader2 className="h-5 w-5 animate-spin" />
+       ) : recorder.isRecording ? (
+         <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span>
+       ) : (
+         <MonitorPlay className="h-5 w-5" />
+       )}
+     </button>
+     <button
+       onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
+       className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.danger)}
+     >
+       <LogOut className="h-5 w-5" />
+     </button>
+   </div>
+ </div>
 
         <div className="pointer-events-none absolute inset-0 z-30">
           <div className="pointer-events-auto">

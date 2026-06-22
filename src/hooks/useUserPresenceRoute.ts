@@ -6,10 +6,10 @@ import { useLocation } from "react-router-dom";
 /**
  * Tracks the user's current route/page and writes it to user_presence_routes.
  *
- * REPLACED: Previous version used 30s setInterval heartbeat to upsert
- * user_presence_routes. Now the 30s timer is removed — route changes and
- * visibility transitions are sufficient triggers. The periodic heartbeat was
- * redundant since the route only changes on navigation.
+ * Scaling optimizations:
+ * - No periodic heartbeat — route changes are event-driven
+ * - Route dedup: skips DB write if route hasn't changed
+ * - 5s debounce to prevent rapid duplicate writes
  *
  * Should be used once at the app level for authenticated users.
  */
@@ -17,6 +17,7 @@ export function useUserPresenceRoute() {
   const { user: storeUser } = useAuthStore();
   const location = useLocation();
   const lastUpdateRef = useRef(0);
+  const lastRouteRef = useRef<string | null>(null);
   const sessionIdRef = useRef(
     `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
   );
@@ -34,6 +35,11 @@ export function useUserPresenceRoute() {
         return;
       }
 
+      // Route dedup: skip if route hasn't changed
+      if (lastRouteRef.current === path) return;
+      lastRouteRef.current = path;
+
+      // 5s debounce
       const now = Date.now();
       if (now - lastUpdateRef.current < 5000) return;
       lastUpdateRef.current = now;
@@ -82,14 +88,12 @@ export function useUserPresenceRoute() {
     updatePresence(location.pathname, document.title);
   }, [location.pathname, updatePresence]);
 
-  // REMOVED: 30s periodic heartbeat — route changes are event-driven.
-  // The periodic upsert was causing unnecessary DB writes every 30s per user
-  // with no new data (same route, same title).
-
   // Update on visibility change (tab becomes active)
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
+        // Reset route cache so the current route is written again on return
+        lastRouteRef.current = null;
         updatePresence(location.pathname, document.title);
       }
     };

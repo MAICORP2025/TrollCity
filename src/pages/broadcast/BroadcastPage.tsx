@@ -4,7 +4,7 @@ import {
   useParams,
   useNavigate,
 } from 'react-router-dom'
-import { Room, RoomEvent, LocalVideoTrack, LocalAudioTrack, RemoteParticipant, RemoteTrack, RemoteVideoTrack, RemoteAudioTrack, RemoteTrackPublication, LocalParticipant, VideoPresets, AudioPresets, Track, createLocalTracks } from 'livekit-client'
+import { Room, RoomEvent, LocalVideoTrack, LocalAudioTrack, RemoteParticipant, RemoteVideoTrack, RemoteAudioTrack, RemoteTrackPublication, VideoPresets, Track, createLocalTracks } from 'livekit-client'
 
 import { isStaffUser } from '../../lib/userUtils'
 
@@ -33,10 +33,9 @@ import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import AudienceBubbleTicker from '@/components/broadcast/AudienceBubbleTicker'
 import BroadcastOfficerModal from '../../components/broadcast/BroadcastOfficerModal'
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
+import MobileBroadcastHostSettings from '../../components/broadcast/MobileBroadcastHostSettings'
 import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersModal'
-import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton'
-import { BadgeCheck, Gift } from 'lucide-react'
-import DraggableWrapper from '@/components/broadcast/DraggableWrapper'
+import { Settings } from 'lucide-react'
 import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
 import { showStorageStartWarning } from '../../hooks/useStorageUsage'
 import SaveBroadcastButton from '../../components/broadcast/SaveBroadcastButton'
@@ -44,8 +43,8 @@ import SaveBroadcastButton from '../../components/broadcast/SaveBroadcastButton'
 import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
 
 // Reusable label classes from broadcastTheme
-const guestLabel = 'rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]'
-const sectionLabel = 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm font-bold text-white/70 backdrop-blur'
+// const guestLabel = 'rounded-lg bg-cyan-500/20 px-2.5 py-1 text-[11px] font-black text-cyan-300 shadow-[0_0_12px_rgba(45,212,191,0.25)]'
+// const sectionLabel = 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm font-bold text-white/70 backdrop-blur'
 
 type SeatModalPrice = number | ''
 
@@ -496,11 +495,8 @@ function GhostAudioTrack({ participant }: { participant: any }) {
   )
 }
 
-import BroadcastStageLayout from '../../components/broadcast/BroadcastStageLayout'
-
 import ShareModal from '@/components/broadcast/ShareModal'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { GlassCrackEffect } from '@/components/GlassCrackEffect'
 import { getCategoryConfig } from '@/config/broadcastCategories'
 import { useBattleState } from '@/hooks/useBattleState'
 import { useBroadcastAbilities } from '@/hooks/useBroadcastAbilities'
@@ -519,14 +515,11 @@ import { useStreamAudiencePresence } from '@/hooks/useStreamAudiencePresence'
 import { useSubscriberUsernames } from '@/hooks/useCreatorSubscription'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
-import { GiftItem } from '@/lib/giftConstants'
 import { getGiftVisualConfig } from '@/lib/giftVisuals'
 
 import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
-import { AnimatePresence } from 'framer-motion'
-import { Megaphone } from 'lucide-react'
-import { LogOut, Coins, Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, ShieldCheck, Sparkles, Skull, Users, Search } from 'lucide-react'
+import { Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import AbilityBox from '@/components/broadcast/AbilityBox'
 import BattleView from '@/components/broadcast/BattleView'
@@ -535,7 +528,6 @@ import BroadcasterStatsModal from '@/components/broadcast/BroadcasterStatsModal'
 import CoinStoreModal from '@/components/broadcast/CoinStoreModal'
 import GiftBoxModal from '@/components/broadcast/GiftBoxModal'
 import GiftVideoOverlay from '@/components/broadcast/GiftVideoOverlay'
-import OpenStagePassModal from '@/components/broadcast/OpenStagePassModal'
 import PinProductModal from '@/components/broadcast/PinProductModal'
 import UserActionModal from '@/components/broadcast/UserActionModal'
 import CityStatusPanel from '@/components/city/CityStatusPanel'
@@ -611,12 +603,12 @@ export function BroadcastPage() {
   useEffect(() => {
     DEBUG_COUNTERS.broadcastPageMountCount++
     console.log(`[BroadcastPage] MOUNT COUNT: ${DEBUG_COUNTERS.broadcastPageMountCount} for streamId: ${streamId}`)
-    logActiveChannels(`BroadcastPage:mount:${streamId}`)
+    if (isStreamAdmin) logActiveChannels(`BroadcastPage:mount:${streamId}`)
 
     return () => {
       DEBUG_COUNTERS.broadcastPageUnmountCount++
       console.log(`[BroadcastPage] UNMOUNT COUNT: ${DEBUG_COUNTERS.broadcastPageUnmountCount} for streamId: ${streamId}`)
-      logActiveChannels(`BroadcastPage:unmount:${streamId}`)
+      if (isStreamAdmin) logActiveChannels(`BroadcastPage:unmount:${streamId}`)
     }
   }, [])
 
@@ -625,17 +617,19 @@ export function BroadcastPage() {
     profile.role === 'admin' || profile.is_admin ||
     profile.is_superadmin || profile.role === 'owner'
   ))
-  
+
    const isOfficer = isStaffProfile(profile)
 
-   const videoPreset = isStreamAdmin ? VideoPresets.h1080 : VideoPresets.h720
+  const isMobileDevice = typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const videoPreset = isStreamAdmin ? VideoPresets.h1080 : (isMobileDevice ? VideoPresets.h540 : VideoPresets.h720)
 
     const [stream, setStream] = useState<Stream | null>(null)
 
     const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
 
-   // -- Channel diagnostics (dev only) --
+   // -- Channel diagnostics (dev only, admin only) --
   useEffect(() => {
+    if (!isStreamAdmin) return;
     if (stream?.is_battle && stream?.battle_id) {
       logActiveChannels(`BroadcastPage:battle:${stream.battle_id}`)
     } else {
@@ -1297,6 +1291,7 @@ useEffect(() => {
   const [, setSeatTick] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       setSeatTick(t => t + 1)
     }, 1000)
     return () => clearInterval(interval)
@@ -2701,9 +2696,10 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
     // Track watch time and emit events periodically
     let watchTime = 0;
     const watchInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       watchTime += 30; // Increment by 30 seconds
       emitEvent('stream_watch_time', user.id, { streamId, watchTime });
-    }, 30000); // Every 30 seconds
+    }, 60000); // Every 60 seconds (was 30s)
 
     return () => clearInterval(watchInterval);
   }, [streamId, user?.id]);
@@ -3043,6 +3039,7 @@ useStreamRealtime(streamId, {
       });
 
     const heartbeatInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       if (channelRef.current) {
         channelRef.current.send({
           type: 'broadcast',
@@ -3050,7 +3047,7 @@ useStreamRealtime(streamId, {
           payload: { timestamp: Date.now(), user_id: user?.id }
         }).catch(() => {});
       }
-    }, 30000);
+    }, 60000);
 
     return () => {
       clearInterval(heartbeatInterval);
@@ -3526,6 +3523,7 @@ useStreamRealtime(streamId, {
             audio: true,
             video: {
               resolution: isScreenShareExisting ? VideoPresets.h720.resolution : videoPreset.resolution,
+              facingMode: isMobileDevice ? 'user' : undefined,
             },
           })
 
@@ -4829,6 +4827,8 @@ const handleLike = useCallback(async () => {
 
   // Only treat as mobile viewer after mount and when actually on mobile width
   const isMobileViewer = hasMounted && isMobileWidth && !isHost;
+  // Mobile host: broadcaster on mobile/PWA needs a completely different layout
+  const isMobileHost = hasMounted && isMobileWidth && isHost;
 
    const streamLayoutStats = useMemo(() => ({
     viewers: viewerCount > 0 ? viewerCount : Number(stream?.current_viewers ?? stream?.viewer_count ?? remoteParticipants.size ?? 0),
@@ -5159,7 +5159,11 @@ const handleLike = useCallback(async () => {
 
           {/* -- Outer layout: header + 3-column grid + bottom bar + footer -- */}
           <div
-            className={cn(theme.pageShell, 'relative flex h-screen max-h-screen min-h-0 flex-col overflow-hidden')}
+            className={cn(
+              theme.pageShell,
+              'relative flex min-h-0 flex-col overflow-hidden',
+              isMobileHost ? 'h-dvh max-h-dvh' : 'h-screen max-h-screen'
+            )}
           >
 
             {/* Background layers � identical to Sidebar ShellBackdrop */}
@@ -5241,13 +5245,37 @@ const handleLike = useCallback(async () => {
                </div>
              )}
 
-            {/* -- MAIN CONTENT GRID (3-column) -- */}
+            {/* -- MAIN CONTENT: mobile host gets flex-col layout, desktop gets 3-column grid -- */}
             <main
-              className="grid flex-1 min-h-0 gap-4 px-5 py-4"
-              style={{ gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }}
+              className={cn(
+                'flex flex-1 min-h-0',
+                isMobileHost
+                  ? 'flex-col overflow-hidden px-0 pt-0 relative'
+                  : 'grid gap-4 px-5 py-4'
+              )}
+              style={
+                !isMobileHost
+                  ? { gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }
+                  : undefined
+              }
             >
               {/* -- LEFT: Host Video Card -- */}
-              <section className={cn('relative h-full min-h-0 overflow-hidden', theme.hostVideoPanel)}>
+              <section
+                className={cn(
+                  'relative min-h-0 overflow-hidden',
+                  isMobileHost
+                    ? 'flex-none rounded-none border-0'
+                    : theme.hostVideoPanel
+                )}
+                style={
+                  isMobileHost
+                    ? {
+                        height: 'calc(100dvh - 180px)',
+                        maxHeight: 'calc(100dvh - 180px)',
+                      }
+                    : undefined
+                }
+              >
 
                 {/* Camera starting fallback � shows when no video track is available */}
                 {(() => {
@@ -5397,7 +5425,8 @@ const handleLike = useCallback(async () => {
                  })()}
                </section>
 
-              <aside
+              {/* -- CENTER: Seats (desktop only - mobile seats overlay on video) -- */}
+              {!isMobileHost && <aside
                 className={cn(
                   'flex h-auto min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/20 bg-transparent p-4 backdrop-blur-md shadow-[0_0_30px_rgba(45,212,191,0.10)]'
                 )}
@@ -5613,10 +5642,10 @@ const handleLike = useCallback(async () => {
                     )
                   })}
                 </div>
-              </aside>
+              </aside>}
 
-              {/* -- RIGHT: Chat Panel -- */}
-              <aside className={cn(
+              {/* -- RIGHT: Chat Panel (desktop only - mobile chat is floating) -- */}
+              {!isMobileHost && <aside className={cn(
     theme.chatPanel,
     'flex min-h-0 flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]'
   )}>
@@ -5894,11 +5923,241 @@ const handleLike = useCallback(async () => {
                     </div>
                   )}
                 </div>
-              </aside>
+              </aside>}
             </main>
 
-              {/* -- BOTTOM CONTROL BAR -- */}
-              <BroadcastBottomBar
+            {/* ═══ MOBILE HOST OVERLAYS ═══ */}
+            {isMobileHost && (
+              <>
+                {/* Seats overlay on broadcaster video */}
+                {viewerSeatCards.length > 0 && (
+                  <div
+                    className="absolute inset-x-0 bottom-0 z-20 flex flex-col pointer-events-none"
+                    style={{
+                      bottom: '16px',
+                      maxHeight: '45%',
+                    }}
+                  >
+                    <div className="pointer-events-auto overflow-y-auto px-2 pb-1">
+                      <div className={cn('grid gap-1.5', viewerSeatCards.length <= 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+                        {viewerSeatCards.map((seat) => {
+                          const exactParticipant = findSeatRemoteParticipant(
+                            remoteParticipants,
+                            seat.seatUserId,
+                            seat.seatIdentity,
+                          );
+                          const matchedParticipant = exactParticipant;
+                          const participantDisplayName = matchedParticipant
+                            ? getParticipantLabel(matchedParticipant, seat.displayName)
+                            : seat.displayName;
+
+                          const seatParticipantMetadata = matchedParticipant ? getRemoteParticipantMetadata(matchedParticipant) : {};
+                          const seatActionUserId =
+                            seat.seatUserId ||
+                            seatParticipantMetadata.user_id ||
+                            seatParticipantMetadata.userId ||
+                            null;
+                          const seatActionUsername =
+                            seat.displayName ||
+                            getParticipantLabel(matchedParticipant, 'Viewer');
+                          const seatActionRole =
+                            seat?.avatarUrl ? seatParticipantMetadata.role || seatParticipantMetadata.troll_role || seat?.seatStatus : undefined;
+                          const seatActionInfo =
+                            canInteractWithSeats && seat.isOccupied && seatActionUserId
+                              ? { userId: String(seatActionUserId), username: seatActionUsername, role: seatActionRole, seatSessionId: seat.seatSessionId }
+                              : null;
+
+                          const seatConnectedAt = seatJoinTimes[seat.seatIndex] || 0;
+                          const isCameraConnecting = seat.isOccupied && !matchedParticipant && (Date.now() - seatConnectedAt < 8000 || seatConnectedAt === 0);
+                          const isCameraUnavailable = seat.isOccupied && !matchedParticipant && seatConnectedAt > 0 && (Date.now() - seatConnectedAt >= 8000);
+
+                          const canClickSeat = seat.isOccupied && seat.seatUserId;
+                          const clickProps = canClickSeat
+                            ? {
+                                role: 'button' as const,
+                                tabIndex: 0,
+                                onClick: () => {
+                                  if (seatActionInfo) {
+                                    handleOpenUserAction(seatActionInfo);
+                                  } else {
+                                    setSelectedSeatUserId(seat.seatUserId!);
+                                  }
+                                },
+                                onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    if (seatActionInfo) {
+                                      handleOpenUserAction(seatActionInfo);
+                                    } else {
+                                      setSelectedSeatUserId(seat.seatUserId!);
+                                    }
+                                  }
+                                },
+                              }
+                            : undefined;
+
+                          return (
+                            <div
+                              key={`mobile-seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
+                              className={cn(
+                                'relative aspect-[4/3] overflow-hidden rounded-xl border',
+                                seat.isOccupied
+                                  ? matchedParticipant
+                                    ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                                    : isCameraUnavailable
+                                      ? 'border-red-400/40'
+                                      : 'border-cyan-400/40'
+                                  : 'border-white/20',
+                                'bg-black/60 backdrop-blur-sm',
+                                canClickSeat ? 'cursor-pointer' : ''
+                              )}
+                              {...clickProps}
+                            >
+                              {matchedParticipant ? (
+                                <RemoteSeatSurface
+                                  participant={matchedParticipant}
+                                  fallback={
+                                    <div className="flex h-full w-full flex-col items-center justify-center gap-1">
+                                      <Users className="h-5 w-5 text-emerald-300/70" />
+                                      <div className="max-w-full truncate px-1 text-[9px] font-black text-white">{participantDisplayName}</div>
+                                    </div>
+                                  }
+                                />
+                              ) : isCameraUnavailable ? (
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-1">
+                                  <VideoOff className="h-4 w-4 text-red-300/60" />
+                                  <div className="max-w-full truncate px-1 text-[9px] font-black text-white">{participantDisplayName}</div>
+                                </div>
+                              ) : isCameraConnecting ? (
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-1">
+                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-300/40 border-t-cyan-300" />
+                                  <div className="max-w-full truncate px-1 text-[9px] font-black text-white">{participantDisplayName}</div>
+                                </div>
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <Ticket className="h-5 w-5 text-white/30" />
+                                </div>
+                              )}
+
+                              {/* Seat label */}
+                              {seat.isOccupied && (
+                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 py-0.5">
+                                  <p className="truncate text-[8px] font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{participantDisplayName}</p>
+                                </div>
+                              )}
+
+                              {/* Seat number badge */}
+                              <div className="absolute left-1 top-1 rounded-full border border-white/20 bg-black/50 px-1.5 py-0.5 text-[8px] font-black text-white/80 backdrop-blur-sm">
+                                S{seat.seatIndex}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Floating chat messages on video */}
+                {floatingMessages.length > 0 && (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 bottom-0 z-10 overflow-hidden"
+                    style={{ bottom: viewerSeatCards.length > 0 ? '48%' : '16px', top: '40px' }}
+                  >
+                    <div className="flex flex-col-reverse gap-1 px-3 pb-2">
+                      {floatingMessages.slice(0, 8).map((msg) => (
+                        <div
+                          key={msg.id}
+                          className="pointer-events-auto max-w-[80%] self-start rounded-xl border border-cyan-300/15 bg-black/50 px-2.5 py-1.5 backdrop-blur-md"
+                        >
+                          <button
+                            onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                            className="text-[11px] font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                          >
+                            {msg.username}
+                          </button>
+                          <span className="mx-1 text-white/30 text-[11px]">:</span>
+                          <span className="text-[11px] text-white/80">{msg.content}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mic / Camera status pills - top right */}
+                <div className="absolute right-3 top-3 z-30 flex items-center gap-1.5">
+                  <span className={cn(
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full border backdrop-blur-md',
+                    micEnabled ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300' : 'border-red-400/30 bg-red-500/15 text-red-300'
+                  )}>
+                    {micEnabled ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+                  </span>
+                  <span className={cn(
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full border backdrop-blur-md',
+                    cameraEnabled ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300' : 'border-red-400/30 bg-red-500/15 text-red-300'
+                  )}>
+                    {cameraEnabled ? <Video className="h-3 w-3" /> : <VideoOff className="h-3 w-3" />}
+                  </span>
+                </div>
+
+                {/* LIVE badge - top left */}
+                <div className="absolute left-3 top-3 z-30">
+                  <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-red-400/30 bg-red-500/20 px-2.5 text-[10px] font-black text-red-300 backdrop-blur-md">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
+                    LIVE
+                  </span>
+                </div>
+
+                {/* Viewer count - below LIVE badge */}
+                <div className="absolute left-3 top-10 z-30">
+                  <span className="inline-flex h-5 items-center gap-1 rounded-full border border-white/10 bg-black/40 px-2 text-[9px] font-bold text-white/60 backdrop-blur-md">
+                    <Users className="h-2.5 w-2.5" />
+                    {liveViewerCount}
+                  </span>
+                </div>
+
+                {/* Settings button - bottom right */}
+                <div className="absolute bottom-4 right-3 z-50 flex flex-col items-end gap-2">
+                  <MobileBroadcastHostSettings
+                    isMicOn={micEnabled}
+                    isCamOn={cameraEnabled}
+                    isLive={stream.status === 'live'}
+                    hasRgbEffect={!!stream?.has_rgb_effect}
+                    areSeatsLocked={!!stream?.are_seats_locked}
+                    openStagePassCount={currentViewerSeatCount}
+                    onToggleMic={toggleMicrophone}
+                    onToggleCamera={toggleCamera}
+                    onFlipCamera={() => {
+                      // Flip camera is handled by the local tracks
+                      if (localTracks?.[1]) {
+                        // Toggle front/back camera
+                        const currentFacing = (localTracks[1] as any)?.mediaStreamTrack?.getSettings?.()?.facingMode;
+                        // Re-create tracks with opposite facing mode would require more complex logic
+                        // For now, this is a placeholder
+                      }
+                    }}
+                    onGift={handleGiftHost}
+                    onShare={handleOpenShareModal}
+                    onOpenSeats={handleOpenSeatsModal}
+                    onEndStream={handleStreamEnd}
+                    onOpenCoinStore={user?.id ? handleOpenCoinStore : () => {}}
+                    onInviteFollowers={handleInviteFollowers}
+                    onToggleRGB={toggleStreamRgb}
+                    onTextPopup={() => {
+                      setIsTextPopupComposerOpen(true);
+                    }}
+                    onAssignOfficer={() => setIsAssignOfficerModalOpen(true)}
+                    onPayOfficers={() => setShowPayBroadOfficersModal(true)}
+                    onToggleSeatsLock={() => {
+                      // Toggle seats lock logic
+                    }}
+                  />
+                </div>
+              </>
+            )}
+
+              {/* -- BOTTOM CONTROL BAR (desktop only) -- */}
+              {!isMobileHost && <BroadcastBottomBar
                 openPassCount={currentViewerSeatCount}
                 isMicOn={micEnabled}
                 isCamOn={cameraEnabled}
@@ -5932,7 +6191,7 @@ const handleLike = useCallback(async () => {
                     />
                   ) : undefined
                 }
-              />
+              />}
 
           
 

@@ -161,7 +161,6 @@ const { data, error } = await supabase
             last_seen_at: now,
             username,
             avatar_url: avatarUrl,
-            last_seen_at: now,
             seat_id: null,
             role: 'audience',
           })

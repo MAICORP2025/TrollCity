@@ -1,0 +1,985 @@
+﻿================================================================================
+  TROLL CITY SCALING OPTIMIZATION - ALL CHANGES FOR REVIEW
+  Generated: 2026-06-21 22:19:13
+================================================================================
+
+================================================================================
+  SECTION 1: MODIFIED FILES (diff)
+================================================================================
+
+diff --git a/src/App.tsx b/src/App.tsx
+index 0cfe67d..78116e4 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -54,7 +54,7 @@ import { AnimationsContainer } from "./components/animations";
+ // Layout
+ import OfficerAlertBanner from "./components/OfficerAlertBanner";
+ import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
+-import { RTCAdminMonitor } from "./components/admin";
++import { RTCAdminMonitor, RealtimeDebugPanel } from "./components/admin";
+ import { StaffWalkieTalkieProvider } from "./components/StaffWalkieTalkieProvider";
+ 
+ import AdminErrors from "./pages/admin/AdminErrors";
+@@ -1437,6 +1437,7 @@ const handleVisibilityChange = async () => {
+            {user && <ChatBubble />}
+            <StaffWalkieTalkieProvider>
+              <RTCAdminMonitor />
++             {import.meta.env.DEV && <RealtimeDebugPanel />}
+              <ErrorBoundary>
+                <Suspense fallback={null}>
+                  <Routes>
+diff --git a/src/components/admin/index.ts b/src/components/admin/index.ts
+index fa75985..95a60d3 100644
+--- a/src/components/admin/index.ts
++++ b/src/components/admin/index.ts
+@@ -26,3 +26,6 @@ export { default as UserDetailsModal } from './UserDetailsModal'
+ // RTC Monitor
+ export { default as RTCAdminMonitor } from './RTCAdminMonitor'
+ 
++// Realtime Debug Panel (dev/admin only)
++export { default as RealtimeDebugPanel } from './RealtimeDebugPanel'
++
+diff --git a/src/components/originalChannel.tsx b/src/components/originalChannel.tsx
+index 30e1096..93a876f 100644
+--- a/src/components/originalChannel.tsx
++++ b/src/components/originalChannel.tsx
+@@ -15,7 +15,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+   },
+   realtime: {
+     params: {
+-      eventsPerSecond: 10,
++      eventsPerSecond: 50,
+     },
+   },
+ })
+diff --git a/src/components/promo/PromoAdCard.tsx b/src/components/promo/PromoAdCard.tsx
+index c91efa3..64dd93e 100644
+--- a/src/components/promo/PromoAdCard.tsx
++++ b/src/components/promo/PromoAdCard.tsx
+@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
+ import { useNavigate } from 'react-router-dom';
+ import { CityAd } from '../../types/cityAds';
+ import { supabase } from '../../lib/supabase';
++import { queueCityAdClick } from '../../lib/batchWrites';
+ 
+ const AUTO_REDIRECT_DELAY = 5000;
+ 
+@@ -98,20 +99,8 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
+       }, AUTO_REDIRECT_DELAY);
+     }
+ 
+-    // Track click in background without blocking UI
+-    try {
+-      await supabase.rpc('increment_ad_clicks', { ad_id: ad.id });
+-    } catch (e) {
+-      // Fallback: direct update
+-      try {
+-        await supabase
+-          .from('city_ads')
+-          .update({ clicks_count: (ad.clicks_count || 0) + 1 })
+-          .eq('id', ad.id);
+-      } catch (err) {
+-        console.error('Failed to track ad click:', err);
+-      }
+-    }
++    // Track click in background ΓÇö batched to reduce DB writes
++    queueCityAdClick(ad.id);
+   };
+   
+   const closeLightbox = () => {
+diff --git a/src/components/promo/PromoSlot.tsx b/src/components/promo/PromoSlot.tsx
+index 596b353..1100637 100644
+--- a/src/components/promo/PromoSlot.tsx
++++ b/src/components/promo/PromoSlot.tsx
+@@ -5,6 +5,7 @@
+ import React, { useEffect, useState, useCallback, useRef } from 'react';
+ import { CityAd, AdPlacement } from '../../types/cityAds';
+ import { supabase } from '../../lib/supabase';
++import { queueCityAdImpression } from '../../lib/batchWrites';
+ import PromoAdCard from './PromoAdCard';
+ 
+ interface PromoSlotProps {
+@@ -76,27 +77,11 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
+       if (isUserAd) {
+         await supabase.rpc('increment_user_ad_impressions', { ad_id: adId });
+       } else {
+-        await supabase.rpc('increment_ad_impressions', { ad_id: adId });
++        // Use batched writer for city_ads impressions
++        queueCityAdImpression(adId);
+       }
+     } catch (e) {
+-      // Fallback: direct update
+-      try {
+-        const table = isUserAd ? 'user_advertisements' : 'city_ads';
+-        const { data } = await supabase
+-          .from(table)
+-          .select('impressions_count')
+-          .eq('id', adId)
+-          .maybeSingle();
+-        
+-        if (data) {
+-          await supabase
+-            .from(table)
+-            .update({ impressions_count: (data.impressions_count || 0) + 1 })
+-            .eq('id', adId);
+-        }
+-      } catch (err) {
+-        console.error('Failed to track impression:', err);
+-      }
++      console.error('Failed to track impression:', e);
+     }
+   }, []);
+ 
+diff --git a/src/contexts/LiveContentContext.tsx b/src/contexts/LiveContentContext.tsx
+index 1b2a5ca..ae74215 100644
+--- a/src/contexts/LiveContentContext.tsx
++++ b/src/contexts/LiveContentContext.tsx
+@@ -164,49 +164,50 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
+     fetchLiveContent()
+     fetchLiveAuctions()
+ 
+-    const streamInterval = setInterval(fetchLiveContent, 60000)
+-    const auctionInterval = setInterval(fetchLiveAuctions, 30000)
+-
+-    const channel = supabase.channel('home:live-streams')
+-    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
+-      try {
+-        const oldRow = (payload.old || null) as any
+-        const newRow = (payload.new || null) as any
+-        const relevantChange = (() => {
+-          if (!oldRow && newRow) return newRow.is_live === true
+-          if (oldRow && !newRow) return oldRow.is_live === true
+-          if (oldRow && newRow) {
+-            if ((oldRow.is_live || newRow.is_live) && oldRow.is_live !== newRow.is_live) return true
+-            const keys = ['current_viewers','viewer_count','is_featured','battle_mode','battle_format','battle_status']
+-            return keys.some(k => (oldRow as any)[k] !== (newRow as any)[k])
+-          }
+-          return false
+-        })()
+-        if (relevantChange) fetchLiveContent()
+-      } catch (e) {
+-        console.warn('home:live-streams handler error', e)
+-      }
+-    })
+-    channel.subscribe()
+-
+-    const auctionChannel = supabase.channel('home:live-auctions')
+-    auctionChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'auction_shows' }, () => {
+-      fetchLiveAuctions()
+-    })
+-    auctionChannel.subscribe()
+-
+-    const visibilityChannel = supabase.channel('home:visibility-scores')
+-    visibilityChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, () => {
++    // Visibility-gated polling: slow down when tab is backgrounded
++    const streamInterval = setInterval(() => {
++      if (document.visibilityState !== 'visible') return
+       fetchLiveContent()
+-    })
+-    visibilityChannel.subscribe()
++    }, 60000)
++    const auctionInterval = setInterval(() => {
++      if (document.visibilityState !== 'visible') return
++      fetchLiveAuctions()
++    }, 30000)
++
++    // Consolidated single channel for home page (replaces 3 separate channels)
++    const homeChannel = supabase.channel('home:global')
++    homeChannel
++      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
++        try {
++          const oldRow = (payload.old || null) as any
++          const newRow = (payload.new || null) as any
++          const relevantChange = (() => {
++            if (!oldRow && newRow) return newRow.is_live === true
++            if (oldRow && !newRow) return oldRow.is_live === true
++            if (oldRow && newRow) {
++              if ((oldRow.is_live || newRow.is_live) && oldRow.is_live !== newRow.is_live) return true
++              const keys = ['current_viewers','viewer_count','is_featured','battle_mode','battle_format','battle_status']
++              return keys.some(k => (oldRow as any)[k] !== (newRow as any)[k])
++            }
++            return false
++          })()
++          if (relevantChange) fetchLiveContent()
++        } catch (e) {
++          console.warn('home:global streams handler error', e)
++        }
++      })
++      .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_shows' }, () => {
++        fetchLiveAuctions()
++      })
++      .on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, () => {
++        fetchLiveContent()
++      })
++      .subscribe()
+ 
+     return () => {
+       clearInterval(streamInterval)
+       clearInterval(auctionInterval)
+-      try { supabase.removeChannel(channel) } catch {}
+-      try { supabase.removeChannel(auctionChannel) } catch {}
+-      try { supabase.removeChannel(visibilityChannel) } catch {}
++      try { supabase.removeChannel(homeChannel) } catch {}
+     }
+   }, [fetchLiveContent, fetchLiveAuctions])
+ 
+diff --git a/src/hooks/useBattleRealtime.ts b/src/hooks/useBattleRealtime.ts
+index 4950ed0..fa146f4 100644
+--- a/src/hooks/useBattleRealtime.ts
++++ b/src/hooks/useBattleRealtime.ts
+@@ -262,10 +262,10 @@ export function useBattleRealtime(battleId: string | null | undefined) {
+     fetchInitial();
+ 
+     // ΓöÇΓöÇ Fast score sync ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-    // During active battles, poll the score every 2s as a safety net.
++    // During active battles, poll the score every 10s as a safety net.
+     // The postgres_changes handler above handles most updates, but rapid
+     // RPC-driven score changes (e.g. from gifts) can occasionally be missed
+-    // by realtime. This ensures the score overlay never lags more than 2s.
++    // by realtime. This ensures the score overlay never lags more than 10s.
+     if (scorePollRef.current) {
+       clearInterval(scorePollRef.current);
+       scorePollRef.current = null;
+@@ -298,7 +298,7 @@ export function useBattleRealtime(battleId: string | null | undefined) {
+           });
+         }
+       } catch {}
+-    }, 2000);
++    }, 10000);
+ 
+     return () => {
+       if (channelRef.current) {
+diff --git a/src/hooks/useStreamTopGifters.ts b/src/hooks/useStreamTopGifters.ts
+index cf4548a..fcd2475 100644
+--- a/src/hooks/useStreamTopGifters.ts
++++ b/src/hooks/useStreamTopGifters.ts
+@@ -20,7 +20,7 @@ interface UseStreamTopGiftersOptions {
+ export function useStreamTopGifters({
+   streamId,
+   limit = 8,
+-  refreshIntervalMs = 15000,
++  refreshIntervalMs = 60000,
+ }: UseStreamTopGiftersOptions) {
+   const [topGifters, setTopGifters] = useState<TopGifter[]>([])
+   const [isLoading, setIsLoading] = useState(false)
+@@ -153,6 +153,10 @@ export function useStreamTopGifters({
+     const scheduleRefresh = () => {
+       if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current)
+       refreshTimeoutRef.current = setTimeout(() => {
++        if (document.visibilityState !== 'visible') {
++          scheduleRefresh()
++          return
++        }
+         fetchTopGifters()
+         lastRefreshRef.current = Date.now()
+         scheduleRefresh()
+diff --git a/src/hooks/useUserPresenceRoute.ts b/src/hooks/useUserPresenceRoute.ts
+index 7a30c04..b3d7d70 100644
+--- a/src/hooks/useUserPresenceRoute.ts
++++ b/src/hooks/useUserPresenceRoute.ts
+@@ -6,10 +6,10 @@ import { useLocation } from "react-router-dom";
+ /**
+  * Tracks the user's current route/page and writes it to user_presence_routes.
+  *
+- * REPLACED: Previous version used 30s setInterval heartbeat to upsert
+- * user_presence_routes. Now the 30s timer is removed ΓÇö route changes and
+- * visibility transitions are sufficient triggers. The periodic heartbeat was
+- * redundant since the route only changes on navigation.
++ * Scaling optimizations:
++ * - No periodic heartbeat ΓÇö route changes are event-driven
++ * - Route dedup: skips DB write if route hasn't changed
++ * - 5s debounce to prevent rapid duplicate writes
+  *
+  * Should be used once at the app level for authenticated users.
+  */
+@@ -17,6 +17,7 @@ export function useUserPresenceRoute() {
+   const { user: storeUser } = useAuthStore();
+   const location = useLocation();
+   const lastUpdateRef = useRef(0);
++  const lastRouteRef = useRef<string | null>(null);
+   const sessionIdRef = useRef(
+     `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+   );
+@@ -34,6 +35,11 @@ export function useUserPresenceRoute() {
+         return;
+       }
+ 
++      // Route dedup: skip if route hasn't changed
++      if (lastRouteRef.current === path) return;
++      lastRouteRef.current = path;
++
++      // 5s debounce
+       const now = Date.now();
+       if (now - lastUpdateRef.current < 5000) return;
+       lastUpdateRef.current = now;
+@@ -82,14 +88,12 @@ export function useUserPresenceRoute() {
+     updatePresence(location.pathname, document.title);
+   }, [location.pathname, updatePresence]);
+ 
+-  // REMOVED: 30s periodic heartbeat ΓÇö route changes are event-driven.
+-  // The periodic upsert was causing unnecessary DB writes every 30s per user
+-  // with no new data (same route, same title).
+-
+   // Update on visibility change (tab becomes active)
+   useEffect(() => {
+     const handleVisibility = () => {
+       if (document.visibilityState === "visible") {
++        // Reset route cache so the current route is written again on return
++        lastRouteRef.current = null;
+         updatePresence(location.pathname, document.title);
+       }
+     };
+diff --git a/src/lib/realtime/RealtimeManager.ts b/src/lib/realtime/RealtimeManager.ts
+index 4b4f20c..e6f7a0f 100644
+--- a/src/lib/realtime/RealtimeManager.ts
++++ b/src/lib/realtime/RealtimeManager.ts
+@@ -147,10 +147,103 @@ export function removeChannel(name: string) {
+   destroyChannel(name)
+ }
+ 
++// --- Page-level channel helpers ---
++
++type PageChannelType = 'home' | 'stream' | 'court' | 'pod' | 'user'
++
++function getPageChannelName(type: PageChannelType, id?: string): string {
++  switch (type) {
++    case 'home': return 'page:home'
++    case 'stream': return `page:stream:${id}`
++    case 'court': return `page:court:${id}`
++    case 'pod': return `page:pod:${id}`
++    case 'user': return `page:user:${id}`
++    default: return `page:${type}`
++  }
++}
++
++/**
++ * Subscribe to a page-level channel. If the channel already exists, reuse it.
++ * Returns an unsubscribe function.
++ */
++export function subscribePageChannel(
++  type: PageChannelType,
++  subscriberId: string,
++  builder?: (channel: ReturnType<typeof supabase.channel>) => ReturnType<typeof supabase.channel>,
++  id?: string,
++): () => void {
++  const name = getPageChannelName(type, id)
++  return subscribe(name, subscriberId, builder)
++}
++
++/**
++ * Remove a page-level channel immediately.
++ */
++export function removePageChannel(type: PageChannelType, id?: string) {
++  const name = getPageChannelName(type, id)
++  removeChannel(name)
++}
++
++// --- Polling registry ---
++
++interface PollingEntry {
++  id: string
++  label: string
++  intervalMs: number
++  subscriberId: string
++  visibilityOnly: boolean
++}
++
++const pollingRegistry = new Map<string, PollingEntry>()
++
++export function registerPolling(
++  id: string,
++  label: string,
++  intervalMs: number,
++  subscriberId: string,
++  visibilityOnly: boolean = false,
++) {
++  pollingRegistry.set(id, { id, label, intervalMs, subscriberId, visibilityOnly })
++}
++
++export function unregisterPolling(id: string) {
++  pollingRegistry.delete(id)
++}
++
++export function getPollingRegistry() {
++  return Array.from(pollingRegistry.values())
++}
++
++// --- Channel health warnings ---
++
++export type ChannelHealth = 'green' | 'yellow' | 'red'
++
++export function getChannelHealth(activeCount: number): ChannelHealth {
++  if (activeCount <= 3) return 'green'
++  if (activeCount <= 6) return 'yellow'
++  return 'red'
++}
++
++export function getPageChannelStats() {
++  const stats = getStats()
++  const pageChannels = stats.channels.filter(c => c.name.startsWith('page:'))
++  return {
++    totalPageChannels: pageChannels.length,
++    channels: pageChannels,
++    health: getChannelHealth(pageChannels.length),
++  }
++}
++
+ if (typeof window !== 'undefined' && isDev()) {
+   ;(window as any).__TROLLCITY_REALTIME_MANAGER__ = {
+     getStats,
+     cleanup,
+     subscribe,
++    subscribePageChannel,
++    removePageChannel,
++    getPageChannelStats,
++    getPollingRegistry,
++    registerPolling,
++    unregisterPolling,
+   }
+ }
+diff --git a/src/lib/supabase.ts b/src/lib/supabase.ts
+index 8a86058..7bc9b84 100644
+--- a/src/lib/supabase.ts
++++ b/src/lib/supabase.ts
+@@ -19,7 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+   },
+   realtime: {
+     params: {
+-      eventsPerSecond: 10,
++      eventsPerSecond: 50,
+     },
+   },
+ })
+diff --git a/src/pages/broadcast/BroadcastPage.tsx b/src/pages/broadcast/BroadcastPage.tsx
+index fa1d88a..b2ff081 100644
+--- a/src/pages/broadcast/BroadcastPage.tsx
++++ b/src/pages/broadcast/BroadcastPage.tsx
+@@ -1297,6 +1297,7 @@ useEffect(() => {
+   const [, setSeatTick] = useState(0)
+   useEffect(() => {
+     const interval = setInterval(() => {
++      if (document.visibilityState !== 'visible') return
+       setSeatTick(t => t + 1)
+     }, 1000)
+     return () => clearInterval(interval)
+@@ -2701,9 +2702,10 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
+     // Track watch time and emit events periodically
+     let watchTime = 0;
+     const watchInterval = setInterval(() => {
++      if (document.visibilityState !== 'visible') return
+       watchTime += 30; // Increment by 30 seconds
+       emitEvent('stream_watch_time', user.id, { streamId, watchTime });
+-    }, 30000); // Every 30 seconds
++    }, 60000); // Every 60 seconds (was 30s)
+ 
+     return () => clearInterval(watchInterval);
+   }, [streamId, user?.id]);
+@@ -3043,6 +3045,7 @@ useStreamRealtime(streamId, {
+       });
+ 
+     const heartbeatInterval = setInterval(() => {
++      if (document.visibilityState !== 'visible') return
+       if (channelRef.current) {
+         channelRef.current.send({
+           type: 'broadcast',
+@@ -3050,7 +3053,7 @@ useStreamRealtime(streamId, {
+           payload: { timestamp: Date.now(), user_id: user?.id }
+         }).catch(() => {});
+       }
+-    }, 30000);
++    }, 60000);
+ 
+     return () => {
+       clearInterval(heartbeatInterval);
+diff --git a/src/pages/broadcast/ViewerPage.tsx b/src/pages/broadcast/ViewerPage.tsx
+index e1b7b33..86822f4 100644
+--- a/src/pages/broadcast/ViewerPage.tsx
++++ b/src/pages/broadcast/ViewerPage.tsx
+@@ -1916,6 +1916,7 @@ const handleLeaveSeat = useCallback(async () => {
+     }
+ 
+     watchTimeIntervalRef.current = window.setInterval(() => {
++      if (document.visibilityState !== 'visible') return
+       void recordWatchActivity()
+     }, 60 * 1000)
+ 
+@@ -2235,8 +2236,9 @@ useStreamRealtime(
+     }
+ 
+     const heartbeat = window.setInterval(() => {
++      if (document.visibilityState !== 'visible') return
+       void heartbeatAudience()
+-    }, 30_000)
++    }, 60_000)
+ 
+     return () => {
+       window.clearInterval(heartbeat)
+
+
+================================================================================
+  SECTION 2: NEW FILES (full content)
+================================================================================
+
+--------------------------------------------------------------------------------
+  FILE: src/components/admin/RealtimeDebugPanel.tsx
+--------------------------------------------------------------------------------
+
+import { useState, useEffect } from 'react'
+import { getStats, getPollingRegistry, getChannelHealth } from '../../lib/realtime/RealtimeManager'
+import { getStreamRealtimeDebugState } from '../../lib/realtime/streamRealtimeManager'
+
+export default function RealtimeDebugPanel() {
+  const [stats, setStats] = useState(getStats())
+  const [polling, setPolling] = useState(getPollingRegistry())
+  const [streamRealtime, setStreamRealtime] = useState(getStreamRealtimeDebugState())
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStats(getStats())
+      setPolling(getPollingRegistry())
+      setStreamRealtime(getStreamRealtimeDebugState())
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const health = getChannelHealth(stats.active)
+
+  const healthColor = {
+    green: 'text-green-400',
+    yellow: 'text-yellow-400',
+    red: 'text-red-400',
+  }[health]
+
+  const healthBg = {
+    green: 'bg-green-900/30 border-green-700',
+    yellow: 'bg-yellow-900/30 border-yellow-700',
+    red: 'bg-red-900/30 border-red-700',
+  }[health]
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[9999] max-w-sm text-xs font-mono">
+      <div className={`rounded-lg border p-3 shadow-xl backdrop-blur-sm ${healthBg}`}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-bold text-white">⚡ Realtime Monitor</span>
+          <span className={`font-bold ${healthColor}`}>{health.toUpperCase()}</span>
+        </div>
+
+        <div className="space-y-1 text-gray-300">
+          <div className="flex justify-between">
+            <span>Active Channels:</span>
+            <span className={healthColor}>{stats.active}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Total Created:</span>
+            <span>{stats.created}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Total Removed:</span>
+            <span>{stats.removed}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Leaked:</span>
+            <span className={stats.leaked > 0 ? 'text-red-400' : ''}>{stats.leaked}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Polling Loops:</span>
+            <span>{polling.length}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Stream Realtime:</span>
+            <span>{streamRealtime.length}</span>
+          </div>
+        </div>
+
+        {stats.channels.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-600">
+            <div className="text-gray-400 mb-1">Channels:</div>
+            {stats.channels.map((ch) => (
+              <div key={ch.name} className="flex justify-between text-gray-400">
+                <span className="truncate max-w-[180px]" title={ch.name}>{ch.name}</span>
+                <span className="ml-2 shrink-0">
+                  refs:{ch.refCount} {ch.subscribers > 0 ? `sub:${ch.subscribers}` : ''} {ch.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {polling.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-600">
+            <div className="text-gray-400 mb-1">Polling:</div>
+            {polling.map((p) => (
+              <div key={p.id} className="flex justify-between text-gray-400">
+                <span className="truncate max-w-[140px]" title={p.label}>{p.label}</span>
+                <span className="ml-2 shrink-0">{p.intervalMs / 1000}s {p.visibilityOnly ? '👁' : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+--------------------------------------------------------------------------------
+  FILE: src/contexts/PageChannelContext.tsx
+--------------------------------------------------------------------------------
+
+import React, { createContext, useContext, useEffect, useRef, useCallback, useMemo } from 'react'
+import { subscribePageChannel, removePageChannel, getPageChannelStats } from '../lib/realtime/RealtimeManager'
+
+export type PageType = 'home' | 'stream' | 'court' | 'pod' | 'none'
+
+interface PageChannelState {
+  currentPage: PageType
+  currentPageId: string | null
+  switchPage: (type: PageType, id?: string | null) => void
+  getPageStats: ReturnType<typeof getPageChannelStats>
+}
+
+const PageChannelContext = createContext<PageChannelState | null>(null)
+
+/**
+ * PageChannelProvider manages a single page-level channel per navigation state.
+ * When the page changes, the old page channel is removed and a new one is created.
+ * This ensures only 1 page channel is active at a time per user.
+ */
+export function PageChannelProvider({ children }: { children: React.ReactNode }) {
+  const currentPageRef = useRef<PageType>('none')
+  const currentPageIdRef = useRef<string | null>(null)
+
+  const switchPage = useCallback((type: PageType, id?: string | null) => {
+    const prevType = currentPageRef.current
+    const prevId = currentPageIdRef.current
+
+    // Remove previous page channel
+    if (prevType !== 'none') {
+      removePageChannel(prevType, prevId || undefined)
+    }
+
+    currentPageRef.current = type
+    currentPageIdRef.current = id || null
+  }, [])
+
+  const getPageStats = useCallback(() => getPageChannelStats(), [])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const type = currentPageRef.current
+      const id = currentPageIdRef.current
+      if (type !== 'none') {
+        removePageChannel(type, id || undefined)
+      }
+    }
+  }, [])
+
+  const value = useMemo(() => ({
+    currentPage: currentPageRef.current,
+    currentPageId: currentPageIdRef.current,
+    switchPage,
+    getPageStats,
+  }), [switchPage, getPageStats])
+
+  return (
+    <PageChannelContext.Provider value={value}>
+      {children}
+    </PageChannelContext.Provider>
+  )
+}
+
+export function usePageChannel() {
+  const ctx = useContext(PageChannelContext)
+  if (!ctx) throw new Error('usePageChannel must be used within PageChannelProvider')
+  return ctx
+}
+
+/**
+ * Hook that subscribes to the current page channel with a builder.
+ * Automatically unsubscribes when the page changes or component unmounts.
+ */
+export function usePageChannelSubscription(
+  pageType: PageType,
+  pageId: string | undefined,
+  subscriberId: string,
+  builder: (channel: any) => any,
+) {
+  const { switchPage } = usePageChannel()
+
+  useEffect(() => {
+    switchPage(pageType, pageId || null)
+
+    const unsubscribe = subscribePageChannel(pageType, subscriberId, builder, pageId)
+
+    return () => {
+      unsubscribe()
+    }
+  }, [pageType, pageId, subscriberId, builder, switchPage])
+}
+
+
+--------------------------------------------------------------------------------
+  FILE: src/hooks/useVisibilityPolling.ts
+--------------------------------------------------------------------------------
+
+import { useEffect, useRef, useCallback } from 'react'
+import { registerPolling, unregisterPolling } from '../lib/realtime/RealtimeManager'
+
+interface UseVisibilityPollingOptions {
+  id: string
+  label: string
+  callback: () => void
+  intervalMs: number
+  /** If true, polling only runs when tab is visible. Defaults to true. */
+  visibilityOnly?: boolean
+  /** If true, starts paused. Defaults to false. */
+  paused?: boolean
+}
+
+/**
+ * A visibility-aware polling hook that:
+ * - Pauses polling when the tab is backgrounded (if visibilityOnly=true)
+ * - Registers itself in the global polling registry for monitoring
+ * - Cleans up on unmount
+ */
+export function useVisibilityPolling({
+  id,
+  label,
+  callback,
+  intervalMs,
+  visibilityOnly = true,
+  paused = false,
+}: UseVisibilityPollingOptions) {
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
+
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pausedRef = useRef(paused)
+  pausedRef.current = paused
+
+  const tick = useCallback(() => {
+    if (pausedRef.current) return
+    if (visibilityOnly && document.visibilityState !== 'visible') return
+    callbackRef.current()
+  }, [visibilityOnly])
+
+  useEffect(() => {
+    registerPolling(id, label, intervalMs, id, visibilityOnly)
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+    }
+    intervalRef.current = setInterval(tick, intervalMs)
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+      unregisterPolling(id)
+    }
+  }, [id, label, intervalMs, tick, visibilityOnly])
+
+  /** Manually pause/resume polling */
+  const setPaused = useCallback((value: boolean) => {
+    pausedRef.current = value
+  }, [])
+
+  return { setPaused }
+}
+
+
+--------------------------------------------------------------------------------
+  FILE: src/lib/batchWrites.ts
+--------------------------------------------------------------------------------
+
+import { supabase } from './supabase'
+
+type BatchOperation = () => Promise<void>
+
+interface BatchConfig {
+  /** Max time between flushes (ms) */
+  flushIntervalMs: number
+  /** Max operations before forced flush */
+  maxBatchSize: number
+}
+
+const DEFAULT_CONFIG: BatchConfig = {
+  flushIntervalMs: 60_000, // 1 minute
+  maxBatchSize: 50,
+}
+
+/**
+ * Creates a batched write collector.
+ * Operations are queued and flushed on interval or before page unload.
+ */
+export function createBatchWriter(config: Partial<BatchConfig> = {}) {
+  const { flushIntervalMs, maxBatchSize } = { ...DEFAULT_CONFIG, ...config }
+  const queue: BatchOperation[] = []
+  let flushTimer: ReturnType<typeof setInterval> | null = null
+  let flushing = false
+
+  async function flush() {
+    if (flushing || queue.length === 0) return
+    flushing = true
+
+    const ops =.spliceQueue()
+    for (const op of ops) {
+      try {
+        await op()
+      } catch (error) {
+        console.warn('[batchWrite] operation failed', error)
+      }
+    }
+
+    flushing = false
+  }
+
+  function spliceQueue(): BatchOperation[] {
+    const ops = queue.splice(0, maxBatchSize)
+    return ops
+  }
+
+  function enqueue(op: BatchOperation) {
+    queue.push(op)
+
+    if (queue.length >= maxBatchSize) {
+      flush()
+    }
+  }
+
+  function start() {
+    if (flushTimer) return
+    flushTimer = setInterval(flush, flushIntervalMs)
+
+    // Flush before page unload
+    window.addEventListener('beforeunload', flush)
+  }
+
+  function stop() {
+    if (flushTimer) {
+      clearInterval(flushTimer)
+      flushTimer = null
+    }
+    window.removeEventListener('beforeunload', flush)
+  }
+
+  return { enqueue, flush, start, stop, getQueueSize: () => queue.length }
+}
+
+// --- city_ads batching ---
+
+let cityAdsBatch: ReturnType<typeof createBatchWriter> | null = null
+
+function getCityAdsBatch() {
+  if (!cityAdsBatch) {
+    cityAdsBatch = createBatchWriter({ flushIntervalMs: 60_000, maxBatchSize: 20 })
+    cityAdsBatch.start()
+  }
+  return cityAdsBatch
+}
+
+/**
+ * Queue a city ad impression (view). Batched and flushed every 60s or before unload.
+ */
+export function queueCityAdImpression(adId: number) {
+  const batch = getCityAdsBatch()
+  batch.enqueue(async () => {
+    await supabase.rpc('increment_ad_impressions', { ad_id: adId })
+  })
+}
+
+/**
+ * Queue a city ad click. Batched and flushed every 60s or before unload.
+ */
+export function queueCityAdClick(adId: number) {
+  const batch = getCityAdsBatch()
+  batch.enqueue(async () => {
+    await supabase.rpc('increment_ad_clicks', { ad_id: adId })
+  })
+}
+
+/**
+ * Flush all pending city ad writes immediately.
+ */
+export function flushCityAds() {
+  if (cityAdsBatch) {
+    cityAdsBatch.flush()
+  }
+}
+
+// --- app_bug_reports dedup ---
+
+const reportedErrors = new Map<string, number>()
+const DEDUP_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
+
+function getDedupKey(type: string, message: string, route: string): string {
+  return `${type}:${message}:${route}`
+}
+
+/**
+ * Report a bug with client-side deduplication.
+ * Same error within the dedup window is only inserted once.
+ */
+export async function reportBugDedup(
+  type: string,
+  message: string,
+  route: string,
+  extra?: Record<string, unknown>,
+) {
+  const key = getDedupKey(type, message, route)
+  const now = Date.now()
+  const lastReported = reportedErrors.get(key)
+
+  if (lastReported && now - lastReported < DEDUP_WINDOW_MS) {
+    return // Skip duplicate
+  }
+
+  reportedErrors.set(key, now)
+
+  // Clean up old entries periodically
+  if (reportedErrors.size > 100) {
+    for (const [k, v] of reportedErrors.entries()) {
+      if (now - v > DEDUP_WINDOW_MS) {
+        reportedErrors.delete(k)
+      }
+    }
+  }
+
+  await supabase.from('app_bug_reports').insert({
+    type,
+    message,
+    route,
+    extra: extra || {},
+    created_at: new Date().toISOString(),
+  })
+}
+
+// --- user_presence route dedup ---
+
+let lastWrittenRoute: string | null = null
+
+/**
+ * Update user presence route, skipping if route hasn't changed.
+ */
+export async function updatePresenceRoute(userId: string, route: string) {
+  if (lastWrittenRoute === route) return // Skip duplicate
+
+  lastWrittenRoute = route
+
+  await supabase
+    .from('user_presence_routes')
+    .upsert(
+      { user_id: userId, route, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    )
+}
+
+/**
+ * Reset the route dedup cache (call on mount).
+ */
+export function resetPresenceRouteCache() {
+  lastWrittenRoute = null
+}
+

@@ -5,6 +5,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { CityAd, AdPlacement } from '../../types/cityAds';
 import { supabase } from '../../lib/supabase';
+import { queueCityAdImpression } from '../../lib/batchWrites';
 import PromoAdCard from './PromoAdCard';
 
 interface PromoSlotProps {
@@ -76,27 +77,11 @@ export default function PromoSlot({ placement, variant = 'sidebar' }: PromoSlotP
       if (isUserAd) {
         await supabase.rpc('increment_user_ad_impressions', { ad_id: adId });
       } else {
-        await supabase.rpc('increment_ad_impressions', { ad_id: adId });
+        // Use batched writer for city_ads impressions
+        queueCityAdImpression(adId);
       }
     } catch (e) {
-      // Fallback: direct update
-      try {
-        const table = isUserAd ? 'user_advertisements' : 'city_ads';
-        const { data } = await supabase
-          .from(table)
-          .select('impressions_count')
-          .eq('id', adId)
-          .maybeSingle();
-        
-        if (data) {
-          await supabase
-            .from(table)
-            .update({ impressions_count: (data.impressions_count || 0) + 1 })
-            .eq('id', adId);
-        }
-      } catch (err) {
-        console.error('Failed to track impression:', err);
-      }
+      console.error('Failed to track impression:', e);
     }
   }, []);
 

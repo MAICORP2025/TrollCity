@@ -147,10 +147,103 @@ export function removeChannel(name: string) {
   destroyChannel(name)
 }
 
+// --- Page-level channel helpers ---
+
+type PageChannelType = 'home' | 'stream' | 'court' | 'pod' | 'user'
+
+function getPageChannelName(type: PageChannelType, id?: string): string {
+  switch (type) {
+    case 'home': return 'page:home'
+    case 'stream': return `page:stream:${id}`
+    case 'court': return `page:court:${id}`
+    case 'pod': return `page:pod:${id}`
+    case 'user': return `page:user:${id}`
+    default: return `page:${type}`
+  }
+}
+
+/**
+ * Subscribe to a page-level channel. If the channel already exists, reuse it.
+ * Returns an unsubscribe function.
+ */
+export function subscribePageChannel(
+  type: PageChannelType,
+  subscriberId: string,
+  builder?: (channel: ReturnType<typeof supabase.channel>) => ReturnType<typeof supabase.channel>,
+  id?: string,
+): () => void {
+  const name = getPageChannelName(type, id)
+  return subscribe(name, subscriberId, builder)
+}
+
+/**
+ * Remove a page-level channel immediately.
+ */
+export function removePageChannel(type: PageChannelType, id?: string) {
+  const name = getPageChannelName(type, id)
+  removeChannel(name)
+}
+
+// --- Polling registry ---
+
+interface PollingEntry {
+  id: string
+  label: string
+  intervalMs: number
+  subscriberId: string
+  visibilityOnly: boolean
+}
+
+const pollingRegistry = new Map<string, PollingEntry>()
+
+export function registerPolling(
+  id: string,
+  label: string,
+  intervalMs: number,
+  subscriberId: string,
+  visibilityOnly: boolean = false,
+) {
+  pollingRegistry.set(id, { id, label, intervalMs, subscriberId, visibilityOnly })
+}
+
+export function unregisterPolling(id: string) {
+  pollingRegistry.delete(id)
+}
+
+export function getPollingRegistry() {
+  return Array.from(pollingRegistry.values())
+}
+
+// --- Channel health warnings ---
+
+export type ChannelHealth = 'green' | 'yellow' | 'red'
+
+export function getChannelHealth(activeCount: number): ChannelHealth {
+  if (activeCount <= 3) return 'green'
+  if (activeCount <= 6) return 'yellow'
+  return 'red'
+}
+
+export function getPageChannelStats() {
+  const stats = getStats()
+  const pageChannels = stats.channels.filter(c => c.name.startsWith('page:'))
+  return {
+    totalPageChannels: pageChannels.length,
+    channels: pageChannels,
+    health: getChannelHealth(pageChannels.length),
+  }
+}
+
 if (typeof window !== 'undefined' && isDev()) {
   ;(window as any).__TROLLCITY_REALTIME_MANAGER__ = {
     getStats,
     cleanup,
     subscribe,
+    subscribePageChannel,
+    removePageChannel,
+    getPageChannelStats,
+    getPollingRegistry,
+    registerPolling,
+    unregisterPolling,
   }
 }

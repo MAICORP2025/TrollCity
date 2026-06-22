@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Coins } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -35,6 +35,7 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
 
   const [showPayPalPayment, setShowPayPalPayment] = useState(false);
   const [showCardPayment, setShowCardPayment] = useState(false);
+  const paymentInProgressRef = useRef(false);
 
   // Check if user is a new user (less than 1 week on platform)
   const checkNewUserStatus = useCallback(async () => {
@@ -131,6 +132,7 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
       metadata: { source: 'broadcast_quick_store', baseCoins: pkg.baseCoins, bonusCoins: pkg.bonusCoins },
     };
     setSelectedPack(pkgWithTax);
+    paymentInProgressRef.current = true;
     setShowPayPalPayment(true);
   };
 
@@ -179,9 +181,18 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
   };
   
   const handlePaymentSuccess = (data: any) => {
+    paymentInProgressRef.current = false;
     toast.success(`Successfully purchased ${selectedPack?.coins.toLocaleString()} coins!`);
     setShowPayPalPayment(false);
+    setShowCardPayment(false);
     setSelectedPack(null);
+  };
+
+  const handleSafeClose = () => {
+    if (paymentInProgressRef.current) {
+      toast.info('Please wait for the payment to complete.');
+      return;
+    }
     onClose();
   };
 
@@ -189,17 +200,25 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
 
   return (
     <>
-      <div className={embedded ? "h-full w-full" : "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"}>
-        <div className={embedded ? "relative h-full w-full bg-zinc-900 overflow-hidden" : "relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"}>
+      <div
+        className={embedded ? "h-full w-full" : "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"}
+        onClick={!embedded ? handleSafeClose : undefined}
+      >
+        <div
+          className={embedded ? "relative h-full w-full bg-zinc-900 overflow-hidden" : "relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"}
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Coins className="w-5 h-5 text-yellow-400" />
               Coin Store
             </h2>
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-white"
+            <button
+              onClick={handleSafeClose}
+              disabled={paymentInProgressRef.current}
+              className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+              title={paymentInProgressRef.current ? 'Payment in progress' : 'Close'}
             >
               <X className="w-5 h-5" />
             </button>
@@ -294,6 +313,8 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
       <PayPalPaymentModal
         isOpen={showPayPalPayment || showCardPayment}
         onClose={() => {
+          // Only allow close if payment is not actively in progress
+          if (paymentInProgressRef.current) return;
           setShowPayPalPayment(false);
           setShowCardPayment(false);
           setSelectedPack(null);
@@ -302,6 +323,8 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
         userId={user?.id || ''}
         profile={profile}
         onPaymentSuccess={handlePaymentSuccess}
+        onPaymentStart={() => { paymentInProgressRef.current = true; }}
+        onPaymentEnd={() => { paymentInProgressRef.current = false; }}
         onSaveCard={true}
       />
     </>

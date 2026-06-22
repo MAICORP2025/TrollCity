@@ -54,7 +54,8 @@ import { AnimationsContainer } from "./components/animations";
 // Layout
 import OfficerAlertBanner from "./components/OfficerAlertBanner";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
-import { RTCAdminMonitor } from "./components/admin";
+import { RTCAdminMonitor, RealtimeDebugPanel } from "./components/admin";
+import { PageChannelProvider } from "./contexts/PageChannelContext";
 import { StaffWalkieTalkieProvider } from "./components/StaffWalkieTalkieProvider";
 
 import AdminErrors from "./pages/admin/AdminErrors";
@@ -392,13 +393,6 @@ if (
       (location.pathname === "/map" || location.pathname === "/neighborhood-map") &&
       !isPublicRoute(location.pathname)
     ) {
-      const hasNeighborhood = !!(profile?.neighborhood_id && profile.neighborhood_id !== '')
-      console.log('[RequireAuth] Redirecting to neighborhood-setup. profile:', { 
-        neighborhood_id: profile?.neighborhood_id,
-        hasNeighborhood,
-        pathname: location.pathname,
-        profileId: profile?.id 
-      });
       return <Navigate to="/neighborhood-setup" replace />;
     }
 
@@ -1437,8 +1431,10 @@ const handleVisibilityChange = async () => {
            {user && <ChatBubble />}
            <StaffWalkieTalkieProvider>
              <RTCAdminMonitor />
+             {import.meta.env.DEV && (profile?.is_admin || profile?.is_superadmin || ['admin','ceo','superadmin'].includes(profile?.role || '')) && <RealtimeDebugPanel />}
              <ErrorBoundary>
                <Suspense fallback={null}>
+                 <PageChannelProvider>
                  <Routes>
                  {/* Public Routes */}
                  <Route path="/intro" element={<Navigate to="/" replace />} />
@@ -2611,10 +2607,11 @@ const handleVisibilityChange = async () => {
                 {/* 🔙 Catch-all - redirect username patterns to profile (PUBLIC ACCESS) */}
                  <Route path="/:username" element={<UsernameRedirect />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
-                   </Routes>
-             </Suspense>
+                </Routes>
+              </PageChannelProvider>
+              </Suspense>
             </ErrorBoundary>
-            </StaffWalkieTalkieProvider>
+          </StaffWalkieTalkieProvider>
            <GlobalPodBanner />
            <BugAlertPopup />
          </AppLayout>

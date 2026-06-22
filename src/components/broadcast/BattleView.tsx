@@ -7,11 +7,12 @@ import { supabase } from '../../lib/supabase';
 import { Stream } from '../../types/broadcast';
 import { useAuthStore } from '../../lib/store';
 import { PreflightStore } from '../../lib/preflightStore';
-import { Loader2, Coins, User, MicOff, VideoOff, Plus, Minus, Crown, Flame, ArrowLeft, Skull, Gem, X } from 'lucide-react';
+import { Loader2, Coins, User, MicOff, VideoOff, Mic, Video, Plus, Minus, Crown, Flame, ArrowLeft, Skull, Gem, X } from 'lucide-react';
 import { useCoins } from '../../lib/hooks/useCoins';
 import useTrollFamilyActivity from '../../hooks/useTrollFamilyActivity';
 import { useBattleRealtime } from '../../hooks/useBattleRealtime';
 import { logActiveChannels } from '../../lib/realtimeChannelDiagnostics';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import BattleChat from './BattleChat';
 import MuteHandler from './MuteHandler';
 import GiftTray from './GiftTray';
@@ -496,6 +497,14 @@ interface BattleParticipantTileProps extends BattleParticipant {
   statePoints?: number | null;
   /** Whether this is a state battle */
   isStateBattle?: boolean;
+  /** Callback to toggle camera for this participant */
+  onToggleCamera?: () => void;
+  /** Callback to toggle mic for this participant */
+  onToggleMic?: () => void;
+  /** Whether camera toggle is available */
+  canToggleCamera?: boolean;
+  /** Whether mic toggle is available */
+  canToggleMic?: boolean;
 }
 
 const BattleVideoRenderer = ({
@@ -570,6 +579,7 @@ const BattleParticipantTile = ({
   isLocal,
   videoTrack,
   isMicrophoneEnabled,
+  isCameraEnabled,
   metadata,
   role,
   side,
@@ -583,6 +593,10 @@ const BattleParticipantTile = ({
   stateName = null,
   statePoints = null,
   isStateBattle = false,
+  onToggleCamera,
+  onToggleMic,
+  canToggleCamera = false,
+  canToggleMic = false,
 }: BattleParticipantTileProps) => {
   const isHost = role === 'host' || metadata?.role === 'host';
   const micMuted = !isMicrophoneEnabled;
@@ -700,11 +714,41 @@ const BattleParticipantTile = ({
           )}
         </div>
 
-        {micMuted && (
-          <div className="bg-red-500 p-1.5 rounded-full shadow-lg">
-            <MicOff size={12} className="text-white" />
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          {/* Camera toggle button for remote participants */}
+          {!isLocal && canToggleCamera && onToggleCamera && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleCamera(); }}
+              className={cn(
+                "p-1.5 rounded-full shadow-lg pointer-events-auto",
+                isCameraEnabled ? "bg-green-500/80 hover:bg-green-500" : "bg-red-500/80 hover:bg-red-500"
+              )}
+              title={isCameraEnabled ? "Camera ON" : "Camera OFF"}
+            >
+              {isCameraEnabled ? <Video size={12} className="text-white" /> : <VideoOff size={12} className="text-white" />}
+            </button>
+          )}
+
+          {/* Mic toggle button for remote participants */}
+          {!isLocal && canToggleMic && onToggleMic && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleMic(); }}
+              className={cn(
+                "p-1.5 rounded-full shadow-lg pointer-events-auto",
+                isMicrophoneEnabled ? "bg-green-500/80 hover:bg-green-500" : "bg-red-500/80 hover:bg-red-500"
+              )}
+              title={isMicrophoneEnabled ? "Mic ON" : "Mic OFF"}
+            >
+              {isMicrophoneEnabled ? <Mic size={12} className="text-white" /> : <MicOff size={12} className="text-white" />}
+            </button>
+          )}
+
+          {micMuted && (
+            <div className="bg-red-500 p-1.5 rounded-full shadow-lg">
+              <MicOff size={12} className="text-white" />
+            </div>
+          )}
+        </div>
       </div>
 
       {onTileClick && (
@@ -889,6 +933,8 @@ const BattleArena = ({
     ambientEnabled: jailTimeAmbientEnabled !== false,
   });
   const lastKnownTrackRef = useRef<Record<string, { video?: RemoteVideoTrack; audio?: RemoteAudioTrack }>>({});
+  const [preBattleCountdown, setPreBattleCountdown] = useState<number | null>(null);
+  const [cameraCheckResults, setCameraCheckResults] = useState<Record<string, { hasParticipant: boolean; hasPublication: boolean; hasSubscription: boolean; hasVideo: boolean }>>({});
   const [battleParticipants, setBattleParticipants] = useState<BattleParticipant[]>([]);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -903,6 +949,74 @@ const BattleArena = ({
   }, []);
 
   const isMobileViewport = isMobileLayout;
+
+  // Pre-battle camera check: when battle is starting/ready, verify both sides have cameras
+  useEffect(() => {
+    if (battleStatus !== 'starting' && battleStatus !== 'ready') {
+      setPreBattleCountdown(null);
+      setCameraCheckResults({});
+      return;
+    }
+
+    const checkCameras = () => {
+      const results: Record<string, { hasParticipant: boolean; hasPublication: boolean; hasSubscription: boolean; hasVideo: boolean }> = {};
+
+      for (const side of ['challenger', 'opponent'] as const) {
+        const hostId = side === 'challenger' ? challengerHostId : opponentHostId;
+        const liveKitIdentity = userIdToLiveKitIdentity?.[hostId] || hostId;
+        const normalizedIdentity = String(liveKitIdentity || '').replace(/-/g, '').toLowerCase();
+
+        const participant = remoteUsers.find((u) => {
+          const id = String(u.identity || '');
+          const normalized = id.replace(/-/g, '').toLowerCase();
+          return (
+            id === liveKitIdentity ||
+            normalized === normalizedIdentity ||
+            normalized.startsWith(normalizedIdentity.substring(0, 8)) ||
+            normalizedIdentity.startsWith(normalized.substring(0, 8))
+          );
+        });
+
+        if (!participant) {
+          results[side] = { hasParticipant: false, hasPublication: false, hasSubscription: false, hasVideo: false };
+          continue;
+        }
+
+        const videoPubs = getTrackPublications(participant, 'video');
+        const cameraPub = videoPubs.find(p => p.source === Track.Source.Camera);
+        const hasPublication = !!cameraPub;
+        const hasSubscription = cameraPub?.isSubscribed ?? false;
+        const hasVideo = !!cameraPub?.track;
+
+        results[side] = { hasParticipant: true, hasPublication, hasSubscription, hasVideo };
+      }
+
+      setCameraCheckResults(results);
+
+      // Start 3-second countdown if not already running
+      setPreBattleCountdown((prev) => {
+        if (prev !== null) return prev; // Already counting down
+        return 3;
+      });
+    };
+
+    checkCameras();
+  }, [battleStatus, remoteUsers, challengerHostId, opponentHostId, userIdToLiveKitIdentity]);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (preBattleCountdown === null) return;
+    if (preBattleCountdown <= 0) {
+      setPreBattleCountdown(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setPreBattleCountdown((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [preBattleCountdown]);
 
   const STAFF_ROLES = useMemo(() => new Set([
     'admin',
@@ -2397,6 +2511,29 @@ return (
         </>
         );
       })()}
+
+      {/* Pre-battle countdown overlay */}
+      {preBattleCountdown !== null && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+          <motion.div
+            key={preBattleCountdown}
+            initial={{ scale: 1.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="text-6xl font-black text-white mb-4"
+          >
+            {preBattleCountdown}
+          </motion.div>
+          <div className="text-lg text-white/70 font-bold">Preparing battle cameras...</div>
+          <div className="mt-4 flex gap-4 text-xs">
+            <span className={cameraCheckResults.challenger?.hasVideo ? 'text-green-400' : 'text-red-400'}>
+              Challenger: {cameraCheckResults.challenger?.hasVideo ? '✅ Camera ready' : '❌ No camera'}
+            </span>
+            <span className={cameraCheckResults.opponent?.hasVideo ? 'text-green-400' : 'text-red-400'}>
+              Opponent: {cameraCheckResults.opponent?.hasVideo ? '✅ Camera ready' : '❌ No camera'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {<BattleAudioRenderer entries={remoteAudioEntries} />}
     </div>
