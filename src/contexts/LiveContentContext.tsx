@@ -2,13 +2,13 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { supabase } from '@/lib/supabase'
 
 export interface LiveItem {
-  is_Live: import("react/jsx-runtime").JSX.Element
   id: string
   title: string
   type: 'stream' | 'podcast' | 'auction'
   viewerCount: number
   streamerName: string
   streamerAvatar: string | null
+  broadcasterId?: string
   isFeatured?: boolean
   isBattle?: boolean
   battleFormat?: string
@@ -103,6 +103,7 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
           viewerCount: stream.current_viewers || stream.viewer_count || 0,
           streamerName: stream.user_profiles?.username || 'Unknown',
           streamerAvatar: stream.user_profiles?.avatar_url || null,
+          broadcasterId: stream.broadcaster_id || stream.user_id || null,
           isFeatured: stream.is_featured || false,
           isBattle: stream.battle_mode === 'universal',
           battleFormat: stream.battle_format,
@@ -124,6 +125,7 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
         viewerCount: row.current_viewers || 0,
         streamerName: row.broadcaster_username || 'Unknown',
         streamerAvatar: row.broadcaster_avatar || null,
+        broadcasterId: row.broadcaster_id || null,
         isFeatured: row.visibility_score > 0,
         isBattle: false,
         category: row.category || null,
@@ -160,19 +162,19 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
     }
   }, [])
 
-  useEffect(() => {
-    fetchLiveContent()
-    fetchLiveAuctions()
+useEffect(() => {
+     fetchLiveContent()
+     fetchLiveAuctions()
 
-    // Visibility-gated polling: slow down when tab is backgrounded
-    const streamInterval = setInterval(() => {
-      if (document.visibilityState !== 'visible') return
-      fetchLiveContent()
-    }, 60000)
-    const auctionInterval = setInterval(() => {
-      if (document.visibilityState !== 'visible') return
-      fetchLiveAuctions()
-    }, 30000)
+     // Visibility-gated polling: 90 seconds to reduce Supabase load for likes
+     const streamInterval = setInterval(() => {
+       if (document.visibilityState !== 'visible') return
+       fetchLiveContent()
+     }, 90000)
+     const auctionInterval = setInterval(() => {
+       if (document.visibilityState !== 'visible') return
+       fetchLiveAuctions()
+     }, 30000)
 
     // Consolidated single channel for home page (replaces 3 separate channels)
     const homeChannel = supabase.channel('home:global')
@@ -194,6 +196,12 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
           if (relevantChange) fetchLiveContent()
         } catch (e) {
           console.warn('home:global streams handler error', e)
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_participants' }, () => {
+        // Poll every 90 seconds for viewer count updates instead of realtime spam
+        if (document.visibilityState === 'visible') {
+          fetchLiveContent()
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_shows' }, () => {

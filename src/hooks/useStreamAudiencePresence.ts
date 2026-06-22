@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
+import { getProfiles } from '../lib/profileCache'
 
 export interface StreamAudienceMember {
   id: string
@@ -79,6 +80,17 @@ export function useStreamAudiencePresence(
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastGiftUpdateRef = useRef<Record<string, number>>({})
   const channelsRef = useRef<any[]>([])
+  const ghostModeFetchedRef = useRef<{ streamId: string; userIds: string } | null>(null)
+  const profileRef = useRef(profile)
+  const userRef = useRef(user)
+
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
+
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
 
   const cleanupChannels = useCallback(() => {
     channelsRef.current.forEach(ch => supabase.removeChannel(ch))
@@ -131,12 +143,15 @@ const { data, error } = await supabase
   const joinAudience = useCallback(async () => {
     if (!effectiveUserId || !streamId) return
 
+    const currentProfile = profileRef.current
+    const currentUser = userRef.current
+
     // Don't join audience presence if user has ghost mode enabled
-    if (profile?.is_ghost_mode) return
+    if (currentProfile?.is_ghost_mode) return
 
     const now = new Date().toISOString()
-    const username = profile?.username || user?.email?.split('@')?.[0] || effectiveUserId
-    const avatarUrl = profile?.avatar_url ?? null
+    const username = currentProfile?.username || currentUser?.email?.split('@')?.[0] || effectiveUserId
+    const avatarUrl = currentProfile?.avatar_url ?? null
 
     try {
       const { data: existingRow, error: lookupError } = await supabase
@@ -201,7 +216,7 @@ const { data, error } = await supabase
       toast.error('Failed to join audience')
       return false
     }
-  }, [streamId, effectiveUserId, profile?.avatar_url, profile?.username, user?.email])
+  }, [streamId, effectiveUserId])
 
   const leaveAudience = useCallback(async () => {
     if (!effectiveUserId || !streamId) return
@@ -429,19 +444,29 @@ const { data, error } = await supabase
   }, [streamId, effectiveUserId, fetchAudience, cleanupChannels])
 
   // Fetch ghost mode status for audience members (realtime doesn't support joins)
+  // Guard with a ref so we only fetch once per unique set of audience user IDs.
   useEffect(() => {
-    if (!streamId || audience.length === 0) return
+    if (!streamId) return
 
-    const userIds = audience.map(m => m.user_id).filter(Boolean)
-    if (userIds.length === 0) return
+    const currentUserIds = audience
+      .map(m => m.user_id)
+      .filter(Boolean)
+      .sort()
+      .join(',')
+
+    const last = ghostModeFetchedRef.current
+    if (last?.streamId === streamId && last.userIds === currentUserIds) {
+      return
+    }
+
+    if (!currentUserIds) return
 
     const fetchGhostModeStatus = async () => {
-      const { data: profiles } = await supabase
-        .from('user_profiles')
-        .select('id, is_ghost_mode')
-        .in('id', userIds)
+      const ids = currentUserIds.split(',')
+      const profiles = await getProfiles(ids)
 
-      if (profiles) {
+      if (profiles.length > 0) {
+        ghostModeFetchedRef.current = { streamId, userIds: currentUserIds }
         const ghostModeMap = new Map(profiles.map((p: any) => [p.id, p.is_ghost_mode]))
         setAudience((prev) =>
           prev.map((member) => ({

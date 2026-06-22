@@ -5,7 +5,6 @@ import {
   BadgeCheck,
   Crown,
   Gift,
-  Heart,
   Loader2,
   LogOut,
   Plus,
@@ -24,7 +23,7 @@ import { supabase, getBlockedUserIds } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
 import { getLiveKitRoomName } from '../../lib/liveUtils'
-import { cn } from '../../lib/utils'
+import { isStaffProfile } from '../../lib/staff'
 import {
   getAnonymousDisplayName,
   isAnonymousDisplayName,
@@ -44,6 +43,8 @@ import BattleView from '../../components/broadcast/BattleView'
 import { useBoxCount } from '../../hooks/useBoxCount'
 import ProfileFrame from '@/components/profile/ProfileFrame'
 import { useUserFrame } from '@/hooks/useUserFrame'
+import { useBroadcastFrame } from '@/hooks/useBroadcastFrame'
+import BroadcastFrame from '@/components/broadcast/BroadcastFrame'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useUserLeagues } from '../../hooks/useUserLeagues'
 import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
@@ -600,11 +601,13 @@ function ViewerPage() {
     return 'regular';
   }, [stream, stream?.battle_mode, stream?.battle_id, stream?.is_battle, stream?.battle_status, stream?.random_battle_queue_enabled, stream?.status]);
 
-   const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
-   const [error, setError] = useState<string | null>(null)
-   const [streamLoaded, setStreamLoaded] = useState(false)
-   const [viewerCount, setViewerCount] = useState(0)
-   // Local tracks for publishing when in a seat
+const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
+    const [error, setError] = useState<string | null>(null)
+    const [streamLoaded, setStreamLoaded] = useState(false)
+    const [viewerCount, setViewerCount] = useState(0)
+    // Broadcast frame - decorative border for viewer page
+    const broadcastFrame = useBroadcastFrame(stream?.user_id)
+    // Local tracks for publishing when in a seat
    const audioTrackRef = useRef<LocalAudioTrack | null>(null)
    const videoTrackRef = useRef<LocalVideoTrack | null>(null)
    const [localTracksVersion, setLocalTracksVersion] = useState(0)
@@ -973,16 +976,22 @@ function ViewerPage() {
     }, giftDurationMs + 150)
   }, [enrichGiftForOverlay, resolveGiftAmount, resolveGiftName, streamId])
 
-  const hasJoinedAudienceRef = useRef(false)
-  const joiningAudienceRef = useRef(false)
-  const audienceFailedUntilRef = useRef<number>(0)
-  const audienceJoinAttemptedKeyRef = useRef<string | null>(null)
-  const joiningPublisherRef = useRef(false)
-  const currentRoomKeyRef = useRef<string | null>(null)
-  const viewerIdentityRef = useRef<string>(
-    `viewer-${streamId}-${user?.id || Math.random().toString(36).slice(2, 9)}`,
-  )
-   const watchTimeIntervalRef = useRef<number | null>(null)
+   const hasJoinedAudienceRef = useRef(false)
+   const joiningAudienceRef = useRef(false)
+   const audienceFailedUntilRef = useRef<number>(0)
+   const audienceJoinAttemptedKeyRef = useRef<string | null>(null)
+   const joiningPublisherRef = useRef(false)
+   const currentRoomKeyRef = useRef<string | null>(null)
+   const viewerIdentityRef = useRef<string>(
+     `viewer-${streamId}-${user?.id || Math.random().toString(36).slice(2, 9)}`,
+   )
+    const joinAudienceRef = useRef<(options?: any) => Promise<any>>(null as any)
+    const heartbeatAudienceRef = useRef<() => Promise<void>>(null as any)
+    const leaveAudienceRef = useRef<() => Promise<void>>(null as any)
+    const audienceStreamIdRef = useRef<string>('')
+    const hasJoinedStreamAudienceRef = useRef(false)
+
+    const watchTimeIntervalRef = useRef<number | null>(null)
   const clickTimesRef = useRef<number[]>([])
   const blockedUntilRef = useRef<number | null>(null)
 
@@ -1021,6 +1030,18 @@ function ViewerPage() {
      removeSeat,
    } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
    const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
+
+   useEffect(() => {
+     joinAudienceRef.current = joinAudience
+   }, [joinAudience])
+
+   useEffect(() => {
+     heartbeatAudienceRef.current = heartbeatAudience
+   }, [heartbeatAudience])
+
+   useEffect(() => {
+     leaveAudienceRef.current = leaveAudience
+   }, [leaveAudience])
 
     // Refs to hold LiveKit functions populated after useLiveKitRoom hook runs
     const unpublishLocalTracksRef = useRef<(() => Promise<void>) | null>(null)
@@ -2145,10 +2166,10 @@ useStreamRealtime(
 
    useEffect(() => {
      return () => {
-       void leaveAudience()
-       leaveLiveKitRoom().catch(() => {})
+       void leaveAudienceRef.current?.()
+       leaveLiveKitRoomRef.current?.().catch(() => {})
      }
-   }, [leaveAudience, leaveLiveKitRoom])
+   }, [])
 
    // Mute/chat detection: subscribe to stream_mutes for current user
    useEffect(() => {
@@ -2220,23 +2241,33 @@ useStreamRealtime(
    }, [streamId, user?.id, isUserOnStage, isPublishing, unpublishLocalTracks])
 
    useEffect(() => {
-    if (!streamId || !user?.id) return
+     if (!streamId || !user?.id) return
 
-    // Don't join audience presence if user has ghost mode enabled
-    if (!profile?.is_ghost_mode) {
-      void joinAudience()
-    }
+     const previousStreamId = audienceStreamIdRef.current
+     if (previousStreamId && previousStreamId !== streamId) {
+       // Switching streams: leave previous audience
+       void leaveAudienceRef.current?.()
+       hasJoinedStreamAudienceRef.current = false
+     }
+     audienceStreamIdRef.current = streamId
 
-    const heartbeat = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return
-      void heartbeatAudience()
-    }, 60_000)
+     // Don't join audience presence if user has ghost mode enabled
+     if (!profile?.is_ghost_mode && !hasJoinedStreamAudienceRef.current) {
+       void joinAudienceRef.current?.()
+       hasJoinedStreamAudienceRef.current = true
+     }
 
-    return () => {
-      window.clearInterval(heartbeat)
-      void leaveAudience()
-    }
-  }, [streamId, user?.id, profile?.is_ghost_mode, joinAudience, heartbeatAudience, leaveAudience])
+const heartbeat = window.setInterval(() => {
+        if (document.visibilityState !== 'visible') return
+        void heartbeatAudienceRef.current?.()
+      }, 90_000) // 90 second heartbeat to reduce Supabase load for likes
+
+     return () => {
+       window.clearInterval(heartbeat)
+       void leaveAudienceRef.current?.()
+       hasJoinedStreamAudienceRef.current = false
+     }
+   }, [streamId, user?.id, profile?.is_ghost_mode])
 
   useEffect(() => {
 
@@ -2608,27 +2639,34 @@ useStreamRealtime(
            )}
 
 <main
-            className={cn(
-              'relative z-10 flex flex-1 min-h-0',
-              isMobileViewer
-                ? 'flex-col overflow-hidden px-0 pt-0'
-                : 'grid gap-4 px-5 py-4'
-            )}
-            style={
-              !isMobileViewer
-                ? {
-                    gridTemplateColumns:
-                      seatCards.length > 0
-                        ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
-                        : 'minmax(560px, 1fr) 360px',
-                  }
-                : {
-                    // Reserve space for fixed chat input + safe area (seats & controls overlay on video)
-                    paddingBottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
-                  }
-            }
-          >
-            {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
+             className={cn(
+               'relative z-10 flex flex-1 min-h-0',
+               isMobileViewer
+                 ? 'flex-col overflow-hidden px-0 pt-0'
+                 : 'grid gap-4 px-5 py-4'
+             )}
+             style={
+               !isMobileViewer
+                 ? {
+                     gridTemplateColumns:
+                       seatCards.length > 0
+                         ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
+                         : 'minmax(560px, 1fr) 360px',
+                   }
+                 : {
+                     // Reserve space for fixed chat input + safe area (seats & controls overlay on video)
+                     paddingBottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
+                   }
+             }
+           >
+             {/* Broadcast Frame as border decoration */}
+             {broadcastFrame && (
+               <BroadcastFrame frame={broadcastFrame} className="absolute inset-0 z-0 rounded-3xl pointer-events-none">
+                 <div className="absolute inset-0" />
+               </BroadcastFrame>
+             )}
+             
+             {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
             <section
               className={cn(
                 'relative min-h-0 overflow-hidden',

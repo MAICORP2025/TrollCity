@@ -239,6 +239,17 @@ export default function TrollCourt() {
     }
   }, [searchQuery])
 
+  const loadPublicCourtState = useCallback(async () => {
+    const { data: recent } = await supabase
+      .from('court_cases')
+      .select('*, defendant:defendant_id(username), plaintiff:plaintiff_id(username)')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    if (recent) setRecentCases(recent)
+  }, [])
+
   const loadCourtState = useCallback(async () => {
     try {
       const { data: currentSession, error: sessionError } = await supabase.rpc('get_current_court_session')
@@ -322,6 +333,10 @@ export default function TrollCourt() {
   }, [user?.id])
 
   useEffect(() => {
+    loadPublicCourtState()
+
+    if (!canStartCourt && !canSummonUser) return
+
     loadCourtState()
 
     const channel = supabase
@@ -330,21 +345,10 @@ export default function TrollCourt() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'court_summons' }, () => loadCourtState())
       .subscribe()
 
-    const heartbeatInterval = setInterval(() => {
-      channel
-        .send({
-          type: 'broadcast',
-          event: 'ping',
-          payload: { timestamp: Date.now(), page: 'troll-court' },
-        })
-        .catch(() => {})
-    }, 30000)
-
     return () => {
-      clearInterval(heartbeatInterval)
       supabase.removeChannel(channel)
     }
-  }, [user?.id, loadCourtState])
+  }, [user?.id, canStartCourt, canSummonUser, loadPublicCourtState, loadCourtState])
 
   const openCreateModal = () => {
     if (!canSummonUser) return

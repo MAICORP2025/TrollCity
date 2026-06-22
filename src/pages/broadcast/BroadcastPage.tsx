@@ -37,8 +37,10 @@ import MobileBroadcastHostSettings from '../../components/broadcast/MobileBroadc
 import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersModal'
 import { Settings } from 'lucide-react'
 import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
+import { useBroadcastFrame } from '../../hooks/useBroadcastFrame'
 import { showStorageStartWarning } from '../../hooks/useStorageUsage'
 import SaveBroadcastButton from '../../components/broadcast/SaveBroadcastButton'
+import BroadcastFrame from '../../components/broadcast/BroadcastFrame'
 
 import { trollCityBroadcastTheme as theme } from '../../styles/broadcastTheme'
 
@@ -656,6 +658,9 @@ export function BroadcastPage() {
 
 const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats, removeSeat } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
     const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
+
+    // Broadcast frame - decorative border for host's stream
+    const broadcastFrame = useBroadcastFrame(stream?.user_id)
 
   const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
   const isSeatActiveStatus = (status?: string | null) => {
@@ -5245,21 +5250,28 @@ const handleLike = useCallback(async () => {
                </div>
              )}
 
-            {/* -- MAIN CONTENT: mobile host gets flex-col layout, desktop gets 3-column grid -- */}
-            <main
-              className={cn(
-                'flex flex-1 min-h-0',
-                isMobileHost
-                  ? 'flex-col overflow-hidden px-0 pt-0 relative'
-                  : 'grid gap-4 px-5 py-4'
-              )}
-              style={
-                !isMobileHost
-                  ? { gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }
-                  : undefined
-              }
-            >
-              {/* -- LEFT: Host Video Card -- */}
+{/* -- MAIN CONTENT: mobile host gets flex-col layout, desktop gets 3-column grid -- */}
+             <main
+               className={cn(
+                 'flex flex-1 min-h-0',
+                 isMobileHost
+                   ? 'flex-col overflow-hidden px-0 pt-0 relative'
+                   : 'grid gap-4 px-5 py-4'
+               )}
+               style={
+                 !isMobileHost
+                   ? { gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }
+                   : undefined
+               }
+             >
+               {/* Broadcast Frame as border decoration */}
+               {broadcastFrame && (
+                 <BroadcastFrame frame={broadcastFrame} className="absolute inset-0 z-0 rounded-3xl pointer-events-none">
+                   <div className="absolute inset-0" />
+                 </BroadcastFrame>
+               )}
+               
+               {/* -- LEFT: Host Video Card -- */}
               <section
                 className={cn(
                   'relative min-h-0 overflow-hidden',

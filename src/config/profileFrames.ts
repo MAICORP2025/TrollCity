@@ -48,28 +48,29 @@ export type FrameStyle = 'flat' | 'beveled' | 'glowing' | 'animated' | 'premium'
 export type AnimationSpeed = 'slow' | 'normal' | 'fast';
 
 export interface ProfileFrame {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  animationType: AnimationType;
-  frameStyle: FrameStyle;
-  borderColor: string;
-  borderGradient: string | null;
-  glowColor: string | null;
-  glowIntensity: number; // 0-2
-  animationSpeed: AnimationSpeed;
-  hasParticles: boolean;
-  particleColor: string | null;
-  particleCount: number;
-  hasSparkles: boolean;
-  hasEnergyRings: boolean;
-  rarity: FrameRarity;
-  coinCost: number;
-  isActive: boolean;
-  isLimited: boolean;
-  limitedQuantity: number | null;
-  sortOrder: number;
+   id: string;
+   name: string;
+   description: string;
+   icon: string;
+   animationType: AnimationType;
+   frameStyle: FrameStyle;
+   borderColor: string;
+   borderGradient: string | null;
+   glowColor: string | null;
+   glowIntensity: number; // 0-2
+   animationSpeed: AnimationSpeed;
+   hasParticles: boolean;
+   particleColor: string | null;
+   particleCount: number;
+   hasSparkles: boolean;
+   hasEnergyRings: boolean;
+   rarity: FrameRarity;
+   coinCost: number;
+   isActive: boolean;
+   isLimited: boolean;
+   limitedQuantity: number | null;
+   sortOrder: number;
+   frameType?: 'profile' | 'broadcast'; // 'profile' for avatar frames, 'broadcast' for stream borders
 }
 
 // ─── Rarity Colors ──────────────────────────────────────────────
@@ -870,6 +871,159 @@ export const LAUNCH_FRAMES: ProfileFrame[] = [
     isLimited: false,
     limitedQuantity: null,
     sortOrder: 32,
+    frameType: 'profile',
+  },
+  // ─── BROADCAST FRAMES (Stream Border Decorations) ─────────────────────
+  // These frames wrap the entire broadcast layout as a decorative border
+  {
+    id: 'broadcast_neon',
+    name: 'Neon Border',
+    description: 'Pulsing neon border wraps around your entire stream',
+    icon: '⚡',
+    animationType: 'neon_glow',
+    frameStyle: 'animated',
+    borderColor: '#00ff88',
+    borderGradient: 'linear-gradient(90deg, #00ff88, #ff00ff, #0088ff, #00ff88)',
+    glowColor: '#00ff88',
+    glowIntensity: 1.0,
+    animationSpeed: 'normal',
+    hasParticles: true,
+    particleColor: '#00ff88',
+    particleCount: 5,
+    hasSparkles: false,
+    hasEnergyRings: true,
+    rarity: 'epic',
+    coinCost: 500,
+    isActive: true,
+    isLimited: false,
+    limitedQuantity: null,
+    sortOrder: 100,
+    frameType: 'broadcast',
+  },
+  {
+    id: 'broadcast_rainbow',
+    name: 'Rainbow Stream',
+    description: 'Flowing rainbow border for your broadcast',
+    icon: '🌈',
+    animationType: 'rainbow',
+    frameStyle: 'premium',
+    borderColor: '#ff0000',
+    borderGradient: 'linear-gradient(90deg, #ff0000, #ff8800, #ffff00, #00ff00, #0088ff, #8800ff, #ff0000)',
+    glowColor: '#ff00ff',
+    glowIntensity: 0.8,
+    animationSpeed: 'normal',
+    hasParticles: true,
+    particleColor: '#ffffff',
+    particleCount: 6,
+    hasSparkles: true,
+    hasEnergyRings: false,
+    rarity: 'rare',
+    coinCost: 500,
+    isActive: true,
+    isLimited: false,
+    limitedQuantity: null,
+    sortOrder: 101,
+    frameType: 'broadcast',
+  },
+  {
+    id: 'broadcast_gold',
+    name: 'Golden Border',
+    description: 'Luxurious gold shimmer around your stream',
+    icon: '👑',
+    animationType: 'gold_shimmer',
+    frameStyle: 'premium',
+    borderColor: '#ffd700',
+    borderGradient: 'linear-gradient(135deg, #ffd700, #ffaa00, #ffd700, #ffe066)',
+    glowColor: '#ffd700',
+    glowIntensity: 1.0,
+    animationSpeed: 'slow',
+    hasParticles: true,
+    particleColor: '#ffd700',
+    particleCount: 8,
+    hasSparkles: true,
+    hasEnergyRings: false,
+    rarity: 'epic',
+    coinCost: 500,
+    isActive: true,
+    isLimited: false,
+    limitedQuantity: null,
+    sortOrder: 102,
+    frameType: 'broadcast',
+  },
+  {
+    id: 'broadcast_fire',
+    name: 'Inferno Stream',
+    description: 'Animated flames dance around your broadcast border',
+    icon: '🔥',
+    animationType: 'fire',
+    frameStyle: 'legendary',
+    borderColor: '#ff4400',
+    borderGradient: 'linear-gradient(180deg, #ff6600, #ff2200, #ff8800, #ff4400, #ffcc00)',
+    glowColor: '#ff4400',
+    glowIntensity: 1.2,
+    animationSpeed: 'fast',
+    hasParticles: true,
+    particleColor: '#ffcc00',
+    particleCount: 10,
+    hasSparkles: true,
+    hasEnergyRings: false,
+    rarity: 'legendary',
+    coinCost: 500,
+    isActive: true,
+    isLimited: false,
+    limitedQuantity: null,
+    sortOrder: 103,
+    frameType: 'broadcast',
+  },
+  {
+    id: 'broadcast_ice',
+    name: 'Frost Stream',
+    description: 'Icy crystals and snow swirl around your broadcast',
+    icon: '❄️',
+    animationType: 'ice',
+    frameStyle: 'premium',
+    borderColor: '#88ccff',
+    borderGradient: 'linear-gradient(135deg, #88ccff, #ffffff, #aaddff, #88ccff)',
+    glowColor: '#88ccff',
+    glowIntensity: 1.0,
+    animationSpeed: 'normal',
+    hasParticles: true,
+    particleColor: '#ffffff',
+    particleCount: 8,
+    hasSparkles: true,
+    hasEnergyRings: false,
+    rarity: 'epic',
+    coinCost: 500,
+    isActive: true,
+    isLimited: false,
+    limitedQuantity: null,
+    sortOrder: 104,
+    frameType: 'broadcast',
+  },
+  {
+    id: 'broadcast_hearts',
+    name: 'Love Stream',
+    description: 'Floating hearts surround your broadcast play area',
+    icon: '💕',
+    animationType: 'hearts',
+    frameStyle: 'premium',
+    borderColor: '#ec4899',
+    borderGradient: 'linear-gradient(135deg, #ec4899, #f472b6, #db2777, #f9a8d4)',
+    glowColor: '#f472b6',
+    glowIntensity: 0.9,
+    animationSpeed: 'normal',
+    hasParticles: true,
+    particleColor: '#f9a8d4',
+    particleCount: 8,
+    hasSparkles: true,
+    hasEnergyRings: false,
+    rarity: 'rare',
+    coinCost: 500,
+    isActive: true,
+    isLimited: false,
+    limitedQuantity: null,
+    sortOrder: 105,
+    frameType: 'broadcast',
   },
 ];
 
