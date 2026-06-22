@@ -15,9 +15,9 @@ export interface StreamAudienceMember {
   is_present?: boolean
   gift_total: number
   gift_score?: number
-  seat_id: string | null
+  seat_id: number | null
   seat_status?: 'audience' | 'seated'
-  role: 'viewer' | 'audience' | 'seat' | 'broadcaster'
+  role: 'audience' | 'seat' | 'broadcaster'
   last_seen_at: string
   is_ghost_mode?: boolean
 }
@@ -44,9 +44,9 @@ function normalizeAudienceMember(row: any): StreamAudienceMember {
     gift_score: Number(row?.gift_score ?? giftTotal),
     seat_id: row?.seat_id ?? null,
     seat_status: seatStatus,
-    role: row?.role ?? (seatStatus === 'seated' ? 'seat' : 'audience'),
+    role: row?.role === 'seat' || row?.role === 'broadcaster' ? row.role : 'audience',
     last_seen_at: row?.last_seen_at ?? row?.joined_at ?? new Date().toISOString(),
-    is_ghost_mode: row?.user_profiles?.is_ghost_mode ?? false,
+    is_ghost_mode: row?.is_ghost_mode ?? false,
   }
 }
 
@@ -89,16 +89,12 @@ export function useStreamAudiencePresence(
     if (!streamId) return
     try {
 const { data, error } = await supabase
-         .from('stream_audience_presence')
-         .select(`
-           *,
-           user_profiles:user_id (
-             is_ghost_mode
-           )
-         `)
-         .eq('stream_id', streamId)
-         .order('gift_total', { ascending: false })
-         .order('joined_at', { ascending: true })
+          .from('stream_audience_presence')
+          .select('*')
+          .eq('stream_id', streamId)
+          .eq('is_active', true)
+          .order('gift_total', { ascending: false })
+          .order('joined_at', { ascending: true })
 
       if (error) {
         console.warn('[useStreamAudiencePresence] fetchAudience error', error)
@@ -161,15 +157,12 @@ const { data, error } = await supabase
           .from('stream_audience_presence')
           .update({
             is_active: true,
-            is_present: true,
             left_at: null,
             last_seen_at: now,
             username,
             avatar_url: avatarUrl,
-            gift_score: 0,
+            last_seen_at: now,
             seat_id: null,
-            seat_index: null,
-            seat_status: 'audience',
             role: 'audience',
           })
           .eq('id', existingRow.id)
@@ -190,14 +183,8 @@ const { data, error } = await supabase
             joined_at: now,
             left_at: null,
             is_active: true,
-            is_present: true,
             gift_total: 0,
-            gift_total_coins: 0,
-            gift_score: 0,
-            message_count: 0,
             seat_id: null,
-            seat_index: null,
-            seat_status: 'audience',
             role: 'audience',
             last_seen_at: now,
           })
@@ -226,12 +213,9 @@ const { data, error } = await supabase
         .from('stream_audience_presence')
         .update({
           is_active: false,
-          is_present: false,
           left_at: now,
           last_seen_at: now,
           seat_id: null,
-          seat_index: null,
-          seat_status: 'audience',
         })
         .eq('stream_id', streamId)
         .eq('user_id', effectiveUserId)

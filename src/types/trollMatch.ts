@@ -156,7 +156,7 @@ export interface TMMessagePricing {
   username: string;
 }
 
-export interface TMTCPSComposerParams {
+export interface TMUtromailComposerParams {
   recipientId: string;
   source: 'troll_match';
   initialMessage?: string;

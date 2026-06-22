@@ -2010,12 +2010,14 @@ return (
         <>
           {/* Challenger Side */}
           <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pr-1 scrollbar-hide">
-            <button
-              onClick={() => handleSideGiftClick('challenger')}
-              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
-            >
-              Gift Side A
-            </button>
+            {!isBroadcaster && (
+              <button
+                onClick={() => handleSideGiftClick('challenger')}
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
+              >
+                Gift Side A
+              </button>
+            )}
             
             {/* Unified Grid for Host + Guests */}
              <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} h-full`}>
@@ -2136,12 +2138,14 @@ return (
 
           {/* Opponent Side */}
           <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pl-1 scrollbar-hide">
-            <button
-              onClick={() => handleSideGiftClick('opponent')}
-              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-            >
-              Gift Side B
-            </button>
+            {!isBroadcaster && (
+              <button
+                onClick={() => handleSideGiftClick('opponent')}
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
+              >
+                Gift Side B
+              </button>
+            )}
             
             {/* Unified Grid for Host + Guests - match BroadcastGrid layout */}
             <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} h-full`}>
@@ -2238,12 +2242,14 @@ return (
         <>
           {/* Challenger Side */}
           <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pr-1 scrollbar-hide">
-            <button
-              onClick={() => handleSideGiftClick('challenger')}
-              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
-            >
-              Gift Side A
-            </button>
+            {!isBroadcaster && (
+              <button
+                onClick={() => handleSideGiftClick('challenger')}
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
+              >
+                Gift Side A
+              </button>
+            )}
             <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} h-full`}>
               {challengerSlots.map((slot, idx) => (
                 <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
@@ -2329,12 +2335,14 @@ return (
 
           {/* Opponent Side */}
           <div className="flex-1 min-h-0 h-full flex flex-col gap-2 md:gap-3 overflow-y-auto pl-1 scrollbar-hide">
-            <button
-              onClick={() => handleSideGiftClick('opponent')}
-              className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-            >
-              Gift Side B
-            </button>
+            {!isBroadcaster && (
+              <button
+                onClick={() => handleSideGiftClick('opponent')}
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
+              >
+                Gift Side B
+              </button>
+            )}
             <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} h-full`}>
               {opponentSlots.map((slot, idx) => (
                 <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">

@@ -403,7 +403,7 @@ export default function OfficerOperations() {
               title="Sync legacy direct messages into new conversations"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Sync TCPS
+              Sync Utromail
             </button>
           </div>
 

@@ -34,7 +34,7 @@ export async function sendNotification(
   if (userId) {
     let url = '/';
     if (type === 'message' && metadata?.sender_id) {
-      url = `/tcps?user=${metadata.sender_id}`;
+      url = `/utromail?recipientId=${metadata.sender_id}`;
     } else if (metadata?.url) {
       url = metadata.url;
     }

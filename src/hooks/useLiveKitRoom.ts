@@ -10,7 +10,7 @@ import { toast } from 'sonner';
  * 
  * @param config - Configuration object
  * @param config.roomId - Room/stream ID
- * @param config.roomType - Type of room: 'broadcast' | 'pod' | 'church' | 'talent' | 'tcps' | 'jail' | 'court' | 'election' | 'team_meeting'
+ * @param config.roomType - Type of room: 'broadcast' | 'pod' | 'church' | 'talent' | 'utromail' | 'jail' | 'court' | 'election' | 'team_meeting'
  * @param config.role - 'publisher' | 'viewer'
  * @param config.audioOnly - Whether room is audio-only (pods)
  * @param config.publish - Whether user should publish (host/speaker/guest)

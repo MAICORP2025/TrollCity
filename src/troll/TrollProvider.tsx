@@ -29,7 +29,7 @@ const EVENT_TROLL_CONTEXTS: Record<TrollEventType, string> = {
   'economy_gain': 'economy',
   'pod_started': 'pod',
   'pod_listened': 'pod',
-  'tcps_message_sent': 'chat',
+  'utromail_message_sent': 'chat',
   badge_progress: ''
 };
 

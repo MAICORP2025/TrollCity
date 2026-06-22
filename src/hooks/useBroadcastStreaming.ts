@@ -124,6 +124,21 @@ export function useBroadcastStreaming(streamId: string) {
 
       console.log('[useBroadcastStreaming] Broadcast stopped');
 
+      // Hard-update the stream as ended in the database immediately,
+      // regardless of what the backend does internally.
+      try {
+        await supabase
+          .from('streams')
+          .update({
+            is_live: false,
+            status: 'ended',
+            end_time: new Date().toISOString(),
+          })
+          .eq('id', streamId);
+      } catch (dbErr) {
+        console.warn('[useBroadcastStreaming] DB update failed:', dbErr);
+      }
+
       setStatus(prev => ({
         ...prev,
         isLive: false,

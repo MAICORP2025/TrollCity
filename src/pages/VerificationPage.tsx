@@ -123,7 +123,7 @@ export default function VerificationPage() {
   const troll_coins = profile?.troll_coins || 0
   const canPayWithCoins = troll_coins >= 500
   const handleSkip = () => {
-    navigate('/tcps')
+    navigate('/utromail')
   }
 
   return (
@@ -173,13 +173,13 @@ export default function VerificationPage() {
 
         <div className="mt-6 flex flex-col gap-2 items-center">
           <p className="text-xs text-gray-400 text-center">
-            Not ready to verify yet? You can still access TCPS and grab it later from the store.
+            Not ready to verify yet? You can still access Utromail and grab it later from the store.
           </p>
           <button
             onClick={handleSkip}
             className="px-6 py-3 bg-white text-black rounded-lg font-semibold hover:bg-gray-200 transition-colors"
           >
-            Not right now — Take me to TCPS
+            Not right now — Take me to Utromail
           </button>
         </div>
 

@@ -283,9 +283,13 @@ export default function ChatBubble() {
     }])
 
     try {
+      const recipientId = activeThread?.other_user_id || otherParticipant?.user_id
+      const recipientMail = activeThread?.other_utromail_address || undefined
       const sent = await sendMessage({
         senderId: user.id,
         senderMail: `${profile?.username || 'user'}@utromail`,
+        recipientId,
+        recipientMail,
         body: text,
       })
 

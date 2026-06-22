@@ -18,7 +18,7 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'streams' AND column_name = 'broadcaster_id'
   ) THEN
-    ALTER TABLE public.streams ADD COLUMN broadcaster_id UUID REFERENCES auth.users(id);
+    ALTER TABLE public.streams ADD COLUMN broadcaster_id UUID REFERENCES public.user_profiles(id);
     UPDATE public.streams SET broadcaster_id = user_id WHERE broadcaster_id IS NULL;
   END IF;
 END $$;

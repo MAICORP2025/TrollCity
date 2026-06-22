@@ -40,7 +40,7 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
     if (pricing && pricing.price > 0) {
       setShowPricingModal(true);
     } else {
-      // Free message - navigate to TCPS
+      // Free message - navigate to Utromail
       onMessage?.(match.user_id, 0);
     }
   };

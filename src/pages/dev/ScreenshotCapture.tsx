@@ -12,7 +12,7 @@ const SCREENSHOT_PAGES = [
   { id: 'home', path: '/', title: 'Homepage', aspect: 'desktop' },
   { id: 'auctions', path: '/auctions', title: 'Live Auctions', aspect: 'desktop' },
   { id: 'live', path: '/', title: 'Live Tab', aspect: 'desktop' },
-  { id: 'tcps', path: '/tcps', title: 'TCPS Chat', aspect: 'desktop' },
+  { id: 'utromail', path: '/utromail', title: 'Utromail Chat', aspect: 'desktop' },
   { id: 'leaderboard', path: '/leaderboard', title: 'Leaderboard', aspect: 'desktop' },
   { id: 'store', path: '/store', title: 'Coin Store', aspect: 'desktop' },
   { id: 'marketplace', path: '/marketplace', title: 'Marketplace', aspect: 'desktop' },

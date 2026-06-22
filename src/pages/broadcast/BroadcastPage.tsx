@@ -4520,25 +4520,25 @@ const handleLike = useCallback(async () => {
 
     }
 
-    if (!backendStopped) {
-      try {
-        const { error: updateError } = await supabase
-          .from('streams')
-          .update({
-            is_live: false,
-            status: 'ended',
-            ended_at: new Date().toISOString()
-          })
-          .eq('id', stream.id);
+    // Always hard-update the stream as ended in the database,
+    // regardless of whether the backend API call succeeded.
+    // The backend handles LiveKit egress cleanup; this ensures the
+    // stream is immediately marked as not live for all viewers.
+    try {
+      const { error: updateError } = await supabase
+        .from('streams')
+        .update({
+          is_live: false,
+          status: 'ended',
+          ended_at: new Date().toISOString()
+        })
+        .eq('id', stream.id);
 
-        if (updateError) {
-
-          toast.error('Failed to end stream properly.');
-          return;
-        }
-      } catch (fallbackErr) {
-
+      if (updateError) {
+        console.warn('[handleStreamEnd] streams update error:', updateError);
       }
+    } catch (updateErr) {
+      console.warn('[handleStreamEnd] streams update failed:', updateErr);
     }
 
     try {

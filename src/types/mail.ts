@@ -48,7 +48,7 @@ export interface UtromailThread {
   members?: UtromailThreadMember[];
   last_message?: UtromailMessage;
   unread_count?: number;
-  // Flat fields for sidebar display (like old TCPS)
+  // Flat fields for sidebar display
   other_user_id?: string | null;
   other_username?: string | null;
   other_avatar_url?: string | null;

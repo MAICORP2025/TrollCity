@@ -19,6 +19,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Helper function to create or update Troll Wall system-generated posts for streams
 async function handleTrollWallSystemPost(streamId, broadcasterId, isLive, title) {
+  if (!broadcasterId) {
+    console.warn('[TrollWallSystemPost] No broadcasterId provided, skipping');
+    return;
+  }
   try {
     // Get broadcaster username
     const { data: profile, error: profileError } = await supabase
@@ -611,7 +615,11 @@ async function stopStreaming(req, res) {
     console.log(`[stopStreaming] Stream stopped: ${streamId}`);
 
     // Update Troll Wall system post for ended stream
-    await handleTrollWallSystemPost(streamId, stream.broadcaster_id, false, stream.title || 'Live Stream');
+    if (stream.broadcaster_id) {
+      await handleTrollWallSystemPost(streamId, stream.broadcaster_id, false, stream.title || 'Live Stream');
+    } else {
+      console.warn(`[stopStreaming] No broadcaster_id on stream ${streamId}, skipping TrollWall post`);
+    }
 
     return res.status(200).json({ success: true, message: "Stream stopped", streamId });
 

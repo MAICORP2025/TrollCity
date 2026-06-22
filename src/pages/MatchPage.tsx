@@ -88,7 +88,7 @@ export function MatchPage() {
 
   const handleMessage = useCallback(
     (userId: string, price: number) => {
-      navigate(`/tcps?recipient=${userId}&source=troll_match&price=${price}`);
+      navigate(`/utromail?recipientId=${userId}&source=troll_match&price=${price}`);
     },
     [navigate]
   );

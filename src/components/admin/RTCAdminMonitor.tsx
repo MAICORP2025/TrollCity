@@ -1537,64 +1537,9 @@ const renderFloatingButton = () => {
       ? userList.filter((user) => user.username.toLowerCase().includes(userSearch.trim().toLowerCase()))
       : userList;
 
-    return (
-      <div className="space-y-3">
-        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-xs font-bold uppercase tracking-wide text-cyan-300">Recent User Mod Actions</span>
-            <button
-              type="button"
-              onClick={fetchModActionLogs}
-              disabled={modLogsLoading}
-              className="rounded bg-cyan-600/30 px-2 py-1 text-[11px] font-medium text-cyan-100 hover:bg-cyan-600/45 disabled:opacity-50"
-            >
-              {modLogsLoading ? 'Loading...' : 'Refresh'}
-            </button>
-          </div>
-          <div className="max-h-44 space-y-1 overflow-y-auto">
-            {modActionLogs.length === 0 ? (
-              <div className="rounded bg-black/20 px-3 py-3 text-center text-xs text-cyan-100/55">
-                No actions loaded yet.
-              </div>
-            ) : (
-              modActionLogs.map((log) => {
-                const actorIsAdmin = log.actor?.is_admin || log.actor?.role === 'admin' || log.details?.includes('admin_locked:true');
-                return (
-                  <button
-                    key={log.id}
-                    type="button"
-                    onClick={() => log.target_user_id && navigate(`/profile/id/${log.target_user_id}`)}
-                    className="w-full rounded border border-white/10 bg-black/20 px-3 py-2 text-left hover:bg-white/5"
-                  >
-                     <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-xs font-bold text-white cursor-pointer hover:text-blue-300" onClick={() => log.target?.user_id && navigate(`/profile/id/${log.target?.user_id}`)}>
-                         @{log.target?.username || log.target_user_id || 'unknown'}
-                       </span>
-                       <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] uppercase text-cyan-200">
-                         {log.action_type || log.action || 'action'}
-                       </span>
-                     </div>
-                    <div className="mt-1 text-[11px] text-gray-400">
-                      by @{log.actor?.username || 'staff'} • {new Date(log.created_at).toLocaleString()}
-                    </div>
-                    {(log.reason || log.details) && (
-                      <div className="mt-1 line-clamp-2 text-[11px] text-gray-300">
-                        {log.reason || log.details}
-                      </div>
-                    )}
-                    {actorIsAdmin && (
-                      <div className="mt-1 text-[10px] font-bold uppercase tracking-wide text-red-300">
-                        Admin locked: staff cannot undo this action
-                      </div>
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-2">
+return (
+       <div className="space-y-3">
+         <div className="flex gap-2">
           <input
             type="text"
             value={userSearch}

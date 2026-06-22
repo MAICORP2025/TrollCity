@@ -105,8 +105,11 @@ export default function UtromailPage() {
   const [msgLoading, setMsgLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sentMessageIdsRef = useRef<Set<string>>(new Set());
 
   // Fetch user's utromail address
   useEffect(() => {
@@ -159,12 +162,38 @@ export default function UtromailPage() {
       setMsgLoading(true);
       try {
         const msgs = await getThreadMessages(activeConversationId);
-        setMessages(msgs);
-        await markThreadAsRead(activeConversationId, user.id);
-        for (const msg of msgs) {
-          if (msg.recipient_id === user.id) {
-            await markAsRead(msg.id, user.id);
+        // Fetch read status for these messages from utromail_read_status
+        const msgIds = msgs.map(m => m.id);
+        let readMap: Record<string, boolean> = {};
+        if (msgIds.length > 0) {
+          const { data: readRows } = await supabase
+            .from('utromail_read_status')
+            .select('message_id')
+            .in('message_id', msgIds)
+            .eq('user_id', user.id);
+          if (readRows) {
+            readMap = Object.fromEntries(readRows.map(r => [r.message_id, true]));
           }
+        }
+        const msgsWithRead = msgs.map(m => ({
+          ...m,
+          is_read: !!readMap[m.id] || !!m.is_read,
+        }));
+        setMessages(msgsWithRead);
+        await markThreadAsRead(activeConversationId, user.id);
+        // Mark unread messages from other user as read
+        const unreadFromOther = msgs.filter(
+          m => m.sender_id !== user.id && !readMap[m.id]
+        );
+        if (unreadFromOther.length > 0) {
+          await supabase.from('utromail_read_status').upsert(
+            unreadFromOther.map(m => ({
+              message_id: m.id,
+              user_id: user.id,
+              read_at: new Date().toISOString(),
+            })),
+            { onConflict: 'message_id,user_id' }
+          );
         }
         fetchThreads();
       } catch (err) {
@@ -221,54 +250,32 @@ export default function UtromailPage() {
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg) return;
 
+    const body = replyText.trim();
+    setReplyText('');
     setSending(true);
     try {
       const recipientId = lastMsg.sender_id === user.id ? lastMsg.recipient_id! : lastMsg.sender_id;
       const recipientMail = lastMsg.sender_id === user.id ? lastMsg.recipient_mail_address! : lastMsg.sender_mail_address;
-      await sendMessage({
+      const sentMsg = await sendMessage({
         senderId: user.id,
         senderMail,
         recipientId,
         recipientMail,
         subject: 'Direct Message',
-        body: replyText.trim(),
+        body,
         parentMessageId: lastMsg.id,
       });
-      setReplyText('');
-      // Optimistically add the sender's message to the UI immediately
-      const optimisticMsg: UtromailMessage = {
-        id: `temp-${Date.now()}`,
-        thread_id: activeConversationId,
-        sender_id: user.id,
-        sender_mail_address: senderMail,
-        recipient_id: recipientId,
-        recipient_mail_address: recipientMail,
-        subject: 'Direct Message',
-        body: replyText.trim(),
-        body_html: '',
-        message_type: 'normal',
-        is_starred: false,
-        is_draft: false,
-        parent_message_id: lastMsg.id,
-        sent_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        sender_name: profile?.display_name || profile?.username || null,
-        sender_username: profile?.username || null,
-        sender_avatar: profile?.avatar_url || null,
-      };
-      setMessages(prev => [...prev, optimisticMsg]);
-      // Then fetch the real messages to replace the optimistic one
-      try {
-        const freshMsgs = await getThreadMessages(activeConversationId);
-        setMessages(freshMsgs);
-      } catch (err) {
-        console.error('Error refreshing messages after send:', err);
+      // Track the sent message ID so the realtime handler skips it (prevents duplicate)
+      if (sentMsg?.id) {
+        sentMessageIdsRef.current.add(sentMsg.id);
+        // Clean up tracking after 10s
+        setTimeout(() => sentMessageIdsRef.current.delete(sentMsg.id), 10000);
       }
       fetchThreadsRef.current?.();
-      toast.success('Sent!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to send');
+      // Restore the text so user doesn't lose it
+      setReplyText(body);
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -306,8 +313,27 @@ export default function UtromailPage() {
           table: 'utromail_notifications',
           filter: `user_id=eq.${user.id}`,
         },
-        () => {
+        async (payload) => {
+          const notif = payload.new as any;
+          // Refresh the thread list sidebar
           fetchThreadsRef.current?.();
+          // Auto-open the conversation if it's a new message from someone else
+          // and the user isn't already viewing this thread
+          if (notif?.message_id && notif.message_id !== activeConversationId) {
+            try {
+              const { data: msg } = await supabase
+                .from('utromail_messages')
+                .select('thread_id, sender_id')
+                .eq('id', notif.message_id)
+                .maybeSingle();
+              if (msg && msg.sender_id !== user.id && msg.thread_id !== activeConversationId) {
+                setActiveConversationId(msg.thread_id);
+                setShowMobileChat(true);
+              }
+            } catch (err) {
+              console.error('[UtromailPage] Error auto-opening conversation:', err);
+            }
+          }
         }
       )
       .subscribe();
@@ -315,7 +341,7 @@ export default function UtromailPage() {
     return () => {
       supabase.removeChannel(notifChannel);
     };
-  }, [user?.id]);
+  }, [user?.id, activeConversationId]);
 
   // Real-time: watch for new messages in the active thread
   useEffect(() => {
@@ -334,7 +360,11 @@ export default function UtromailPage() {
         async (payload) => {
           try {
             const newMsg = payload.new as any;
-            if (!newMsg || newMsg.sender_id === user.id) return;
+            if (!newMsg) return;
+
+            // Skip messages we just sent (they're already handled by realtime from DB)
+            // But we still add them if they're not already in the list
+            const isOwnMessage = newMsg.sender_id === user.id;
 
             // Fetch full message with all fields (realtime payload may not include all columns)
             const { data: fullMsg } = await supabase
@@ -344,6 +374,42 @@ export default function UtromailPage() {
               .maybeSingle();
 
             const msgData = fullMsg || newMsg;
+
+            // Skip if this message was just sent by us and is already tracked
+            if (isOwnMessage && sentMessageIdsRef.current.has(msgData.id)) {
+              // Still add it to the messages list if not already there
+              setMessages(prev => {
+                if (prev.some(m => m.id === msgData.id)) return prev;
+                const mappedMsg: UtromailMessage = {
+                  id: msgData.id,
+                  thread_id: msgData.thread_id,
+                  sender_id: msgData.sender_id,
+                  sender_mail_address: msgData.sender_mail_address,
+                  recipient_id: msgData.recipient_id,
+                  recipient_mail_address: msgData.recipient_mail_address,
+                  subject: msgData.subject,
+                  body: msgData.body,
+                  body_html: msgData.body_html,
+                  message_type: msgData.message_type,
+                  is_starred: false,
+                  is_draft: false,
+                  parent_message_id: msgData.parent_message_id,
+                  sent_at: msgData.sent_at,
+                  created_at: msgData.created_at,
+                  updated_at: msgData.updated_at,
+                  sender_name: profile?.display_name || profile?.username || null,
+                  sender_username: profile?.username || null,
+                  sender_avatar: profile?.avatar_url || null,
+                  is_read: false,
+                };
+                return [...prev, mappedMsg];
+              });
+              sentMessageIdsRef.current.delete(msgData.id);
+              return;
+            }
+
+            // Skip own messages that aren't tracked (already in UI)
+            if (isOwnMessage) return;
 
             const { data: senderProfile } = await supabase
               .from('user_profiles')
@@ -371,6 +437,7 @@ export default function UtromailPage() {
               sender_name: (senderProfile as any)?.display_name || (senderProfile as any)?.username || null,
               sender_username: (senderProfile as any)?.username || null,
               sender_avatar: (senderProfile as any)?.avatar_url || null,
+              is_read: false,
             };
 
             setMessages(prev => {
@@ -391,6 +458,95 @@ export default function UtromailPage() {
       supabase.removeChannel(msgChannel);
     };
   }, [activeConversationId, user?.id]);
+
+  // Typing indicator: broadcast when user types
+  const broadcastTyping = () => {
+    if (!activeConversationId || !user?.id) return;
+    const thread = threads.find(t => t.id === activeConversationId);
+    if (!thread?.other_user_id) return;
+    const typingCh = supabase.channel(`utromail-typing:${activeConversationId}`, {
+      config: { broadcast: { self: false } },
+    });
+    typingCh.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await typingCh.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { userId: user.id, isTyping: true },
+        });
+      }
+    });
+  };
+
+  // Typing indicator: listen for other user typing
+  useEffect(() => {
+    if (!activeConversationId || !user?.id) return;
+    const thread = threads.find(t => t.id === activeConversationId);
+    const otherUserId = thread?.other_user_id;
+    if (!otherUserId) return;
+
+    const typingChannel = supabase.channel(`utromail-typing:${activeConversationId}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    typingChannel.on('broadcast', { event: 'typing' }, (payload: any) => {
+      const { userId: typingUserId, isTyping } = payload.payload || {};
+      if (typingUserId && typingUserId !== user.id && typingUserId === otherUserId) {
+        setIsOtherTyping(!!isTyping);
+      }
+    }).subscribe();
+
+    return () => {
+      supabase.removeChannel(typingChannel);
+    };
+  }, [activeConversationId, user?.id, threads]);
+
+  // Clear typing indicator after inactivity
+  useEffect(() => {
+    if (!isOtherTyping) return;
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 5000);
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [isOtherTyping]);
+
+  // Mark messages as read when viewing (read receipts)
+  useEffect(() => {
+    if (!activeConversationId || !user?.id || messages.length === 0) return;
+
+    // Find unread messages from the other user
+    const unreadFromOther = messages.filter(
+      m => m.sender_id !== user.id && !m.is_read
+    );
+
+    if (unreadFromOther.length === 0) return;
+
+    // Mark them as read using utromail_read_status (no realtime trigger on utromail_messages)
+    const markRead = async () => {
+      try {
+        const readStatusRows = unreadFromOther.map(m => ({
+          message_id: m.id,
+          user_id: user.id,
+          read_at: new Date().toISOString(),
+        }));
+        await supabase.from('utromail_read_status').upsert(readStatusRows, {
+          onConflict: 'message_id,user_id',
+        });
+        // Update local state to reflect read status
+        const readIds = new Set(unreadFromOther.map(m => m.id));
+        setMessages(prev =>
+          prev.map(m => readIds.has(m.id) ? { ...m, is_read: true } : m)
+        );
+        // Also update thread read status in sidebar
+        await markThreadAsRead(activeConversationId, user.id);
+        fetchThreadsRef.current?.();
+      } catch (err) {
+        console.error('[UtromailPage] Error marking messages as read:', err);
+      }
+    };
+    markRead();
+  }, [activeConversationId, user?.id, messages.length]);
 
   const deleteThreads = async (threadIds: string[]) => {
     if (!user?.id || threadIds.length === 0) return;
@@ -464,7 +620,7 @@ export default function UtromailPage() {
   };
 
   // Auto-open compose when navigating from marketplace or other external links
-  const recipientId = searchParams.get('recipientId') || undefined;
+  const recipientId = searchParams.get('recipientId') || searchParams.get('recipient') || searchParams.get('user') || undefined;
   const subject = searchParams.get('subject') || undefined;
   const autoCompose = !!(recipientId && threadId === undefined);
 
@@ -508,7 +664,18 @@ export default function UtromailPage() {
                 <p className="text-sm font-bold text-white">
                   {activeThread.other_username || 'Unknown'}
                 </p>
-                <p className="text-[10px] text-slate-500">{activeThread.other_utromail_address || 'UTroMail'}</p>
+                {isOtherTyping ? (
+                  <p className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
+                    <span className="inline-flex gap-0.5">
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '0ms' }} />
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '150ms' }} />
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '300ms' }} />
+                    </span>
+                    typing…
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-500">{activeThread.other_utromail_address || 'UTroMail'}</p>
+                )}
               </div>
             </>
           )}
@@ -564,9 +731,14 @@ export default function UtromailPage() {
                       <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.body}</p>
                     </div>
                     {isLast && (
-                      <p className={`mt-1 text-[9px] text-slate-500 ${isOwn ? 'text-right' : 'text-left'}`}>
-                        {formatMessageTime(msg.sent_at)}
-                        {isOwn && <CheckCheck className="ml-1 inline h-3 w-3 text-emerald-400" />}
+                      <p className={`mt-1 flex items-center gap-1 text-[9px] text-slate-500 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                        <span>{formatMessageTime(msg.sent_at)}</span>
+                        {isOwn && msg.is_read && (
+                          <CheckCheck className="inline h-3 w-3 text-emerald-400" title="Read" />
+                        )}
+                        {isOwn && !msg.is_read && (
+                          <Check className="inline h-3 w-3 text-slate-500" title="Sent" />
+                        )}
                       </p>
                     )}
                   </div>
@@ -590,7 +762,11 @@ export default function UtromailPage() {
           <textarea
             ref={inputRef}
             value={replyText}
-            onChange={e => setReplyText(e.target.value)}
+            onChange={e => {
+              setReplyText(e.target.value);
+              // Broadcast typing indicator
+              if (e.target.value.length > 0) broadcastTyping();
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             rows={1}

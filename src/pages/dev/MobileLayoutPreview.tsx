@@ -351,7 +351,7 @@ function MockContent({ variant }: { variant: LayoutVariant }) {
           {[
             { icon: Store, label: 'Shop', color: 'bg-green-600' },
             { icon: Trophy, label: 'Ranks', color: 'bg-amber-600' },
-            { icon: MessageSquare, label: 'TCPS', color: 'bg-blue-600' },
+            { icon: MessageSquare, label: 'Utromail', color: 'bg-blue-600' },
             { icon: Mic, label: 'Pods', color: 'bg-pink-600' },
           ].map((action, i) => (
             <button key={i} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">

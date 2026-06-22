@@ -51,7 +51,7 @@ interface ConvSidebarItem {
   unread_count: number;
 }
 
-interface TCPSChatMessage {
+interface UtromailChatMessage {
   id: string;
   conversation_id: string;
   sender_id: string;
@@ -208,16 +208,16 @@ export default function JailPage() {
   const [postingBail, setPostingBail] = useState(false);
   const [requestingAttorney, setRequestingAttorney] = useState(false);
 
-  // TCPS-style conversation state
+  // Utromail conversation state
   const [conversations, setConversations] = useState<ConvSidebarItem[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [activeOtherUserId, setActiveOtherUserId] = useState<string | null>(null);
   const [activeOtherUsername, setActiveOtherUsername] = useState<string | null>(null);
   const [activeOtherAvatar, setActiveOtherAvatar] = useState<string | null>(null);
-  const [tcpsMessages, setTcpsMessages] = useState<TCPSChatMessage[]>([]);
-  const [tcpsInput, setTcpsInput] = useState('');
-  const [tcpsSending, setTcpsSending] = useState(false);
-  const tcpsEndRef = useRef<HTMLDivElement>(null);
+  const [utromailMessages, setUtromailMessages] = useState<UtromailChatMessage[]>([]);
+  const [utromailInput, setUtromailInput] = useState('');
+  const [utromailSending, setUtromailSending] = useState(false);
+  const utromailEndRef = useRef<HTMLDivElement>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
 
   useEffect(() => {
@@ -479,7 +479,7 @@ export default function JailPage() {
     }
   };
 
-  // TCPS conversation functions
+  // Utromail conversation functions
   const fetchConversations = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -505,15 +505,15 @@ export default function JailPage() {
     }
   }, [user?.id]);
 
-  const fetchTCPSMessages = useCallback(async (convId: string) => {
+  const fetchUtromailMessages = useCallback(async (convId: string) => {
     try {
       const rows = await getConversationMessages(convId, { limit: 500 });
-      if (!rows || rows.length === 0) { setTcpsMessages([]); return; }
+      if (!rows || rows.length === 0) { setUtromailMessages([]); return; }
       const senderIds = Array.from(new Set(rows.map((m) => m.sender_id)));
       const { data: senders } = await supabase.from('user_profiles').select('id, username, display_name, avatar_url').in('id', senderIds);
       const senderMap: Record<string, any> = {};
       senders?.forEach((s) => { senderMap[s.id] = s; });
-      const mapped: TCPSChatMessage[] = rows.map((m) => ({
+      const mapped: UtromailChatMessage[] = rows.map((m) => ({
         id: m.id,
         conversation_id: m.conversation_id,
         sender_id: m.sender_id,
@@ -522,18 +522,18 @@ export default function JailPage() {
         sender_username: senderMap[m.sender_id]?.display_name || senderMap[m.sender_id]?.username || `user${m.sender_id.slice(0, 6)}`,
         sender_avatar_url: senderMap[m.sender_id]?.avatar_url || null,
       })).reverse();
-      setTcpsMessages(mapped);
+      setUtromailMessages(mapped);
       await markConversationRead(convId).catch(() => {});
     } catch (err) {
-      console.error('Error fetching TCPS messages:', err);
+      console.error('Error fetching Utromail messages:', err);
     }
   }, []);
 
   useEffect(() => {
     if (!activeConvId) return;
-    fetchTCPSMessages(activeConvId);
+    fetchUtromailMessages(activeConvId);
 
-    const channel = supabase.channel(`jail-tcps:${activeConvId}`)
+    const channel = supabase.channel(`jail-utromail:${activeConvId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'conversation_messages',
         filter: `conversation_id=eq.${activeConvId}`,
@@ -552,7 +552,7 @@ export default function JailPage() {
           senderName = data?.display_name || data?.username || senderName;
           senderAvatar = data?.avatar_url || null;
         }
-        setTcpsMessages((prev) => {
+        setUtromailMessages((prev) => {
           if (prev.some((m) => m.id === raw.id)) return prev;
           return [...prev, { id: raw.id, conversation_id: raw.conversation_id, sender_id: raw.sender_id, content: raw.body, created_at: raw.created_at, sender_username: senderName, sender_avatar_url: senderAvatar }];
         });
@@ -561,17 +561,17 @@ export default function JailPage() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [activeConvId, user?.id, profile, activeOtherUserId, activeOtherUsername, activeOtherAvatar, fetchTCPSMessages]);
+  }, [activeConvId, user?.id, profile, activeOtherUserId, activeOtherUsername, activeOtherAvatar, fetchUtromailMessages]);
 
   useEffect(() => {
-    if (tcpsEndRef.current && tcpsMessages.length > 0) {
-      tcpsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (utromailEndRef.current && utromailMessages.length > 0) {
+      utromailEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [tcpsMessages]);
+  }, [utromailMessages]);
 
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase.channel('jail-tcps-sidebar')
+    const channel = supabase.channel('jail-utromail-sidebar')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_messages' }, () => {
         fetchConversations();
       })
@@ -586,15 +586,15 @@ export default function JailPage() {
     setActiveOtherAvatar(otherAvatar);
   };
 
-  const handleTCPSKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTCPSMessage(); }
+  const handleUtromailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendUtromailMessage(); }
   };
 
-  const sendTCPSMessage = async () => {
-    if (!tcpsInput.trim() || !activeConvId || tcpsSending) return;
-    const body = tcpsInput.trim();
-    setTcpsInput('');
-    setTcpsSending(true);
+  const sendUtromailMessage = async () => {
+    if (!utromailInput.trim() || !activeConvId || utromailSending) return;
+    const body = utromailInput.trim();
+    setUtromailInput('');
+    setUtromailSending(true);
     try {
       await sendConversationMessage(activeConvId, body);
       const { data: members } = await supabase.from('conversation_members').select('user_id').eq('conversation_id', activeConvId).neq('user_id', user?.id);
@@ -603,12 +603,12 @@ export default function JailPage() {
           sendNotification(m.user_id, 'message', `New message from ${profile?.username}`, body.length > 50 ? body.substring(0, 50) + '...' : body, { conversation_id: activeConvId, sender_id: user?.id }).catch(() => {});
         }
       }
-      fetchTCPSMessages(activeConvId);
+      fetchUtromailMessages(activeConvId);
       fetchConversations();
     } catch (err: any) {
       toast.error(err.message || 'Failed to send message');
     } finally {
-      setTcpsSending(false);
+      setUtromailSending(false);
     }
   };
 
@@ -855,11 +855,11 @@ export default function JailPage() {
               )}
             </div>
 
-            {/* TCPS-style Inmate Communication */}
+            {/* Utromail Inmate Communication */}
             <div className={`${cellPanel} flex flex-col overflow-hidden`}>
               <div className="border-b border-zinc-800 p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <SectionTitle icon={Mail} title="Inmate Mail" subtitle="TCPS conversation inbox" tone="blue" />
+                  <SectionTitle icon={Mail} title="Inmate Mail" subtitle="Utromail conversation inbox" tone="blue" />
                   <span className="rounded-full border border-zinc-700 bg-black/40 px-3 py-1 text-xs font-bold text-zinc-400">
                     Monitored
                   </span>
@@ -952,12 +952,12 @@ export default function JailPage() {
                       </div>
 
                       <div className="flex-1 space-y-2 overflow-y-auto p-4">
-                        {tcpsMessages.length === 0 ? (
+                        {utromailMessages.length === 0 ? (
                           <div className="flex h-full items-center justify-center text-xs text-zinc-600">
                             No messages in this conversation
                           </div>
                         ) : (
-                          tcpsMessages.map((msg) => {
+                          utromailMessages.map((msg) => {
                             const isMe = msg.sender_id === user?.id;
                             return (
                               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -976,24 +976,24 @@ export default function JailPage() {
                             );
                           })
                         )}
-                        <div ref={tcpsEndRef} />
+                        <div ref={utromailEndRef} />
                       </div>
 
                       <div className="border-t border-zinc-800/60 bg-zinc-950/50 p-3">
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            value={tcpsInput}
-                            onChange={(e) => setTcpsInput(e.target.value)}
-                            onKeyDown={handleTCPSKeyDown}
+                            value={utromailInput}
+                            onChange={(e) => setUtromailInput(e.target.value)}
+                            onKeyDown={handleUtromailKeyDown}
                             placeholder="Type a monitored message..."
                             className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-700"
                           />
                           <button
-                            onClick={sendTCPSMessage}
-                            disabled={tcpsSending || !tcpsInput.trim()}
+                            onClick={sendUtromailMessage}
+                            disabled={utromailSending || !utromailInput.trim()}
                             className={`rounded-xl px-3.5 py-2 transition-all ${
-                              !tcpsInput.trim() || tcpsSending
+                              !utromailInput.trim() || utromailSending
                                 ? 'cursor-not-allowed bg-zinc-800/50 text-zinc-700'
                                 : 'bg-cyan-700 text-white hover:bg-cyan-600'
                             }`}

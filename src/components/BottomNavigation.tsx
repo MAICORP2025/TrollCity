@@ -381,6 +381,8 @@ export default function BottomNavigation() {
     fetchUnreadCount()
 
     // Subscribe to new utromail messages for unread count updates
+    // Note: No recipient_id filter — realtime publication doesn't include that column.
+    // We fetch the full message in the callback and filter in application code.
     const channel = supabase
       .channel(`nav-utromail-unread:${user.id}`)
       .on(
@@ -389,9 +391,20 @@ export default function BottomNavigation() {
           event: 'INSERT',
           schema: 'public',
           table: 'utromail_messages',
-          filter: `recipient_id=eq.${user.id}`,
         },
-        () => fetchUnreadCount(),
+        async (payload) => {
+          const newMsg = payload.new as any;
+          if (!newMsg) return;
+          // Fetch full message to check recipient_id (not in realtime payload)
+          const { data: fullMsg } = await supabase
+            .from('utromail_messages')
+            .select('recipient_id')
+            .eq('id', newMsg.id)
+            .maybeSingle();
+          if (fullMsg?.recipient_id === user.id) {
+            fetchUnreadCount();
+          }
+        },
       )
       .subscribe()
 
@@ -459,11 +472,18 @@ export default function BottomNavigation() {
           event: 'INSERT',
           schema: 'public',
           table: 'utromail_messages',
-          filter: `recipient_id=eq.${user.id}`,
         },
         async (payload) => {
           const newMsg = payload.new as any
-          if (newMsg.sender_id === user.id) return
+          if (!newMsg) return
+          // Fetch full message to check recipient_id (not in realtime payload)
+          const { data: fullMsg } = await supabase
+            .from('utromail_messages')
+            .select('recipient_id, sender_id')
+            .eq('id', newMsg.id)
+            .maybeSingle()
+          if (!fullMsg || fullMsg.recipient_id !== user.id) return
+          if (fullMsg.sender_id === user.id) return
 
           const { data: sender } = await supabase
             .from('user_profiles')

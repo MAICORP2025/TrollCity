@@ -316,7 +316,7 @@ export default function InmatesPage() {
 
       const senderUsername = profile?.username || 'Someone'
 
-      // Find or create a TCPS conversation between sender and inmate
+      // Find or create a conversation between sender and inmate
       let conversationId: string | null = null
       try {
         const { data: foundConvId } = await supabase.rpc('find_shared_conversation', {
@@ -343,7 +343,7 @@ export default function InmatesPage() {
         }
       }
 
-      // Insert into conversation_messages so inmate sees it in TCPS inbox
+      // Insert into conversation_messages so inmate sees it in inbox
       if (conversationId) {
         await supabase.from('conversation_messages').insert({
           conversation_id: conversationId,

@@ -163,7 +163,7 @@ export const getThreads = async (userId: string, folder: MailFolder = 'inbox'): 
 
     return {
       ...t,
-      // Add flat "other user" fields for easy sidebar display (like old TCPS)
+      // Add flat "other user" fields for easy sidebar display
       other_user_id: otherUserId || null,
       other_username: otherProfile?.display_name || otherProfile?.username || lastMsg?.sender_mail_address || 'Unknown',
       other_avatar_url: otherProfile?.avatar_url || null,

@@ -723,7 +723,7 @@ function ProfileInner() {
       if (!followedByData && !hasPerk) return toast.error("You need the 'Message Admin' perk or be followed by the Admin to message them!");
     }
 
-    navigate(`/tcps?user=${profile.id}`);
+    navigate(`/utromail?recipientId=${encodeURIComponent(profile.id)}`);
   };
 
   const handleUpdateCosts = async () => {

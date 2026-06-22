@@ -30,7 +30,7 @@ export function TMUserCard({ user, isNew }: TMUserCardProps) {
       toast.error('Please log in to send messages');
       return;
     }
-    navigate(`/tcps?recipient=${user.user_id}&source=troll_match`);
+    navigate(`/utromail?recipientId=${user.user_id}&source=troll_match`);
   };
 
   const handleViewProfile = (e: React.MouseEvent) => {

@@ -520,7 +520,7 @@ export default function Trollifications() {
     if (metadata.route) return metadata.route
     if (metadata.action_url) return metadata.action_url
     if (metadata.stream_id) return `/stream/${metadata.stream_id}`
-    if (metadata.sender_id) return `/tcps?user=${metadata.sender_id}`
+    if (metadata.sender_id) return `/utromail?recipientId=${metadata.sender_id}`
     if (metadata.payout_id) return isAdmin ? `/admin/finance?tab=payouts&id=${metadata.payout_id}` : '/my-earnings'
     if (metadata.battle_id) return '/battles'
     if (metadata.ticket_id) return `/admin/support?id=${metadata.ticket_id}`
@@ -543,7 +543,7 @@ export default function Trollifications() {
       case 'broadcast':
         return '/broadcasts'
       case 'social':
-        return '/tcps'
+        return '/utromail'
       default:
         return '/'
     }

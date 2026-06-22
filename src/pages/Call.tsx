@@ -114,7 +114,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
 
         if (!hasMinutes) {
           toast.error(`You don't have enough ${callType} minutes. Please purchase a package.`);
-          navigate('/tcps');
+          navigate('/utromail');
           return;
         }
 
@@ -314,7 +314,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
       } catch (err: any) {
         console.error('[Call] LiveKit connection error:', err);
         toast.error('Failed to connect to call');
-        navigate('/tcps');
+        navigate('/utromail');
       }
     };
 
@@ -356,7 +356,7 @@ export default function Call({ roomId: propRoomId, callType: propCallType, other
       } catch (err: any) {
         console.error('[Call] Token error:', err);
         toast.error('Failed to initialize call');
-        navigate('/tcps');
+        navigate('/utromail');
       }
     };
 

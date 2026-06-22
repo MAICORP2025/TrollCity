@@ -183,7 +183,7 @@ export const getThreads = async (userId: string, folder: MailFolder = 'inbox'): 
 
     return {
       ...t,
-      // Flat "other user" fields for sidebar (like old TCPS)
+      // Flat "other user" fields for sidebar
       other_user_id: otherUserId || null,
       // Fallback: if we can't get profile, use the mail address of the other person
       // When last msg was sent BY us → recipient is the other person

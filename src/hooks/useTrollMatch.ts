@@ -312,7 +312,7 @@ export function useTMSendMessage() {
           2. deducts sender coins
           3. credits receiver if applicable
           4. writes coin ledger rows
-          5. sends the TCPS/Troll Match message
+          5. sends the Utromail/Troll Match message
 
           Do not directly update user_profiles.troll_coins from the frontend.
         */

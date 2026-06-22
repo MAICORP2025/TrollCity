@@ -30,7 +30,7 @@ const NOTIFICATION_CATEGORIES = {
   CHAT_SOCIAL: [
     'new_private_message', 'message_request_received', 'someone_replied',
     'someone_mentioned', 'someone_followed', 'friend_request_received',
-    'request_accepted', 'tcps_mail_received', 'paid_message_received',
+    'request_accepted', 'utromail_received', 'paid_message_received',
     'paid_message_unlocked'
   ],
   GIFTS_COINS_WALLET: [

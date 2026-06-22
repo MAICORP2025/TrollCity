@@ -56,7 +56,7 @@ export default function DistrictNavigation() {
       main_plaza: [
         { feature_name: 'Live Streams', route_path: '/live', required_role: 'user' },
         { feature_name: 'Troll Pods', route_path: '/pods', required_role: 'user' },
-        { feature_name: 'TCPS', route_path: '/tcps', required_role: 'user' },
+        { feature_name: 'Utromail', route_path: '/utromail', required_role: 'user' },
         { feature_name: 'Living & Housing', route_path: '/living', required_role: 'user' },
         { feature_name: 'Following', route_path: '/following', required_role: 'user' },
         { feature_name: 'Leaderboard', route_path: '/leaderboard', required_role: 'user' },

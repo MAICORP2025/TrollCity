@@ -504,7 +504,6 @@ import TrollBank from "./pages/TrollBank";
 import Leaderboard from "./pages/Leaderboard";
 import TrollCityWall from "./pages/TrollCityWall";
 import WallPostPage from "./pages/WallPostPage";
-import DistrictTour from "./pages/DistrictTour";
 import LivingPage from "./pages/UnderConstructionPage";
 import ChurchPage from "./pages/ChurchPage";
 import PastorDashboard from "./pages/church/PastorDashboard";
@@ -1525,6 +1524,7 @@ const handleVisibilityChange = async () => {
                 <Route path="/treelz/upload" element={<TreelzUploadPage />} />
 
 {/* Username-based public profile routes - must be after known routes */}
+                <Route path="/profile" element={<Profile />} />
                 <Route path="/profile/id/:userId" element={<Profile />} />
                 <Route path="/profile/:username" element={<Profile />} />
 
@@ -1758,7 +1758,6 @@ const handleVisibilityChange = async () => {
                    <Route path="/profile/delete" element={<DeleteAccount />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/blocked-users" element={<BlockedUsers />} />
-<Route path="/district/:districtName" element={<DistrictTour />} />
                    <Route path="/living" element={<LivingPage />} />
                     <Route path="/map" element={<MapPage />} />
                     <Route path="/neighborhood-map" element={<NeighborhoodMapHub />} />

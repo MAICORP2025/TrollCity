@@ -446,7 +446,7 @@ export async function notifyNewPrivateMessage(
     'new_private_message',
     '📩 New Message',
     `@${senderUsername}: ${messagePreview.substring(0, 100)}`,
-    { sender_username: senderUsername, conversation_id: conversationId, action_url: `/tcps?user=${senderUsername}` }
+    { sender_username: senderUsername, conversation_id: conversationId, action_url: `/utromail?recipientId=${senderUsername}` }
   )
 }
 
@@ -456,7 +456,7 @@ export async function notifyMessageRequestReceived(userId: string, senderUsernam
     'message_request_received',
     '📨 Message Request',
     `@${senderUsername} wants to message you.`,
-    { sender_username: senderUsername, action_url: '/tcps?tab=requests' }
+    { sender_username: senderUsername, action_url: '/utromail?tab=requests' }
   )
 }
 
@@ -510,13 +510,13 @@ export async function notifyRequestAccepted(userId: string, acceptorUsername: st
   )
 }
 
-export async function notifyTCPSMailReceived(userId: string, senderUsername: string) {
+export async function notifyUtromailReceived(userId: string, senderUsername: string) {
   return createNotification(
     userId,
-    'tcps_mail_received',
-    '📬 TCPS Mail',
+    'utromail_received',
+    '📬 Utromail',
     `New mail from @${senderUsername}.`,
-    { sender_username: senderUsername, action_url: '/tcps' }
+    { sender_username: senderUsername, action_url: '/utromail' }
   )
 }
 
@@ -526,7 +526,7 @@ export async function notifyPaidMessageReceived(userId: string, senderUsername: 
     'paid_message_received',
     '💰 Paid Message Received',
     `@${senderUsername} sent you a paid message (${price} coins).`,
-    { sender_username: senderUsername, price, action_url: '/tcps' }
+    { sender_username: senderUsername, price, action_url: '/utromail' }
   )
 }
 

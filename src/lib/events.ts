@@ -11,7 +11,7 @@ export type TrollEventType =
   | 'economy_gain'
   | 'pod_started'
   | 'pod_listened'
-  | 'tcps_message_sent'
+  | 'utromail_message_sent'
   | 'badge_progress';
 
 export type TrollEvent = {

@@ -187,17 +187,16 @@ export const getThreads = async (userId: string, folder: MailFolder = 'inbox'): 
 
     return {
       ...t,
-      // Flat "other user" fields for sidebar (like old TCPS)
+      // Flat "other user" fields for sidebar
       other_user_id: otherUserId || null,
-      // Fallback: if we can't get profile, use the mail address of the other person
-      // When last msg was sent BY us → recipient is the other person
-      // When last msg was sent BY them → sender is the other person
-      other_username: otherProfile?.display_name || otherProfile?.username
-        || (lastMsg?.sender_id === userId ? lastMsg?.recipient_mail_address : lastMsg?.sender_mail_address)
+      // Resolve username: profile → mail address prefix → 'Unknown'
+      other_username: otherProfile?.username
+        || otherProfile?.display_name
+        || (lastMsg?.sender_id === userId ? lastMsg?.recipient_mail_address?.split('@')[0] : lastMsg?.sender_mail_address?.split('@')[0])
         || 'Unknown',
       other_avatar_url: otherProfile?.avatar_url || null,
       other_utromail_address: otherProfile?.utromail_address || null,
-      other_display_name: otherProfile?.display_name || null,
+      other_display_name: otherProfile?.display_name || otherProfile?.username || null,
       last_message: lastMsg ? {
         ...lastMsg,
         sender_name: senderProfile?.display_name || senderProfile?.username || null,
@@ -252,21 +251,37 @@ export const getThreadMessages = async (threadId: string): Promise<UtromailMessa
     .from('utromail_messages')
     .select(`
       *,
-      utromail_attachments(*),
-      user_profiles!utromail_messages_sender_id_fkey(username, display_name, avatar_url)
+      utromail_attachments(*)
     `)
     .eq('thread_id', threadId)
     .eq('is_draft', false)
     .order('sent_at', { ascending: true });
   if (error) throw error;
+
+  // Batch-fetch sender profiles manually (avoids FK join dependency)
+  const senderIds = Array.from(new Set((data || []).map((m: any) => m.sender_id).filter(Boolean)));
+  const profileMap: Record<string, { username?: string; display_name?: string; avatar_url?: string }> = {};
+  if (senderIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id, username, display_name, avatar_url')
+      .in('id', senderIds);
+    if (profiles) {
+      for (const p of profiles) {
+        profileMap[p.id] = p;
+      }
+    }
+  }
+
   const result = (data || []).map((m: any) => {
+    const senderProfile = profileMap[m.sender_id] || null;
     const mapped = {
       ...m,
-      sender_name: m.user_profiles?.display_name || m.user_profiles?.username,
-      sender_username: m.user_profiles?.username,
-      sender_avatar: m.user_profiles?.avatar_url,
+      sender_name: senderProfile?.display_name || senderProfile?.username || null,
+      sender_username: senderProfile?.username || null,
+      sender_avatar: senderProfile?.avatar_url || null,
     };
-    if (import.meta.env.DEV) console.log('[getThreadMessages] msg:', m.id, '| sender_id:', m.sender_id, '| recipient_id:', m.recipient_id);
+    if (import.meta.env.DEV) console.log('[getThreadMessages] msg:', m.id, '| sender_id:', m.sender_id, '| sender:', mapped.sender_name);
     return mapped;
   });
   return result;

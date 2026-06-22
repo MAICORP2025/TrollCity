@@ -532,7 +532,7 @@ serve(async (req) => {
             body: `${senderName}: ${data.content?.substring(0, 100) || 'sent a message'}`,
             type: 'new_private_message',
             icon: '/icons/icon-192.png',
-            url: `/tcps?stream=${stream_id}`,
+            url: `/utromail?stream=${stream_id}`,
             data: {
               stream_id: stream_id,
               message_id: txn_id,

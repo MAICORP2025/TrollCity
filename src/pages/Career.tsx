@@ -112,7 +112,7 @@ const jobPositions: JobPosition[] = [
   {
     id: 'troll_officer',
     title: 'Troll Officer',
-    department: 'TCPS',
+    department: 'Utromail',
     description: 'Official city enforcer responsible for reports, moderation, investigations, arrests, and safety response.',
     requirements: ['Previous moderation experience', 'Strong understanding of city rules', 'Good judgment under pressure'],
     benefits: ['Officer badge', 'Access to officer tools', 'Potential weekly role perk from Treasury'],
@@ -132,7 +132,7 @@ const jobPositions: JobPosition[] = [
   {
     id: 'lead_troll_officer',
     title: 'Lead Troll Officer',
-    department: 'TCPS Leadership',
+    department: 'Utromail Leadership',
     description: 'Senior enforcement role overseeing Troll Officers, cases, escalation, and city safety consistency.',
     requirements: ['Previous Troll Officer experience', 'Leadership skills', 'Ability to train officers'],
     benefits: ['Leadership role', 'Officer oversight tools', 'Potential weekly role perk from Treasury'],

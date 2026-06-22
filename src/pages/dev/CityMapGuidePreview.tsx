@@ -92,8 +92,8 @@ const DISTRICTS: District[] = [
     gridArea: '1 / 3 / 2 / 4',
   },
   {
-    id:        'tcps',
-    name:      'TCPS Station',
+    id:        'utromail',
+    name:      'Utromail Station',
     icon:      <Shield className="w-7 h-7" />,
     description: 'City law enforcement: officers, reports, arrests, and the jail system.',
     color:  'text-cyan-400',
@@ -215,12 +215,12 @@ const ROLE_PATHS: RolePath[] = [
     whereToGo: '/broadcast/setup',
   },
   {
-    id: 'tcps-officer', name: 'TCPS Officer', icon: <Shield className="w-5 h-5" />,
+    id: 'utromail-officer', name: 'Utromail Officer', icon: <Shield className="w-5 h-5" />,
     color: 'text-cyan-400',
     description: 'City law enforcement. Patrol, respond, and keep the city running.',
     whatYouDo: ['Respond to city reports', 'Patrol broadcast rooms', 'Handle enforcement actions', 'Manage the jail system'],
     howToStart: 'Apply through MAICorp after reaching the required level.',
-    whereToGo: '/tcps',
+    whereToGo: '/utromail',
   },
   {
     id: 'attorney', name: 'Court Attorney', icon: <ScrollText className="w-5 h-5" />,
@@ -298,10 +298,10 @@ const FEATURES: FeatureExplain[] = [
     color: 'amber',
   },
   {
-    id: 'jail-tcps',
+    id: 'jail-utromail',
     icon: <Lock className="w-5 h-5" />,
-    title: 'Jail & TCPS',
-    content: 'Troll City uses a jail system instead of boring bans. TCPS officers manage arrests, reports, and inmate records.',
+    title: 'Jail & Utromail',
+    content: 'Troll City uses a jail system instead of boring bans. Utromail officers manage arrests, reports, and inmate records.',
     color: 'cyan',
   },
   {
@@ -427,7 +427,7 @@ export default function CityMapGuidePreview() {
     broadcast:    { path: '/live',                         auth: false },
     battle:       { path: '/live',                         auth: false },
     court:        { path: '/troll-court',                  auth: false },
-    tcps:         { path: '/tcps',                         auth: false },
+    utromail:     { path: '/utromail',                     auth: false },
     neighborhood: { path: '/neighborhood-map',             auth: false },
     coins:        { path: '/coin-store',                   auth: false },
     tcnn:         { path: '/tcnn',                         auth: false },
