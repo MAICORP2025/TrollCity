@@ -2523,6 +2523,23 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
         (seat) => seat.status === 'active' && (seat.seat_index ?? 0) >= totalBoxes,
       )
 
+      const protectedSeatUsers = seatsToRemove
+        .map((seat) => seat.user_id || seat.guest_id)
+        .filter(Boolean)
+
+      if (protectedSeatUsers.length > 0) {
+        const { data: protectedProfiles } = await supabase
+          .from('user_profiles')
+          .select('role, troll_role, is_admin, is_troll_officer, is_lead_officer, is_staff, is_superadmin, is_secretary, is_prosecutor, is_attorney')
+          .in('id', protectedSeatUsers)
+
+        const hasProtected = (protectedProfiles || []).some((profile: any) => isStaffProfile(profile))
+        if (hasProtected) {
+          toast.error('Cannot remove staff members, CEO, admins, or officers from the stage.')
+          return
+        }
+      }
+
       for (const seat of seatsToRemove) {
         const { error: leaveError } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
         if (leaveError) {
@@ -4935,20 +4952,20 @@ const handleLike = useCallback(async () => {
       const doKick = async () => {
         try {
           // ── Role-based protection: CEO, admin, and all staff/roles cannot be kicked ──
-          if (targetUserId) {
+           if (targetUserId) {
             const { data: targetProfile } = await supabase
               .from('user_profiles')
-              .select('role, troll_role, is_admin, is_troll_officer, is_lead_officer, is_staff, is_superadmin')
+              .select('role, troll_role, is_admin, is_troll_officer, is_lead_officer, is_staff, is_superadmin, is_secretary, is_prosecutor, is_attorney')
               .eq('id', targetUserId)
               .maybeSingle()
 
            if (targetProfile) {
-             const isProtected = isStaffProfile(targetProfile)
-             if (isProtected) {
-               toast.error('Cannot remove staff members, CEO, admins, or officers from the stage.')
-               return
-             }
-           }
+              const isProtected = isStaffProfile(targetProfile)
+              if (isProtected) {
+                toast.error('Cannot remove staff members, CEO, admins, or officers from the stage.')
+                return
+              }
+            }
           }
 
           let kicked = false

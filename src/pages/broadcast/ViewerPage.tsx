@@ -349,14 +349,16 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
   const attachedVideoIdRef = useRef<string | null>(null)
   const attachedAudioIdRef = useRef<string | null>(null)
 
-  useEffect(() => {
+   useEffect(() => {
     const videoEl = videoRef.current
     if (!videoEl) return
 
-    // Only (re-)attach if the track identity actually changed
+    // Only (re-)attach if the track identity actually changed.
+    // When videoTrack temporarily goes null (brief renegotiation), we keep the
+    // last attached track on the element so the stream stays visible.
     if (videoTrackId !== attachedVideoIdRef.current) {
-      // Detach previous track if we had one attached
-      if (attachedVideoIdRef.current !== null) {
+      // Detach previous track if we had one attached and are replacing it
+      if (attachedVideoIdRef.current !== null && videoTrack) {
         try {
           videoTrack?.detach?.(videoEl)
         } catch {
@@ -372,8 +374,11 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
         } catch (err) {
           console.warn('[ViewerPage] Failed to attach remote video track:', err)
         }
+        attachedVideoIdRef.current = videoTrackId
       }
-      attachedVideoIdRef.current = videoTrackId
+      // If videoTrack is null, intentionally do NOT update attachedVideoIdRef.
+      // This preserves the previous track on the video element and prevents
+      // flicker to fallback during brief track unsubscriptions.
     }
   }, [videoTrack, videoTrackId, trackTick, shouldMirror])
 
@@ -404,27 +409,26 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
     }
   }, [audioTrack, audioTrackId, trackTick])
 
-  return (
+   return (
     <div
       onClick={() => onTap && onTap()}
       className={cn('relative h-full w-full overflow-hidden bg-black', onTap && 'cursor-pointer', className)}
     >
-      {videoTrack ? (
-        <>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={false}
-            className={cn(
-              'h-full w-full object-cover',
-              shouldMirror && '-scale-x-100',
-            )}
-          />
-          <audio ref={audioRef} autoPlay />
-        </>
-      ) : (
-        fallback
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={false}
+        className={cn(
+          'h-full w-full object-cover',
+          shouldMirror && '-scale-x-100',
+        )}
+      />
+      <audio ref={audioRef} autoPlay />
+      {!videoTrack && !attachedVideoIdRef.current && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          {fallback}
+        </div>
       )}
     </div>
   )
@@ -1175,6 +1179,7 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
         .subscribe()
       return () => {
         supabase.removeChannel(channel)
+        kickProcessedRef.current = false
       }
     }, [streamId, refreshSeats, removeSeat, user?.id, mySeat?.id, mySeat?.user_id, mySeat?.guest_id])
 
@@ -1470,11 +1475,13 @@ const isActive = isStreamActive(stream)
       const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null
       const prevAudioId = prev.audioTrack?.mediaStreamTrack?.id || prev.audioTrack?.sid || null
       const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null
+      const prevIdentity = prev.participant?.identity || null
+      const nextIdentity = participant?.identity || null
 
       if (
         prevVideoId === nextVideoId &&
         prevAudioId === nextAudioId &&
-        prev.participant === participant
+        prevIdentity === nextIdentity
       ) {
         return prev
       }
@@ -2436,8 +2443,8 @@ const heartbeat = window.setInterval(() => {
 
     let cancelled = false
 
-    Promise.resolve()
-      .then(() => joinAsAudience({ userId: identityToUse, streamId, roomName: roomId, viewerIdentity: identityToUse }))
+     Promise.resolve()
+       .then(() => joinAsAudience({ userId: identityToUse, streamId, roomName: roomId, viewerIdentity: identityToUse, publishCapable: true }))
       .then((res: any) => {
         if (cancelled) return
         if (res && typeof res !== 'string') {

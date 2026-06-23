@@ -592,18 +592,13 @@ room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
        room.on(RoomEvent.ParticipantDisconnected, handleParticipantLeft);
        room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
        room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-       room.on(RoomEvent.Disconnected, () => {
-         console.log('[useLiveKitRoom] Room disconnected');
-         joinedRef.current = false;
-         joiningRef.current = false;
-         setIsConnected(false);
-         setIsPublishing(false);
-         // DO NOT clear participants during seat upgrade - they will be restored
-         // by publishLocalTracks after reconnect. Only clear for actual disconnects.
-         if (!isSeatUpgradingRef.current) {
-           setRemoteUsers([]);
-         }
-       });
+        room.on(RoomEvent.Disconnected, () => {
+          console.log('[useLiveKitRoom] Room disconnected');
+          joinedRef.current = false;
+          joiningRef.current = false;
+          setIsConnected(false);
+          setIsPublishing(false);
+        });
       room.on(RoomEvent.Reconnecting, () => {
         console.log('[useLiveKitRoom] Room reconnecting...');
       });
@@ -730,17 +725,19 @@ room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
   }, [roomId, videoPreset, fetchToken, handleParticipantJoined, handleParticipantLeft, handleTrackSubscribed, handleTrackUnsubscribed, onError, userName, identity, audioOnly, initialAudioEnabled]);
 
   // Join as viewer (LiveKit)
-  const joinAsAudience = useCallback(async (userIdOrParam: string | { userId?: string; streamId?: string; roomName?: string; viewerIdentity?: string }) => {
+  const joinAsAudience = useCallback(async (userIdOrParam: string | { userId?: string; streamId?: string; roomName?: string; viewerIdentity?: string; publishCapable?: boolean }) => {
     // Support legacy string signature and object signature
     let userId: string
     let providedStreamId: string | undefined
     let providedRoomName: string | undefined
+    let publishCapable = false
     if (typeof userIdOrParam === 'string') {
       userId = userIdOrParam
     } else {
       userId = userIdOrParam.userId || userIdOrParam.viewerIdentity || ''
       providedStreamId = userIdOrParam.streamId
       providedRoomName = userIdOrParam.roomName
+      publishCapable = !!userIdOrParam.publishCapable
     }
     // Guard: prevent multiple simultaneous connection attempts
     if (joinedRef.current) {
@@ -814,11 +811,6 @@ room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
         joiningRef.current = false;
         setIsConnected(false);
         setIsPublishing(false);
-        // DO NOT clear participants during seat upgrade - they will be restored
-        // by publishLocalTracks after reconnect. Only clear for actual disconnects.
-        if (!isSeatUpgradingRef.current) {
-          setRemoteUsers([]);
-        }
       });
 
       // Handle reconnection events
@@ -857,7 +849,7 @@ room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
         setLastJoinDebug((prev: any) => ({ ...(prev || {}), pre }));
       }
 
-      const token = await fetchToken(roomName, userId, userName, false, providedStreamId ? JSON.stringify({ streamId: providedStreamId }) : undefined, 'audience');
+      const token = await fetchToken(roomName, userId, userName, publishCapable, providedStreamId ? JSON.stringify({ streamId: providedStreamId }) : undefined, publishCapable ? 'seat-publisher' : 'audience');
       const url = getLiveKitUrl();
       const apiKey = getLiveKitApiKey();
 
@@ -998,71 +990,34 @@ room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
   }, [])
 
    const publishLocalTracks = useCallback(async () => {
-     const room = roomRef.current
-     if (!room || room.state !== 'connected') {
-       return
-     }
-
-const currentRoomName = room.name
-      const userId = localUserIdRef.current || ''
-      const pubToken = await fetchToken(currentRoomName, userId, userName, true, undefined, 'seat-publisher')
-
-      if (!pubToken) {
-        throw new Error('Failed to get publish token from server')
+      const room = roomRef.current
+      if (!room || room.state !== 'connected') {
+        return
       }
 
-      const url = getLiveKitUrl()
-      if (!url) {
-        throw new Error('Missing LiveKit URL for reconnect')
+      let audioTrack = localAudioTrackRef.current
+      let videoTrack = localVideoTrackRef.current
+
+      if (!audioTrack) {
+        audioTrack = await createLocalAudioTrack()
+        localAudioTrackRef.current = audioTrack
+        setLocalAudioTrack(audioTrack)
       }
 
-      // Mark upgrade in progress BEFORE disconnect to prevent clearing participants
-      isSeatUpgradingRef.current = true
-      
-      const remoteParticipantsBefore = room.remoteParticipants
-        ? Array.from(room.remoteParticipants.values())
-        : []
+      if (!videoTrack && !audioOnly) {
+        const { createLocalVideoTrack: createVideo } = await import('livekit-client')
+        videoTrack = await createVideo({ ...videoPreset, facingMode: 'user' })
+        localVideoTrackRef.current = videoTrack
+        setLocalVideoTrack(videoTrack)
+      }
 
-      await room.disconnect()
-      joinedRef.current = false
-      setIsConnected(false)
-
-      await room.connect(url, pubToken)
-      await waitForRoomConnected(room, 10000)
-
-     joinedRef.current = true
-     setIsConnected(true)
-
-      const existingParticipants = room.remoteParticipants
-        ? Array.from(room.remoteParticipants.values())
-        : []
-      setRemoteUsers(existingParticipants)
-
-     let audioTrack = localAudioTrackRef.current
-     let videoTrack = localVideoTrackRef.current
-
-     if (!audioTrack) {
-       audioTrack = await createLocalAudioTrack()
-       localAudioTrackRef.current = audioTrack
-       setLocalAudioTrack(audioTrack)
-     }
-
-     if (!videoTrack && !audioOnly) {
-       const { createLocalVideoTrack: createVideo } = await import('livekit-client')
-       videoTrack = await createVideo({ ...videoPreset, facingMode: 'user' })
-       localVideoTrackRef.current = videoTrack
-       setLocalVideoTrack(videoTrack)
-     }
-
-await room.localParticipant.publishTrack(audioTrack)
+      await room.localParticipant.publishTrack(audioTrack)
       if (videoTrack) {
         await room.localParticipant.publishTrack(videoTrack)
       }
 
       setIsPublishing(true)
-      // Mark upgrade complete after all state is restored
-      isSeatUpgradingRef.current = false
-    }, [audioOnly, videoPreset, onError, fetchToken, userName])
+    }, [audioOnly, videoPreset])
 
   // Unpublish only local camera/mic tracks. Does NOT disconnect the room.
   // Used when a viewer leaves a seat — broadcaster tracks stay subscribed.
@@ -1155,9 +1110,7 @@ await room.localParticipant.publishTrack(audioTrack)
          setLocalVideoTrack(null)
        }
 
-        if (roomRef.current) {
-          // Remove stale listeners so disconnected/left events from this room
-          // cannot clear remoteUsers during seat upgrade flows.
+         if (roomRef.current) {
           try {
             roomRef.current.off(RoomEvent.ParticipantConnected, handleParticipantJoined)
             roomRef.current.off(RoomEvent.ParticipantDisconnected, handleParticipantLeft)
