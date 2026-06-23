@@ -565,7 +565,6 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
     joiningRef.current = true;
     setIsJoining(true);
     setError(null);
-    setRemoteUsers([]);
     localUserIdRef.current = userId;
 
     let room: Room | null = null;
@@ -792,7 +791,6 @@ room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
     joiningRef.current = true;
     setIsJoining(true);
     setError(null);
-    setRemoteUsers([]);
     localUserIdRef.current = userId;
 
     try {
@@ -1140,43 +1138,52 @@ await room.localParticipant.publishTrack(audioTrack)
   }, [audioOnly, roomType, videoPreset])
 
 // Leave room
-   const leaveRoom = useCallback(async () => {
-    try {
-      const audioTrack = localAudioTrackRef.current
-      const videoTrack = localVideoTrackRef.current
+    const leaveRoom = useCallback(async () => {
+     try {
+       const audioTrack = localAudioTrackRef.current
+       const videoTrack = localVideoTrackRef.current
 
-      if (audioTrack) {
-        audioTrack.stop()
-        localAudioTrackRef.current = null
-        setLocalAudioTrack(null)
-      }
+       if (audioTrack) {
+         audioTrack.stop()
+         localAudioTrackRef.current = null
+         setLocalAudioTrack(null)
+       }
 
-      if (videoTrack) {
-        videoTrack.stop()
-        localVideoTrackRef.current = null
-        setLocalVideoTrack(null)
-      }
+       if (videoTrack) {
+         videoTrack.stop()
+         localVideoTrackRef.current = null
+         setLocalVideoTrack(null)
+       }
 
-      if (roomRef.current) {
-        await roomRef.current.disconnect()
-        roomRef.current = null
-      }
+        if (roomRef.current) {
+          // Remove stale listeners so disconnected/left events from this room
+          // cannot clear remoteUsers during seat upgrade flows.
+          try {
+            roomRef.current.off(RoomEvent.ParticipantConnected, handleParticipantJoined)
+            roomRef.current.off(RoomEvent.ParticipantDisconnected, handleParticipantLeft)
+            roomRef.current.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+            roomRef.current.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
+          } catch {
+            // ignore if handlers were never attached
+          }
+          await roomRef.current.disconnect()
+          roomRef.current = null
+        }
 
-      joinedRef.current = false
-      joiningRef.current = false
-      localUserIdRef.current = null
-      setIsConnected(false)
-      setIsPublishing(false)
-      setRemoteUsers([])
-    } catch (err) {
-      console.error(`[useLiveKitRoom] Error leaving room: ${safeStringify(err)}`)
-      joinedRef.current = false
-      joiningRef.current = false
-      roomRef.current = null
-      setIsConnected(false)
-      setIsPublishing(false)
-    }
-  }, [])
+       joinedRef.current = false
+       joiningRef.current = false
+       localUserIdRef.current = null
+       setIsConnected(false)
+       setIsPublishing(false)
+     } catch (err) {
+       console.error(`[useLiveKitRoom] Error leaving room: ${safeStringify(err)}`)
+       joinedRef.current = false
+       joiningRef.current = false
+       roomRef.current = null
+       setIsConnected(false)
+       setIsPublishing(false)
+     }
+   }, [])
 
   const setCameraEnabled = useCallback(async (enabled: boolean) => {
     if (audioOnly || roomType === 'pod') return false
