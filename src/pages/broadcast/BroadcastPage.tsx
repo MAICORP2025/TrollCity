@@ -963,6 +963,11 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     })
   }, [])
 
+  const seatsRefForTrackHandler = useRef(seats)
+  useEffect(() => {
+    seatsRefForTrackHandler.current = seats
+  }, [seats])
+
   const handleLiveKitTrackSubscribed = useCallback((_track: any, _publication: any, participant: RemoteParticipant) => {
     DEBUG_COUNTERS.trackSubscribedCount++
     if (!participant?.identity) return
@@ -973,13 +978,10 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
       return next
     })
 
-    // Ensure host receives audio from every subscribed seat participant. LiveKit
-    // can leave audio subscriptions muted by default for host pages when the
-    // participant is only matched by metadata, so force subscribe once per seat.
     const metadata = getRemoteParticipantMetadata(participant)
     const participantUserId = String(metadata?.user_id || metadata?.userId || '')
     const participantSeatIndex = Number(metadata?.seat_index ?? metadata?.seatIndex ?? NaN)
-    const seatMatchedBySeats = Object.values(seats).some((seat: any) => {
+    const seatMatchedBySeats = Object.values(seatsRefForTrackHandler.current).some((seat: any) => {
       const seatUserId = String(seat?.user_id || seat?.guest_id || '')
       const seatIdentity = String(seat?.livekit_participant_identity || seat?.participant_identity || seat?.livekit_identity || '')
       const normalizedSeatIndex = Number(seat?.seat_index ?? seat?.seatIndex ?? NaN)
@@ -1001,7 +1003,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
         }
       })
     }
-  }, [seats])
+  }, [])
 
   const handleLiveKitTrackUnsubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
     DEBUG_COUNTERS.trackUnsubscribedCount++

@@ -1035,14 +1035,10 @@ const currentRoomName = room.name
      joinedRef.current = true
      setIsConnected(true)
 
-     const existingParticipants = room.remoteParticipants
-       ? Array.from(room.remoteParticipants.values())
-       : []
-     if (existingParticipants.length === 0 && remoteParticipantsBefore.length > 0) {
-       setRemoteUsers(remoteParticipantsBefore)
-     } else {
-       setRemoteUsers(existingParticipants)
-     }
+      const existingParticipants = room.remoteParticipants
+        ? Array.from(room.remoteParticipants.values())
+        : []
+      setRemoteUsers(existingParticipants)
 
      let audioTrack = localAudioTrackRef.current
      let videoTrack = localVideoTrackRef.current

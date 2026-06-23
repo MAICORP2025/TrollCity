@@ -1461,33 +1461,47 @@ const isActive = isStreamActive(stream)
   })
   
   // Sync broadcaster state — only touches host, never seats
+  // Protects against stale participant objects during reconnect
   const updateBroadcasterState = useCallback((participant: any) => {
     const videoTrack = getVideoTrackFromParticipant(participant)
     const audioTrack = getAudioTrackFromParticipant(participant)
     setBroadcasterState(prev => {
-      // Only update if track identity actually changed
       const prevVideoId = prev.videoTrack?.mediaStreamTrack?.id || prev.videoTrack?.sid || null
       const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null
       const prevAudioId = prev.audioTrack?.mediaStreamTrack?.id || prev.audioTrack?.sid || null
       const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null
-      // Guard: ignore if no actual track change (prevents seat-triggered updates)
-      if (prevVideoId === nextVideoId && prevAudioId === nextAudioId && prev.participant === participant) {
-        return prev // No change
+
+      if (
+        prevVideoId === nextVideoId &&
+        prevAudioId === nextAudioId &&
+        prev.participant === participant
+      ) {
+        return prev
       }
+
+      if (prevVideoId && !nextVideoId) {
+        return prev
+      }
+
+      if (prevAudioId && !nextAudioId) {
+        return prev
+      }
+
       return { participant, videoTrack, audioTrack }
     })
   }, [])
 
   // Sync broadcaster state from remoteParticipants — stable, only reacts to host changes
+  // Never clears host state due to seat joins/leaves or temporary lookup failures
   useEffect(() => {
     const exactHost = remoteParticipants.find((p: any) => participantMatchesUser(p, hostId))
     if (exactHost) {
       updateBroadcasterState(exactHost)
       hostParticipantRef.current = exactHost
     } else if (hostParticipantRef.current) {
-      // Keep using the last known good host participant if we still have one
-      // This prevents the host track from going black when a seat joins
-      // The fallback UI will show instead, but we keep the participant reference
+      // Keep using the last known good host participant.
+      // Do NOT clear broadcasterState — host may be temporarily missing from
+      // remoteParticipants during reconnect/subscribe. Only clear on stream end.
     }
   }, [remoteParticipants, hostId, updateBroadcasterState])
 
