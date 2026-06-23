@@ -1630,6 +1630,8 @@ const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribe
   }, [battleParticipants, challengerBoxCount, opponentBoxCount]);
 
   const handleGiftClick = (p: BattleParticipant) => {
+    if (isBroadcaster) return;
+    if (currentUserId && p.identity === currentUserId) return;
     const resolvedStreamId =
       p.sourceStreamId ||
       (p.team === 'challenger' ? challengerStreamId : p.team === 'opponent' ? opponentStreamId : '');
@@ -1672,6 +1674,7 @@ const videoPub = getTrackPublications(remote, 'video').find((p) => p.isSubscribe
   };
 
   const handleSideGiftClick = (team: 'challenger' | 'opponent') => {
+    if (isBroadcaster) return;
     const streamId = team === 'challenger' ? challengerStreamId : opponentStreamId;
     const hostId = team === 'challenger' ? challengerHostId : opponentHostId;
     if (!streamId || !hostId) return;
@@ -3262,12 +3265,14 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   const [remoteUsers, setRemoteUsers] = useState<RemoteParticipant[]>([]);
 
   const handleGiftSelect = useCallback((uid: string, sourceStreamId: string) => {
+    if (isBroadcaster) return;
+    if (effectiveUserId && uid === effectiveUserId) return;
     setGiftRecipientId(uid);
     setGiftStreamId(sourceStreamId);
     if (isMobileViewport) {
       setShowMobileGiftTray(true);
     }
-  }, [isMobileViewport]);
+  }, [isBroadcaster, effectiveUserId, isMobileViewport]);
 
   const myStream = useMemo(() => {
     if (!participantInfo?.team) return null;
@@ -3352,13 +3357,31 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
         const { data: { user: authUser } } = await supabase.auth.getUser();
         console.log('[BattleView] DEBUG initBattle', { battleId, authUserId: authUser?.id, authUserExists: !!authUser });
 
-        const { data: battleData, error: battleError } = await supabase.from('battles').select('*').eq('id', battleId).maybeSingle();
+        // Verify battle_id format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!battleId || !uuidRegex.test(battleId)) {
+          setError('Invalid battle ID');
+          return;
+        }
+
+        // Retry DB query up to 3 times with short delays — handles race where battle row is being created
+        let battleData: any = null;
+        let battleError: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const result = await supabase.from('battles').select('*').eq('id', battleId).maybeSingle();
+          battleData = result.data;
+          battleError = result.error;
+          if (battleData) break;
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 300));
+          }
+        }
 
         // Use a resolvedBattle local variable so later code doesn't accidentally
         // dereference `battleData` when it was null and we used a realtime fallback.
         let resolvedBattle: any = null;
         if (battleError || !battleData) {
-          console.warn('[BattleView] battle query returned empty or error', { battleId, battleData, battleError });
+          console.warn('[BattleView] battle query returned empty or error after retries', { battleId, battleData, battleError });
           // Fallback: prefer realtime state (handles viewers with RLS blocking DB reads)
           const realtimeCandidate = (battleRealtime as any)?.battle;
           if (realtimeCandidate) {

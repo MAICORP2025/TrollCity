@@ -32,9 +32,9 @@ import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import AudienceBubbleTicker from '@/components/broadcast/AudienceBubbleTicker'
 import BroadcastOfficerModal from '../../components/broadcast/BroadcastOfficerModal'
+import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersModal'
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
 import MobileBroadcastHostSettings from '../../components/broadcast/MobileBroadcastHostSettings'
-import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersModal'
 import { Settings } from 'lucide-react'
 import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
 import { useBroadcastFrame } from '../../hooks/useBroadcastFrame'
@@ -124,9 +124,7 @@ function participantMatchesSeat(
       participantIdentity === candidate ||
       participantIdentity.endsWith(`-${candidate}`) ||
       metadata.user_id === candidate ||
-      metadata.userId === candidate ||
-      participant?.user_id === candidate ||
-      participant?.userId === candidate
+      metadata.userId === candidate
     )
   })
 }
@@ -162,10 +160,7 @@ function remoteParticipantMatchesUser(
     metadata.user_id === normalizedUserId ||
     metadata.userId === userId ||
     metadata.userId === normalizedUserId ||
-    participant?.user_id === userId ||
-    participant?.user_id === normalizedUserId ||
-    participant?.userId === userId ||
-    participant?.userId === normalizedUserId
+    metadata.user_id === normalizedUserId
 
   return identityMatchesUser || matchesIdentity(preferredIdentity)
 }
@@ -328,6 +323,7 @@ function findSeatRemoteParticipant(
   participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
   seatUserId?: string | null,
   seatIdentity?: string | null,
+  hostUserId?: string | null,
 ): RemoteParticipant | null {
   if (!participants) return null
 
@@ -340,12 +336,15 @@ function findSeatRemoteParticipant(
   const userId = String(seatUserId || '').trim()
   const identity = String(seatIdentity || '').trim()
   const candidates = [identity, userId].filter(Boolean)
+  const hostId = String(hostUserId || '').trim()
 
   return (
     list.find((participant: any) => {
       const participantIdentity = String(participant?.identity || '').trim()
       const metadata = getRemoteParticipantMetadata(participant)
-      const participantUserId = String(metadata?.user_id || metadata?.userId || participant?.user_id || participant?.userId || '').trim()
+      const participantUserId = String(metadata?.user_id || metadata?.userId || '').trim()
+
+      if (hostId && (participantIdentity === hostId || participantUserId === hostId)) return false
 
       if (participantUserId && candidates.includes(participantUserId)) {
         return true
@@ -978,8 +977,8 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     // can leave audio subscriptions muted by default for host pages when the
     // participant is only matched by metadata, so force subscribe once per seat.
     const metadata = getRemoteParticipantMetadata(participant)
-    const participantUserId = String(metadata?.user_id || metadata?.userId || participant?.user_id || participant?.userId || '')
-    const participantSeatIndex = Number(metadata?.seat_index ?? metadata?.seatIndex ?? participant?.seatIndex ?? NaN)
+    const participantUserId = String(metadata?.user_id || metadata?.userId || '')
+    const participantSeatIndex = Number(metadata?.seat_index ?? metadata?.seatIndex ?? NaN)
     const seatMatchedBySeats = Object.values(seats).some((seat: any) => {
       const seatUserId = String(seat?.user_id || seat?.guest_id || '')
       const seatIdentity = String(seat?.livekit_participant_identity || seat?.participant_identity || seat?.livekit_identity || '')
@@ -1196,17 +1195,17 @@ useEffect(() => {
      })
    }, [remoteUsers])
    
-   // Ghost audio participants - these are ghost participants whose audio we need to render
-   // They are filtered from visibleRemoteUsers but their audio tracks must still be heard
-   const ghostAudioParticipants = useMemo(() => {
-     return remoteUsers.filter(p => {
-       const metadata = getRemoteParticipantMetadata(p)
-       return metadata?.role === 'ghost' || metadata?.hidden === true
-     })
-   }, [remoteUsers])
-   
-   // Debug: Log ghost mode audio state
-useEffect(() => {
+// Ghost audio participants - these are ghost participants whose audio we need to render
+    // They are filtered from visibleRemoteUsers but their audio tracks must still be heard
+    const ghostAudioParticipants = useMemo(() => {
+      return remoteUsers.filter(p => {
+        const metadata = getRemoteParticipantMetadata(p)
+        return metadata?.role === 'ghost' || metadata?.hidden === true
+      })
+    }, [remoteUsers])
+    
+    // Debug: Log ghost mode audio state
+ useEffect(() => {
       if (!import.meta.env.DEV) return;
       console.log('[BroadcastPage] Ghost audio debug:', {
         ghostAudioParticipantsCount: ghostAudioParticipants.length,
@@ -1214,6 +1213,36 @@ useEffect(() => {
         ghostAudioWithTracks: ghostAudioParticipants.filter((p: any) => getAudioTrackFromRemoteParticipant(p)).length,
       })
     }, [ghostAudioParticipants])
+
+    // ─── ISOLATED HOST PARTICIPANT STATE ───────────────────────────────────────
+    // Track host participant identity in a ref to prevent seat join/leave disruptions
+    const hostParticipantRef = useRef<any>(null)
+    
+    // Stable host participant lookup — only watches remoteParticipants and hostId directly
+    const hostParticipant = useMemo(() => {
+      if (!stream?.user_id || !remoteParticipants) return null
+      
+      const hostId = String(stream.user_id).trim()
+      let foundHost: RemoteParticipant | null = null
+      
+      remoteParticipants.forEach((p: RemoteParticipant) => {
+        const identity = String(p?.identity || '').trim()
+        const metadata = getRemoteParticipantMetadata(p)
+        const participantUserId = String(metadata?.user_id || metadata?.userId || '').trim()
+        
+        if (identity === hostId || participantUserId === hostId || identity.endsWith(`-${hostId}`)) {
+          foundHost = p
+        }
+      })
+      
+      if (foundHost) {
+        hostParticipantRef.current = foundHost
+        return foundHost
+      }
+      
+      // Keep last known good host participant if no match but we have one cached
+      return hostParticipantRef.current
+    }, [stream?.user_id, remoteParticipants])
   // Helper to safely get array from RemoteParticipants Map
   const getRemoteParticipantsArray = () => {
     if (!remoteParticipants || typeof remoteParticipants.values !== 'function') return []
@@ -1609,7 +1638,6 @@ const ranked = senderIds
     } | null>(null)
     // CityStatusPanel for clicking on seats / broadcaster orb
     const [selectedSeatUserId, setSelectedSeatUserId] = useState<string | null>(null)
-  const [showPayBroadOfficersModal, setShowPayBroadOfficersModal] = useState(false)
   // Broadcast Abilities
   const {
     abilities: userAbilities,
@@ -2005,8 +2033,8 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
         }
       }));
 
-      updateStreamActivity()
-    }, [streamId, resolveGiftAmount, resolveGiftName, supabase]);
+      updateStreamActivityRef.current
+    }, [enrichGiftForOverlay, resolveGiftAmount, resolveGiftName, streamId, supabase]);
 
   const stopLocalTracks = useCallback(() => {
     if (localTracks) {
@@ -2032,7 +2060,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
     } else {
       console.log('[BroadcastPage] ?? Skipping clearTracks in stopLocalTracks during live transition')
     }
-  }, [localTracks, clearTracks, disconnectLiveKitRoom])
+  }, [clearTracks, disconnectLiveKitRoom, localTracks, setLocalTracks])
 
   const stopLocalTracksRef = useRef(stopLocalTracks)
   useEffect(() => {
@@ -2842,7 +2870,7 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
         navigate(`/broadcast/summary/${streamId}`);
       }, 100);
     }
-  }, [navigate, streamId, disconnectLiveKitRoom, user?.id]);
+  }, [areStreamRealtimeUpdatesEqual, disconnectLiveKitRoom, navigate, recordStreamStarted, streamId, user?.id]);
 
 useStreamRealtime(streamId, {
      onStream: (event) => {
@@ -4377,7 +4405,7 @@ const handleLike = useCallback(async () => {
     } catch (e) {
 
     }
-  }, [checkClickRate, isClickBlocked, isHost, navigate, stream?.id, user]);
+  }, [checkClickRate, isClickBlocked, isHost, navigate, stream?.id, user, updateStreamActivity]);
 
   const toggleStreamRgb = useCallback(async () => {
     if (!isHost || !stream) return;
@@ -4399,7 +4427,7 @@ const handleLike = useCallback(async () => {
 
       toast.error(e.message || "Failed to update RGB setting");
     }
-  }, [isHost, stream?.id, stream?.has_rgb_effect]);
+  }, [isHost, stream, stream?.id, stream?.has_rgb_effect]);
 
   const isStaff = useMemo(() => isStaffProfile(profile), [profile])
 
@@ -4580,7 +4608,7 @@ const handleLike = useCallback(async () => {
     } else {
       navigate(`/broadcast/summary/${stream?.id}`);
     }
-  }, [cleanupLocalMedia, isStaff, navigate, stream?.id, stream?.status, stream?.is_battle, stream?.battle_id, stream?.battle_mode, user?.id]);
+  }, [cleanupLocalMedia, disconnectLiveKitRoom, isStaff, navigate, recorder, stream?.id, stream?.status, stream?.is_battle, stream?.battle_id, stream?.battle_mode, stream?.started_at, stream?.title, user?.id]);
 
   const handleStartBattle = useCallback(async () => {
     if (!stream || !isHost) return
@@ -4657,7 +4685,7 @@ const handleLike = useCallback(async () => {
       console.error('Error with battle:', err)
       toast.error('Failed to toggle battle')
     }
-  }, [isHost, refreshStream, selectedBattleTheme, stream?.id, stream?.is_battle]);
+  }, [isHost, refreshStream, selectedBattleTheme, stream]);
 
   const swipeNavigateLockRef = useRef(false);
 
@@ -4912,13 +4940,13 @@ const handleLike = useCallback(async () => {
               .eq('id', targetUserId)
               .maybeSingle()
 
-            if (targetProfile) {
-              const isProtected = isStaffProfile(targetProfile)
-              if (isProtected) {
-                toast.error('Cannot remove staff members, CEO, admins, or officers from the stage.')
-                return
-              }
-            }
+           if (targetProfile) {
+             const isProtected = isStaffProfile(targetProfile)
+             if (isProtected) {
+               toast.error('Cannot remove staff members, CEO, admins, or officers from the stage.')
+               return
+             }
+           }
           }
 
           let kicked = false
@@ -5046,6 +5074,7 @@ const handleLike = useCallback(async () => {
      }
 
   const [isAssignOfficerModalOpen, setIsAssignOfficerModalOpen] = useState(false)
+  const [isPayBroadOfficersModalOpen, setIsPayBroadOfficersModalOpen] = useState(false)
 
   const handleAssignBroadofficer = useCallback(() => {
     if (!isHost) {
@@ -5060,7 +5089,7 @@ const handleLike = useCallback(async () => {
       toast.error('Only the broadcaster can pay officers');
       return;
     }
-    setShowPayBroadOfficersModal(true)
+    setIsAssignOfficerModalOpen(true)
   }, [isHost]);
 
   function startDrag(event: React.MouseEvent<HTMLDivElement>): void {
@@ -5289,27 +5318,23 @@ const handleLike = useCallback(async () => {
                 }
               >
 
-                {/* Camera starting fallback � shows when no video track is available */}
+{/* Camera starting fallback � shows when no video track is available */}
                 {(() => {
+                  const hostParticipant = hostParticipantRef.current
                   const hostCamTrack = isHost
                     ? (localTracks?.[1] ?? null)
                     : (() => {
-                        const broadcasterUserId = stream?.user_id;
-                        if (!broadcasterUserId || !remoteParticipants) return null;
-                        let vt: LocalVideoTrack | RemoteVideoTrack | undefined;
-                        remoteParticipants.forEach((rp: RemoteParticipant) => {
-                          if (rp.identity === broadcasterUserId) {
-                            const pub = (rp as any).videoTrackPublications
-                              ? Array.from((rp as any).videoTrackPublications.values()) as any[]
-                              : [];
-                            const found = pub.find((p: any) => p.track && typeof (p.track as any).attach === 'function');
-                            if (found) vt = found.track;
-                          }
-                        });
-                        return vt ?? null;
-                      })();
+                        if (!hostParticipant) return null
+                        const pubs = (hostParticipant as any).videoTrackPublications
+                        if (pubs) {
+                          const pubArray = Array.from(pubs.values()) as any[]
+                          const found = pubArray.find((p: any) => p.track && typeof (p.track as any).attach === 'function')
+                          if (found) return found.track
+                        }
+                        return null
+                      })()
 
-                  if (hostCamTrack) return null;
+                  if (hostCamTrack) return null
 
                   return (
                     <div className="absolute inset-0 flex h-full w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(45,212,191,0.15),transparent_38%)]">
@@ -5325,28 +5350,23 @@ const handleLike = useCallback(async () => {
                       <p className="mt-4 text-base font-black text-white">{broadcasterProfile?.username || 'Broadcaster'}</p>
                       <p className="mt-1 text-sm text-cyan-200/60">Camera starting�</p>
                     </div>
-                  );
+                  )
                 })()}
 
                 {/* Host video element � mounted via TrackAttach, covers card when track available */}
                 <TrackAttach
                   track={isHost ? (localTracks?.[1] ?? null) : (() => {
-                    const broadcasterUserId = stream?.user_id;
-                    if (!broadcasterUserId || !remoteParticipants) return null;
-                    let vt: any = null;
-                    remoteParticipants.forEach((rp: RemoteParticipant) => {
-                      if (rp.identity === broadcasterUserId) {
-                        const pubs = (rp as any).videoTrackPublications;
-                        if (pubs) {
-                          pubs.forEach((pub: any) => {
-                            if (pub.track && typeof pub.track?.attach === 'function') vt = pub.track;
-                          });
-                        }
-                      }
-                    });
-                    return vt;
+                    const hostParticipant = hostParticipantRef.current
+                    if (!hostParticipant) return null
+                    const pubs = (hostParticipant as any).videoTrackPublications
+                    if (pubs) {
+                      const pubArray = Array.from(pubs.values()) as any[]
+                      const found = pubArray.find((p: any) => p.track && typeof p.track?.attach === 'function')
+                      return found
+                    }
+                    return null
                   })()}
-                  />
+                />
 
                 {/* Gradient overlay � sits above video/fallback */}
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
@@ -5461,6 +5481,7 @@ const handleLike = useCallback(async () => {
                       remoteParticipants,
                       seat.seatUserId,
                       seat.seatIdentity,
+                      stream.user_id,
                     )
 
                      const matchedParticipant = exactParticipant
@@ -5957,6 +5978,7 @@ const handleLike = useCallback(async () => {
                             remoteParticipants,
                             seat.seatUserId,
                             seat.seatIdentity,
+                            stream.user_id,
                           );
                           const matchedParticipant = exactParticipant;
                           const participantDisplayName = matchedParticipant
@@ -6159,7 +6181,7 @@ const handleLike = useCallback(async () => {
                       setIsTextPopupComposerOpen(true);
                     }}
                     onAssignOfficer={() => setIsAssignOfficerModalOpen(true)}
-                    onPayOfficers={() => setShowPayBroadOfficersModal(true)}
+                    onPayOfficers={() => setIsPayBroadOfficersModalOpen(true)}
                     onToggleSeatsLock={() => {
                       // Toggle seats lock logic
                     }}
@@ -6582,16 +6604,17 @@ const handleLike = useCallback(async () => {
                   broadcasterId={stream.user_id}
                   isOpen={isAssignOfficerModalOpen}
                   onClose={() => setIsAssignOfficerModalOpen(false)}
+                  onPayAll={handlePayBroadOfficers}
                 />
               )}
 
-              {showPayBroadOfficersModal && (
+              {isPayBroadOfficersModalOpen && stream?.id && stream?.user_id && (
                 <PayBroadOfficersModal
-                  isOpen={showPayBroadOfficersModal}
-                  onClose={() => setShowPayBroadOfficersModal(false)}
-                  broadcasterId={user?.id || ''}
-                  broadcasterBalance={broadcasterProfile?.troll_coins || 0}
-                  streamId={streamId || ''}
+                  isOpen={isPayBroadOfficersModalOpen}
+                  onClose={() => setIsPayBroadOfficersModalOpen(false)}
+                  broadcasterId={stream.user_id}
+                  broadcasterBalance={broadcasterProfile?.troll_coins ?? 0}
+                  streamId={stream.id}
                 />
               )}
 
@@ -6617,7 +6640,7 @@ const handleLike = useCallback(async () => {
     );
   }
 
-function isStaffProfile(profile: UserProfile | null) {
+function isStaffProfile(profile: any) {
   if (!profile) return false
   return isStaffUser(profile)
 }

@@ -9,6 +9,7 @@ import { useAuthStore } from '../../lib/store';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../../lib/chatStore';
 import UserMiniProfile from '../user/UserMiniProfile';
+import { notifyBroadofficerAssigned } from '../../lib/notifications';
 
 function getTierColor(tier: string) {
   switch (tier) {
@@ -468,40 +469,43 @@ export default function UserActionModal({
      }
    };
 
-   const handlePromote = async () => {
-    if (!confirm("Promote this user to Broadofficer? They will have moderation powers.")) return;
-    const { error } = await supabase.rpc('assign_broadofficer', { p_stream_id: streamId, p_officer_id: userId });
-    if (error) toast.error("Failed to promote user");
-    else {
-        const promotedName = displayName || username || 'this viewer';
-        const content = `Broadcaster has made ${promotedName} a broadofficer`;
-        const systemMessage = {
-            id: `broadofficer-${streamId}-${userId}-${Date.now()}`,
-            user_id: currentUser?.id || userId,
-            content,
-            created_at: new Date().toISOString(),
-            type: 'system',
-            user_profiles: { username: 'System', avatar_url: '' }
-        };
+    const handlePromote = async () => {
+     if (!confirm("Promote this user to Broadofficer? They will have moderation powers.")) return;
+     const { error } = await supabase.rpc('assign_broadofficer', { p_stream_id: streamId, p_officer_id: userId });
+     if (error) toast.error("Failed to promote user");
+     else {
+         const promotedName = displayName || username || 'this viewer';
+         const content = `Broadcaster has made ${promotedName} a broadofficer`;
+         const systemMessage = {
+             id: `broadofficer-${streamId}-${userId}-${Date.now()}`,
+             user_id: currentUser?.id || userId,
+             content,
+             created_at: new Date().toISOString(),
+             type: 'system',
+             user_profiles: { username: 'System', avatar_url: '' }
+         };
 
-        void supabase.from('stream_messages').insert({
-            stream_id: streamId,
-            user_id: currentUser?.id || userId,
-            content,
-            type: 'system'
-        });
+         void supabase.from('stream_messages').insert({
+             stream_id: streamId,
+             user_id: currentUser?.id || userId,
+             content,
+             type: 'system'
+         });
 
-        const channel = supabase.channel(`stream-chat:${streamId}`);
-        channel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage })
-                    .finally(() => supabase.removeChannel(channel));
-            }
-        });
-        toast.success("User promoted to Broadofficer");
-        onClose();
-    }
-  };
+         const channel = supabase.channel(`stream-chat:${streamId}`);
+         channel.subscribe((status) => {
+             if (status === 'SUBSCRIBED') {
+                 void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage })
+                     .finally(() => supabase.removeChannel(channel));
+             }
+         });
+
+         const broadcasterName = currentUser?.username || currentUser?.display_name || 'Broadcaster';
+         void notifyBroadofficerAssigned(userId, broadcasterName, streamId);
+         toast.success("User promoted to Broadofficer");
+         onClose();
+     }
+   };
 
   const handleFollow = async () => {
     if (!currentUser) {

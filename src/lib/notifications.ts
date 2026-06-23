@@ -361,7 +361,7 @@ export async function notifyBroadofficerAssigned(userId: string, officerUsername
     userId,
     'broadofficer_assigned',
     '🛡️ BroadOfficer Assigned',
-    `@${officerUsername} has been assigned to moderate your stream.`,
+    `@${officerUsername} has made you a Broadofficer.`,
     { officer_username: officerUsername, stream_id: streamId }
   )
 }

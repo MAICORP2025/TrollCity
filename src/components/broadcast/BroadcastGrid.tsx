@@ -759,7 +759,7 @@ const stagePassesHook = useStagePasses(streamStatus === 'live' ? stream.id : und
 
   const attributes = useParticipantAttributes(userIds, stream.id);
 
-  const getParticipantAndTracks = (userId: string | undefined) => {
+  const getParticipantAndTracks = (userId: string | undefined, hostUserId?: string) => {
     if (!userId) return { participant: undefined, videoTrack: undefined, audioTrack: undefined, isLocal: false };
 
     let participant: RemoteParticipant | undefined;
@@ -803,9 +803,13 @@ const stagePassesHook = useStagePasses(streamStatus === 'live' ? stream.id : und
       const normalizedLiveKitIdentityShort = normalizedLiveKitIdentity.substring(0, 8);
       const prefixedViewerId = `viewer-${userId.substring(0, 12)}`;
 
+      const hostIdShort = hostUserId ? hostUserId.replace(/-/g, '').toLowerCase().substring(0, 8) : ''
+
       participant = remoteUsers.find((u) => {
         const identityStr = String(u.identity || '');
         const normalizedIdentity = identityStr.replace(/-/g, '').toLowerCase();
+        const normUid = identityStr.replace(/^viewer-/, '').toLowerCase()
+        if (hostUserId && (identityStr === hostUserId || normUid === hostUserId || normUid.startsWith(hostIdShort))) return false
 
         if (identityStr === userId) return true;
         if (identityStr === liveKitIdentity) return true;
@@ -879,7 +883,17 @@ const stagePassesHook = useStagePasses(streamStatus === 'live' ? stream.id : und
           allVideoPubsCount: allVideoPubs.length,
         });
       } else {
-        if (import.meta.env.DEV) console.debug('[BroadcastGrid] No participant found for userId:', userId?.substring(0, 8), 'remoteUsers count:', remoteUsers.length);
+        const hostIdNorm = hostUserId ? hostUserId.replace(/-/g, '').toLowerCase() : ''
+        const fallbackParticipant = remoteUsers.find((u: any) => {
+          const identityStr = String(u?.identity || '')
+          const normId = identityStr.replace(/-/g, '').toLowerCase()
+          if (hostUserId && (identityStr === hostUserId || normId === hostIdNorm || normId.startsWith(hostIdNorm.substring(0, 8)))) return false
+          return !!getVideoTrackFromRemoteParticipant(u)
+        }) || null
+        if (fallbackParticipant && !participant) {
+          participant = fallbackParticipant
+        }
+        if (import.meta.env.DEV) console.debug('[BroadcastGrid] No participant found for userId:', userId?.substring(0, 8), 'remoteUsers count:', remoteUsers.length, 'fallback used:', !!fallbackParticipant);
       }
     }
     

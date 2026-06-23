@@ -67,6 +67,8 @@ export function useLiveKitRoom({
     const prewarmCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Track last failed join to prevent infinite retry loops
     const lastFailedJoinRef = useRef<{ roomId: string; userId: string; error: string; timestamp: number } | null>(null);
+    // Track seat upgrade in progress to prevent clearing participants during the transition
+    const isSeatUpgradingRef = useRef(false);
 
 // Module-level: tracks failed joins across component remounts (e.g. ErrorBoundary recovery).
 // Key = `${roomId}:${userId}`, Value = { error, timestamp }
@@ -587,18 +589,22 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
 
       roomRef.current = room;
 
-      room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
-      room.on(RoomEvent.ParticipantDisconnected, handleParticipantLeft);
-      room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-      room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-      room.on(RoomEvent.Disconnected, () => {
-        console.log('[useLiveKitRoom] Room disconnected');
-        joinedRef.current = false;
-        joiningRef.current = false;
-        setIsConnected(false);
-        setIsPublishing(false);
-        setRemoteUsers([]);
-      });
+room.on(RoomEvent.ParticipantConnected, handleParticipantJoined);
+       room.on(RoomEvent.ParticipantDisconnected, handleParticipantLeft);
+       room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+       room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+       room.on(RoomEvent.Disconnected, () => {
+         console.log('[useLiveKitRoom] Room disconnected');
+         joinedRef.current = false;
+         joiningRef.current = false;
+         setIsConnected(false);
+         setIsPublishing(false);
+         // DO NOT clear participants during seat upgrade - they will be restored
+         // by publishLocalTracks after reconnect. Only clear for actual disconnects.
+         if (!isSeatUpgradingRef.current) {
+           setRemoteUsers([]);
+         }
+       });
       room.on(RoomEvent.Reconnecting, () => {
         console.log('[useLiveKitRoom] Room reconnecting...');
       });
@@ -803,14 +809,18 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
       room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
       room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
       
-      // Handle disconnection events to reset state
+// Handle disconnection events to reset state
       room.on(RoomEvent.Disconnected, () => {
         console.log('[useLiveKitRoom] Room disconnected');
         joinedRef.current = false;
         joiningRef.current = false;
         setIsConnected(false);
         setIsPublishing(false);
-        setRemoteUsers([]);
+        // DO NOT clear participants during seat upgrade - they will be restored
+        // by publishLocalTracks after reconnect. Only clear for actual disconnects.
+        if (!isSeatUpgradingRef.current) {
+          setRemoteUsers([]);
+        }
       });
 
       // Handle reconnection events
@@ -995,29 +1005,32 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
        return
      }
 
-     const currentRoomName = room.name
-     const userId = localUserIdRef.current || ''
-     const pubToken = await fetchToken(currentRoomName, userId, userName, true, undefined, 'seat-publisher')
+const currentRoomName = room.name
+      const userId = localUserIdRef.current || ''
+      const pubToken = await fetchToken(currentRoomName, userId, userName, true, undefined, 'seat-publisher')
 
-     if (!pubToken) {
-       throw new Error('Failed to get publish token from server')
-     }
+      if (!pubToken) {
+        throw new Error('Failed to get publish token from server')
+      }
 
-     const url = getLiveKitUrl()
-     if (!url) {
-       throw new Error('Missing LiveKit URL for reconnect')
-     }
+      const url = getLiveKitUrl()
+      if (!url) {
+        throw new Error('Missing LiveKit URL for reconnect')
+      }
 
-     const remoteParticipantsBefore = room.remoteParticipants
-       ? Array.from(room.remoteParticipants.values())
-       : []
+      // Mark upgrade in progress BEFORE disconnect to prevent clearing participants
+      isSeatUpgradingRef.current = true
+      
+      const remoteParticipantsBefore = room.remoteParticipants
+        ? Array.from(room.remoteParticipants.values())
+        : []
 
-     await room.disconnect()
-     joinedRef.current = false
-     setIsConnected(false)
+      await room.disconnect()
+      joinedRef.current = false
+      setIsConnected(false)
 
-     await room.connect(url, pubToken)
-     await waitForRoomConnected(room, 10000)
+      await room.connect(url, pubToken)
+      await waitForRoomConnected(room, 10000)
 
      joinedRef.current = true
      setIsConnected(true)
@@ -1047,12 +1060,14 @@ const failedJoinCache = new Map<string, { error: string; timestamp: number }>();
        setLocalVideoTrack(videoTrack)
      }
 
-     await room.localParticipant.publishTrack(audioTrack)
-     if (videoTrack) {
-       await room.localParticipant.publishTrack(videoTrack)
-     }
+await room.localParticipant.publishTrack(audioTrack)
+      if (videoTrack) {
+        await room.localParticipant.publishTrack(videoTrack)
+      }
 
       setIsPublishing(true)
+      // Mark upgrade complete after all state is restored
+      isSeatUpgradingRef.current = false
     }, [audioOnly, videoPreset, onError, fetchToken, userName])
 
   // Unpublish only local camera/mic tracks. Does NOT disconnect the room.

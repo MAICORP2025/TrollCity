@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { X, Shield, UserPlus, UserMinus, Search, RefreshCw } from 'lucide-react'
+import { X, Shield, UserPlus, UserMinus, Search, RefreshCw, Coins, Gift } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
+import PayBroadOfficersModal from './PayBroadOfficersModal'
 
 interface BroadcastOfficerModalProps {
   streamId: string
   broadcasterId: string
   isOpen: boolean
   onClose: () => void
+  onPayAll?: () => void
 }
 
 interface BroadcastOfficer {
@@ -17,13 +19,20 @@ interface BroadcastOfficer {
   assigned_at: string
 }
 
-export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen, onClose }: BroadcastOfficerModalProps) {
+export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen, onClose, onPayAll }: BroadcastOfficerModalProps) {
   const [officers, setOfficers] = useState<BroadcastOfficer[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([])
   const [searching, setSearching] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
+
+  const [payingOfficerId, setPayingOfficerId] = useState<string | null>(null)
+  const [payAmount, setPayAmount] = useState<string>('')
+  const [paying, setPaying] = useState(false)
+  const [broadcasterBalance, setBroadcasterBalance] = useState<number>(0)
+
+  const [showPayAllModal, setShowPayAllModal] = useState(false)
 
   const fetchOfficers = async () => {
     setLoading(true)
@@ -41,7 +50,7 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
         const userIds = data.map(d => d.officer_id)
         const { data: profiles, error: profileError } = await supabase
           .from('user_profiles')
-          .select('id, username, avatar_url')
+          .select('id, username, avatar_url, troll_coins')
           .in('id', userIds)
 
         if (profileError) throw profileError
@@ -52,7 +61,7 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
             id: d.officer_id,
             username: profile?.username || 'Unknown',
             avatar_url: profile?.avatar_url || null,
-            assigned_at: d.created_at
+            assigned_at: d.created_at,
           }
         })
         setOfficers(enrichedOfficers)
@@ -66,9 +75,23 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
     }
   }
 
+  const fetchBroadcasterBalance = async () => {
+    try {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('troll_coins')
+        .eq('id', broadcasterId)
+        .maybeSingle()
+      if (data) setBroadcasterBalance(Number(data.troll_coins || 0))
+    } catch {
+      // silent
+    }
+  }
+
   useEffect(() => {
     if (isOpen && streamId && broadcasterId) {
       fetchOfficers()
+      fetchBroadcasterBalance()
     }
   }, [isOpen, streamId, broadcasterId])
 
@@ -117,11 +140,11 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
     setRemovingId(officerId)
     try {
       const { error } = await supabase
-  .from('broadcast_officers')
-  .delete()
-  .eq('broadcaster_id', broadcasterId)
-  .eq('officer_id', officerId)
-  .or(`stream_id.eq.${streamId},stream_id.is.null`)
+        .from('broadcast_officers')
+        .delete()
+        .eq('broadcaster_id', broadcasterId)
+        .eq('officer_id', officerId)
+        .or(`stream_id.eq.${streamId},stream_id.is.null`)
 
       if (error) throw error
       toast.success('Officer removed from this broadcast')
@@ -134,14 +157,63 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
     }
   }
 
+  const handleStartPayOfficer = (officerId: string) => {
+    setPayingOfficerId(officerId)
+    setPayAmount('')
+  }
+
+  const handleCancelPay = () => {
+    setPayingOfficerId(null)
+    setPayAmount('')
+  }
+
+  const handlePayOfficer = async (officerId: string) => {
+    const amount = parseInt(payAmount, 10)
+    if (!amount || amount <= 0) {
+      toast.error('Enter a valid amount')
+      return
+    }
+    if (amount > broadcasterBalance) {
+      toast.error('Insufficient balance')
+      return
+    }
+
+    setPaying(true)
+    try {
+      const { data, error } = await supabase.rpc('pay_broadofficer_individual', {
+        p_stream_id: streamId,
+        p_officer_id: officerId,
+        p_amount: amount,
+      })
+
+      if (error) throw error
+      if (!data?.success) throw new Error(data?.error || 'Payment failed')
+
+      toast.success(`Paid ${amount} coins to officer`)
+      setPayingOfficerId(null)
+      setPayAmount('')
+      setBroadcasterBalance(prev => prev - amount)
+      onPayAll?.()
+    } catch (err: any) {
+      console.error('Error paying officer:', err)
+      toast.error(err.message || 'Failed to pay officer')
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  const handlePayAllClick = () => {
+    setShowPayAllModal(true)
+  }
+
   if (!isOpen) return null
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => { e.stopPropagation(); onClose(); }}
     >
-      <div 
+      <div
         className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -151,11 +223,11 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
               <Shield className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h3 className="font-bold text-white">Broadcast Officers</h3>
+              <h3 className="font-bold text-white">Broadofficers</h3>
               <p className="text-xs text-zinc-400">Manage officers for this stream</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="text-zinc-400 hover:text-white transition-colors"
           >
@@ -166,13 +238,25 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
         <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
             <p className="text-xs text-blue-300">
-              Officers have moderation powers <span className="text-white font-bold">only in this broadcast</span>. 
+              Officers have moderation powers <span className="text-white font-bold">only in this broadcast</span>.
               They lose access when the stream ends or you remove them.
             </p>
           </div>
 
+          {officers.length > 0 && (
+            <button
+              onClick={handlePayAllClick}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2.5 text-sm font-bold text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+            >
+              <Gift size={16} />
+              Pay All Broadofficers
+            </button>
+          )}
+
           <div className="space-y-2">
-            <label className="text-xs font-bold text-zinc-400 uppercase">Add Officer</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-zinc-400 uppercase">Add Officer</label>
+            </div>
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <input
@@ -236,36 +320,85 @@ export default function BroadcastOfficerModal({ streamId, broadcasterId, isOpen,
                 {officers.map(officer => (
                   <div
                     key={officer.id}
-                    className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg border border-zinc-700"
+                    className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
-                        {officer.avatar_url ? (
-                          <img src={officer.avatar_url} alt={officer.username} className="w-full h-full object-cover" />
-                        ) : (
-                          officer.username?.charAt(0).toUpperCase()
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-medium text-white text-sm">{officer.username}</div>
-                        <div className="text-[10px] text-zinc-500">
-                          Added {new Date(officer.assigned_at).toLocaleDateString()}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
+                          {officer.avatar_url ? (
+                            <img src={officer.avatar_url} alt={officer.username} className="w-full h-full object-cover" />
+                          ) : (
+                            officer.username?.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium text-white text-sm">{officer.username}</div>
+                          <div className="text-[10px] text-zinc-500">
+                            Added {new Date(officer.assigned_at).toLocaleDateString()}
+                          </div>
                         </div>
                       </div>
+                      <button
+                        onClick={() => handleRemoveOfficer(officer.id)}
+                        disabled={removingId === officer.id}
+                        className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                      >
+                        <UserMinus size={16} />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleRemoveOfficer(officer.id)}
-                      disabled={removingId === officer.id}
-                      className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
-                    >
-                      <UserMinus size={16} />
-                    </button>
+
+                    {payingOfficerId === officer.id ? (
+                      <div className="mt-3 flex items-center gap-2">
+                        <Coins size={14} className="text-yellow-500 shrink-0" />
+                        <input
+                          type="number"
+                          min="1"
+                          max={broadcasterBalance}
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                          placeholder="Coins per officer"
+                          className="flex-1 bg-zinc-900 border border-yellow-500/30 rounded-lg px-2 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-yellow-500/60"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handlePayOfficer(officer.id)}
+                          disabled={paying}
+                          className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-800 text-white text-xs font-bold rounded-lg transition-colors"
+                        >
+                          {paying ? '...' : 'Pay'}
+                        </button>
+                        <button
+                          onClick={handleCancelPay}
+                          className="px-2 py-1.5 text-zinc-400 hover:text-white text-xs transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleStartPayOfficer(officer.id)}
+                        className="mt-2 flex items-center gap-1.5 text-xs text-yellow-400 hover:text-yellow-300 transition-colors"
+                      >
+                        <Coins size={12} />
+                        Pay Broadofficer
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
         </div>
+
+        {showPayAllModal && (
+          <PayBroadOfficersModal
+            isOpen={showPayAllModal}
+            onClose={() => setShowPayAllModal(false)}
+            broadcasterId={broadcasterId}
+            broadcasterBalance={broadcasterBalance}
+            streamId={streamId}
+          />
+        )}
       </div>
     </div>
   )

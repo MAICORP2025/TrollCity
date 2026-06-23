@@ -231,7 +231,7 @@ export default function SupportPage() {
       >
         <div className="grid md:grid-cols-2 gap-6">
           <a
-            href="mailto:kain.towns@maicorp.online"
+            href="mailto:trollcity2025@gmail.com"
             className="p-6 bg-slate-900/50 border border-slate-800 hover:border-purple-500/30 rounded-xl transition-all flex items-center gap-4"
           >
             <div className="w-12 h-12 rounded-xl bg-purple-600/20 flex items-center justify-center flex-shrink-0">
@@ -239,7 +239,7 @@ export default function SupportPage() {
             </div>
             <div>
               <h4 className="text-white font-medium">Email Support</h4>
-              <p className="text-slate-400 text-sm">kain.towns@maicorp.online</p>
+              <p className="text-slate-400 text-sm">trollcity2025@gmail.com</p>
             </div>
           </a>
           <Link

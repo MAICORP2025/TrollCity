@@ -430,12 +430,12 @@ export default function FAQPage() {
             <p className="text-slate-400 text-sm">Browse all articles</p>
           </Link>
           <a
-            href="mailto:kain.towns@maicorp.online"
+            href="mailto:trollcity2025@gmail.com"
             className="p-6 bg-slate-900/50 border border-slate-800 hover:border-purple-500/30 rounded-xl transition-all text-center"
           >
             <Mail className="w-8 h-8 text-blue-400 mx-auto mb-3" />
             <h4 className="text-white font-medium mb-1">Email Us</h4>
-            <p className="text-slate-400 text-sm">kain.towns@maicorp.online</p>
+            <p className="text-slate-400 text-sm">trollcity2025@gmail.com</p>
           </a>
         </div>
       </SEOContentSection>

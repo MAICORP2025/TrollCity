@@ -8,8 +8,8 @@ const contactMethods = [
     icon: Mail,
     title: 'Email Us',
     description: 'Send us an email and we\'ll respond within 24 hours.',
-    action: 'kain.towns@maicorp.online',
-    link: 'mailto:kain.towns@maicorp.online'
+    action: 'trollcity2025@gmail.com',
+    link: 'mailto:trollcity2025@gmail.com'
   },
   {
     icon: MessageSquare,

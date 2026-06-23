@@ -120,7 +120,7 @@ export default function SEOLayout({ children, title, description, keywords = [],
               <ul className="space-y-2">
                 <li><Link to="/support" className="text-slate-400 hover:text-purple-300 transition-colors">Help Center</Link></li>
                 <li><Link to="/contact" className="text-slate-400 hover:text-purple-300 transition-colors">Submit a Ticket</Link></li>
-                <li><a href="mailto:kain.towns@maicorp.online" className="text-slate-400 hover:text-purple-300 transition-colors">Email Us</a></li>
+                <li><a href="mailto:trollcity2025@gmail.com" className="text-slate-400 hover:text-purple-300 transition-colors">Email Us</a></li>
               </ul>
             </div>
             <div>

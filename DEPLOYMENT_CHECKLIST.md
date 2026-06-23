@@ -281,9 +281,9 @@ If migrations cause issues:
 4. Debug offline
 
 ### Emergency Contacts
-- Supabase Support: kain.towns@maicorp.online
-- Square Support: kain.towns@maicorp.online
-- Vercel Support: kain.towns@maicorp.online
+- Supabase Support: trollcity2025@gmail.com
+- Square Support: trollcity2025@gmail.com
+- Vercel Support: trollcity2025@gmail.com
 
 ---
 

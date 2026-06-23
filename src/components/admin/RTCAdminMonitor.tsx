@@ -193,6 +193,13 @@ const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer',
   const timerRef = useRef<number | null>(null);
   const { isMobileWidth } = useIsMobile();
 
+  // Draggable panel state
+  const [isManuallyClosed, setIsManuallyClosed] = useState(false);
+  const [monitorPos, setMonitorPos] = useState<{ top: number; left: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffsetRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
+  const monitorPosLoadedRef = useRef(false);
+
   const [stats, setStats] = useState<RTCStats>({
     totalMinutes: 0,
     activeSessions: 0,
@@ -1331,7 +1338,129 @@ const openAction = useCallback((user: UserListItem, action: string) => {
 
      window.addEventListener('keydown', handleEscape);
      return () => window.removeEventListener('keydown', handleEscape);
-    }, [isOpen, activeAction, selectedStream, closeAction, closeStreamModal, setIsOpen]);
+     }, [isOpen, activeAction, selectedStream, closeAction, closeStreamModal, setIsOpen]);
+
+    // Load saved monitor position from sessionStorage when it first opens
+    useEffect(() => {
+      if (!isOpen || monitorPosLoadedRef.current) return
+      monitorPosLoadedRef.current = true
+
+      try {
+        const saved = sessionStorage.getItem('rtc-monitor-pos')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (parsed && typeof parsed.top === 'number' && typeof parsed.left === 'number') {
+            setMonitorPos({ top: parsed.top, left: parsed.left })
+          }
+        }
+      } catch {
+        // use default position
+      }
+    }, [isOpen])
+
+    // Reset position-loaded flag when monitor closes so we reload next time
+    useEffect(() => {
+      if (!isOpen) {
+        monitorPosLoadedRef.current = false
+      }
+    }, [isOpen])
+
+    // Drag handlers
+    const handleMonitorDragStart = useCallback((e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest('button, [role="button"], input, select, textarea')) return
+      const panel = (e.currentTarget as HTMLElement).closest('[data-rtc-monitor-panel]') as HTMLElement | null
+      if (!panel) return
+      const rect = panel.getBoundingClientRect()
+      dragOffsetRef.current = {
+        dx: e.clientX - rect.left,
+        dy: e.clientY - rect.top,
+      }
+      setIsDragging(true)
+      e.preventDefault()
+    }, [])
+
+    const handleMonitorDragMove = useCallback((e: MouseEvent) => {
+      if (!isDragging) return
+      const { dx, dy } = dragOffsetRef.current
+      setMonitorPos({
+        top: Math.max(0, e.clientY - dy),
+        left: Math.max(0, Math.min(window.innerWidth - 320, e.clientX - dx)),
+      })
+    }, [isDragging])
+
+    const handleMonitorDragEnd = useCallback(() => {
+      if (!isDragging) return
+      setIsDragging(false)
+      if (monitorPos) {
+        try {
+          sessionStorage.setItem('rtc-monitor-pos', JSON.stringify(monitorPos))
+        } catch {
+          // silent
+        }
+      }
+    }, [isDragging, monitorPos])
+
+    useEffect(() => {
+      if (!isDragging) return
+      window.addEventListener('mousemove', handleMonitorDragMove)
+      window.addEventListener('mouseup', handleMonitorDragEnd)
+      return () => {
+        window.removeEventListener('mousemove', handleMonitorDragMove)
+        window.removeEventListener('mouseup', handleMonitorDragEnd)
+      }
+    }, [isDragging, handleMonitorDragMove, handleMonitorDragEnd])
+
+    // Auto-open monitor on first security-relevant event (channel/session changes)
+    // Does not re-open if user manually closed the panel
+    const autoOpenIfNeeded = useCallback(() => {
+      if (isOpen || isManuallyClosed) return
+      setIsOpen(true)
+      setIsManuallyClosed(false)
+    }, [isOpen, isManuallyClosed])
+
+    // Track last auto-open time to prevent spam
+    const lastAutoOpenRef = useRef<number>(0)
+    const throttledAutoOpen = useCallback(() => {
+      const now = Date.now()
+      if (now - lastAutoOpenRef.current < 5000) return
+      lastAutoOpenRef.current = now
+      autoOpenIfNeeded()
+    }, [autoOpenIfNeeded])
+
+    // Monitor rtc_sessions for new channel opened
+    useEffect(() => {
+      if (!isStaff) return
+
+      const channel = supabase
+        .channel('admin-rtc-session-monitor')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'rtc_sessions',
+        }, () => {
+          throttledAutoOpen()
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIPTION_ERROR') {
+            console.warn('[RTCAdminMonitor] Session subscription error (lock contention) — will retry')
+          }
+        })
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }, [isStaff, throttledAutoOpen])
+
+    // Auto-close when clicking the floating monitor button while already open
+    const handleFloatingButtonClick = useCallback(() => {
+      if (isOpen) {
+        setIsManuallyClosed(true)
+        setIsOpen(false)
+      } else {
+        setIsManuallyClosed(false)
+        setIsOpen(true)
+      }
+    }, [isOpen])
 
     // Close dropdown when clicking outside or scrolling/resizing
     useEffect(() => {
@@ -1397,9 +1526,9 @@ const renderFloatingButton = () => {
 
       return (
          <div className="fixed bottom-[160px] right-4 z-[100] flex flex-col gap-2 md:bottom-[200px]">
-           <button
-             type="button"
-             onClick={() => setIsOpen((open) => !open)}
+            <button
+              type="button"
+              onClick={handleFloatingButtonClick}
              className={`flex ${buttonSize} items-center justify-center gap-1.5 rounded-full px-2.5 shadow-lg transition-all hover:scale-105 ${flashClass}`}
               style={{
                 backgroundColor: showErrorFlash
@@ -2149,16 +2278,37 @@ return (
   const renderFullPageModal = () => {
     if (!isOpen) return null;
 
+    const panelStyle: React.CSSProperties = monitorPos
+      ? { top: monitorPos.top, left: monitorPos.left, bottom: 'auto', right: 'auto' }
+      : { bottom: '80px', right: '16px', top: 'auto', left: 'auto' }
+
     return (
       <div
-        className="fixed inset-0 z-[9999] flex items-end justify-end bg-black/35 p-3 backdrop-blur-[1px] animate-in fade-in duration-150"
+        className="fixed inset-0 z-[9999] flex items-end justify-end bg-transparent p-0 animate-in fade-in duration-150"
         onClick={(e) => {
-          if (e.target === e.currentTarget) setIsOpen(false);
+          if (e.target === e.currentTarget) {
+            setIsManuallyClosed(true)
+            setIsOpen(false)
+          }
         }}
       >
-        <div className="flex h-[min(86vh,720px)] w-full max-w-[420px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0A0814] shadow-2xl shadow-black/60">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-blue-900/45 to-purple-900/45 px-3 py-2">
+        <div
+          data-rtc-monitor-panel
+          style={{
+            ...panelStyle,
+            position: 'fixed',
+            height: 'min(86vh,720px)',
+            width: '100%',
+            maxWidth: '420px',
+            cursor: isDragging ? 'grabbing' : 'default',
+          }}
+          className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0A0814] shadow-2xl shadow-black/60"
+        >
+          {/* Header — drag handle */}
+          <div
+            onMouseDown={handleMonitorDragStart}
+            className="flex cursor-grab items-center justify-between border-b border-white/10 bg-gradient-to-r from-blue-900/45 to-purple-900/45 px-3 py-2 select-none"
+          >
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <Radio className="h-4 w-4 text-blue-400" />
@@ -2170,9 +2320,13 @@ return (
             </div>
             <button
               type="button"
-              onClick={() => setIsOpen(false)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                setIsManuallyClosed(true)
+                setIsOpen(false)
+              }}
               className="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
-              title="Close (Esc)"
+              title="Close"
             >
               <X className="h-4 w-4" />
             </button>

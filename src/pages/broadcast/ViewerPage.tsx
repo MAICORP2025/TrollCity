@@ -12,6 +12,8 @@ import {
   Users,
   Video,
   MonitorPlay,
+  Shield,
+  X,
 } from 'lucide-react'
 import type { LocalAudioTrack, LocalVideoTrack, RemoteParticipant, RemoteTrackPublication, RemoteVideoTrack } from 'livekit-client'
 import { RoomEvent, Track } from 'livekit-client'
@@ -171,10 +173,23 @@ function participantMatchesUser(participant: any, userId?: string | null) {
     identity.endsWith(`-${userId}`) ||
     identity.startsWith(`${userId}-`) ||
     metadata.user_id === userId ||
-    metadata.userId === userId ||
-    participant?.user_id === userId ||
-    participant?.userId === userId
+    metadata.userId === userId
   )
+}
+
+// Interfaces for isolated track state management
+interface SeatState {
+  participant: any
+  videoTrack: any
+  audioTrack: any
+  isLoading: boolean
+  userId: string | null
+}
+
+interface BroadcasterState {
+  participant: any
+  videoTrack: any
+  audioTrack: any
 }
 
 function getVideoTrackFromParticipant(participant: any): RemoteVideoTrack | null {
@@ -323,11 +338,11 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
     })
   }
 
-  // Stable identity for the underlying media stream track.
-  // This prevents unnecessary detach/attach when trackTick bumps due to
-  // unrelated room events (e.g. another participant joining a seat).
-  const videoTrackId = videoTrack?.mediaStreamTrack?.id || videoTrack?.trackId || videoTrack?.sid || null
-  const audioTrackId = audioTrack?.mediaStreamTrack?.id || audioTrack?.trackId || audioTrack?.sid || null
+// Stable identity for the underlying media stream track.
+   // This prevents unnecessary detach/attach when trackTick bumps due to
+   // unrelated room events (e.g. another participant joining a seat).
+   const videoTrackId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null
+   const audioTrackId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null
 
   // Use refs to track what we actually attached, so we only detach/reattach
   // when the underlying track identity truly changes.
@@ -578,6 +593,66 @@ function ViewerPage() {
     allRestrictionsDisabled,
     isStreamViewerCapped,
   } = useBroadcastViewerCap()
+
+  // Broadofficer appointment popup state
+  const [broadofficerPopup, setBroadofficerPopup] = useState<{ visible: boolean; message: string; streamId: string } | null>(null)
+
+  // Refresh current user profile without full logout/login
+  const refreshCurrentUserProfile = useCallback(async () => {
+    const { user: currentUser } = useAuthStore.getState()
+    if (!currentUser?.id) return
+    try {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .maybeSingle()
+      if (data) {
+        useAuthStore.getState().setProfile(data as any, { force: true })
+      }
+    } catch {
+      // silent
+    }
+  }, [])
+
+  // Listen for realtime broadofficer_assigned notifications
+  useEffect(() => {
+    const { user: currentUser } = useAuthStore.getState()
+    if (!currentUser?.id) return
+
+    const channel = supabase
+      .channel(`notifications:user:${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        (payload) => {
+          const newNotification = payload.new as any
+          if (newNotification?.type === 'broadofficer_assigned') {
+            setBroadofficerPopup({
+              visible: true,
+              message: newNotification.message || 'Broadcaster has made you a Broadofficer.',
+              streamId: newNotification.data?.stream_id || '',
+            })
+            refreshCurrentUserProfile()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [refreshCurrentUserProfile])
+
+  // Dismiss broadofficer popup and optionally navigate to stream
+  const dismissBroadofficerPopup = useCallback(() => {
+    setBroadofficerPopup(null)
+  }, [])
 
   // Mobile layout constants
   const MOBILE_CONTROL_BAR_HEIGHT = 76
@@ -1358,183 +1433,65 @@ const isActive = isStreamActive(stream)
     return Array.isArray(remoteUsers) ? remoteUsers : []
   }, [remoteUsers])
 
-  // ─── ISOLATED SEAT-SPECIFIC STATE ──────────────────────────────────────
-  // Each seat manages its own track, user, and loading state keyed by seatId.
-  // The broadcaster track lives in a completely separate state object.
-  // No seat operation may ever modify broadcaster state or another seat's state.
-
+// ─── ISOLATED HOST PARTICIPANT STATE ───────────────────────────────────────
+  // Host participant is tracked in a stable ref to prevent seat joins/leaves from
+  // disrupting the broadcaster track. This state is ONLY updated when the host's
+  // own tracks change, never when other participants (seats) come/go.
+  
   interface SeatState {
-    participant: any;
-    videoTrack: any;
-    audioTrack: any;
-    isLoading: boolean;
-    userId: string | null;
+    participant: any
+    videoTrack: any
+    audioTrack: any
+    isLoading: boolean
+    userId: string | null
   }
 
   interface BroadcasterState {
-    participant: any;
-    videoTrack: any;
-    audioTrack: any;
+    participant: any
+    videoTrack: any
+    audioTrack: any
   }
 
-  const [seatTracks, setSeatTracks] = useState<Record<number, SeatState>>({});
+  const hostParticipantRef = useRef<any>(null)
+  const [seatTracks, setSeatTracks] = useState<Record<number, SeatState>>({})
   const [broadcasterState, setBroadcasterState] = useState<BroadcasterState>({
     participant: null,
     videoTrack: null,
     audioTrack: null,
-  });
-
-  // Guard: verify seatId is a valid seat index (not broadcaster/box 0)
-  const isValidSeatId = useCallback((seatId: number): boolean => {
-    return Number.isInteger(seatId) && seatId >= 1;
-  }, []);
-
-  // Guard: verify uid matches the seat's assigned occupant
-  const seatMatchesUser = useCallback((seatId: number, userId: string | null): boolean => {
-    if (!isValidSeatId(seatId)) return false;
-    const seat = seats?.[seatId];
-    if (!seat) return false;
-    const seatUserId = seat?.user_id || seat?.guest_id || null;
-    return seatUserId !== null && seatUserId === userId;
-  }, [seats, isValidSeatId]);
-
-  // Guard: verify seat is active
-  const isSeatActive = useCallback((seatId: number): boolean => {
-    if (!isValidSeatId(seatId)) return false;
-    const seat = seats?.[seatId];
-    if (!seat) return false;
-    return isSeatActiveStatus(seat?.status);
-  }, [seats, isValidSeatId]);
-
-  // Update broadcaster state — only touches broadcaster, never seats
+  })
+  
+  // Sync broadcaster state — only touches host, never seats
   const updateBroadcasterState = useCallback((participant: any) => {
-    const videoTrack = getVideoTrackFromParticipant(participant);
-    const audioTrack = getAudioTrackFromParticipant(participant);
+    const videoTrack = getVideoTrackFromParticipant(participant)
+    const audioTrack = getAudioTrackFromParticipant(participant)
     setBroadcasterState(prev => {
       // Only update if track identity actually changed
-      const prevVideoId = prev.videoTrack?.mediaStreamTrack?.id || prev.videoTrack?.sid || null;
-      const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null;
-      const prevAudioId = prev.audioTrack?.mediaStreamTrack?.id || prev.audioTrack?.sid || null;
-      const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null;
+      const prevVideoId = prev.videoTrack?.mediaStreamTrack?.id || prev.videoTrack?.sid || null
+      const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null
+      const prevAudioId = prev.audioTrack?.mediaStreamTrack?.id || prev.audioTrack?.sid || null
+      const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null
+      // Guard: ignore if no actual track change (prevents seat-triggered updates)
       if (prevVideoId === nextVideoId && prevAudioId === nextAudioId && prev.participant === participant) {
-        return prev; // No change
+        return prev // No change
       }
-      return { participant, videoTrack, audioTrack };
-    });
-  }, []);
+      return { participant, videoTrack, audioTrack }
+    })
+  }, [])
 
-  // Update a specific seat's state — guarded to only affect the target seat
-  const updateSeatState = useCallback((seatId: number, participant: any, loading: boolean) => {
-    // Guard: must be a valid seat (not broadcaster)
-    if (!isValidSeatId(seatId)) {
-      console.warn('[ViewerPage] updateSeatState: invalid seatId', seatId, 'ignoring');
-      return;
-    }
-    const videoTrack = getVideoTrackFromParticipant(participant);
-    const audioTrack = getAudioTrackFromParticipant(participant);
-    const userId = participant ? (participant.identity || participant.name || null) : null;
-
-    setSeatTracks(prev => {
-      const prevSeat = prev[seatId];
-      // Only update if something actually changed
-      const prevVideoId = prevSeat?.videoTrack?.mediaStreamTrack?.id || prevSeat?.videoTrack?.sid || null;
-      const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null;
-      const prevAudioId = prevSeat?.audioTrack?.mediaStreamTrack?.id || prevSeat?.audioTrack?.sid || null;
-      const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null;
-      if (
-        prevVideoId === nextVideoId &&
-        prevAudioId === nextAudioId &&
-        prevSeat?.participant === participant &&
-        prevSeat?.isLoading === loading &&
-        prevSeat?.userId === userId
-      ) {
-        return prev; // No change
-      }
-      return {
-        ...prev,
-        [seatId]: { participant, videoTrack, audioTrack, isLoading: loading, userId },
-      };
-    });
-  }, [isValidSeatId]);
-
-  // Clear a specific seat's state — only clears the target seat
-  const clearSeatState = useCallback((seatId: number) => {
-    if (!isValidSeatId(seatId)) {
-      console.warn('[ViewerPage] clearSeatState: invalid seatId', seatId, 'ignoring');
-      return;
-    }
-    setSeatTracks(prev => {
-      if (!prev[seatId]) return prev; // Already empty
-      const next = { ...prev };
-      delete next[seatId];
-      return next;
-    });
-  }, [isValidSeatId]);
-
-  // Sync broadcaster state from remoteParticipants
+  // Sync broadcaster state from remoteParticipants — stable, only reacts to host changes
   useEffect(() => {
-    const exactHost = remoteParticipants.find((p: any) => participantMatchesUser(p, hostId));
-    const fallbackHost = exactHost || remoteParticipants.find((p: any) => !!getVideoTrackFromParticipant(p)) || null;
-    updateBroadcasterState(fallbackHost);
-  }, [remoteParticipants, hostId, updateBroadcasterState]);
+    const exactHost = remoteParticipants.find((p: any) => participantMatchesUser(p, hostId))
+    if (exactHost) {
+      updateBroadcasterState(exactHost)
+      hostParticipantRef.current = exactHost
+    } else if (hostParticipantRef.current) {
+      // Keep using the last known good host participant if we still have one
+      // This prevents the host track from going black when a seat joins
+      // The fallback UI will show instead, but we keep the participant reference
+    }
+  }, [remoteParticipants, hostId, updateBroadcasterState])
 
-  // Sync seat states from remoteParticipants — each seat only updates itself
-  useEffect(() => {
-    if (!seats) return;
-
-    Object.entries(seats).forEach(([seatIndexStr, seat]: [string, any]) => {
-      const seatId = Number(seatIndexStr);
-      // Guard: skip broadcaster (seat 0)
-      if (!isValidSeatId(seatId)) return;
-
-      const seatUserId = seat?.user_id || seat?.guest_id || null;
-      const seatIdentity = seat?.livekit_participant_identity || seatUserId;
-      const isActive = isSeatActiveStatus(seat?.status);
-
-      if (!isActive || !seatUserId) {
-        // Seat is empty or inactive — clear it
-        clearSeatState(seatId);
-        return;
-      }
-
-      // Find the participant for this specific seat
-      const participant = remoteParticipants.find((p: any) => {
-        const pIdentity = String(p?.identity || '');
-        return (
-          participantMatchesUser(p, seatUserId) ||
-          participantMatchesUser(p, seatIdentity) ||
-          pIdentity === String(seatIdentity) ||
-          pIdentity.endsWith(`-${seatIdentity}`) ||
-          String(seatIdentity).endsWith(pIdentity)
-        );
-      }) || null;
-
-      // Guard: verify the found participant actually belongs to this seat
-      if (participant && !participantMatchesUser(participant, seatUserId) && !participantMatchesUser(participant, seatIdentity)) {
-        return; // Participant doesn't match — don't update
-      }
-
-      const isLoading = normalizeSeatStatus(seat?.status) === 'camera_starting';
-      updateSeatState(seatId, participant, isLoading);
-    });
-
-    // Clear seats that no longer exist in the seats data
-    setSeatTracks(prev => {
-      const validSeatIds = new Set(Object.keys(seats).map(Number).filter(isValidSeatId));
-      let changed = false;
-      const next: Record<number, SeatState> = {};
-      for (const [id, state] of Object.entries(prev)) {
-        if (validSeatIds.has(Number(id))) {
-          next[Number(id)] = state;
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [seats, remoteParticipants, isValidSeatId, updateSeatState, clearSeatState]);
-
-  // Mic mute callbacks for walkie-talkie integration (for users on stage)
+// Mic mute callbacks for walkie-talkie integration (for users on stage)
   const handleToggleMic = useCallback(async () => {
     if (!isUserOnStage) return
     const nextMicOn = !seatMicOn
@@ -1551,32 +1508,110 @@ const isActive = isStreamActive(stream)
     console.log('[ViewerPage] seat camera toggled', nextCamOn)
   }, [isUserOnStage, seatCamOn, setCameraEnabled])
 
-  
-  const hostParticipant = useMemo(() => {
-    const exactHost = remoteParticipants.find((participant: any) => participantMatchesUser(participant, hostId))
-    if (exactHost) {
-      if (import.meta.env.DEV) {
-        console.log('[ViewerPage] hostParticipant found by identity match:', {
-          hostId,
-          participantIdentity: getParticipantIdentity(exactHost),
-          hasVideo: !!getVideoTrackFromParticipant(exactHost),
-        });
-      }
-      return exactHost
-    }
+  // ─── SEAT STATE MANAGEMENT (isolated from host) ───────────────────────────────
+  // Guard: verify seatId is a valid seat index (not broadcaster/box 0)
+  const isValidSeatId = useCallback((seatId: number): boolean => {
+    return Number.isInteger(seatId) && seatId >= 1
+  }, [])
 
-    const participantWithCamera = remoteParticipants.find((participant: any) => !!getVideoTrackFromParticipant(participant))
-    if (import.meta.env.DEV) {
-      console.log('[ViewerPage] hostParticipant fallback:', {
-        hostId,
-        remoteParticipantCount: remoteParticipants.length,
-        remoteIdentities: remoteParticipants.map((p: any) => getParticipantIdentity(p)),
-        fallbackFound: !!participantWithCamera,
-        fallbackIdentity: participantWithCamera ? getParticipantIdentity(participantWithCamera) : null,
-      });
+  // Update a specific seat's state — guarded to only affect the target seat
+  const updateSeatState = useCallback((seatId: number, participant: any, loading: boolean) => {
+    if (!isValidSeatId(seatId)) {
+      console.warn('[ViewerPage] updateSeatState: invalid seatId', seatId, 'ignoring')
+      return
     }
-    return participantWithCamera || null
-  }, [remoteParticipants, hostId])
+    const videoTrack = getVideoTrackFromParticipant(participant)
+    const audioTrack = getAudioTrackFromParticipant(participant)
+    const userId = participant ? (participant.identity || participant.name || null) : null
+
+    setSeatTracks(prev => {
+      const prevSeat = prev[seatId]
+      const prevVideoId = prevSeat?.videoTrack?.mediaStreamTrack?.id || prevSeat?.videoTrack?.sid || null
+      const nextVideoId = videoTrack?.mediaStreamTrack?.id || videoTrack?.sid || null
+      const prevAudioId = prevSeat?.audioTrack?.mediaStreamTrack?.id || prevSeat?.audioTrack?.sid || null
+      const nextAudioId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null
+      if (
+        prevVideoId === nextVideoId &&
+        prevAudioId === nextAudioId &&
+        prevSeat?.participant === participant &&
+        prevSeat?.isLoading === loading &&
+        prevSeat?.userId === userId
+      ) {
+        return prev // No change
+      }
+      return {
+        ...prev,
+        [seatId]: { participant, videoTrack, audioTrack, isLoading: loading, userId },
+      }
+    })
+  }, [isValidSeatId])
+
+  // Clear a specific seat's state — only clears the target seat
+  const clearSeatState = useCallback((seatId: number) => {
+    if (!isValidSeatId(seatId)) {
+      console.warn('[ViewerPage] clearSeatState: invalid seatId', seatId, 'ignoring')
+      return
+    }
+    setSeatTracks(prev => {
+      if (!prev[seatId]) return prev // Already empty
+      const next = { ...prev }
+      delete next[seatId]
+      return next
+    })
+  }, [isValidSeatId])
+
+  // Sync seat states from remoteParticipants — each seat only updates itself
+  useEffect(() => {
+    if (!seats) return
+
+    Object.entries(seats).forEach(([seatIndexStr, seat]: [string, any]) => {
+      const seatId = Number(seatIndexStr)
+      if (!isValidSeatId(seatId)) return
+
+      const seatUserId = seat?.user_id || seat?.guest_id || null
+      const seatIdentity = seat?.livekit_participant_identity || seatUserId
+      const isActive = isSeatActiveStatus(seat?.status)
+
+      if (!isActive || !seatUserId) {
+        clearSeatState(seatId)
+        return
+      }
+
+      const participant = remoteParticipants.find((p: any) => {
+        const pIdentity = String(p?.identity || '')
+        return (
+          participantMatchesUser(p, seatUserId) ||
+          participantMatchesUser(p, seatIdentity) ||
+          pIdentity === String(seatIdentity) ||
+          pIdentity.endsWith(`-${seatIdentity}`) ||
+          String(seatIdentity).endsWith(pIdentity)
+        )
+      }) || null
+
+      if (participant && !participantMatchesUser(participant, seatUserId) && !participantMatchesUser(participant, seatIdentity)) {
+        return // Participant doesn't match — don't update
+      }
+
+      const isLoading = normalizeSeatStatus(seat?.status) === 'camera_starting'
+      updateSeatState(seatId, participant, isLoading)
+    })
+
+    // Clear seats that no longer exist in the seats data
+    setSeatTracks(prev => {
+      const validSeatIds = new Set(Object.keys(seats).map(Number).filter(isValidSeatId))
+      let changed = false
+      const next: Record<number, SeatState> = {}
+      for (const [id, state] of Object.entries(prev)) {
+        if (validSeatIds.has(Number(id))) {
+          next[Number(id)] = state
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [seats, remoteParticipants, isValidSeatId, updateSeatState, clearSeatState])
+  
 
   // Check if current user is CEO
   const isCEO = Boolean(
@@ -2551,9 +2586,42 @@ const heartbeat = window.setInterval(() => {
     throw new Error('Function not implemented.')
   }
 
+  // Broadofficer appointment popup (realtime)
+  const broadofficerPopupVisible = broadofficerPopup?.visible && !!streamId
+
   return (
     <GiftSystemProvider streamId={streamId} defaultReceiverId={hostId}>
       <ErrorBoundary>
+        {/* Broadofficer appointment notification popup */}
+        {broadofficerPopupVisible && (
+          <div
+            className="fixed inset-x-0 top-4 z-[200] flex justify-center pointer-events-none"
+            onClick={dismissBroadofficerPopup}
+          >
+            <div
+              className="pointer-events-auto max-w-md w-[calc(100%-2rem)] rounded-2xl border border-blue-400/30 bg-slate-950/95 px-5 py-4 shadow-[0_0_40px_rgba(59,130,246,0.25)] backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-400/30 bg-blue-500/15">
+                  <Shield className="h-5 w-5 text-blue-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-white">Broadofficer Assigned</p>
+                  <p className="mt-1 text-xs text-blue-200/80">{broadofficerPopup.message}</p>
+                  <p className="mt-1 text-[10px] text-blue-300/60">Your account permissions have been updated.</p>
+                </div>
+                <button
+                  onClick={dismissBroadofficerPopup}
+                  className="shrink-0 rounded-lg p-1 text-blue-300/60 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className={cn('relative flex h-dvh w-full flex-col overflow-hidden', theme.pageShell)}>
 
           {/* Background layers — identical to Sidebar ShellBackdrop */}
