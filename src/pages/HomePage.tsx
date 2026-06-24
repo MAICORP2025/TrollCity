@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Stream, Profile, TipPackage } from '../types/database'
 import { supabase } from '../lib/supabase'
+import { useLiveContent } from '../contexts/LiveContentContext'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -16,8 +17,9 @@ const CATEGORY_ICONS: Record<string, string> = {
 }
 
 export default function HomePage() {
-  const { user } = useAuth()
-  const [streams, setStreams] = useState<Stream[]>([])
+   const { user } = useAuth()
+   const { onlineUsers, loadingOnline } = useLiveContent()
+   const [streams, setStreams] = useState<Stream[]>([])
   const [creators, setCreators] = useState<Profile[]>([])
   const [packages, setPackages] = useState<TipPackage[]>([])
   const [search, setSearch] = useState('')
@@ -173,18 +175,17 @@ export default function HomePage() {
       <section className="px-6 py-8 border-y border-velvet-gold/10">
         <div className="mx-auto max-w-screen-2xl">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              { label: 'Active Streams', value: '1,200+', icon: '📡' },
-              { label: 'Creators', value: '5,000+', icon: '👑' },
-              { label: 'Daily Viewers', value: '250K+', icon: '👁️' },
-              { label: 'Tips Sent', value: '$2M+', icon: '💰' },
-            ].map((stat) => (
-              <div key={stat.label} className="stat-card text-center">
-                <div className="text-2xl mb-2">{stat.icon}</div>
-                <p className="text-2xl md:text-3xl font-bold gradient-text">{stat.value}</p>
-                <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest">{stat.label}</p>
-              </div>
-            ))}
+{[
+               { label: 'Active Streams', value: streams.length.toString(), icon: '📡' },
+               { label: 'Users Online', value: loadingOnline ? '...' : onlineUsers.toLocaleString(), icon: '👥' },
+               { label: 'Creators', value: creators.length.toString(), icon: '👑' },
+             ].map((stat) => (
+               <div key={stat.label} className="stat-card text-center">
+                 <div className="text-2xl mb-2">{stat.icon}</div>
+                 <p className="text-2xl md:text-3xl font-bold gradient-text">{stat.value}</p>
+                 <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest">{stat.label}</p>
+               </div>
+             ))}
           </div>
         </div>
       </section>

@@ -72,20 +72,22 @@ const OriginalBackground = React.memo(() => {
 OriginalBackground.displayName = 'OriginalBackground'
 
 const LiveGrid = React.memo(function LiveGrid({
-  liveItems,
-  loadingLive,
-  totalViewers,
-  showLiveGrid,
-  setShowLiveGrid,
-  onClickItem,
-}: {
-  liveItems: LiveItem[]
-  loadingLive: boolean
-  totalViewers: number
-  showLiveGrid: boolean | null
-  setShowLiveGrid: (value: boolean | null) => void
-  onClickItem: (item: LiveItem) => void
-}) {
+   liveItems,
+   loadingLive,
+   totalViewers,
+   onlineUsers,
+   showLiveGrid,
+   setShowLiveGrid,
+   onClickItem,
+ }: {
+   liveItems: LiveItem[]
+   loadingLive: boolean
+   totalViewers: number
+   onlineUsers: number
+   showLiveGrid: boolean | null
+   setShowLiveGrid: (value: boolean | null) => void
+   onClickItem: (item: LiveItem) => void
+ }) {
   const visible = showLiveGrid ?? true
 
   return (
@@ -97,9 +99,9 @@ const LiveGrid = React.memo(function LiveGrid({
               <Radio className="h-5 w-5 text-red-400" />
               Live Now
             </h2>
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              {liveItems.length} broadcasting • {totalViewers.toLocaleString()} watching now
-            </p>
+<p className="mt-1 text-xs font-bold text-slate-400">
+               {liveItems.length} broadcasting • {totalViewers.toLocaleString()} watching now • {onlineUsers.toLocaleString()} online
+             </p>
           </div>
           {liveItems.length > 0 && (
             <button
@@ -261,7 +263,7 @@ export default function Home() {
     }
   }, [])
 
-  const { liveItems, liveAuctions, totalViewers, loadingLive } = useLiveContent()
+  const { liveItems, liveAuctions, totalViewers, onlineUsers, loadingLive } = useLiveContent()
   const [supportGoalReminder, setSupportGoalReminder] = useState<any>(null)
   const [reminderLoading, setReminderLoading] = useState(false)
 

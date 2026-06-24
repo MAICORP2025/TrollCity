@@ -44,21 +44,25 @@ export interface AuctionShow {
 }
 
 interface LiveContentState {
-  liveItems: LiveItem[]
-  liveAuctions: AuctionShow[]
-  totalViewers: number
-  loadingLive: boolean
-  refresh: () => void
-}
+   liveItems: LiveItem[]
+   liveAuctions: AuctionShow[]
+   totalViewers: number
+   onlineUsers: number
+   loadingLive: boolean
+   loadingOnline: boolean
+   refresh: () => void
+ }
 
 const LiveContentContext = createContext<LiveContentState | null>(null)
 
-export function LiveContentProvider({ children }: { children: React.ReactNode }) {
-  const [liveItems, setLiveItems] = useState<LiveItem[]>([])
-  const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([])
-  const [totalViewers, setTotalViewers] = useState(0)
-  const [loadingLive, setLoadingLive] = useState(true)
-  const mountedRef = useRef(true)
+ export function LiveContentProvider({ children }: { children: React.ReactNode }) {
+   const [liveItems, setLiveItems] = useState<LiveItem[]>([])
+   const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([])
+   const [totalViewers, setTotalViewers] = useState(0)
+   const [onlineUsers, setOnlineUsers] = useState(0)
+   const [loadingLive, setLoadingLive] = useState(true)
+   const [loadingOnline, setLoadingOnline] = useState(true)
+   const mountedRef = useRef(true)
 
   useEffect(() => {
     mountedRef.current = true
@@ -146,25 +150,44 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
     }
   }, [])
 
-  const fetchLiveAuctions = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('auction_shows')
-        .select('*')
-        .eq('status', 'live')
-        .order('live_started_at', { ascending: false })
-        .limit(5)
+const fetchLiveAuctions = useCallback(async () => {
+     try {
+       const { data, error } = await supabase
+         .from('auction_shows')
+         .select('*')
+         .eq('status', 'live')
+         .order('live_started_at', { ascending: false })
+         .limit(5)
 
-      if (error) throw error
-      if (!mountedRef.current) setLiveAuctions(data || [])
-    } catch (err) {
-      console.error('Error fetching live auctions:', err)
-    }
-  }, [])
+       if (error) throw error
+       if (!mountedRef.current) return
+       setLiveAuctions(data || [])
+     } catch (err) {
+       console.error('Error fetching live auctions:', err)
+     }
+   }, [])
+
+   const fetchOnlineUsers = useCallback(async () => {
+     try {
+       const { count, error } = await supabase
+         .from('user_profiles')
+         .select('id', { count: 'exact', head: true })
+         .eq('is_online', true)
+
+       if (error) throw error
+       if (!mountedRef.current) return
+       setOnlineUsers(count || 0)
+     } catch (err) {
+       console.error('Error fetching online users:', err)
+     } finally {
+       if (mountedRef.current) setLoadingOnline(false)
+     }
+   }, [])
 
 useEffect(() => {
      fetchLiveContent()
      fetchLiveAuctions()
+     fetchOnlineUsers()
 
      // Visibility-gated polling: 90 seconds to reduce Supabase load for likes
      const streamInterval = setInterval(() => {
@@ -175,6 +198,10 @@ useEffect(() => {
        if (document.visibilityState !== 'visible') return
        fetchLiveAuctions()
      }, 30000)
+     const onlineInterval = setInterval(() => {
+       if (document.visibilityState !== 'visible') return
+       fetchOnlineUsers()
+     }, 60000)
 
     // Consolidated single channel for home page (replaces 3 separate channels)
     const homeChannel = supabase.channel('home:global')
@@ -210,27 +237,33 @@ useEffect(() => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, () => {
         fetchLiveContent()
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, () => {
+        fetchOnlineUsers()
+      })
       .subscribe()
 
     return () => {
       clearInterval(streamInterval)
       clearInterval(auctionInterval)
+      clearInterval(onlineInterval)
       try { supabase.removeChannel(homeChannel) } catch {}
     }
-  }, [fetchLiveContent, fetchLiveAuctions])
+  }, [fetchLiveContent, fetchLiveAuctions, fetchOnlineUsers])
 
   const refresh = useCallback(() => {
     fetchLiveContent()
     fetchLiveAuctions()
   }, [fetchLiveContent, fetchLiveAuctions])
 
-  const value = useMemo(() => ({
-    liveItems,
-    liveAuctions,
-    totalViewers,
-    loadingLive,
-    refresh,
-  }), [liveItems, liveAuctions, totalViewers, loadingLive, refresh])
+const value = useMemo(() => ({
+     liveItems,
+     liveAuctions,
+     totalViewers,
+     onlineUsers,
+     loadingLive,
+     loadingOnline,
+     refresh,
+   }), [liveItems, liveAuctions, totalViewers, onlineUsers, loadingLive, loadingOnline, refresh])
 
   return (
     <LiveContentContext.Provider value={value}>
