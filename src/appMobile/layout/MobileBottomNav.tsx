@@ -335,7 +335,9 @@ export default function MobileBottomNav() {
     });
 
     return () => {
-      subscription.unsubscribe();
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, [fetchUserCard]);
 

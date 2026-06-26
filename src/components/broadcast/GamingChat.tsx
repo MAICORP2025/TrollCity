@@ -70,7 +70,9 @@ export function GamingChat({ streamId, className, guestChatLimit }: GamingChatPr
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
       channelRef.current = null
     }
   }, [streamId])

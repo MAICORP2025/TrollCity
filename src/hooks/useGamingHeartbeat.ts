@@ -81,7 +81,11 @@ export function useGamingHeartbeat({
         if (isMountedRef.current) { const now = new Date(); setLastChatAt(now); lastChatAtRef.current = now; setIsChatActive(true); }
       }).subscribe();
     chatChannelRef.current = channel;
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel); 
+      }
+    };
   }, [streamId, enabled]);
 
   // Audio: active while stream is enabled

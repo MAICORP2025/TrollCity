@@ -73,8 +73,12 @@ const giftChannelManager = {
     if (entry.refs > 0) return;
 
     this.streams.delete(streamId);
-    supabase.removeChannel(entry.giftChannel);
-    supabase.removeChannel(entry.chatChannel);
+    if (entry.giftChannel) {
+      supabase.removeChannel(entry.giftChannel);
+    }
+    if (entry.chatChannel) {
+      supabase.removeChannel(entry.chatChannel);
+    }
 
     if (import.meta.env.DEV) {
       const debugCounters = (window as any).DEBUG_COUNTERS;
@@ -433,7 +437,7 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
                   },
                 },
               });
-              setTimeout(() => supabase.removeChannel(battleCh), 1000);
+               setTimeout(() => { if (battleCh) supabase.removeChannel(battleCh) }, 1000);
 
               // 2) Dispatch a local event so the SENDER's own UI updates
               // instantly without waiting for the 3-second poll.

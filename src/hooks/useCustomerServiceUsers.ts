@@ -198,7 +198,9 @@ export function useCustomerServiceUsers() {
     const interval = setInterval(fetchUsers, 30000);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
       clearInterval(interval);
     };
   }, [fetchUsers]);

@@ -107,7 +107,9 @@ export default function PrayerFeed({ isOpen }: { isOpen: boolean }) {
 
     return () => {
       clearInterval(interval);
-      supabase.channel('church_prayers_channel').unsubscribe();
+      if (channelRef.current) {
+      channelRef.current.unsubscribe();
+    }
     };
   }, [fetchPrayers]);
 

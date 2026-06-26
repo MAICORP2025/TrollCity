@@ -584,7 +584,9 @@ export default function EnhancedJoinExperience({ streamId, isVisible }: Enhanced
       if (flushTimerRef.current) {
         clearInterval(flushTimerRef.current);
       }
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }

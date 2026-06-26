@@ -221,7 +221,9 @@ export default function OfficerOperations() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [loadChatMessages]);
 

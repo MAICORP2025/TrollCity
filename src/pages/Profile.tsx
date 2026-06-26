@@ -572,7 +572,9 @@ function ProfileInner() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [profile?.id, currentUser?.id, refreshProfile]);
 
@@ -610,7 +612,9 @@ function ProfileInner() {
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [profile?.id]);
 

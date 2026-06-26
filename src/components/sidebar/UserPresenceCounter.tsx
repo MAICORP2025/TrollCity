@@ -35,7 +35,9 @@ const UserPresenceCounter = () => {
     });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [profile]);
 

@@ -95,7 +95,9 @@ const useGlobalActivity = () => {
 
     return () => {
       mounted = false
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [normalizeEvent])
 

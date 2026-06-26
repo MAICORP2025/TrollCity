@@ -410,7 +410,9 @@ export default function BottomNavigation() {
 
     return () => {
       isMounted = false
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user?.id])
 
@@ -455,7 +457,9 @@ export default function BottomNavigation() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user?.id])
 
@@ -513,7 +517,9 @@ export default function BottomNavigation() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
       if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current)
     }
   }, [user?.id, isMobile])

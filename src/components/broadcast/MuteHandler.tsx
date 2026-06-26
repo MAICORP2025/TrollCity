@@ -59,7 +59,11 @@ export default function MuteHandler({ streamId }: { streamId: string }) {
             })
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        return () => { 
+          if (channel) {
+            supabase.removeChannel(channel); 
+          }
+        };
     }, [streamId, userId, localAudioTrack, isMicrophoneEnabled, toggleMicrophone]);
 
     return null;

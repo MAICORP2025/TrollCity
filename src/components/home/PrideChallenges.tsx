@@ -294,7 +294,9 @@ export default function PrideChallenges({ compact = false, className }: PrideCha
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user?.id, fetchChallenges]);
 

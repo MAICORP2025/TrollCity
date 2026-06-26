@@ -115,7 +115,9 @@ export default function FollowersLiveRow({ onCountChange }: { onCountChange?: (c
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [fetchFollowersLive, profile?.id])
 

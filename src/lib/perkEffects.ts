@@ -296,7 +296,11 @@ export function playArrivalEffects(userId: string) {
         animation: flash 0.5s ease-out;
       `;
       document.body.appendChild(flash);
-      setTimeout(() => document.body.removeChild(flash), 500);
+      setTimeout(() => {
+        if (flash.parentNode) {
+          document.body.removeChild(flash);
+        }
+      }, 500);
     }
   });
 }

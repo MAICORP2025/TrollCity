@@ -90,7 +90,9 @@ export function useTipBanner(streamId: string | null | undefined) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [streamId, enqueueTip]);

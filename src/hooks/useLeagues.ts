@@ -62,7 +62,11 @@ export function useLeagues(): UseLeaguesResult {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_leagues' }, () => fetchPublicLeagues())
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel) 
+      }
+    }
   }, [fetchPublicLeagues, user?.id])
 
   return {

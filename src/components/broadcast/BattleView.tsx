@@ -869,6 +869,10 @@ interface BattleArenaProps {
   opponentStatePoints?: number | null;
   /** Whether this is a state battle */
   isStateBattle?: boolean;
+  /** Callback to toggle camera for current user */
+  onToggleCamera?: () => void;
+  /** Callback to toggle mic for current user */
+  onToggleMic?: () => void;
 }
 
 const BattleArena = ({
@@ -913,6 +917,8 @@ const BattleArena = ({
   opponentStateName = null,
   opponentStatePoints = null,
   isStateBattle = false,
+  onToggleCamera,
+  onToggleMic,
 }: BattleArenaProps) => {
   const { user } = useAuthStore();
 
@@ -1842,6 +1848,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'opponent'}
                             onTroll={() => handleTrollClick('challenger')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={true}
                           />
                         </JailTimeHostTile>
@@ -1864,6 +1874,10 @@ return (
                           {...slot.participant}
                           side="challenger"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -1934,6 +1948,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'challenger'}
                             onTroll={() => handleTrollClick('opponent')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={true}
                           />
                         </JailTimeHostTile>
@@ -1956,6 +1974,10 @@ return (
                           {...slot.participant}
                           side="opponent"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -1997,6 +2019,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'opponent'}
                             onTroll={() => handleTrollClick('challenger')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={challengerIsSingleHost}
                           />
                         </JailTimeHostTile>
@@ -2017,6 +2043,10 @@ return (
                           {...slot.participant}
                           side="challenger"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2085,6 +2115,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'challenger'}
                             onTroll={() => handleTrollClick('opponent')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={opponentIsSingleHost}
                           />
                         </JailTimeHostTile>
@@ -2105,6 +2139,10 @@ return (
                           {...slot.participant}
                           side="opponent"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2157,6 +2195,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'opponent'}
                             onTroll={() => handleTrollClick('challenger')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={challengerIsSingleHost}
                           />
                         </JailTimeHostTile>
@@ -2189,6 +2231,10 @@ return (
                               team: 'challenger',
                               sourceStreamId: challengerStreamId,
                             })}
+                            onToggleCamera={currentUserId === challengerHostId ? onToggleCamera : undefined}
+                            onToggleMic={currentUserId === challengerHostId ? onToggleMic : undefined}
+                            canToggleCamera={currentUserId === challengerHostId}
+                            canToggleMic={currentUserId === challengerHostId}
                           />
                         ) : (
                           <div className="h-full min-h-0 rounded-2xl border-2 border-purple-500/30 bg-black/40 flex flex-col items-center justify-center">
@@ -2210,6 +2256,10 @@ return (
                           {...slot.participant}
                           side="challenger"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2285,6 +2335,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'challenger'}
                             onTroll={() => handleTrollClick('opponent')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={opponentIsSingleHost}
                           />
                         </JailTimeHostTile>
@@ -2317,6 +2371,10 @@ return (
                               team: 'opponent',
                               sourceStreamId: opponentStreamId,
                             })}
+                            onToggleCamera={currentUserId === opponentHostId ? onToggleCamera : undefined}
+                            onToggleMic={currentUserId === opponentHostId ? onToggleMic : undefined}
+                            canToggleCamera={currentUserId === opponentHostId}
+                            canToggleMic={currentUserId === opponentHostId}
                           />
                         ) : (
                           <div className="h-full min-h-0 rounded-2xl border-2 border-emerald-500/30 bg-black/40 flex flex-col items-center justify-center">
@@ -2338,6 +2396,10 @@ return (
                           {...slot.participant}
                           side="opponent"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2385,6 +2447,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'opponent'}
                             onTroll={() => handleTrollClick('challenger')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={challengerIsSingleHost}
                           />
                         </JailTimeHostTile>
@@ -2405,6 +2471,10 @@ return (
                           {...slot.participant}
                           side="challenger"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-purple-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2478,6 +2548,10 @@ return (
                             canTroll={canTroll && currentUserTeam === 'challenger'}
                             onTroll={() => handleTrollClick('opponent')}
                             onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                             isSingleHost={opponentIsSingleHost}
                           />
                         </JailTimeHostTile>
@@ -2498,6 +2572,10 @@ return (
                           {...slot.participant}
                           side="opponent"
                           onTileClick={() => handleParticipantBoxClick(slot.participant!)}
+                          onToggleCamera={slot.participant?.identity === currentUserId ? onToggleCamera : undefined}
+                          onToggleMic={slot.participant?.identity === currentUserId ? onToggleMic : undefined}
+                          canToggleCamera={slot.participant?.identity === currentUserId}
+                          canToggleMic={slot.participant?.identity === currentUserId}
                         />
                       ) : (
                         <div className="h-full min-h-0 rounded-2xl border border-emerald-500/20 bg-black/20 flex flex-col items-center justify-center">
@@ -2555,9 +2633,14 @@ interface BattleViewProps {
   remoteUsers?: RemoteParticipant[];
   userIdToLiveKitIdentity?: Record<string, string>;
   onReturnToStream?: () => void;
+  onToggleCamera?: () => void;
+  onToggleMic?: () => void;
 }
 
-export default function BattleView({ battleId, currentStreamId, viewerId, localTracks: passedLocalTracks, remoteUsers: _passedRemoteUsers, userIdToLiveKitIdentity, onReturnToStream }: BattleViewProps) {
+export default function BattleView({ battleId, currentStreamId, viewerId, localTracks: passedLocalTracks, remoteUsers: _passedRemoteUsers, userIdToLiveKitIdentity, onReturnToStream, onToggleCamera: onToggleCameraProp, onToggleMic: onToggleMicProp }: BattleViewProps) {
+  // Provide safe defaults to prevent ReferenceError if props are undefined
+  const onToggleCamera = onToggleCameraProp || (() => {});
+  const onToggleMic = onToggleMicProp || (() => {});
   // Track connection phases to avoid repeated renders from track events
   const [trackRevision, setTrackRevision] = useState(0);
   // Debounce track revision to prevent flashing from rapid track events
@@ -2594,12 +2677,15 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   const cachedVideoTrackRef = useRef<LocalVideoTrack | null>(null);
   // Track whether we've already connected for this battle to prevent re-connect loops
   const hasPublishedTracksRef = useRef(false);
-  const [participantSnapshots, setParticipantSnapshots] = useState<Array<{ user_id: string; role: 'host' | 'stage' | 'viewer' }>>([]);
+const [participantSnapshots, setParticipantSnapshots] = useState<Array<{ user_id: string; role: 'host' | 'stage' | 'viewer' }>>([]);
   const [arenaReadyAtMs, setArenaReadyAtMs] = useState<number | null>(null);
   const [arenaReady, setArenaReady] = useState(false);
   const hasHandledReturnRef = useRef(false);
   const [challengerCrownInfo, setChallengerCrownInfo] = useState<CrownInfo>({ crowns: 0, streak: 0, hasStreak: false });
   const [opponentCrownInfo, setOpponentCrownInfo] = useState<CrownInfo>({ crowns: 0, streak: 0, hasStreak: false });
+  
+  // Track stream live status to detect when a stream ends during battle
+  const prevStreamLiveRef = useRef({ challenger: true, opponent: true });
   
   const publishedArenaReadyRef = useRef(false);
   const isReusingRoomRef = useRef(false);
@@ -3646,15 +3732,68 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
 
   // Stream updates — kept as minimal postgres_changes on streams table
   // (these are per-stream, not per-battle, and are needed for box_count/seat changes)
+  // Detect stream end during battle: opposite side wins, forfeiting user goes home
   useEffect(() => {
     if (!challengerStream?.id && !opponentStream?.id) return;
     const channels: ReturnType<typeof supabase.channel>[] = [];
+    const streamEndedHandledRef = { challenger: false, opponent: false };
+
+    const handleStreamEnded = async (endedStreamId: string, endedStreamUserId: string, userTeam: 'challenger' | 'opponent') => {
+      if (battle?.status !== 'active' || streamEndedHandledRef[userTeam]) return;
+      streamEndedHandledRef[userTeam] = true;
+
+      const winnerStreamId = userTeam === 'challenger' ? opponentStream?.id : challengerStream?.id;
+      if (!winnerStreamId) return;
+
+      // Award crown to winner
+      try {
+        await supabase.rpc('end_battle_with_rewards', {
+          p_battle_id: battleId,
+          p_winner_stream_id: winnerStreamId
+        });
+
+        // Broadcast return_to_broadcast to all participants
+        const returnChannel = supabase.channel(`battle:${battleId}`);
+        await returnChannel.send({
+          type: 'broadcast',
+          event: 'return_to_broadcast',
+          payload: {
+            challengerStreamId: challengerStream?.id,
+            opponentStreamId: opponentStream?.id,
+            challengerHostId: challengerStream?.user_id,
+            opponentHostId: opponentStream?.user_id,
+            streamEnded: true,
+            winnerStreamId
+          }
+        });
+        setTimeout(() => supabase.removeChannel(returnChannel), 2000);
+      } catch (e) {
+        console.error('[BattleView] Stream ended handling error:', e);
+      }
+
+      // Navigate forfeiting user to home
+      if (userTeam === 'challenger' && participantInfo?.team === 'challenger') {
+        navigate('/');
+      } else if (userTeam === 'opponent' && participantInfo?.team === 'opponent') {
+        navigate('/');
+      }
+    };
 
     if (challengerStream?.id) {
       const c = supabase.channel(`battle_stream_${challengerStream.id}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams', filter: `id=eq.${challengerStream.id}` },
           (payload) => {
-            setChallengerStream((prev) => prev ? { ...prev, ...(payload.new as Stream) } : (payload.new as Stream));
+            const newStream = payload.new as Stream;
+            setChallengerStream((prev) => prev ? { ...prev, ...newStream } : newStream);
+            // Check if challenger stream ended during battle
+            if (newStream.status !== 'live' && prevStreamLiveRef.current.challenger && battle?.status === 'active') {
+              handleStreamEnded(challengerStream.id, challengerStream.user_id, 'challenger');
+            }
+            if (newStream.status === 'live') {
+              prevStreamLiveRef.current.challenger = true;
+            } else {
+              prevStreamLiveRef.current.challenger = false;
+            }
           }
         )
         .on('broadcast', { event: 'box_count_changed' }, (payload) => {
@@ -3671,7 +3810,17 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
       const c = supabase.channel(`battle_stream_${opponentStream.id}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams', filter: `id=eq.${opponentStream.id}` },
           (payload) => {
-            setOpponentStream((prev) => prev ? { ...prev, ...(payload.new as Stream) } : (payload.new as Stream));
+            const newStream = payload.new as Stream;
+            setOpponentStream((prev) => prev ? { ...prev, ...newStream } : newStream);
+            // Check if opponent stream ended during battle
+            if (newStream.status !== 'live' && prevStreamLiveRef.current.opponent && battle?.status === 'active') {
+              handleStreamEnded(opponentStream.id, opponentStream.user_id, 'opponent');
+            }
+            if (newStream.status === 'live') {
+              prevStreamLiveRef.current.opponent = true;
+            } else {
+              prevStreamLiveRef.current.opponent = false;
+            }
           }
         )
         .on('broadcast', { event: 'box_count_changed' }, (payload) => {
@@ -3687,7 +3836,7 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
     return () => {
       channels.forEach((c) => supabase.removeChannel(c));
     };
-  }, [challengerStream?.id, opponentStream?.id]);
+  }, [challengerStream?.id, opponentStream?.id, battle?.status, battleId]);
 
   // Fallback poll — 15s during active battle, 30s otherwise.
   // Score updates are handled in realtime via useBattleRealtime broadcasts,
@@ -4160,23 +4309,46 @@ export default function BattleView({ battleId, currentStreamId, viewerId, localT
   }, [battleLocalAudioTrack, battleLocalVideoTrack, livekitRoom, battleId, challengerStream?.id, challengerStream?.user_id, opponentStream?.id, opponentStream?.user_id, navigateBackToOwnBroadcast, onReturnToStream]);
 
   // React to battle-level "return_to_broadcast" broadcast from either broadcaster.
+  // When streamEnded is true, the user on the ended stream goes home, winner goes to broadcast
   useEffect(() => {
     if (!battleId) return;
     const ch = supabase
       .channel(`battle:${battleId}`)
-      .on('broadcast', { event: 'return_to_broadcast' }, () => {
+      .on('broadcast', { event: 'return_to_broadcast' }, (payload) => {
         if (hasHandledReturnRef.current) return;
         hasHandledReturnRef.current = true;
         setShowResults(false);
         setShowRematchOption(false);
-        navigateBackToOwnBroadcast();
-        onReturnToStream?.();
+        
+        const data = payload.payload;
+        const winnerStreamId = data?.winnerStreamId;
+        
+        if (data?.streamEnded) {
+          // Stream ended during battle - route based on who was affected
+          const currentUserOnChallenger = participantInfo?.team === 'challenger';
+          const currentUserOnOpponent = participantInfo?.team === 'opponent';
+          
+          // If user was on the ended stream, go to home
+          if ((currentUserOnChallenger && winnerStreamId === opponentStream?.id) ||
+              (currentUserOnOpponent && winnerStreamId === challengerStream?.id)) {
+            navigate('/');
+            onReturnToStream?.();
+            return;
+          }
+          // Winner or viewer stays - return to broadcast
+          navigateBackToOwnBroadcast();
+          onReturnToStream?.();
+        } else {
+          // Normal return
+          navigateBackToOwnBroadcast();
+          onReturnToStream?.();
+        }
       })
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [battleId, navigateBackToOwnBroadcast, onReturnToStream]);
+  }, [battleId, navigateBackToOwnBroadcast, onReturnToStream, participantInfo?.team, opponentStream?.id, challengerStream?.id, navigate]);
 
   // Guarantee end screen appears whenever server battle row is ended.
   useEffect(() => {

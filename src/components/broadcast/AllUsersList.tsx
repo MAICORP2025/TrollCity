@@ -239,7 +239,7 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
             channel.subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
                     void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage })
-                        .finally(() => supabase.removeChannel(channel));
+                        .finally(() => { if (channel) supabase.removeChannel(channel) });
                 }
             });
 

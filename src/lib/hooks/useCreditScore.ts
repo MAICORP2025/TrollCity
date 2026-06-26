@@ -87,7 +87,9 @@ export function useCreditScore(targetUserId?: string) {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [userId, fetchCredit])
 

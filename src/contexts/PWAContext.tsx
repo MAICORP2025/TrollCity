@@ -629,7 +629,9 @@ const isLocalhost =
 
       if (subscription) {
         const endpoint = subscription.endpoint || (subscription.toJSON() as any).endpoint;
+        if (subscription) {
         await subscription.unsubscribe();
+      }
         console.log('[PWA] Push subscription cancelled');
 
         try {

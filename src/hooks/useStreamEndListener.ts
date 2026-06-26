@@ -75,7 +75,9 @@ export function useStreamEndListener({
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [streamId, enabled, redirectToSummary, navigate, clearTracks])
 }

@@ -76,7 +76,9 @@ export default function TickerQueueTab() {
     const interval = setInterval(loadTickerQueue, 30000);
 
     return () => {
-      channel.unsubscribe();
+      if (channel) {
+        channel.unsubscribe();
+      }
       clearInterval(interval);
     };
   }, []);

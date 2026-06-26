@@ -87,7 +87,7 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
   const channelsRef = useRef<any[]>([]);
 
   const cleanupChannels = useCallback(() => {
-    channelsRef.current.forEach(ch => supabase.removeChannel(ch));
+    channelsRef.current.forEach(ch => { if (ch) supabase.removeChannel(ch) })
     channelsRef.current = [];
   }, []);
 
@@ -131,7 +131,9 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
 
     return () => {
       mounted = false;
-      supabase.removeChannel(moderationChannel);
+      if (moderationChannel) {
+        supabase.removeChannel(moderationChannel);
+      }
     };
   }, [hostId]);
 

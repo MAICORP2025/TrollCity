@@ -94,7 +94,9 @@ export default function AdminCashoutDetailPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [id]);
 

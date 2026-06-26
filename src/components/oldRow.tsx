@@ -1053,7 +1053,9 @@ export default function Home() {
     return () => {
       mounted = false
       clearInterval(interval)
-      try { supabase.removeChannel(channel) } catch {}
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [])
 

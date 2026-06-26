@@ -437,7 +437,9 @@ export const TeamMeetingRoom: React.FC = () => {
         .subscribe();
 
       return () => {
-        supabase.removeChannel(channel);
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
       };
     }, [meetingId, meeting?.status]);
 
@@ -476,7 +478,9 @@ export const TeamMeetingRoom: React.FC = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(notificationChannel);
+      if (notificationChannel) {
+        supabase.removeChannel(notificationChannel);
+      }
     };
   }, [user?.id, navigate]);
 

@@ -102,13 +102,9 @@ const createTimerAnimation = (container: HTMLDivElement, timeLeft: number, isSud
     cleanup: () => {
       cancelAnimationFrame(animationId);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
-    },
-    updateTime: (newTimeLeft: number) => {
-      const newMinutes = Math.floor(newTimeLeft / 60);
-      const newSeconds = newTimeLeft % 60;
-      // Update animation based on new time
-      ringMaterial.color.setHex(newTimeLeft <= 10 ? 0xff0000 : 0xffa500);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     }
   };
 };
@@ -215,7 +211,9 @@ const createSuddenDeathAnimation = (container: HTMLDivElement) => {
     cleanup: () => {
       cancelAnimationFrame(animationId);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     }
   };
 };
@@ -328,7 +326,9 @@ const createBoxAddedAnimation = (container: HTMLDivElement, boxNumber: number) =
     cleanup: () => {
       cancelAnimationFrame(animationId);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     }
   };
 };
@@ -429,7 +429,9 @@ const createCrownAnimation = (container: HTMLDivElement) => {
     cleanup: () => {
       cancelAnimationFrame(animationId);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     }
   };
 };
@@ -516,7 +518,9 @@ const createStreakAnimation = (container: HTMLDivElement, streakCount: number) =
     cleanup: () => {
       cancelAnimationFrame(animationId);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     }
   };
 };

@@ -185,7 +185,9 @@ export default function ChallengeManager({
           timestamp: new Date().toISOString()
         }
       });
-      supabase.removeChannel(challengeChannel);
+      if (challengeChannel) {
+        supabase.removeChannel(challengeChannel);
+      }
 
       // Call parent handler
       onAccept(challenge.challenge_id, challenge.challenger_id);
@@ -233,7 +235,9 @@ export default function ChallengeManager({
           timestamp: new Date().toISOString()
         }
       });
-      supabase.removeChannel(challengeChannel);
+      if (challengeChannel) {
+        supabase.removeChannel(challengeChannel);
+      }
 
       // Call parent handler
       onDeny(challenge.challenge_id);

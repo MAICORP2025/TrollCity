@@ -1096,7 +1096,9 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       })
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [isStaff, profile?.id])
 
@@ -1176,69 +1178,13 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIPTION_ERROR') {
-          console.warn('[RTCAdminMonitor] Signup subscription error (lock contention) — will retry');
+          console.warn('[RTCAdminMonitor] Live stream subscription error (lock contention) — will retry');
         }
       });
 
     return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isStaff]);
-
-  // Monitor for new non-admin users coming online to trigger white flash
-  useEffect(() => {
-    if (!isStaff) return;
-
-    const checkNewOnlineUsers = async () => {
-      try {
-        const twoMinutesAgo = new Date(Date.now() - 120000).toISOString();
-        const { data: presenceData, error } = await supabase
-          .from('user_presence')
-          .select('user_id')
-          .gt('last_seen_at', twoMinutesAgo)
-          .limit(1000);
-
-        if (error || !presenceData) return;
-
-        const currentUserIds = new Set(
-          (presenceData as Array<{ user_id: string | null }>)
-            .map(p => p.user_id)
-            .filter(Boolean) as string[]
-        );
-
-        // Skip comparison on first run — just seed the ref
-        if (isFirstOnlineCheckRef.current) {
-          prevOnlineUserIdsRef.current = currentUserIds;
-          isFirstOnlineCheckRef.current = false;
-          return;
-        }
-
-        // Find newly online user IDs
-        const newUserIds = [...currentUserIds].filter(id => !prevOnlineUserIdsRef.current.has(id));
-
-        if (newUserIds.length === 0) {
-          prevOnlineUserIdsRef.current = currentUserIds;
-          return;
-        }
-
-        // Check if any of the new users are non-admin
-        const { data: profiles } = await supabase
-          .from('user_profiles')
-          .select('id, role, is_admin')
-          .in('id', newUserIds.slice(0, 20)); // batch check
-
-        const hasNonAdmin = (profiles || []).some(
-          (p: any) => !p.is_admin && !['admin', 'superadmin', 'ceo'].includes(p.role)
-        );
-
-        if (hasNonAdmin) {
-          setShowOnlineFlash(true);
-          setTimeout(() => setShowOnlineFlash(false), 3000);
-        }
-
-        prevOnlineUserIdsRef.current = currentUserIds;
-      } catch (err) {
-        // Silent fail for background polling
+      if (channel) {
+        supabase.removeChannel(channel);
       }
     };
 
@@ -1281,12 +1227,14 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIPTION_ERROR') {
-          console.warn('[RTCAdminMonitor] Live stream subscription error (lock contention) — will retry');
+          console.warn('[RTCAdminMonitor] Signup subscription error (lock contention) — will retry');
         }
       });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [isStaff]);
 
@@ -1307,7 +1255,9 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [isStaff]);
 
@@ -1446,9 +1396,11 @@ const openAction = useCallback((user: UserListItem, action: string) => {
           }
         })
 
-      return () => {
+    return () => {
+      if (channel) {
         supabase.removeChannel(channel)
       }
+    }
     }, [isStaff, throttledAutoOpen])
 
     // Auto-close when clicking the floating monitor button while already open

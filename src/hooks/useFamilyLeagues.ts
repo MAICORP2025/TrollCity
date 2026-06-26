@@ -125,7 +125,9 @@ export function useFamilyGoals(familyId?: string) {
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [familyId, fetchGoals])
 
@@ -189,7 +191,9 @@ export function useFamilyGoalProgress(familyId?: string) {
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [familyId, user?.id, fetchProgress])
 
@@ -299,7 +303,9 @@ export function useLeagueStandings() {
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [season?.id, fetchStandings])
 
@@ -385,7 +391,9 @@ export function useMyFamilyLeagueStanding() {
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [user?.id, season?.id, familyId, fetchStanding])
 

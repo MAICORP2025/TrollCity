@@ -49,7 +49,9 @@ const AdminSupportTickets: React.FC = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [loadTickets]);
 

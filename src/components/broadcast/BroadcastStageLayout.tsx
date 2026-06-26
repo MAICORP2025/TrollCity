@@ -165,8 +165,8 @@ function StageGuestTile({
   const statusText = isWaitingForGuest ? 'Approved — waiting on guest' : 'On Stage'
 
   return (
-    <div
-      className="group relative min-h-[188px] overflow-hidden rounded-2xl border border-violet-500/70
+     <div
+       className="group relative aspect-square overflow-hidden rounded-2xl border border-violet-500/70
       bg-[#090a13]/90 p-3 shadow-[0_0_22px_rgba(124,58,237,0.35)]
       transition-all duration-200 hover:border-cyan-300/80 hover:shadow-[0_0_28px_rgba(34,211,238,0.28)]"
     >
@@ -292,8 +292,8 @@ function EmptyStagePassTile({
       type="button"
       disabled={disabled}
       onClick={isHost ? onOpenPassModal : onRequestPass}
-      className={cn(
-        'relative min-h-[188px] overflow-hidden rounded-2xl border border-dashed p-4 text-center transition-all',
+       className={cn(
+         'relative aspect-square overflow-hidden rounded-2xl border border-dashed p-4 text-center transition-all',
         'bg-black/25 backdrop-blur-xl',
         disabled
           ? 'cursor-not-allowed border-white/10 text-white/35'
@@ -380,7 +380,7 @@ export default function BroadcastStageLayout({
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.12),transparent_30%),radial-gradient(circle_at_70%_30%,rgba(168,85,247,0.16),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent)]" />
 
-      <div className="relative z-10 grid h-full min-h-[560px] grid-cols-1 gap-5 xl:grid-cols-[minmax(420px,1.18fr)_minmax(360px,0.95fr)]">
+      <div className="relative z-10 grid h-full min-h-[560px] grid-cols-1 gap-5 xl:grid-cols-[minmax(320px,0.85fr)_minmax(400px,1.15fr)]">
         {/* LEFT: HOST MAIN VIDEO */}
         <section
           className="relative min-h-[560px] overflow-hidden rounded-[28px] border border-cyan-300/75

@@ -324,7 +324,7 @@ export function useBattleRealtime(battleId: string | null | undefined) {
       event: 'arena_ready',
       payload: { ready_at_ms: nowMs },
     });
-    setTimeout(() => supabase.removeChannel(pubChannel), 500);
+    setTimeout(() => { if (pubChannel) supabase.removeChannel(pubChannel) }, 500);
   }, [battleId]);
 
   return { state, publishArenaReady };

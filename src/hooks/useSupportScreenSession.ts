@@ -70,7 +70,9 @@ export function useSupportScreenSession() {
     channelRef.current = channel;
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user?.id]);
 

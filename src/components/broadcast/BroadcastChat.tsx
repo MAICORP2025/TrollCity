@@ -697,7 +697,9 @@ export default function BroadcastChat({
       .subscribe();
     
     return () => {
-      supabase.removeChannel(challengeChannel);
+      if (challengeChannel) {
+        supabase.removeChannel(challengeChannel);
+      }
     };
   }, [streamId, isBattleActive]);
   
@@ -1140,11 +1142,13 @@ const fetchMessages = async () => {
     // stream broadcast delivery, and history fetches when the chat opens.
      // Note: Presence tracking is handled by useViewerTracking hook; no need to track separately.
      // Cleanup: remove channels when component unmounts or streamId changes
-     return () => {
-         if (import.meta.env.DEV) console.debug('[BroadcastChat] 🧹 Cleaning up realtime channels');
-         supabase.removeChannel(broadcastChannel);
-         broadcastChannelRef.current = null;
-     };
+      return () => {
+          if (import.meta.env.DEV) console.debug('[BroadcastChat] 🧹 Cleaning up realtime channels');
+          if (broadcastChannel) {
+            supabase.removeChannel(broadcastChannel);
+          }
+          broadcastChannelRef.current = null;
+      };
   }, [streamId]);
 
   // Track chat focus/visibility

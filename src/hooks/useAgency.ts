@@ -202,6 +202,6 @@ export function useAgencyRealtime() {
       .on('postgres_changes', { schema: 'public', table: 'agency_rewards', event: '*' }, () => {})
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, []);
 }

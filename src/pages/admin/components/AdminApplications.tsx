@@ -295,7 +295,9 @@ export default function AdminApplications() {
 
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-      supabase.removeChannel(channel1)
+      if (channel1) {
+        supabase.removeChannel(channel1)
+      }
     }
   }, [loadApplications])
 

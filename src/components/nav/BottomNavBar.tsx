@@ -195,7 +195,9 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
       xpStore.fetchXP(user.id);
       xpStore.subscribeToXP(user.id);
       return () => {
-        xpStore.unsubscribe();
+        if (xpStore.unsubscribe) {
+          xpStore.unsubscribe();
+        }
       };
     }
   }, [user?.id]);

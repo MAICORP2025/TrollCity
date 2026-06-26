@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { MAX_ADMIN_SEAT_COUNT, MIN_ADMIN_SEAT_COUNT } from '../config/broadcastCategories';
 
 interface UseBoxCountOptions {
   streamId: string;
@@ -9,7 +10,9 @@ interface UseBoxCountOptions {
 
 export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOptions) {
   // Local state for instant UI updates - separate from stream object
-  const [boxCount, setBoxCount] = useState(initialBoxCount);
+  // Clamp initial value to valid range
+  const clampedInitial = Math.max(MIN_ADMIN_SEAT_COUNT, Math.min(MAX_ADMIN_SEAT_COUNT, initialBoxCount));
+  const [boxCount, setBoxCount] = useState(clampedInitial);
   const boxCountRef = useRef(boxCount);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isSubscribedRef = useRef(false);
@@ -21,8 +24,9 @@ export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOp
 
   // Sync with initialBoxCount if it changes from parent
   useEffect(() => {
-    if (initialBoxCount !== boxCountRef.current) {
-      setBoxCount(initialBoxCount);
+    const clamped = Math.max(MIN_ADMIN_SEAT_COUNT, Math.min(MAX_ADMIN_SEAT_COUNT, initialBoxCount));
+    if (clamped !== boxCountRef.current) {
+      setBoxCount(clamped);
     }
   }, [initialBoxCount]);
 
@@ -61,7 +65,9 @@ export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOp
 
     return () => {
       isSubscribedRef.current = false;
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
       channelRef.current = null;
     };
   }, [streamId]);
@@ -70,8 +76,11 @@ export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOp
   const updateBoxCount = useCallback(async (newCount: number) => {
     if (!streamId) return;
 
+    // Clamp to valid range
+    const clampedCount = Math.max(MIN_ADMIN_SEAT_COUNT, Math.min(MAX_ADMIN_SEAT_COUNT, newCount));
+
     // Don't update if the value hasn't changed
-    if (boxCountRef.current === newCount) {
+    if (boxCountRef.current === clampedCount) {
       if (import.meta.env.DEV) {
         console.debug('[useBoxCount] No change needed - same value');
       }
@@ -79,11 +88,11 @@ export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOp
     }
 
     if (import.meta.env.DEV) {
-      console.debug('[useBoxCount] Updating box count from', boxCountRef.current, 'to', newCount);
+      console.debug('[useBoxCount] Updating box count from', boxCountRef.current, 'to', clampedCount);
     }
 
     // Immediately update local state for instant UI feedback
-    setBoxCount(newCount);
+    setBoxCount(clampedCount);
 
     // Broadcast to all connected clients if the channel is ready
     const channel = channelRef.current;
@@ -92,7 +101,7 @@ export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOp
         await channel.send({
           type: 'broadcast',
           event: 'box_count_changed',
-          payload: { box_count: newCount, stream_id: streamId }
+          payload: { box_count: clampedCount, stream_id: streamId }
         });
         if (import.meta.env.DEV) {
           console.debug('[useBoxCount] Broadcast sent successfully');
@@ -108,7 +117,7 @@ export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOp
     try {
       const { error } = await supabase
         .from('streams')
-        .update({ box_count: newCount })
+        .update({ box_count: clampedCount, seat_count: clampedCount })
         .eq('id', streamId);
 
       if (error) {
@@ -126,12 +135,12 @@ export function useBoxCount({ streamId, initialBoxCount, isHost }: UseBoxCountOp
   }, [streamId]);
 
   const incrementBoxCount = useCallback(() => {
-    if (boxCountRef.current >= 6) return;
+    if (boxCountRef.current >= MAX_ADMIN_SEAT_COUNT) return;
     updateBoxCount(boxCountRef.current + 1);
   }, [updateBoxCount]);
 
   const decrementBoxCount = useCallback(() => {
-    if (boxCountRef.current <= 1) return;
+    if (boxCountRef.current <= MIN_ADMIN_SEAT_COUNT) return;
     updateBoxCount(boxCountRef.current - 1);
   }, [updateBoxCount]);
 

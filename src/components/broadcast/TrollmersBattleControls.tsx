@@ -353,7 +353,9 @@ export default function TrollmersBattleControls({ currentStream, onBattleAccepte
       .subscribe();
     
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [currentStream.id, battleStatus]);
 
@@ -394,9 +396,11 @@ export default function TrollmersBattleControls({ currentStream, onBattleAccepte
         }
       )
       .subscribe();
-    
+     
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [currentStream.id]);
 

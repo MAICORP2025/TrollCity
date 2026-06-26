@@ -146,7 +146,9 @@ export function useChatBlockStatus(userId?: string | null, streamId?: string | n
 
     return () => {
       clearExpiryTimer();
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [clearExpiryTimer, refresh, streamId, userId]);
 

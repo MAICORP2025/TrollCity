@@ -495,8 +495,8 @@ export default function UserActionModal({
          const channel = supabase.channel(`stream-chat:${streamId}`);
          channel.subscribe((status) => {
              if (status === 'SUBSCRIBED') {
-                 void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage })
-                     .finally(() => supabase.removeChannel(channel));
+                  void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage })
+                      .finally(() => { if (channel) supabase.removeChannel(channel) });
              }
          });
 

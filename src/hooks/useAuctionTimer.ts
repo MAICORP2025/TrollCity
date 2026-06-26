@@ -125,7 +125,9 @@ export function useAuctionTimer(lotId: string | null, isAuctioneer: boolean) {
 
     return () => {
       clearTimerIntervalRef.current()
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [lotId])
 

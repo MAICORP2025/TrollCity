@@ -59,8 +59,9 @@ export default function PasswordReset() {
     }, 3000);
 
     return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, []);
 

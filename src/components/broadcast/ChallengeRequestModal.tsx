@@ -136,7 +136,9 @@ export default function ChallengeRequestModal({
           timestamp: new Date().toISOString()
         }
       });
-      supabase.removeChannel(streamChannel);
+      if (streamChannel) {
+        supabase.removeChannel(streamChannel);
+      }
 
       toast.success('Challenge sent! Waiting for broadcaster to accept.');
       onChallengeSent?.();

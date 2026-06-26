@@ -55,7 +55,9 @@ export default function PresidentCandidatesTab() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [currentElection?.id, refresh])
 

@@ -1159,8 +1159,8 @@ const stagePassesHook = useStagePasses(streamStatus === 'live' ? stream.id : und
           !isUniversalBattleActive && effectiveBoxCount === 7 && 'grid-cols-2 grid-rows-4 sm:grid-cols-3 sm:grid-rows-3',
           !isUniversalBattleActive && effectiveBoxCount === 8 && 'grid-cols-2 grid-rows-4 sm:grid-cols-3 sm:grid-rows-3',
           !isUniversalBattleActive && effectiveBoxCount === 9 && 'grid-cols-3 grid-rows-3',
-          // Force aspect-video on mobile for better battle experience, auto aspect on desktop
-          '[&>*]:aspect-video sm:[&>*]:aspect-auto'
+          // Force aspect-square on mobile for square seats, auto aspect on desktop
+          '[&>*]:aspect-square sm:[&>*]:aspect-auto'
         )}
         style={enableStreamSwipe && canSwipe ? { touchAction: 'pan-y' } : undefined}
         onTouchStart={handleTouchStart}

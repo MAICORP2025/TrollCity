@@ -134,7 +134,9 @@ export function subscribeToProperties(userId: string, callback: (rows: any[]) =>
 
   return {
     unsubscribe: () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     }
   };
 }

@@ -687,8 +687,8 @@ function resolveNotificationDestination(
     case 'marketplace_sale':
     case 'marketplace_order_fulfillment_required':
       return {
-        route: orderId ? withQuery('/seller/orders', { order: orderId }) : '/seller/orders',
-        label: 'Open seller order',
+        route: orderId ? withQuery('/marketplace/sales', { order: orderId }) : '/marketplace/sales',
+        label: 'Open sales',
       }
 
     case 'kick':
@@ -955,7 +955,9 @@ export default function Notifications() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [profile?.id, loadNotifications])
 

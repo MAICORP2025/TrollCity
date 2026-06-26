@@ -69,7 +69,7 @@ export default function BroadcastGridOverlay({
               displayProfile = broadcasterProfile;
           }
 
-          let boxClass = "relative rounded-xl overflow-hidden aspect-video pointer-events-auto";
+          let boxClass = "relative rounded-xl overflow-hidden aspect-square pointer-events-auto";
           
           const hasGold = displayProfile?.is_gold;
           const hasRgbProfile = displayProfile?.rgb_username_expires_at && new Date(displayProfile.rgb_username_expires_at) > new Date();
@@ -78,9 +78,9 @@ export default function BroadcastGridOverlay({
           const isLocal = userId && user?.id && userId === user.id;
 
           if (hasGold) {
-             boxClass = "relative rounded-xl overflow-hidden aspect-video pointer-events-auto border-2 border-yellow-500 shadow-[0_0_15px_rgba(255,215,0,0.3)]";
+              boxClass = "relative rounded-xl overflow-hidden aspect-square pointer-events-auto border-2 border-yellow-500 shadow-[0_0_15px_rgba(255,215,0,0.3)]";
           } else if (hasRgbProfile || (hasStreamRgb && !isLocal)) {
-             boxClass = "relative rounded-xl overflow-hidden aspect-video pointer-events-auto rgb-box";
+             boxClass = "relative rounded-xl overflow-hidden aspect-square pointer-events-auto rgb-box";
           }
 
           return (

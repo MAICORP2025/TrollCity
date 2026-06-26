@@ -300,7 +300,11 @@ function GamingSetupPageInner() {
           return merged
         })
       }).subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel) 
+      }
+    }
   }, [streamData?.id, isObsConnected])
 
   // ── Health Check Interval ─────────────────────────────────────────────

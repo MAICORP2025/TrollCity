@@ -134,7 +134,9 @@ export function useTrollUsGame({ streamId }: UseTrollUsGameProps) {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [gameId])
 

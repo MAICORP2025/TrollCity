@@ -114,7 +114,9 @@ export default function ProfileFeed({ userId }: ProfileFeedProps) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [userId, fetchPosts]);
 

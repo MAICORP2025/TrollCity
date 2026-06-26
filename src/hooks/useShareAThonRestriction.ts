@@ -79,7 +79,9 @@ export function useShareAThonRestriction(userId: string | undefined): ShareAThon
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [userId]);
 

@@ -15,7 +15,9 @@ export function downloadText(filename: string, content: string, mimeType: string
 
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
+  if (link.parentNode) {
+    document.body.removeChild(link);
+  }
 
   // Clean up the URL object
   URL.revokeObjectURL(url);

@@ -803,7 +803,9 @@ export default function MilestonesTimeline({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId]);
 

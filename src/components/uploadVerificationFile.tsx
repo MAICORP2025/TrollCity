@@ -87,7 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     )
 
     return () => {
-      authListener.subscription.unsubscribe()
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe()
+      }
     }
   }, [])
 

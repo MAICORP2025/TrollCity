@@ -54,7 +54,9 @@ export default function CourtAIController({ caseId, isJudge, evidence, caseDetai
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [caseId]);
 
@@ -136,7 +138,9 @@ export default function CourtAIController({ caseId, isJudge, evidence, caseDetai
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [caseId, isJudge, isLive, evidence, caseDetails, highActivity, sessionState]);
 

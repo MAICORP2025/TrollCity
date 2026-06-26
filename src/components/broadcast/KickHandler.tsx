@@ -43,7 +43,9 @@ export default function KickHandler({ streamId }: { streamId: string }) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, userId, navigate, room]);
 

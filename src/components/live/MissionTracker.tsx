@@ -552,7 +552,9 @@ export default function MissionTracker({ streamId }: MissionTrackerProps) {
     channelRef.current = channel
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
       channelRef.current = null
     }
   }, [streamId])

@@ -122,7 +122,9 @@ const LiveKitViewerPlayer: React.FC<LiveKitViewerPlayerProps> = ({ streamId, bro
 
     return () => {
       clearInterval(pollInterval);
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, navigate]);
 

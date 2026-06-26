@@ -146,7 +146,9 @@ export function useBroadcastPinnedProducts({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, fetchPinnedProducts]);
 

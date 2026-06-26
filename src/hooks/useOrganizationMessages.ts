@@ -56,7 +56,9 @@ export function useOrganizationMessages(orgId?: string | null) {
       )
       .subscribe()
     return () => {
-      void supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [orgId])
 

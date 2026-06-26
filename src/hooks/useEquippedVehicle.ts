@@ -74,7 +74,9 @@ export function useEquippedVehicle() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user]);
 

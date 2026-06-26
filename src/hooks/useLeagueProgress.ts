@@ -363,7 +363,9 @@ export function useLeagueProgress(streamId?: string | null) {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [userId, streamId, fetchProgress])
 

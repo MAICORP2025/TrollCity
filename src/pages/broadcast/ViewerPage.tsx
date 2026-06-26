@@ -649,7 +649,9 @@ function ViewerPage() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [refreshCurrentUserProfile])
 
@@ -1080,22 +1082,39 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
 
   const { boxCount: hookBoxCount } = useBoxCount({
     streamId: streamId || '',
-    initialBoxCount: (stream as any)?.box_count || defaultSeatCount || 1,
+    initialBoxCount: (stream as any)?.seat_count || (stream as any)?.box_count || defaultSeatCount || 1,
     isHost: false,
   })
 
   const effectiveBoxCount = useMemo(() => {
+    // Prefer seat_count (new field), fall back to box_count, then seat_prices
+    // seat_count = 0 means broadcaster only (no guest seats)
+    const seatCount = (stream as any)?.seat_count !== undefined ? Number((stream as any).seat_count) : undefined
+    if (seatCount !== undefined) {
+      if (seatCount === 0) return 1 // broadcaster only, 1 box
+      return Math.max(1, Math.min(12, seatCount))
+    }
+
+    const boxCount = Number((stream as any)?.box_count ?? 0)
+    if (boxCount > 0) {
+      return Math.max(1, Math.min(12, boxCount))
+    }
+
     const seatCountFromPrices = Array.isArray((stream as any)?.seat_prices)
       ? Math.max(1, (stream as any).seat_prices.length)
       : 0
 
     if (seatCountFromPrices > 0) {
-      return Math.max(1, seatCountFromPrices)
+      return Math.max(1, Math.min(12, seatCountFromPrices))
     }
 
-    const rawBoxCount = Number((stream as any)?.box_count ?? hookBoxCount ?? 1)
-    return Math.max(1, rawBoxCount || 1)
+    return 1 // default: broadcaster only
   }, [stream, hookBoxCount])
+
+  // Layout mode: 'split' for <=6 total boxes, 'grid' for >6
+  const layoutMode = useMemo(() => {
+    return effectiveBoxCount <= 6 ? 'split' : 'grid'
+  }, [effectiveBoxCount])
 
    const {
      seats,
@@ -1178,7 +1197,9 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
         })
         .subscribe()
       return () => {
-        supabase.removeChannel(channel)
+        if (channel) {
+          supabase.removeChannel(channel)
+        }
         kickProcessedRef.current = false
       }
     }, [streamId, refreshSeats, removeSeat, user?.id, mySeat?.id, mySeat?.user_id, mySeat?.guest_id])
@@ -1291,7 +1312,7 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
       const currentSeatPrices = Array.isArray((stream as any)?.seat_prices)
         ? (stream as any).seat_prices
         : []
-      const desiredBoxCount = Math.min(6, currentBoxCount + 1)
+      const desiredBoxCount = Math.min(12, currentBoxCount + 1)
       const newSeatPrices = [...currentSeatPrices]
       while (newSeatPrices.length < desiredBoxCount) {
         newSeatPrices.push(0)
@@ -1300,6 +1321,7 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
         .from('streams')
         .update({
           box_count: desiredBoxCount,
+          seat_count: desiredBoxCount,
           seat_prices: newSeatPrices,
         })
         .eq('id', streamId)
@@ -1307,6 +1329,7 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
       setStream((current) => current ? {
         ...current,
         box_count: desiredBoxCount,
+        seat_count: desiredBoxCount,
         seat_prices: newSeatPrices,
       } : current)
       toast.success('Seat added to stage')
@@ -2100,95 +2123,70 @@ const handleLeaveSeat = useCallback(async () => {
   // seenGiftAnimationIdsRef Set catches the second arrival without double-
   // playing the <video>.
 useStreamRealtime(
-     streamId || '',
-     {
-       onGift: (event) => {
-         const rawGift = event?.new ?? event
-         if (rawGift) {
-           void processGiftEvent(rawGift)
+      streamId || '',
+      {
+        onGift: (event) => {
+          const rawGift = event?.new ?? event
+          if (rawGift) {
+            void processGiftEvent(rawGift)
+          }
+        },
+       onParticipant: (event: any) => {
+         if (event.eventType !== 'UPDATE' || !event.new || !user?.id) return
+         const participant = event.new
+         if (participant.user_id !== user.id || participant.removed !== true || participant.stream_id !== streamId) return
+
+         kickProcessedRef.current = true
+
+         const kickData = {
+           timestamp: Date.now(),
+           streamId,
+           reason: participant.removed_reason || 'Kicked by broadcaster',
+         }
+
+         localStorage.setItem(getKickStorageKey(streamId, user.id), JSON.stringify(kickData))
+         leaveLiveKitRoom().catch(() => {})
+         hasJoinedAudienceRef.current = false
+         joiningAudienceRef.current = false
+         currentRoomKeyRef.current = null
+         navigate(`/?kicked=${encodeURIComponent(kickData.reason)}`, { replace: true })
+       },
+       onStream: (event: any) => {
+         const next = event?.new || event
+         if (!next) return
+
+         const prev = event?.old;
+         const wasInActiveBattle = prev?.is_battle && !!prev?.battle_id && prev?.battle_status === 'active';
+         
+         if (isStreamEnded(next as Stream) && !wasInActiveBattle) {
+           // Hard disconnect from LiveKit before navigating
+           leaveLiveKitRoom().catch(() => {})
+           hasJoinedAudienceRef.current = false
+           joiningAudienceRef.current = false
+           currentRoomKeyRef.current = null
+           navigate(`/broadcast/summary/${streamId}`, { replace: true })
+           return
+         }
+
+         setStream((prev) => {
+           if (!prev) return next as Stream
+           return {
+             ...(prev as any),
+             ...(next as any),
+             box_count: typeof next.box_count !== 'undefined' ? next.box_count : (prev as any).box_count,
+             seat_price: typeof next.seat_price !== 'undefined' ? next.seat_price : (prev as any).seat_price,
+             seat_prices: typeof next.seat_prices !== 'undefined' ? next.seat_prices : (prev as any).seat_prices,
+             total_likes: typeof next.total_likes !== 'undefined' ? next.total_likes : (prev as any).total_likes,
+           } as Stream
+         })
+
+         if (typeof next.current_viewers !== 'undefined') {
+           setViewerCount(Number(next.current_viewers || 0))
          }
        },
-      onViewerCount: (count: number) => setViewerCount(count),
-      onParticipant: (event: any) => {
-        if (event.eventType !== 'UPDATE' || !event.new || !user?.id) return
-        const participant = event.new
-        if (participant.user_id !== user.id || participant.removed !== true || participant.stream_id !== streamId) return
-
-        kickProcessedRef.current = true
-
-        const kickData = {
-          timestamp: Date.now(),
-          streamId,
-          reason: participant.removed_reason || 'Kicked by broadcaster',
-        }
-
-        localStorage.setItem(getKickStorageKey(streamId, user.id), JSON.stringify(kickData))
-        leaveLiveKitRoom().catch(() => {})
-        hasJoinedAudienceRef.current = false
-        joiningAudienceRef.current = false
-        currentRoomKeyRef.current = null
-        navigate(`/?kicked=${encodeURIComponent(kickData.reason)}`, { replace: true })
-      },
-      onStream: (event: any) => {
-        const next = event?.new || event
-        if (!next) return
-
-        if (isStreamEnded(next as Stream)) {
-          // Hard disconnect from LiveKit before navigating
-          leaveLiveKitRoom().catch(() => {})
-          hasJoinedAudienceRef.current = false
-          joiningAudienceRef.current = false
-          currentRoomKeyRef.current = null
-          navigate(`/broadcast/summary/${streamId}`, { replace: true })
-          return
-        }
-
-        setStream((prev) => {
-          if (!prev) return next as Stream
-          return {
-            ...(prev as any),
-            ...(next as any),
-            box_count: typeof next.box_count !== 'undefined' ? next.box_count : (prev as any).box_count,
-            seat_price: typeof next.seat_price !== 'undefined' ? next.seat_price : (prev as any).seat_price,
-            seat_prices: typeof next.seat_prices !== 'undefined' ? next.seat_prices : (prev as any).seat_prices,
-            total_likes: typeof next.total_likes !== 'undefined' ? next.total_likes : (prev as any).total_likes,
-          } as Stream
-        })
-
-        if (typeof next.current_viewers !== 'undefined') {
-          setViewerCount(Number(next.current_viewers || 0))
-        }
-      },
-      onStreamUpdate: (next: any) => {
-        if (!next) return
-
-        if (isStreamEnded(next as Stream)) {
-          // Hard disconnect from LiveKit before navigating
-          leaveLiveKitRoom().catch(() => {})
-          hasJoinedAudienceRef.current = false
-          joiningAudienceRef.current = false
-          currentRoomKeyRef.current = null
-          navigate(`/broadcast/summary/${streamId}`, { replace: true })
-          return
-        }
-
-        setStream((prev) =>
-          prev
-            ? ({
-                ...(prev as any),
-                ...(next as any),
-                total_likes: typeof next.total_likes !== 'undefined' ? next.total_likes : (prev as any).total_likes,
-              } as Stream)
-            : (next as Stream),
-        )
-
-        if (typeof next.current_viewers !== 'undefined') {
-          setViewerCount(Number(next.current_viewers || 0))
-        }
-      },
-    } as any,
-    stream?.battle_id ?? null,
-  )
+     } as any,
+     stream?.battle_id ?? null,
+   )
 
   const floatingChatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -2216,7 +2214,9 @@ useStreamRealtime(
 
     return () => {
       floatingChatChannelRef.current = null;
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [streamId])
 
@@ -2291,9 +2291,11 @@ useStreamRealtime(
        )
        .subscribe()
 
-     return () => {
-       supabase.removeChannel(muteChannel)
-     }
+      return () => {
+        if (muteChannel) {
+          supabase.removeChannel(muteChannel)
+        }
+      }
    }, [streamId, user?.id, isUserOnStage, isPublishing, unpublishLocalTracks])
 
    useEffect(() => {
@@ -2511,13 +2513,23 @@ const heartbeat = window.setInterval(() => {
   }, [effectiveBoxCount, seats, stream, user?.id])
 
   // Mobile layout: broadcaster video stays fixed, seats flow below.
-  // Seats use a fixed tall grid so they're large and readable on PWA.
+  // For high seat counts (>6), use 4 columns × 3 rows for 12 boxes.
   const mobileSeatGridHeight = useMemo(() => {
     if (!isMobileViewer || seatCards.length === 0) return 0
     const count = seatCards.length
     if (count <= 2) return 260  // 1 row of 2-col, tall cards
     if (count <= 4) return 380  // 2 rows of 2-col, tall cards
-    return 500                  // 3 rows of 2-col (5-6 seats), tall cards
+    if (count <= 6) return 500  // 3 rows of 2-col (5-6 seats), tall cards
+    if (count <= 8) return 520  // 2 rows of 4-col (7-8 seats)
+    return 620                  // 3 rows of 4-col (9-11 seats), 4x3 grid for 12 total
+  }, [isMobileViewer, seatCards.length])
+
+  // Mobile seat grid columns: 2 for <=6 seats, 4 for >6 seats (4x3 grid for 12)
+  const mobileSeatGridCols = useMemo(() => {
+    if (!isMobileViewer || seatCards.length === 0) return 'grid-cols-2'
+    const count = seatCards.length
+    if (count <= 6) return count <= 2 ? 'grid-cols-2' : 'grid-cols-2'
+    return 'grid-cols-4'  // 4 columns for 7-11 seats (12 total boxes)
   }, [isMobileViewer, seatCards.length])
 
   // Broadcaster video: fixed height that does NOT shrink when seats are added.
@@ -2593,6 +2605,8 @@ const heartbeat = window.setInterval(() => {
             onReturnToStream={() => {
               refreshStream();
             }}
+            onToggleCamera={handleToggleCamera}
+            onToggleMic={handleToggleMic}
           />
         </GiftSystemProvider>
       </ErrorBoundary>
@@ -2731,21 +2745,33 @@ const heartbeat = window.setInterval(() => {
              className={cn(
                'relative z-10 flex flex-1 min-h-0',
                isMobileViewer
-                 ? 'flex-col overflow-hidden px-0 pt-0'
-                 : 'grid gap-4 px-5 py-4'
+                 ? layoutMode === 'grid'
+                   ? 'grid overflow-hidden px-2 py-2'
+                   : 'flex-col overflow-hidden px-0 pt-0'
+                 : 'grid gap-4 px-5 py-4',
+                 // For >6 total seats, use a multi-column grid layout
+                 !isMobileViewer && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr]' : '',
+                 isMobileViewer && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr_1fr]' : ''
              )}
              style={
-               !isMobileViewer
+               isMobileViewer && layoutMode === 'grid'
                  ? {
-                     gridTemplateColumns:
-                       seatCards.length > 0
-                         ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
-                         : 'minmax(560px, 1fr) 360px',
+                     gridTemplateColumns: 'repeat(4, 1fr)',
+                     gap: '6px',
                    }
-                 : {
-                     // Reserve space for fixed chat input + safe area (seats & controls overlay on video)
-                     paddingBottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
-                   }
+                 : !isMobileViewer
+                   ? layoutMode === 'grid'
+                     ? {
+                         gridTemplateColumns: `repeat(${Math.min(effectiveBoxCount, 6)}, 1fr)`,
+                         gap: '12px',
+                       }
+                     : {
+                         gridTemplateColumns:
+                           seatCards.length > 0
+                             ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
+                             : 'minmax(560px, 1fr) 360px',
+                       }
+                   : undefined
              }
            >
              {/* Broadcast Frame as border decoration */}
@@ -2756,6 +2782,125 @@ const heartbeat = window.setInterval(() => {
              )}
              
              {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
+            {layoutMode === 'grid' ? (
+              /* ===== GRID MODE: Broadcaster tile (same size as seat tiles) ===== */
+              <div
+                className={cn(
+                  'relative min-h-0 overflow-hidden border border-cyan-400/30 bg-transparent',
+                  isMobileViewer ? 'rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(45,212,191,0.15)]'
+                )}
+              >
+                <RemoteVideoSurface
+                  participant={broadcasterState.participant}
+                  mirror={true}
+                  className="absolute inset-0"
+                  onTap={handleLike}
+                  room={liveKitRoom}
+                  fallback={
+                    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_42%),#030611]">
+                      <div className={cn(
+                        'border border-cyan-400/20 bg-slate-950/70 text-center shadow-2xl shadow-cyan-500/10 backdrop-blur-xl',
+                        isMobileViewer ? 'rounded-xl p-2' : 'rounded-3xl p-4'
+                      )} style={{ overflow: 'visible' }}>
+                        {broadcasterProfile?.avatar_url ? (
+                          <div className={cn(
+                            isMobileViewer ? 'mx-auto h-10 w-10' : 'mx-auto h-20 w-20'
+                          )} style={{ overflow: 'visible' }}>
+                            <ProfileFrame
+                              frame={broadcasterFrame}
+                              avatarUrl={broadcasterProfile.avatar_url}
+                              username={hostName}
+                              size={isMobileViewer ? 'sm' : 'md'}
+                            />
+                          </div>
+                        ) : (
+                          <Video className={cn(
+                            'mx-auto text-cyan-200/70',
+                            isMobileViewer ? 'h-6 w-6' : 'h-10 w-10'
+                          )} />
+                        )}
+                        <div className={cn(
+                          'font-black',
+                          isMobileViewer ? 'mt-1 text-[10px]' : 'mt-3 text-sm'
+                        )}>{hostName}</div>
+                        <div className={cn(
+                          'text-slate-300',
+                          isMobileViewer ? 'text-[8px]' : 'mt-1 text-xs'
+                        )}>
+                          {isActive ? 'Camera Off' : 'Waiting for broadcast…'}
+                        </div>
+                      </div>
+                    </div>
+                  }
+                />
+
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/25" />
+
+                {/* Host badge */}
+                <div className={cn(
+                  'absolute z-10 flex items-center',
+                  isMobileViewer ? 'left-1 top-1' : 'left-3 top-3 gap-1.5'
+                )}>
+                  <div className={cn(
+                    'border border-cyan-400/40 bg-cyan-500/15 font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.25)] backdrop-blur-xl',
+                    isMobileViewer ? 'rounded px-1 py-0.5 text-[7px]' : 'rounded-lg px-2.5 py-1 text-xs gap-1.5 flex items-center'
+                  )}>
+                    {!isMobileViewer && <Crown className="h-3 w-3" />}
+                    Host
+                  </div>
+                </div>
+
+                {/* LIVE / STARTING badge */}
+                <div className={cn(
+                  'absolute z-20 flex items-center',
+                  isMobileViewer ? 'right-1 top-1' : 'right-3 top-3 gap-1.5'
+                )}>
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-full border font-black shadow-inner backdrop-blur-xl',
+                      isMobileViewer ? 'h-4 gap-0.5 px-1 text-[7px]' : 'h-6 gap-1.5 px-2 text-[10px]',
+                      isActive
+                        ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
+                        : 'border-yellow-400/30 bg-yellow-500/15 text-yellow-200'
+                    )}
+                  >
+                    <span className={cn(
+                      'rounded-full bg-current shadow-[0_0_10px_currentColor]',
+                      isMobileViewer ? 'h-1 w-1' : 'h-1.5 w-1.5'
+                    )} />
+                    {isActive ? 'LIVE' : 'STARTING'}
+                  </span>
+                </div>
+
+                {/* Seat number badge */}
+                <div className={cn(
+                  'absolute z-10 rounded-full border border-cyan-300/20 bg-black/15 font-black text-white/90 backdrop-blur-sm',
+                  isMobileViewer ? 'left-1 bottom-1 px-1 py-0.5 text-[7px]' : 'left-3 bottom-3 px-2.5 py-1 text-[10px]'
+                )}>
+                  S1
+                </div>
+
+                {/* Username + City Status */}
+                <div className={cn(
+                  'absolute z-10 flex items-center',
+                  isMobileViewer ? 'right-1 bottom-1 gap-0.5' : 'right-3 bottom-3 gap-2'
+                )}>
+                  <span className={cn(
+                    'font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]',
+                    isMobileViewer ? 'text-[8px]' : 'text-xs'
+                  )}>{hostName}</span>
+                  {broadcasterCityStatus.data && !isMobileViewer && (
+                    <CityStatusOrb
+                      data={broadcasterCityStatus.data}
+                      permissions={{ isSelf: false, canCheckLicense: false, canRaid: false, canRepair: false, canEnforce: false, canRemoveFromSeat: false, canAccessAll: false }}
+                      compact
+                      onHouseClick={() => setSelectedSeatUserId(hostId)}
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* ===== SPLIT MODE: Large broadcaster panel ===== */
             <section
               className={cn(
                 'relative min-h-0 overflow-hidden',
@@ -2929,9 +3074,10 @@ const heartbeat = window.setInterval(() => {
                 </div>
               )}
             </section>
+            )}
 
             {/* ── CENTER: Seats belong beside the broadcaster, never over it ── */}
-            {hasMounted && !isMobileViewer && seatCards.length > 0 && (
+            {hasMounted && !isMobileViewer && layoutMode === 'split' && seatCards.length > 0 && (
               <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/25 bg-black/20 p-4 shadow-[0_0_28px_rgba(45,212,191,0.18)] backdrop-blur-xl">
                 <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
                   <div>
@@ -3098,8 +3244,184 @@ const heartbeat = window.setInterval(() => {
               </aside>
             )}
 
-          {/* ── MOBILE PWA: Seats overlay on broadcaster video ── */}
-          {hasMounted && isMobileViewer && seatCards.length > 0 && (
+            {/* ── GRID MODE: Individual seat tiles rendered as direct grid children -- */}
+            {hasMounted && layoutMode === 'grid' && seatCards.map((seat) => {
+              const seatStatus = String(seat.seat?.status || '').toLowerCase()
+              const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
+              const seatIdentity = seat.seat?.livekit_participant_identity || seatUserId
+              const isMine = Boolean(user?.id && (seat.seat?.user_id === user.id || seat.seat?.guest_id === user.id))
+              const seatParticipant = !isMine && seatIdentity
+                ? remoteParticipants.find((participant: any) => {
+                    const participantIdentity = String(participant?.identity || '')
+                    return (
+                      participantMatchesUser(participant, seatIdentity) ||
+                      participantMatchesUser(participant, seatUserId) ||
+                      participantIdentity === String(seatIdentity) ||
+                      participantIdentity.endsWith(`-${seatIdentity}`) ||
+                      String(seatIdentity).endsWith(participantIdentity)
+                    )
+                  })
+                : null
+
+              const statusLabel = isMine
+                ? 'You'
+                : seat.isOccupied
+                  ? seat.displayName
+                  : seat.isLocked
+                    ? 'Locked'
+                    : seat.seatPrice === 0
+                      ? 'Free Seat'
+                      : `${seat.seatPrice} Coins`
+
+              const canClickSeat = seat.isOccupied && seatUserId;
+              const seatClickProps = canClickSeat
+                ? {
+                    role: 'button' as const,
+                    tabIndex: 0,
+                    onClick: () => setSelectedSeatUserId(seatUserId),
+                    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedSeatUserId(seatUserId);
+                      }
+                    },
+                  }
+                : undefined;
+
+              return (
+                <div
+                  key={`grid-seat-${seat.seatIndex}`}
+                  className={cn(
+                    'relative min-h-0 overflow-hidden border bg-transparent transition-all',
+                    isMobileViewer ? 'rounded-lg' : 'rounded-2xl shadow-[inset_0_0_18px_rgba(15,23,42,0.78)]',
+                    isMine
+                      ? 'border-emerald-300/60'
+                      : seat.isOccupied
+                        ? 'border-purple-300/45 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)]'
+                        : seat.isLocked
+                          ? 'border-white/10 bg-transparent opacity-70'
+                          : 'border-white/10 bg-transparent',
+                    canClickSeat ? 'cursor-pointer' : ''
+                  )}
+                  {...seatClickProps}
+                >
+                  {isMine ? (
+                    <LocalVideoSurface
+                      videoTrack={localVideoTrack}
+                      audioTrack={localAudioTrack}
+                      mirror={false}
+                      className="absolute inset-0"
+                      fallback={
+                        <div className={cn(
+                          'flex h-full w-full flex-col items-center justify-center text-center',
+                          isMobileViewer ? 'gap-0.5' : 'gap-3'
+                        )}>
+                          <div className={cn(
+                            'grid place-items-center rounded-xl border border-emerald-300/30 bg-emerald-500/10',
+                            isMobileViewer ? 'h-6 w-6' : 'h-12 w-12'
+                          )}>
+                            <Users className={cn(isMobileViewer ? 'h-3 w-3' : 'h-6 w-6', 'text-emerald-100/80')} />
+                          </div>
+                          <div className={cn('px-1 font-black text-white', isMobileViewer ? 'text-[8px]' : 'text-sm')}>You</div>
+                        </div>
+                      }
+                    />
+                  ) : seat.isOccupied ? (
+                    <RemoteVideoSurface
+                      participant={seatParticipant}
+                      mirror={true}
+                      className="absolute inset-0"
+                      room={liveKitRoom}
+                      fallback={
+                        <div className={cn(
+                          'flex h-full w-full flex-col items-center justify-center text-center',
+                          isMobileViewer ? 'gap-0.5' : 'gap-3'
+                        )}>
+                          <div className={cn(
+                            'grid place-items-center rounded-xl border border-purple-300/30 bg-purple-500/10',
+                            isMobileViewer ? 'h-6 w-6' : 'h-12 w-12'
+                          )}>
+                            <Users className={cn(isMobileViewer ? 'h-3 w-3' : 'h-6 w-6', 'text-purple-200/80')} />
+                          </div>
+                          <div className={cn('px-1 font-black text-white truncate', isMobileViewer ? 'text-[8px]' : 'text-sm')}>{seat.displayName}</div>
+                        </div>
+                      }
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!seat.canJoin}
+                      onClick={() => seat.canJoin && handleJoinSeatByIndex(seat.seatIndex)}
+                      className={cn(
+                        'flex h-full w-full flex-col items-center justify-center text-center disabled:cursor-not-allowed',
+                        isMobileViewer ? 'gap-0.5 p-1' : 'gap-3 p-4'
+                      )}
+                    >
+                      <div className={cn(
+                        'grid place-items-center rounded-lg border border-slate-500/40 bg-transparent',
+                        isMobileViewer ? 'h-5 w-5' : 'h-12 w-12'
+                      )}>
+                        <Plus className={cn(isMobileViewer ? 'h-2.5 w-2.5' : 'h-6 w-6', 'text-slate-200')} />
+                      </div>
+                      <div className={cn(
+                        'border border-white/10 bg-black/20 font-black text-white',
+                        isMobileViewer ? 'rounded px-1 py-0.5 text-[7px]' : 'rounded-xl px-4 py-2 text-sm'
+                      )}>
+                        S{seat.seatIndex}
+                      </div>
+                      <div className={cn(
+                        isMobileViewer ? 'text-[7px]' : 'text-xs',
+                        'font-bold',
+                        seat.canJoin ? 'text-slate-200' : 'text-slate-500'
+                      )}>
+                        {seat.isLocked ? 'Locked' : seat.seatPrice === 0 ? 'Free' : `${seat.seatPrice}◈`}
+                      </div>
+                    </button>
+                  )}
+
+                  {seat.isOccupied && (
+                    <div className={cn(
+                      'absolute z-20 flex items-center justify-between border border-white/10 bg-black/55 backdrop-blur-md',
+                      isMobileViewer
+                        ? 'inset-x-0.5 bottom-0.5 gap-0.5 rounded px-1 py-0.5'
+                        : 'inset-x-3 bottom-3 gap-2 rounded-xl px-3 py-2'
+                    )}>
+                      <div className="min-w-0 flex-1">
+                        {seatUserId ? (
+                          <SeatCityStatusOrb
+                            userId={seatUserId}
+                            broadcasterId={hostId}
+                            isBroadOfficer={isOfficer}
+                            onClick={() => setSelectedSeatUserId(seatUserId)}
+                          />
+                        ) : (
+                          <>
+                            <p className={cn('truncate font-black text-white', isMobileViewer ? 'text-[7px]' : 'text-xs')}>Seat {seat.seatIndex}</p>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center shrink-0">
+                        {seat.isMine && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleLeaveSeat(); }}
+                            className={cn(
+                              'border border-red-300/25 bg-red-500/15 font-black text-red-100',
+                              isMobileViewer ? 'rounded px-1 py-0.5 text-[7px]' : 'rounded-lg px-2 py-1 text-[11px]'
+                            )}
+                          >
+                            Leave
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+          {/* ── MOBILE PWA: Seats overlay on broadcaster video (split mode only) ── */}
+          {hasMounted && isMobileViewer && layoutMode === 'split' && seatCards.length > 0 && (
             <div
               className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col"
               style={{
@@ -3111,7 +3433,7 @@ const heartbeat = window.setInterval(() => {
                 <div
                   className={cn(
                     'grid gap-2',
-                    seatCards.length <= 2 ? 'grid-cols-2' : 'grid-cols-3'
+                    mobileSeatGridCols
                   )}
                 >
                   {seatCards.map((seat) => {
@@ -3205,7 +3527,7 @@ const heartbeat = window.setInterval(() => {
           )}
 
           {/* ── RIGHT: Desktop Chat Panel — same flow layout style as BroadcastPage ── */}
-          {!isMobileViewer && (
+          {!isMobileViewer && layoutMode === 'split' && (
             <aside
               className={cn(
                 theme.chatPanel,
@@ -3347,7 +3669,8 @@ const heartbeat = window.setInterval(() => {
                               payload: { username, content: text },
                             }).catch(() => { })
                           }
-                        } catch {
+                        } catch (err) {
+                          console.warn('[ViewerPage] send-message failed:', err)
                           // keep local optimistic message visible
                         }
                       } }
@@ -3480,6 +3803,280 @@ const heartbeat = window.setInterval(() => {
             </aside>
           )}
         </main>
+
+        {/* ===== GRID MODE: Chat panel below the seat grid (desktop only) ===== */}
+        {!isMobileViewer && layoutMode === 'grid' && (
+          <aside
+            className={cn(
+              theme.chatPanel,
+              'flex flex-col overflow-hidden bg-black/20 border border-white/10 backdrop-blur-xl shadow-[0_0_28px_rgba(45,212,191,0.12)]',
+              'h-[280px] shrink-0'
+            )}
+          >
+            {/* Chat tabs */}
+            <div className="grid shrink-0 grid-cols-5 border-b border-white/10 bg-black/10">
+              {['Chat', 'Progress', 'League', 'Gifts', 'Top Fans'].map((tab) => {
+                const tabKey = tab.toLowerCase().replace(/\s+/g, '-') as 'chat' | 'progress' | 'league' | 'gifts' | 'top-fans'
+                const active = chatTab === tabKey
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setChatTab(tabKey)}
+                    className={cn(
+                      'relative h-16 text-sm font-black transition-colors',
+                      active ? 'text-white' : 'text-white/60 hover:text-white/80'
+                    )}
+                    data-active={active}
+                  >
+                    {tab}
+                    {active && (
+                      <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-400 shadow-[0_0_12px_rgba(45,212,191,0.7)]" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {chatTab === 'progress' ? (
+                <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+                  <LeagueProgressPanel streamId={streamId} />
+                </div>
+              ) : chatTab === 'chat' ? (
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
+                  <div
+                    ref={floatingChatContainerRef}
+                    className="min-h-0 flex-1 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-hide overscroll-contain"
+                  >
+                    {floatingMessages.length === 0 && (
+                      <div className="flex h-full items-center justify-center text-white/25 text-sm font-bold">
+                        No messages yet — say something!
+                      </div>
+                    )}
+                    {floatingMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
+                        style={{ animation: 'slideInFromTop 0.3s ease-out' }}
+                      >
+                        <button
+                          onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                          className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer inline-flex items-center gap-1"
+                          title={`View ${msg.username}'s profile`}
+                        >
+                          {msg.username}
+                          {subscriberUsernames?.has(msg.username) && (
+                            <Crown className="w-3 h-3 text-yellow-400" />
+                          )}
+                        </button>
+                        <span className="text-white/40 mx-1">:</span>
+                        <span className="text-white/90">{msg.content}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Chat input */}
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      const text = chatInput.trim()
+                      if (!text) return
+
+                      if (hostChatDisabledByOfficer) {
+                        toast.error(
+                          hostChatDisableRemainingMs
+                            ? `Chat is disabled by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
+                            : 'Chat is disabled by officer control'
+                        )
+                        return
+                      }
+
+                      if (userChatDisabled) {
+                        toast.error(
+                          chatDisabledRemainingMinutes
+                            ? `Your chat is disabled. Try again in ${chatDisabledRemainingMinutes} minute${chatDisabledRemainingMinutes === 1 ? '' : 's'}.`
+                            : 'Your chat has been permanently disabled in this stream.'
+                        )
+                        return
+                      }
+
+                      if (!user && !reserveAnonymousChatSlot()) {
+                        toast.error("You've used your 5 anonymous chats. Sign in to keep chatting.")
+                        navigate('/auth?mode=login')
+                        return
+                      }
+
+                      const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+                      const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+                      setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))
+                      setChatInput('')
+
+                      setTimeout(() => {
+                        setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                      }, CHAT_FLOAT_MS)
+
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession()
+                        if (session) {
+                          await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+                            method: 'POST',
+                            headers: {
+                              Authorization: `Bearer ${session.access_token}`,
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              type: 'chat',
+                              stream_id: streamId,
+                              data: { content: text },
+                            }),
+                          })
+                        }
+                        const chatChannel = floatingChatChannelRef.current;
+                        if (chatChannel) {
+                          chatChannel.send({
+                            type: 'broadcast',
+                            event: 'floating_chat',
+                            payload: { username, content: text },
+                          }).catch(() => {})
+                        }
+                      } catch (err) {
+                        console.warn('[ViewerPage] send-message failed:', err)
+                      }
+                    }}
+                    className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
+                  >
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder={
+                        hostChatDisabledByOfficer
+                          ? 'Chat disabled by officer control'
+                          : 'Say something…'
+                      }
+                      disabled={hostChatDisabledByOfficer}
+                      readOnly={hostChatDisabledByOfficer}
+                      className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      maxLength={280}
+                    />
+                  </form>
+                </div>
+              ) : chatTab === 'league' ? (
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-slate-200">
+                  <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">League Status</div>
+                  {isUserLeaguesLoading ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">Loading leagues...</div>
+                  ) : myLeagues.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">
+                      You are not in any league yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {myLeagues.map((league) => {
+                        const membership = myMemberships.find((m) => m.league_id === league.id)
+                        const leagueMissionsForLeague = leagueMissions.filter((mission) => mission.league_id === league.id)
+                        return (
+                          <div key={league.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/15 text-2xl">
+                                {league.icon_emoji || '🏆'}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-black text-white truncate">{league.name}</p>
+                                <p className="text-xs text-slate-400 truncate">{league.description || 'League membership active'}</p>
+                              </div>
+                            </div>
+                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Status</p>
+                                <p className="mt-2 text-sm font-black text-white">{membership?.role || membership?.status || 'Member'}</p>
+                              </div>
+                              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Score</p>
+                                <p className="mt-2 text-sm font-black text-white">{league.league_score.toLocaleString()}</p>
+                              </div>
+                              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Members</p>
+                                <p className="mt-2 text-sm font-black text-white">{league.member_count}/{league.max_members}</p>
+                              </div>
+                              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                                <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Missions</p>
+                                <p className="mt-2 text-sm font-black text-white">{leagueMissionsForLeague.length} active</p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : chatTab === 'gifts' ? (
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-slate-200 scrollbar-hide">
+                  <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Recent Gifts</div>
+                  {recentGifts.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">No gifts yet.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentGifts.slice(-20).reverse().map((gift) => (
+                        <div key={gift.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-bold text-white">
+                                {gift.sender_name || (gift as any).sender_username || 'Anonymous'}
+                              </div>
+                              <div className="truncate text-xs text-slate-400">
+                                Sent {gift.quantity || 1} {gift.gift_name || 'gift'}
+                              </div>
+                            </div>
+                            <div className="whitespace-nowrap text-xs font-semibold text-cyan-300">
+                              {Number((gift as any).coins_amount || gift.amount || 0).toLocaleString()} coins
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm text-slate-200 scrollbar-hide">
+                  <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-400">Top Fans</div>
+                  {isTopFansLoading ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">Loading top fans...</div>
+                  ) : topGifters.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center text-slate-500">No top fans yet.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {topGifters.map((fan, index) => (
+                        <div key={fan.sender_id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-cyan-300/25 bg-cyan-500/10 text-xs font-black text-cyan-200">
+                                #{index + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-black text-white">{fan.sender_username || 'Troll Citizen'}</div>
+                                <div className="truncate text-xs text-slate-400">
+                                  {fan.last_gift_at
+                                    ? `Last gift: ${new Date(fan.last_gift_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                    : 'All-time supporter'}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <div className="text-sm font-black text-cyan-300">{fan.total_gift_coins.toLocaleString()}</div>
+                              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">coins gifted</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
 
         {/* ── MOBILE CHAT INPUT AT BOTTOM — fixed overlay, not document flow ── */}
         {isMobileViewer && (

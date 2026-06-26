@@ -46,7 +46,9 @@ export default function PresidentInaugurationCard() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [currentPresident]);
 

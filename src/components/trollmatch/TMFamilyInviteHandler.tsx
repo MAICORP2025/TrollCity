@@ -78,7 +78,9 @@ export function TMFamilyInviteHandler({ targetUserId, onInviteSent }: TMFamilyIn
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user]);
 

@@ -189,7 +189,11 @@ export function useUserLeagues(): UseUserLeaguesResult {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_league_missions', filter: `user_id=eq.${user.id}` }, () => fetchMyLeagues())
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel) 
+      }
+    }
   }, [fetchMyLeagues, user?.id])
 
   const createLeague = useCallback(async (params: CreateLeagueParams): Promise<string | null> => {

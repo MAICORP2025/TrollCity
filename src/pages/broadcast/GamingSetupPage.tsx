@@ -227,7 +227,11 @@ function GamingSetupPageInner() {
         setViewerCount(Number(next.current_viewers || 0));
         setIsLive(Boolean(next.is_live || next.status === 'live'));
       }).subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel); 
+      }
+    };
   }, [streamData?.id]);
 
   // ── Duration ticker ──

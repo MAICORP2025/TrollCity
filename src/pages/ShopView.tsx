@@ -298,7 +298,7 @@ export default function ShopView() {
               }
             })
             // Clean up channel after sending
-            setTimeout(() => supabase.removeChannel(chatChannel), 2000)
+            setTimeout(() => { if (chatChannel) supabase.removeChannel(chatChannel) }, 2000)
           }
         })
       }

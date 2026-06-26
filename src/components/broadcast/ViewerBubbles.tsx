@@ -75,7 +75,9 @@ function ViewerBubbles({ streamId, maxVisible = 50, className, viewers: viewerOv
     fetchViewers();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, viewerOverride]);
 

@@ -95,7 +95,7 @@ export const BROADCAST_CATEGORIES: Record<BroadcastCategoryId, BroadcastCategory
     description: 'Default broadcast layout for casual conversations',
     layoutMode: 'grid',
     defaultBoxCount: 1,
-    maxBoxCount: 9,
+    maxBoxCount: 12,
     allowGuestBoxes: true,
     allowAddBox: true,
     allowDeductBox: true,
@@ -456,6 +456,16 @@ export function getHostRoleLabel(categoryId: string): string {
 export function getMaxBoxCount(categoryId: string): number {
   const config = getCategoryConfig(categoryId);
   return config.maxBoxCount;
+}
+
+// Admin-only: absolute maximum seat count (0-12 total boxes, broadcaster = box 1)
+export const MAX_ADMIN_SEAT_COUNT = 12;
+export const MIN_ADMIN_SEAT_COUNT = 0;
+export const DEFAULT_SEAT_COUNT = 0;
+
+// Helper to get the admin seat count limit (always 12)
+export function getAdminMaxSeatCount(): number {
+  return MAX_ADMIN_SEAT_COUNT;
 }
 
 // Helper to check if category allows front camera

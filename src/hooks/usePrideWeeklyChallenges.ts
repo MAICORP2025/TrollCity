@@ -134,7 +134,9 @@ export function usePrideWeeklyChallenges(): UsePrideWeeklyChallengesReturn {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user?.id, fetchChallenges, isPrideActive]);
 

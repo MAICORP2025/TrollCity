@@ -29,7 +29,9 @@ export default function SeatHeatBar({ userId, streamId, boxCount = 1, isBroadcas
 
     return () => {
       clearInterval(decayInterval);
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, userId]);
 

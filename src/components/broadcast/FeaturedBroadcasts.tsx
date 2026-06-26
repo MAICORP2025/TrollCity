@@ -70,7 +70,9 @@ export default function FeaturedBroadcasts() {
 
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, []);
 

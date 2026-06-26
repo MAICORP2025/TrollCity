@@ -956,7 +956,9 @@ export default function BroadcasterCommandCenter({
     channelRef.current = channel
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
       channelRef.current = null
     }
   }, [streamId, fetchGoals, fetchMissions, fetchFans, fetchMilestones, fetchPolls, fetchEnergy, fetchAwards, fetchStats, fetchAudioSettings])

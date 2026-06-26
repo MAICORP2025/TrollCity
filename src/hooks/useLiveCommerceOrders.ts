@@ -153,7 +153,9 @@ export function useLiveCommerceOrders({ userId, isSeller = false }: UseLiveComme
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [userId, isSeller, fetchOrders]);
 

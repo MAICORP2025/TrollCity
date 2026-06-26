@@ -169,7 +169,9 @@ export default function FloatingPoster({ className }: FloatingPosterProps) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, []);
 

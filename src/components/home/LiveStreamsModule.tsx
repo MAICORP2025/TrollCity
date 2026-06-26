@@ -80,7 +80,9 @@ export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModulePr
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [queryClient])
 

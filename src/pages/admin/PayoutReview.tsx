@@ -94,7 +94,9 @@ export default function PayoutReview() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user, isAdmin, navigate, fetchRequests])
 

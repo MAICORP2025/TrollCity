@@ -85,7 +85,9 @@ export default function ParticipantTile({ participant, isLocal }: ParticipantTil
         audioTrack.detach()
       } catch (e) {}
       if (audioElementRef.current && audioElementRef.current.parentNode) {
-        audioElementRef.current.parentNode.removeChild(audioElementRef.current)
+        if (audioElementRef.current?.parentNode) {
+      audioElementRef.current.parentNode.removeChild(audioElementRef.current)
+    }
       }
     }
   }, [audioTrack])

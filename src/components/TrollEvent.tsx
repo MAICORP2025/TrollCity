@@ -79,7 +79,9 @@ const TrollEvent: React.FC = () => {
     checkActiveEvents();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [profile?.id]);
 

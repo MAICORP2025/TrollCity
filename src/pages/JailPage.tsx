@@ -287,7 +287,9 @@ export default function JailPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user, isJailed, profile?.username]);
 
@@ -560,7 +562,11 @@ export default function JailPage() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel); 
+      }
+    };
   }, [activeConvId, user?.id, profile, activeOtherUserId, activeOtherUsername, activeOtherAvatar, fetchUtromailMessages]);
 
   useEffect(() => {
@@ -576,7 +582,11 @@ export default function JailPage() {
         fetchConversations();
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel); 
+      }
+    };
   }, [user?.id, fetchConversations]);
 
   const handleSelectConversation = (convId: string, otherUserId: string, otherUsername: string, otherAvatar: string | null) => {

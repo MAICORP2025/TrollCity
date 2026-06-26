@@ -231,7 +231,9 @@ export function useLeagueSnapshot({
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [fetchLeagueSnapshot, refreshMissions, streamId, user?.id])
 

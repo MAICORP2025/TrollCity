@@ -158,7 +158,9 @@ export default function SessionMonitor() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user, logout])
 

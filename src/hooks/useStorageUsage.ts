@@ -173,7 +173,11 @@ export function useStorageUsage(userId?: string | null) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saved_streams', filter: `user_id=eq.${userId}` }, fetchStorageUsage)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_storage_usage', filter: `user_id=eq.${userId}` }, fetchStorageUsage)
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel) 
+      }
+    };
   }, [userId, fetchStorageUsage])
 
   return { storage, loading, error, refresh: fetchStorageUsage }

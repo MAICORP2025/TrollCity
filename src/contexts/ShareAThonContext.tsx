@@ -244,7 +244,9 @@ export const ShareAThonProvider: React.FC<ShareAThonProviderProps> = ({ children
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [fetchEvent]);
 

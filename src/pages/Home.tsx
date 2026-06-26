@@ -416,7 +416,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                showPresidentTab={showPresidentTab}
              />
              <div className="min-w-0 flex-1 space-y-4">
-                <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" />
+               <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" />
                <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
                <PodcastRow />
                <HyTroGamingRow onItemClick={handleScrollItemClick} />

@@ -1054,7 +1054,9 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [isStaff, profile?.id])
 
@@ -1135,7 +1137,9 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [isStaff]);
 

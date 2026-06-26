@@ -531,7 +531,9 @@ export default function AudioQueueManager({
     channel.subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, enqueueAudio]);
 

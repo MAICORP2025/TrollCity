@@ -348,7 +348,17 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
               }
               const { error: replayError } = await supabase
                 .from('broadcast_replays')
-                .insert(replayRecord)
+                .upsert(
+                  {
+                    stream_id: activeStreamId,
+                    user_id: user.id,
+                    title: replayTitle,
+                    replay_url: publicUrl,
+                    duration_seconds: durationSeconds,
+                    file_size_bytes: blob.size,
+                  },
+                  { onConflict: 'stream_id' }
+                )
               if (replayError) {
                 console.error('[Recorder] Replay insert error:', replayError)
               }

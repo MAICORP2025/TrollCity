@@ -346,7 +346,9 @@ export default function TrollCourt() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [user?.id, canStartCourt, canSummonUser, loadPublicCourtState, loadCourtState])
 

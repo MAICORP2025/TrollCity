@@ -157,7 +157,9 @@ export const GlobalGiftRenderer: React.FC<GlobalGiftRendererProps> = ({
       .subscribe();
     
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [triggerGift]);
   

@@ -461,7 +461,9 @@ export function useStockMarket() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user?.id, fetchStocks, fetchPortfolio, fetchTransactions, fetchMarketStats]);
 

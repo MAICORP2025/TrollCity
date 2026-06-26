@@ -339,7 +339,9 @@ export default function UtromailPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(notifChannel);
+      if (notifChannel) {
+        supabase.removeChannel(notifChannel);
+      }
     };
   }, [user?.id, activeConversationId]);
 
@@ -455,7 +457,9 @@ export default function UtromailPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(msgChannel);
+      if (msgChannel) {
+        supabase.removeChannel(msgChannel);
+      }
     };
   }, [activeConversationId, user?.id]);
 
@@ -497,7 +501,9 @@ export default function UtromailPage() {
     }).subscribe();
 
     return () => {
-      supabase.removeChannel(typingChannel);
+      if (typingChannel) {
+        supabase.removeChannel(typingChannel);
+      }
     };
   }, [activeConversationId, user?.id, threads]);
 

@@ -672,7 +672,9 @@ export default function StreamGoalsTracker({ streamId, className, compact = fals
 
     channelRef.current = channel
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
       channelRef.current = null
     }
   }, [streamId])

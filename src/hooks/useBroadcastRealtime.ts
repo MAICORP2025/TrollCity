@@ -102,7 +102,9 @@ export function useBroadcastRealtime({
 
   const cleanup = useCallback(() => {
     channelsRef.current.forEach(channel => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     });
     channelsRef.current = [];
   }, []);

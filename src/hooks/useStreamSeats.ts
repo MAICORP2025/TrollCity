@@ -314,7 +314,9 @@ export function useStreamSeats(
         })
 
         // Removing this send-only channel prevents leaked duplicate channels.
-        void supabase.removeChannel(channel)
+        if (channel) {
+          supabase.removeChannel(channel)
+        }
       } catch (err) {
         console.warn('[useStreamSeats] seat broadcast event failed:', {
           event,
@@ -807,7 +809,9 @@ export function useStreamSeats(
       })
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [streamId])
 
@@ -826,13 +830,15 @@ export function useStreamSeats(
        .on('broadcast', { event: 'seat_left' }, () => {
          scheduleRefresh('broadcast-seat_left')
        })
-       .on('broadcast', { event: 'seat_refreshed' }, () => {
-         scheduleRefresh('broadcast-seat_refreshed')
-       })
-       .subscribe()
+        .on('broadcast', { event: 'seat_refreshed' }, () => {
+          scheduleRefresh('broadcast-seat_refreshed')
+        })
+        .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [streamId])
 

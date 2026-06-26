@@ -233,7 +233,9 @@ export default function ExploreFeed() {
 
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(streamsChannel);
+      if (streamsChannel) {
+        supabase.removeChannel(streamsChannel);
+      }
     };
   }, [filter, fetchBroadcasts]);
 

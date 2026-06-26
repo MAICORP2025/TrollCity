@@ -27,7 +27,10 @@ import {
   allowFrontCamera,
   getMaxBoxCount,
   AVAILABLE_RELIGIONS,
-  BroadcastCategoryId
+  BroadcastCategoryId,
+  MAX_ADMIN_SEAT_COUNT,
+  MIN_ADMIN_SEAT_COUNT,
+  DEFAULT_SEAT_COUNT,
 } from '../../config/broadcastCategories';
 
 
@@ -220,6 +223,7 @@ export default function SetupPage() {
   const [category, setCategory] = useState<BroadcastCategoryId>('general');
   const [loading, setLoading] = useState(false);
   const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean; unrestricted?: boolean; isStaffBypass?: boolean } | null>(null);
+  const [seatCount, setSeatCount] = useState<number>(DEFAULT_SEAT_COUNT);
 const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
   const [battleMode, setBattleMode] = useState<BattleModeType>('world');
   const [userState, setUserState] = useState<string | null>(null);
@@ -1703,7 +1707,8 @@ const handleStartStream = async () => {
            status: 'starting',
            is_live: false,
            started_at: null,
-           box_count: categoryConfig.defaultBoxCount,
+           box_count: seatCount === 0 ? 1 : seatCount,
+           seat_count: seatCount,
            layout_mode: layoutMode,
            random_battle_queue_enabled: RANDOM_BATTLE_ENABLED && category === 'general' && battleMode === 'world' ? randomBattleQueueEnabled : false,
            random_battle_queued_at: null,
@@ -2324,6 +2329,55 @@ livekit_room_name: roomName,
                 />
               </div>
             </div>
+
+            {/* Admin-Only: Seat Count Selector */}
+            {isStreamAdmin && (
+              <div className="flex-1 bg-zinc-900/80 rounded-xl border border-amber-500/20 p-3 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Seats</span>
+                  <span className="text-[8px] font-bold text-amber-400/60 bg-amber-500/10 px-1.5 py-0.5 rounded-full">ADMIN</span>
+                </div>
+                <p className="text-[9px] text-slate-500 mb-2">Total boxes (broadcaster = box 1)</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSeatCount(Math.max(MIN_ADMIN_SEAT_COUNT, seatCount - 1))}
+                    disabled={seatCount <= MIN_ADMIN_SEAT_COUNT}
+                    className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white font-bold text-sm flex items-center justify-center hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    -
+                  </button>
+                  <div className="flex-1 text-center">
+                    <span className="text-2xl font-black text-amber-400">{seatCount}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSeatCount(Math.min(MAX_ADMIN_SEAT_COUNT, seatCount + 1))}
+                    disabled={seatCount >= MAX_ADMIN_SEAT_COUNT}
+                    className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white font-bold text-sm flex items-center justify-center hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="flex gap-1 mt-2">
+                  {[1, 2, 4, 6, 8, 12].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSeatCount(n)}
+                      className={cn(
+                        "flex-1 py-1 rounded text-[9px] font-bold transition-colors",
+                        seatCount === n
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "bg-white/5 text-slate-500 border border-white/5 hover:bg-white/10"
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Random Battle Queue Card */}
             {RANDOM_BATTLE_ENABLED && category === 'general' && (

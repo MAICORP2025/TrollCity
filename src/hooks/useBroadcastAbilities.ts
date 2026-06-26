@@ -94,7 +94,9 @@ export function useBroadcastAbilities(streamId: string | undefined, userId?: str
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, loadAbilities, loadActiveEffects, loadRecentLogs]);
 

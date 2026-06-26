@@ -139,7 +139,9 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [courtId, user, profile]);
 

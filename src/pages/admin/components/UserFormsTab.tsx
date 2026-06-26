@@ -94,7 +94,9 @@ export default function UserFormsTab() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [fetchUsers]);
 

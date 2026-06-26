@@ -224,7 +224,9 @@ export function usePredictionBid(
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [showId, fetchMyPrediction, fetchPredictions, fetchCount]);
 

@@ -113,7 +113,9 @@ export function useGamingHeartbeat({
     chatChannelRef.current = channel;
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, enabled]);
 

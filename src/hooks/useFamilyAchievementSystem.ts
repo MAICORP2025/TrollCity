@@ -448,7 +448,9 @@ export function useFamilyRealtime(familyId: string | null, enabled: boolean = tr
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [familyId, enabled]);
 

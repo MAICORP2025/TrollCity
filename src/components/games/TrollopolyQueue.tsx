@@ -61,7 +61,9 @@ export const TrollopolyQueue: React.FC<TrollopolyQueueProps> = ({ onMatchStart }
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [user]);
 

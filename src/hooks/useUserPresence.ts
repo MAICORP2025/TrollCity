@@ -233,7 +233,9 @@ export function useUserOnlineStatus(userId: string | undefined) {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [userId])
 

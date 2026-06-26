@@ -256,7 +256,9 @@ export default function CashoutRequestPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [profile]);
 

@@ -2047,6 +2047,8 @@ export function setupGlobalMessageNotifications(
       supabase.removeChannel(opsChannel)
       opsChannel = null
     }
-    supabase.removeChannel(dmChannel)
+    if (dmChannel) {
+      supabase.removeChannel(dmChannel)
+    }
   }
 }

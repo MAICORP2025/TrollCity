@@ -202,7 +202,9 @@ export function useSeatRoster(roomName: string = DEFAULT_ROOM) {
       return () => {
         console.log('[useSeatRoster] Unsubscribing from seats', roomName)
         subscriptionRef.current = false
-        supabase.removeChannel(channel)
+        if (channel) {
+          supabase.removeChannel(channel)
+        }
       }
     }
 

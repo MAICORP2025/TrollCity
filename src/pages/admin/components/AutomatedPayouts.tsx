@@ -291,7 +291,7 @@ export default function AutomatedPayouts() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payout_runs' }, () => loadRuns())
       .subscribe();
       
-    return () => { supabase.removeChannel(channel) };
+    return () => { if (channel) supabase.removeChannel(channel) };
   }, []);
 
   if (loading && runs.length === 0) return <div className="p-4 text-gray-400">Loading runs...</div>;

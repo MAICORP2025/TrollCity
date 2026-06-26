@@ -51,7 +51,9 @@ export default function GlobalPodBanner() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [profile?.banner_notifications_enabled, profile?.id]);
 

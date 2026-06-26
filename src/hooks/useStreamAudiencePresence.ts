@@ -93,7 +93,7 @@ export function useStreamAudiencePresence(
   }, [user])
 
   const cleanupChannels = useCallback(() => {
-    channelsRef.current.forEach(ch => supabase.removeChannel(ch))
+    channelsRef.current.forEach(ch => { if (ch) supabase.removeChannel(ch) })
     channelsRef.current = []
   }, [])
 

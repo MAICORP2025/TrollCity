@@ -351,7 +351,9 @@ export default function RecognitionPanel({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [streamId, fetchEnergy, fetchSpotlight, fetchLeaderboard, fetchRoles, fetchAwards]);
 

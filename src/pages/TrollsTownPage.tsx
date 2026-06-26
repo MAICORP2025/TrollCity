@@ -564,8 +564,9 @@ const TrollsTownPage: React.FC = () => {
     });
 
     return () => {
-      propsSubscription.unsubscribe();
-      unsubscribeBroadcast();
+      if (propsSubscription) {
+        propsSubscription.unsubscribe();
+      }
     };
   }, [user, loadPropertyDetails])
 
@@ -893,7 +894,9 @@ const TrollsTownPage: React.FC = () => {
       .subscribe()
 
     return () => {
-      channel.unsubscribe()
+      if (channel) {
+        channel.unsubscribe();
+      }
     }
   }, [user, loadListings])
 
@@ -958,7 +961,9 @@ const TrollsTownPage: React.FC = () => {
       .subscribe()
 
     return () => {
-      txChannel.unsubscribe()
+      if (txChannel) {
+        txChannel.unsubscribe()
+      }
     }
   }, [user])
 

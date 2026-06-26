@@ -116,7 +116,9 @@ export function useAnonymousRound(
 
     return () => {
       clearTimer();
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [showId, clearTimer]);
 

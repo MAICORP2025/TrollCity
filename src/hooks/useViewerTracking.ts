@@ -133,8 +133,10 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
 
     return () => {
       if (updateTimerRef.current) clearTimeout(updateTimerRef.current);
-      channel.untrack();
-      supabase.removeChannel(channel);
+      if (channel) {
+        channel.untrack();
+        supabase.removeChannel(channel);
+      }
       
       // Try to remove from stream_viewers on leave
       if (streamId && isValidUUID(user?.id)) {
@@ -216,7 +218,9 @@ export function useLiveViewerCount(streamId: string | null) {
 
     return () => {
       mounted = false
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [streamId])
 
