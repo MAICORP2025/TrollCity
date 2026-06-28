@@ -19,6 +19,7 @@ interface XPState {
 export const useXPStore = create<XPState>((set) => {
   let channel: any = null;
   let xpChannelUserId: string | null = null;
+  let isSubscribed = false;
   let xpFetchPromise: Promise<void> | null = null;
   let lastXPFetchUserId: string | null = null;
   let lastXPFetchTime = 0;
@@ -274,6 +275,7 @@ export const useXPStore = create<XPState>((set) => {
       }
 
       xpChannelUserId = userId
+      isSubscribed = true
       console.log('[XP Store] Subscribing to user_stats for user:', userId)
 
       // Use a stable channel name so we do not resubscribe on rerenders
@@ -343,14 +345,18 @@ export const useXPStore = create<XPState>((set) => {
             channel = null
             xpChannelUserId = null
             setTimeout(() => {
-              supabase.removeChannel(capturedChannel)
-              useXPStore.getState().subscribeToXP(userId)
+              // Guard: only retry if still subscribed (prevents leak on unmount)
+              if (isSubscribed) {
+                supabase.removeChannel(capturedChannel)
+                useXPStore.getState().subscribeToXP(userId)
+              }
             }, 5000)
           }
         })
     },
 
     unsubscribe: () => {
+      isSubscribed = false
       if (channel) {
         supabase.removeChannel(channel)
         channel = null

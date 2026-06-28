@@ -110,8 +110,8 @@ export async function recordOfficerActionWithFee(input: {
     // Don't throw - activity update failure shouldn't block the action
   }
 
-  // 3) pay officer commission
-  const commissionCoins = Math.round(input.fee_coins * input.officer_commission_pct)
+  // 3) pay officer commission (ceil so officers always get at least 1 coin on any fee)
+  const commissionCoins = Math.max(1, Math.ceil(input.fee_coins * input.officer_commission_pct))
   const usd_value = coinsToUsd(commissionCoins)
 
   const { data: offEarn, error: offErr } = await adminClient

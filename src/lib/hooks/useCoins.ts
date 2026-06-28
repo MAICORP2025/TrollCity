@@ -440,32 +440,12 @@ export function useCoins() {
   }, [user?.id, balances.troll_coins])
 
   const depositToCashout = useCallback(async (amount: number): Promise<boolean> => {
-    if (!user?.id) {
-      toast.error('You must be logged in')
-      return false
-    }
-
-    setLoading(true)
-    try {
-      const { data, error } = await supabase.rpc('deposit_to_cashout_escrow', {
-        p_amount: amount
-      })
-
-      if (error) {
-        toast.error(error.message)
-        return false
-      }
-
-      toast.success(`Deposited ${amount.toLocaleString()} coins to cashout escrow`)
-      await refreshCoins()
-      return true
-    } catch (err: any) {
-      toast.error(err.message || 'Deposit failed')
-      return false
-    } finally {
-      setLoading(false)
-    }
-  }, [user?.id, refreshCoins])
+    // Deposit to cashout escrow is now handled automatically by the system
+    // when coins are earned. This function is kept for backward compatibility
+    // but is a no-op.
+    toast.info('Coins are automatically added to your cashout escrow when earned.')
+    return true
+  }, [])
 
   return {
     balances,

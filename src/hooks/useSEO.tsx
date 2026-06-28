@@ -69,7 +69,7 @@ export default function useSEO(config: SEOConfig) {
   const location = useLocation()
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://maitrollcity.com'
   const canonicalUrl = config.canonical || `${origin}${location.pathname}`
-  const imageUrl = config.ogImage || `${origin}/api/og/default`
+  const imageUrl = config.ogImage || `${origin}/images/mai-troll-city-preview.png`
 
   const applySEO = useCallback(() => {
     document.title = config.title

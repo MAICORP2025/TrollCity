@@ -20,16 +20,16 @@ export default function OfficerAlertBanner() {
       const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       
       const { data: stalledPayouts } = await supabase
-        .from('cashout_requests')
-        .select('id, username, created_at')
+        .from('payout_requests')
+        .select('id, created_at')
         .eq('status', 'pending')
         .lt('created_at', thirtyMinsAgo);
 
       // Check for failed payouts
       const { data: failedPayouts } = await supabase
-        .from('cashout_requests')
-        .select('id, username')
-        .eq('status', 'failed'); // Assuming 'failed' status exists or we check fulfillment status
+        .from('payout_requests')
+        .select('id')
+        .eq('status', 'rejected');
 
       const newAlerts = [];
       

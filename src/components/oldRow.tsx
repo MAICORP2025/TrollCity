@@ -1023,8 +1023,9 @@ export default function Home() {
     }, 60000)
 
     // Realtime subscription: refresh live list the second a stream row changes
+    // OPTIMIZED: Only listen to UPDATE events (not INSERT/DELETE) since we only care about status changes
     const channel = supabase.channel('home:live-streams')
-    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
+    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams' }, (payload) => {
       try {
         // Only refresh when live status or viewer counts or featured flags change
         const oldRow = (payload.old || null) as any

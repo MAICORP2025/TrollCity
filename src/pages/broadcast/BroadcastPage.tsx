@@ -520,7 +520,7 @@ import { getGiftVisualConfig } from '@/lib/giftVisuals'
 
 import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
-import { Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, Users } from 'lucide-react'
+import { Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, Users, Pin } from 'lucide-react'
 import { toast } from 'sonner'
 import AbilityBox from '@/components/broadcast/AbilityBox'
 import BattleView from '@/components/broadcast/BattleView'
@@ -535,6 +535,7 @@ import CityStatusPanel from '@/components/city/CityStatusPanel'
 import CityStatusOrb from '@/components/city/CityStatusOrb'
 import { useCityStatusOrb } from '@/lib/hooks/useCityStatusOrb'
 import SeatCityStatusOrb from '@/components/broadcast/SeatCityStatusOrb'
+import PaidChatSettingsModal from '@/components/broadcast/PaidChatSettingsModal'
 
 // Debug counters for broadcast stability verification
 const DEBUG_COUNTERS = {
@@ -1378,11 +1379,13 @@ useEffect(() => {
    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false)
    const [isShareModalOpen, setIsShareModalOpen] = useState(false)
    const [isSeatsModalOpen, setIsSeatsModalOpen] = useState(false)
+  const [smokeEvent, setSmokeEvent] = useState<any>(null)
    const [seatModalCount, setSeatModalCount] = useState(1)
    const [seatModalPrices, setSeatModalPrices] = useState<SeatModalPrice[]>([])
    const [selectedSeatIndex, setSelectedSeatIndex] = useState(0)
-   const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
-    const [chatTab, setChatTab] = useState<'chat' | 'progress' | 'league' | 'gifts' | 'top-fans' | 'settings'>('chat')
+    const [isMoreControlsOpen, setIsMoreControlsOpen] = useState(false)
+    const [isPaidChatModalOpen, setIsPaidChatModalOpen] = useState(false)
+     const [chatTab, setChatTab] = useState<'chat' | 'progress' | 'league' | 'gifts' | 'top-fans' | 'settings'>('chat')
    const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
    const [recentGifts, setRecentGifts] = useState<BroadcastGift[]>([])
    const [giftNameMap, setGiftNameMap] = useState<Record<string, string>>({})
@@ -1458,9 +1461,25 @@ const [allTimeTopGifters, setAllTimeTopGifters] = useState<Array<{
    }
 
      const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
+     const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(new Set())
      const [messages, setMessages] = useState<Array<{id: string; username: string; content: string; createdAt: number}>>([])
      const [chatInput, setChatInput] = useState('')
      const [hostChatDisabledByOfficerState, setHostChatDisabledByOfficerState] = useState(false)
+
+     // Pin/unpin messages (host/broadofficer/staff only)
+     const canPinMessages = isHost || isCurrentUserBroadofficer || isOfficer
+     const handlePinMessage = useCallback((messageId: string) => {
+       setPinnedMessageIds(prev => new Set(prev).add(messageId))
+       toast.success('Message pinned')
+     }, [])
+     const handleUnpinMessage = useCallback((messageId: string) => {
+       setPinnedMessageIds(prev => {
+         const next = new Set(prev)
+         next.delete(messageId)
+         return next
+       })
+       toast.success('Message unpinned')
+     }, [])
      const [hostChatDisabledUntil, setHostChatDisabledUntil] = useState<string | null>(null)
      const [hostChatDisabledStreamId, setHostChatDisabledStreamId] = useState<string | null>(null)
      const [hostChatDisableRemainingMs, setHostChatDisableRemainingMs] = useState(0)
@@ -2712,6 +2731,22 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
 
       setStreamLoaded(true)
 
+      // Fetch smoke event for this stream
+      if (data?.id && (profile?.role === 'admin' || profile?.is_admin || profile?.role === 'owner' || data.user_id === user?.id)) {
+        supabase
+          .from('stream_smoke_events')
+          .select('*')
+          .eq('stream_id', data.id)
+          .eq('is_active', true)
+          .maybeSingle()
+          .then(({ data: smokeData }) => {
+            if (smokeData) {
+              setSmokeEvent(smokeData);
+              console.log('[BroadcastPage] Smoke event loaded:', smokeData);
+            }
+          });
+      }
+
       if (data.status === 'ended') {
         stopLocalTracks()
         navigate(`/broadcast/summary/${streamId}`)
@@ -2847,9 +2882,9 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
       'random_battle_queue_enabled',
       'random_battle_queued_at',
       'random_battle_cooldown_until',
-      'status',
-      'is_live',
-    ];
+       'status',
+       'is_live',
+     ];
     return trackedKeys.every((key) => current[key] === next[key]);
   }, []);
 
@@ -2892,8 +2927,8 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
         battle_end_reason: nextStream.battle_end_reason,
         battle_winner_id: nextStream.battle_winner_id,
         side_a_score: nextStream.side_a_score,
-        side_b_score: nextStream.side_b_score,
-      };
+         side_b_score: nextStream.side_b_score,
+       };
     });
 
     // Record stream started event if transitioning from not live to live
@@ -6142,10 +6177,15 @@ const handleLike = useCallback(async () => {
                             No messages yet � say something!
                           </div>
                         )}
-{floatingMessages.map((msg) => (
+{floatingMessages.map((msg) => {
+                          const isPinned = pinnedMessageIds.has(msg.id)
+                          return (
                           <div
                             key={msg.id}
-                            className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
+                            className={cn(
+                              "text-sm leading-relaxed break-words animate-in fade-in duration-200",
+                              isPinned && "bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-2 py-1"
+                            )}
                             style={{ animation: 'slideInFromTop 0.3s ease-out' }}
                           >
                             <button
@@ -6160,8 +6200,21 @@ const handleLike = useCallback(async () => {
                             </button>
                             <span className="text-white/40 mx-1">:</span>
                             <span className="text-white/90">{msg.content}</span>
+                            {canPinMessages && (
+                              <button
+                                onClick={() => isPinned ? handleUnpinMessage(msg.id) : handlePinMessage(msg.id)}
+                                className={cn(
+                                  "ml-2 inline-flex items-center transition-colors",
+                                  isPinned ? "text-yellow-400 hover:text-yellow-300" : "text-white/30 hover:text-white/60"
+                                )}
+                                title={isPinned ? "Unpin message" : "Pin message"}
+                              >
+                                <Pin className={cn("w-3 h-3", isPinned && "fill-current")} />
+                              </button>
+                            )}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
 
                       {/* Input at the bottom */}
@@ -6428,10 +6481,15 @@ const handleLike = useCallback(async () => {
                             No messages yet — say something!
                           </div>
                         )}
-                        {floatingMessages.map((msg) => (
+                        {floatingMessages.map((msg) => {
+                          const isPinned = pinnedMessageIds.has(msg.id)
+                          return (
                           <div
                             key={msg.id}
-                            className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
+                            className={cn(
+                              "text-sm leading-relaxed break-words animate-in fade-in duration-200",
+                              isPinned && "bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-2 py-1"
+                            )}
                             style={{ animation: 'slideInFromTop 0.3s ease-out' }}
                           >
                             <button
@@ -6446,8 +6504,21 @@ const handleLike = useCallback(async () => {
                             </button>
                             <span className="mx-1 text-white/30 text-sm">:</span>
                             <span className="text-sm text-white/80">{msg.content}</span>
+                            {canPinMessages && (
+                              <button
+                                onClick={() => isPinned ? handleUnpinMessage(msg.id) : handlePinMessage(msg.id)}
+                                className={cn(
+                                  "ml-2 inline-flex items-center transition-colors",
+                                  isPinned ? "text-yellow-400 hover:text-yellow-300" : "text-white/30 hover:text-white/60"
+                                )}
+                                title={isPinned ? "Unpin message" : "Pin message"}
+                              >
+                                <Pin className={cn("w-3 h-3", isPinned && "fill-current")} />
+                              </button>
+                            )}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                       {/* Chat input */}
                       <form
@@ -7249,11 +7320,15 @@ const handleLike = useCallback(async () => {
                      userActionUserId={userActionTarget?.userId}
                     onToggleRGB={toggleStreamRgb}
                     hasRgbEffect={!!stream?.has_rgb_effect}
-                    onTextPopup={() => {
-                      handleCloseMoreMenu()
-                      setIsTextPopupComposerOpen(true)
-                    }}
-                  />
+                     onTextPopup={() => {
+                       handleCloseMoreMenu()
+                       setIsTextPopupComposerOpen(true)
+                     }}
+                     onPaidChat={() => {
+                       handleCloseMoreMenu()
+                       setIsPaidChatModalOpen(true)
+                     }}
+                   />
                 </div>
               )}
 
@@ -7287,14 +7362,28 @@ const handleLike = useCallback(async () => {
                 />
               )}
 
-              {/* Broadcast Text Popup Overlay (visible to broadcaster too) */}
-              <BroadcastTextPopupOverlay
-                popup={activeTextPopup}
-                isBattleActive={shouldShowRandomBattleArena}
-                mobileSafe={isMobileWidth}
-              />
+               {/* Broadcast Text Popup Overlay (visible to broadcaster too) */}
+               <BroadcastTextPopupOverlay
+                 popup={activeTextPopup}
+                 isBattleActive={shouldShowRandomBattleArena}
+                 mobileSafe={isMobileWidth}
+               />
 
-        </ErrorBoundary>
+                {/* Paid Chat Settings Modal */}
+                {isPaidChatModalOpen && stream?.id && (
+                  <PaidChatSettingsModal
+                    isOpen={isPaidChatModalOpen}
+                    onClose={() => setIsPaidChatModalOpen(false)}
+                    streamId={stream.id}
+                    isHost={isHost}
+                    onSave={() => {
+                      setIsPaidChatModalOpen(false);
+                    }}
+                    streamCategory={stream.category}
+                  />
+                )}
+
+         </ErrorBoundary>
       </GiftSystemProvider>
     );
   }

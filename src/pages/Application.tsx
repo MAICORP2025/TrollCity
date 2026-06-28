@@ -4,6 +4,7 @@ import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
 import { Shield, XCircle, Gavel, Briefcase, Video, Sparkles, Newspaper, Mic, Radio, Crown, Users } from 'lucide-react'
+import { notifyCareerApplicationSubmitted } from '../lib/notifications'
 
 interface JobPosition {
   id: string
@@ -102,6 +103,9 @@ export default function Application() {
         })
 
       if (error) throw error
+
+      const positionTitle = positionToJobPosition[positionId]?.title || 'Unknown Position'
+      await notifyCareerApplicationSubmitted(user.id, positionId, positionTitle)
 
       toast.success('Application submitted! We will review it soon.')
       navigate('/careers')

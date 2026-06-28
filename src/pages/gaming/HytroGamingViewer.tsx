@@ -163,6 +163,62 @@ export default function HytroGamingViewer() {
   const [validatingPassword, setValidatingPassword] = useState(false)
   const [hasAccess, setHasAccess] = useState(false)
 
+  // Kick guard: check on page load if user was kicked from this stream
+  useEffect(() => {
+    if (!streamId || !user?.id) return
+
+    const KICK_BAN_DURATION_MS = 24 * 60 * 60 * 1000
+    const getKickStorageKey = (sid: string, uid: string) => `kick_${sid}_${uid}`
+
+    const checkKickGuard = async () => {
+      try {
+        // Check localStorage for recent kick
+        const raw = localStorage.getItem(getKickStorageKey(streamId, user.id))
+        if (raw) {
+          const kickData = JSON.parse(raw)
+          if (kickData && typeof kickData.timestamp === 'number') {
+            const timeSinceKick = Date.now() - kickData.timestamp
+            if (timeSinceKick < KICK_BAN_DURATION_MS) {
+              const remainingMs = KICK_BAN_DURATION_MS - timeSinceKick
+              const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+              toast.error(`You were kicked from this stream and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+              navigate('/', { replace: true })
+              return
+            }
+          }
+        }
+
+        // Check stream_kicks table
+        const { data: kickRecord } = await supabase
+          .from('stream_kicks')
+          .select('id, created_at')
+          .eq('stream_id', streamId)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (kickRecord) {
+          const kickTimestamp = new Date(kickRecord.created_at).getTime()
+          const timeSinceKick = Date.now() - kickTimestamp
+          if (timeSinceKick < KICK_BAN_DURATION_MS) {
+            const remainingMs = KICK_BAN_DURATION_MS - timeSinceKick
+            const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+            toast.error(`You were kicked from this stream and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+            localStorage.setItem(getKickStorageKey(streamId, user.id), JSON.stringify({
+              timestamp: kickTimestamp,
+              streamId,
+              reason: 'Kicked by moderator'
+            }))
+            navigate('/', { replace: true })
+          }
+        }
+      } catch (err) {
+        console.warn('[HytroGamingViewer] Kick guard check failed:', err)
+      }
+    }
+
+    void checkKickGuard()
+  }, [streamId, user?.id, navigate])
+
 // Fetch stream data
    useEffect(() => {
      let mounted = true
@@ -965,7 +1021,7 @@ export default function HytroGamingViewer() {
               </div>
             </div>
             <div className="min-h-0 flex-1">
-              <GamingChat streamId={streamId || ''} className="h-full" guestChatLimit={5} />
+              <GamingChat streamId={streamId || ''} className="h-full" guestChatLimit={5} canPinMessages={isHost || !!(profile && (profile.role === 'admin' || profile.is_admin || profile.is_superadmin || profile.role === 'owner' || profile.is_staff || profile.is_troll_officer || profile.is_lead_officer))} hostId={currentStream.broadcaster_id} />
             </div>
           </div>
         </aside>
@@ -1100,7 +1156,7 @@ export default function HytroGamingViewer() {
               </button>
             </div>
             <div className="min-h-0 flex-1">
-              <GamingChat streamId={streamId || ''} className="h-full" guestChatLimit={5} />
+              <GamingChat streamId={streamId || ''} className="h-full" guestChatLimit={5} canPinMessages={isHost || !!(profile && (profile.role === 'admin' || profile.is_admin || profile.is_superadmin || profile.role === 'owner' || profile.is_staff || profile.is_troll_officer || profile.is_lead_officer))} hostId={currentStream.broadcaster_id} />
             </div>
           </div>
         </div>

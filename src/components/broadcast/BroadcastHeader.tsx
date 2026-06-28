@@ -71,7 +71,10 @@ export default function BroadcastHeader({
             }
         };
 
-        const balanceTimer = window.setInterval(refreshProfileBalance, 30000);
+        // OPTIMIZED: 60s interval with visibility check
+        const balanceTimer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') refreshProfileBalance();
+        }, 60000);
 
         return () => {
             window.clearInterval(balanceTimer);

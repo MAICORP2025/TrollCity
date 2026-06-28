@@ -3,6 +3,7 @@ import { useAuthStore } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 import { Crown, Heart, Loader2, Check } from 'lucide-react';
+import { useCoins } from '../../lib/hooks/useCoins';
 
 interface SubscribeButtonProps {
   broadcasterId: string;
@@ -18,6 +19,7 @@ const SubscribeButton: React.FC<SubscribeButtonProps> = ({
   onUnsubscribe
 }) => {
   const { user, profile } = useAuthStore();
+  const { refreshCoins } = useCoins();
   const [loading, setLoading] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriptionPrice, setSubscriptionPrice] = useState<number | null>(null);
@@ -37,6 +39,7 @@ const SubscribeButton: React.FC<SubscribeButtonProps> = ({
         .eq('id', broadcasterId)
         .single();
 
+      // Check level from user_profiles (same source as bottom nav bar)
       setCanSubscribe(creator?.creator_subscription_enabled && (profile?.level || 0) >= 10);
       setSubscriptionPrice(creator?.creator_subscription_price_coins || 100);
 
@@ -69,6 +72,7 @@ const SubscribeButton: React.FC<SubscribeButtonProps> = ({
 
       toast.success(`Subscribed to ${broadcasterUsername}! (90% to creator, 10% to CEO)`);
       setIsSubscribed(true);
+      await refreshCoins(); // Refresh coin balance (same as bottom nav bar)
       onSubscribe?.();
     } catch (err: any) {
       toast.error(err.message);
@@ -93,6 +97,7 @@ const SubscribeButton: React.FC<SubscribeButtonProps> = ({
       if (error) throw error;
       toast.success(`Unsubscribed from ${broadcasterUsername}`);
       setIsSubscribed(false);
+      await refreshCoins(); // Refresh coin balance (same as bottom nav bar)
       onUnsubscribe?.();
     } catch (err: any) {
       toast.error(err.message);

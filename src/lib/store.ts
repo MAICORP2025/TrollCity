@@ -31,7 +31,6 @@ const PROFILE_UPDATE_DEBOUNCE_MS = 1_500
 const REALTIME_PROFILE_DEBOUNCE_MS = 1_000
 const REFRESH_PROFILE_DEBOUNCE_MS = 5_000
 const CREDIT_REFRESH_DEBOUNCE_MS = 10_000
-const PROFILE_FETCH_TIMEOUT_MS = 15_000
 const GLOBAL_EVENT_DEDUP_MS = 60_000
 const RGB_UPDATE_COOLDOWN_MS = 60_000
 
@@ -171,7 +170,6 @@ function shouldApplyRealtimeProfilePatch(currentProfile: any, patch: any) {
 
 const USER_PROFILE_SELECT = `
   id,
-  user_id,
   email,
   username,
   display_name,
@@ -483,68 +481,78 @@ async function recoverSession(): Promise<Session | null> {
   }
 }
 
-async function fetchProfileBundle(userId: string) {
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    window.setTimeout(() => reject(new Error('Profile fetch timeout')), PROFILE_FETCH_TIMEOUT_MS)
-  })
-
-  const fetchPromise = (async (): Promise<any> => {
+async function fetchProfileWithRetry(userId: string, retries = 1): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      await ensureSupabaseSession(supabase)
-    } catch (err: any) {
-      if (err.message === 'Not logged in yet') {
-        return { profile: null, error: null, notLoggedIn: true }
+      const profileResult = await supabase
+        .from('user_profiles')
+        .select(USER_PROFILE_SELECT)
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (profileResult.error) throw profileResult.error
+
+      const data = profileResult.data
+      if (!data) {
+        return { profile: null, error: null, userStats: null, rgbPerk: null }
       }
-      throw err
+
+      return { profile: data, error: null, userStats: null, rgbPerk: null }
+    } catch (err: any) {
+      if (attempt >= retries) throw err
+      await new Promise(r => window.setTimeout(r, 1000 * (attempt + 1)))
     }
-    
-    const profileResult = await supabase
-      .from('user_profiles')
-      .select(USER_PROFILE_SELECT)
-      .eq('id', userId)
-      .maybeSingle()
-
-    return profileResult
-  })()
-
-  const result = await Promise.race([fetchPromise, timeoutPromise])
-
-  if (result.notLoggedIn) {
-    return { profile: null, error: null, notLoggedIn: true }
   }
+  return { profile: null, error: null, userStats: null, rgbPerk: null }
+}
 
-  const { data, error } = result
+async function fetchProfileBundle(userId: string) {
+  const { profile, error } = await fetchProfileWithRetry(userId, 2)
 
   if (error) {
-    return { profile: null, error }
-  }
-
-  if (!data) {
+    console.warn('[authStore] fetchProfileBundle error:', error?.message || error)
     return { profile: null, error: null }
   }
 
-  const [userStats, rgbPerk] = await Promise.all([
-    supabase
-      .from('user_stats')
-      .select('level, xp_total, xp_to_next_level')
-      .eq('user_id', userId)
-      .maybeSingle(),
-    supabase
-      .from('user_perks')
-      .select('expires_at')
-      .eq('user_id', userId)
-      .eq('perk_id', 'perk_rgb_username')
-      .eq('is_active', true)
-      .gt('expires_at', new Date().toISOString())
-      .order('expires_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ])
+  if (!profile) {
+    return { profile: null, error: null }
+  }
+
+  // Fetch secondary data in background — don't block profile load
+  let userStats = null
+  let rgbPerk = null
+  try {
+    const [statsResult, perkResult] = await Promise.allSettled([
+      supabase
+        .from('user_stats')
+        .select('level, xp_total, xp_to_next_level')
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('user_perks')
+        .select('expires_at')
+        .eq('user_id', userId)
+        .eq('perk_id', 'perk_rgb_username')
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .order('expires_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+    if (statsResult.status === 'fulfilled' && !statsResult.value.error) {
+      userStats = statsResult.value.data
+    }
+    if (perkResult.status === 'fulfilled' && !perkResult.value.error) {
+      rgbPerk = perkResult.value.data
+    }
+  } catch {
+    // Secondary fetches are optional — ignore errors
+  }
 
   return {
-    profile: data,
-    userStats: userStats.data,
-    rgbPerk: rgbPerk.data,
+    profile,
+    userStats,
+    rgbPerk,
     error: null,
   }
 }

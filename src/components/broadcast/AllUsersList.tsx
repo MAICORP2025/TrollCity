@@ -185,20 +185,32 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
     };
 
     const handleKickUser = async (userId: string, username: string) => {
-        if (!confirm(`Kick ${username} for 24 hours? They'll need to pay 100 coins to rejoin.`)) return;
+        if (!confirm(`Kick ${username}? They will be removed and cannot rejoin this broadcast.`)) return;
 
         try {
-            const { data, error } = await supabase.rpc('kick_user_paid', {
-                p_stream_id: streamId,
-                p_target_user_id: userId,
-                p_kicker_id: user?.id
-            });
+            // Insert into stream_kicks (free, no coin cost)
+            const { error: kickError } = await supabase
+              .from('stream_kicks')
+              .insert({
+                stream_id: streamId,
+                user_id: userId,
+                kicked_by: user?.id,
+                reason: 'Kicked by moderator',
+                created_at: new Date().toISOString()
+              });
 
-            if (error) throw error;
-            if (data && !data.success) {
-                toast.error(data.message || 'Failed to kick user');
-                return;
-            }
+            if (kickError) throw kickError;
+
+            // Log in broadcast_mod_actions for tracking
+            await supabase.from('broadcast_mod_actions').insert({
+              actor_id: user?.id,
+              actor_role: 'moderator',
+              target_user_id: userId,
+              action_type: 'kick',
+              stream_id: streamId,
+              reason: 'Kicked by moderator',
+              status: 'completed'
+            });
 
             toast.success('User kicked');
             fetchAllData();
@@ -235,11 +247,12 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
                 type: 'system'
             });
 
-            const channel = supabase.channel(`stream-chat:${streamId}`);
+            const channel = supabase.channel(`stream-chat:${streamId}-${Date.now()}`);
             channel.subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage })
-                        .finally(() => { if (channel) supabase.removeChannel(channel) });
+                    void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage });
+                    // Clean up after send completes or times out
+                    setTimeout(() => { supabase.removeChannel(channel) }, 3000);
                 }
             });
 
@@ -296,7 +309,7 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
                 <button
                     onClick={() => handleKickUser(viewer.user_id, viewer.username)}
                     className="p-1.5 hover:bg-red-500/20 rounded-full text-red-400 hover:text-red-300 transition-colors"
-                    title="Kick User (100 coins)"
+                    title="Kick User"
                 >
                     <UserMinus size={14} />
                 </button>

@@ -142,7 +142,10 @@ export const FloatingUserBackground: React.FC<FloatingUserBackgroundProps> = ({
 
   useEffect(() => {
     fetchUsers();
-    const interval = setInterval(fetchUsers, 30000);
+    // OPTIMIZED: 60s interval with visibility check (background decoration doesn't need 30s)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchUsers();
+    }, 60000);
     return () => clearInterval(interval);
   }, [fetchUsers]);
 

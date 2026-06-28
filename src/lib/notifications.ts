@@ -1070,3 +1070,37 @@ export async function notifyTeamMeetingStarted(
     return { success: false, error: err?.message || 'Failed to send notifications' }
   }
 }
+
+// ==========================================
+// CAREER / JOB APPLICATION NOTIFICATIONS
+// ==========================================
+
+export async function notifyCareerApplicationSubmitted(
+  applicantId: string,
+  positionId: string,
+  positionTitle: string
+): Promise<void> {
+  await notifyAdmins(
+    '📝 New Job Application',
+    `A user has applied for the ${positionTitle} position.`,
+    'career_application_submitted',
+    {
+      applicant_id: applicantId,
+      position_id: positionId,
+      position_title: positionTitle,
+      action_url: '/admin/applications'
+    }
+  )
+
+  await createNotification(
+    applicantId,
+    'application_submitted',
+    '✅ Application Submitted',
+    `Your application for ${positionTitle} has been submitted and is pending review.`,
+    {
+      position_id: positionId,
+      position_title: positionTitle,
+      action_url: '/careers'
+    }
+  )
+}

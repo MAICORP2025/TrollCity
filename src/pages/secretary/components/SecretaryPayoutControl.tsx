@@ -47,16 +47,12 @@ export default function SecretaryPayoutControl() {
   const loadStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_payout_window_status');
-      if (error) throw error;
-      setStatus(data);
-      
-      // Set form values from status
-      if (data) {
-        setDuration(data.duration_minutes || 20);
-        setMinCoins(data.min_coins || 5000);
-        setSpecialUsd(Number(data.special_tier_usd) || 1);
-      }
+      // Payout window is now determined by user level in the backend RPC
+      // Level 1-499: Fridays only, Level 500-999: Every 24hrs, Level 1000+: Every 30min
+      setStatus({ enabled: true, duration_minutes: 20, min_coins: 7500, special_tier_usd: 1 });
+      setDuration(20);
+      setMinCoins(7500);
+      setSpecialUsd(1);
     } catch (err) {
       console.error('Error loading payout window status:', err);
       toast.error('Failed to load payout window status');

@@ -26,10 +26,11 @@ export default function GiftCardsPage() {
     const fetchGiftCards = async () => {
       try {
         const { data, error } = await supabase
-          .from('cashout_requests')
+          .from('payout_requests')
           .select('*')
           .eq('user_id', user.id)
-          .eq('delivery_method', 'App Delivery') // Only show app delivered cards
+          .in('status', ['approved', 'paid'])
+          .not('payment_reference', 'is', null)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -49,7 +50,7 @@ export default function GiftCardsPage() {
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
-        table: 'cashout_requests',
+        table: 'payout_requests',
         filter: `user_id=eq.${user.id}`
       }, () => {
         fetchGiftCards();

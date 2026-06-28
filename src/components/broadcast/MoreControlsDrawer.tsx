@@ -18,6 +18,7 @@ import {
   X,
   Megaphone,
   MessageSquareOff,
+  MessageSquare,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -55,6 +56,7 @@ interface MoreControlsDrawerProps {
   onRemoveFromStage?: () => void
   onModGift?: (userId: string) => void
   userActionUserId?: string
+  onPaidChat?: () => void
 }
 
 export default function MoreControlsDrawer({
@@ -86,6 +88,7 @@ export default function MoreControlsDrawer({
   onRemoveFromStage,
   onModGift,
   userActionUserId,
+  onPaidChat,
 }: MoreControlsDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null)
 
@@ -284,6 +287,14 @@ export default function MoreControlsDrawer({
                       icon={Megaphone}
                       label="Text Popup"
                       onClick={onTextPopup}
+                    />
+                  )}
+
+                  {isHost && onPaidChat && (
+                    <ControlButton
+                      icon={MessageSquare}
+                      label="Paid Chat"
+                      onClick={onPaidChat}
                     />
                   )}
                 </div>

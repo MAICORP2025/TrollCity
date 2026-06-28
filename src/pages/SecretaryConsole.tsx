@@ -45,7 +45,7 @@ export default function SecretaryConsole() {
     try {
         const [intakeRes, cashoutRes, alertsRes, manualRes] = await Promise.all([
             supabase.from('executive_intake').select('id', { count: 'exact', head: true }).eq('status', 'new'),
-            supabase.from('cashout_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+            supabase.from('payout_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
             supabase.from('critical_alerts').select('id', { count: 'exact', head: true }).eq('resolved', false),
             supabase.from('manual_coin_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
             supabase.from('coin_transactions').select('id', { count: 'exact', head: true }).eq('type', 'store_purchase')

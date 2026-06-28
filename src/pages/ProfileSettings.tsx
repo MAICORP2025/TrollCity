@@ -2,13 +2,14 @@ import React from 'react'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '@/lib/supabase'
 import { useNavigate } from 'react-router-dom'
-import { Settings, Boxes, Sparkles, KeyRound, Trash2, Ban } from 'lucide-react'
+import { Settings, Boxes, Sparkles, KeyRound, Trash2, Ban, Palette } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import UserInventory from './UserInventory'
 import { trollCityTheme } from '../styles/trollCityTheme'
 import FamilyMinorSettings from '../components/profile/FamilyMinorSettings'
 import BatterySaverToggle from '@/components/BatterySaverToggle'
+import ProfileCustomization from '@/components/profile/ProfileCustomization'
 
 export default function ProfileSettings() {
   const { user, profile, refreshProfile } = useAuthStore()
@@ -21,6 +22,7 @@ export default function ProfileSettings() {
   const [isMinor, setIsMinor] = useState(false)
   const [platform, setPlatform] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
+  const [activeTab, setActiveTab] = useState<'basic' | 'customization'>('basic')
   
   // Creator Subscription Settings
   const [creatorSubscriptionEnabled, setCreatorSubscriptionEnabled] = useState(false)
@@ -34,16 +36,16 @@ export default function ProfileSettings() {
       setBio(profile.bio || '')
       setPlatform((profile as any).platform || '')
       if ((profile as any).banner_notifications_enabled !== undefined) {
-          setBannerNotifications((profile as any).banner_notifications_enabled)
+        setBannerNotifications((profile as any).banner_notifications_enabled)
       }
       if ((profile as any).is_minor !== undefined) {
-          setIsMinor((profile as any).is_minor)
+        setIsMinor((profile as any).is_minor)
       }
       if ((profile as any).creator_subscription_enabled !== undefined) {
-          setCreatorSubscriptionEnabled((profile as any).creator_subscription_enabled)
+        setCreatorSubscriptionEnabled((profile as any).creator_subscription_enabled)
       }
       if ((profile as any).creator_subscription_price_coins !== undefined) {
-          setCreatorSubscriptionPrice((profile as any).creator_subscription_price_coins)
+        setCreatorSubscriptionPrice((profile as any).creator_subscription_price_coins)
       }
     }
   }, [profile])
@@ -123,220 +125,256 @@ export default function ProfileSettings() {
           </div>
         </div>
 
-        {/* Profile Details Edit */}
-        <div className={`${trollCityTheme.components.card} space-y-4`}>
-          <h2 className="text-xl font-semibold">Preferences</h2>
-          <div className={`flex items-center justify-between p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
-            <div>
-                <p className="font-medium text-white">Global Pod Notifications</p>
-                <p className={`text-xs ${trollCityTheme.text.muted}`}>Receive a banner when a Pod goes live.</p>
-            </div>
-            <button
-                onClick={() => setBannerNotifications(!bannerNotifications)}
-                className={`w-12 h-6 rounded-full transition-colors relative ${bannerNotifications ? 'bg-purple-600' : 'bg-gray-700'}`}
-            >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${bannerNotifications ? 'left-7' : 'left-1'}`} />
-            </button>
-          </div>
-          <div className={`p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
-            <BatterySaverToggle />
-          </div>
+        {/* Tab Navigation */}
+        <div className="flex gap-2 border-b border-white/10 pb-2">
+          <button
+            onClick={() => setActiveTab('basic')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors ${
+              activeTab === 'basic'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            Basic Settings
+          </button>
+          <button
+            onClick={() => setActiveTab('customization')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors ${
+              activeTab === 'customization'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Palette className="w-4 h-4" />
+            Profile Customization
+          </button>
         </div>
 
-        {/* Profile Details Edit */}
-        <div className={`${trollCityTheme.components.card} space-y-4`}>
-          <h2 className="text-xl font-semibold">Profile Details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className={`text-sm ${trollCityTheme.text.muted}`}>Full Name</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
-                placeholder="Your Name"
-              />
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>Used for password recovery.</p>
+        {/* Basic Settings Tab */}
+        {activeTab === 'basic' && (
+          <div className="space-y-6">
+            {/* Preferences */}
+            <div className={`${trollCityTheme.components.card} space-y-4`}>
+              <h2 className="text-xl font-semibold">Preferences</h2>
+              <div className={`flex items-center justify-between p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
+                <div>
+                  <p className="font-medium text-white">Global Pod Notifications</p>
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>Receive a banner when a Pod goes live.</p>
+                </div>
+                <button
+                  onClick={() => setBannerNotifications(!bannerNotifications)}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${bannerNotifications ? 'bg-purple-600' : 'bg-gray-700'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${bannerNotifications ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+              <div className={`p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
+                <BatterySaverToggle />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className={`text-sm ${trollCityTheme.text.muted}`}>Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
-                className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
-                placeholder="Username"
-              />
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>Letters, numbers, and underscores only.</p>
+
+            {/* Profile Details Edit */}
+            <div className={`${trollCityTheme.components.card} space-y-4`}>
+              <h2 className="text-xl font-semibold">Profile Details</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className={`text-sm ${trollCityTheme.text.muted}`}>Full Name</label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
+                    placeholder="Your Name"
+                  />
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>Used for password recovery.</p>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-sm ${trollCityTheme.text.muted}`}>Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                    className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
+                    placeholder="Username"
+                  />
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>Letters, numbers, and underscores only.</p>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-sm ${trollCityTheme.text.muted}`}>Bio</label>
+                  <input
+                    type="text"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
+                    placeholder="Tell us about yourself"
+                    maxLength={500}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-sm ${trollCityTheme.text.muted}`}>Platform You Rep</label>
+                  <select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value)}
+                    className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
+                  >
+                    <option value="">Select platform</option>
+                    <option value="trollcity">Troll City</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="liveme">LiveMe</option>
+                    <option value="bigo">Bigo Live</option>
+                    <option value="favortied">Favortied</option>
+                  </select>
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>Shown on profile and during battles</p>
+                </div>
+                <div className={`flex items-center justify-between p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass} md:col-span-2`}>
+                  <div>
+                    <p className="font-medium text-white flex items-center gap-2">
+                      <span className="text-lg">18+</span> Minor Account
+                    </p>
+                    <p className={`text-xs ${trollCityTheme.text.muted}`}>Enable if this account belongs to a minor under 18. A badge will be shown on your profile.</p>
+                  </div>
+                  <button
+                    onClick={() => setIsMinor(!isMinor)}
+                    className={`w-12 h-6 rounded-full transition-colors relative ${isMinor ? 'bg-purple-600' : 'bg-gray-700'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isMinor ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className={`px-6 py-2 ${trollCityTheme.gradients.button} rounded-xl font-semibold disabled:opacity-50 transition-colors text-white`}
+                >
+                  {savingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
-             <div className="space-y-2">
-              <label className={`text-sm ${trollCityTheme.text.muted}`}>Bio</label>
-              <input
-                type="text"
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
-                placeholder="Tell us about yourself"
-                maxLength={160}
-              />
+
+            {/* Creator Subscription Settings */}
+            <div className={`${trollCityTheme.components.card} space-y-4`}>
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <span>PC</span> Creator Subscription
+              </h2>
+              <p className={`text-xs ${trollCityTheme.text.muted}`}>
+                Allow fans to subscribe to your content. You keep 90% of coins, 10% goes to CEO.
+              </p>
+              <div className="space-y-3">
+                <div className={`flex items-center justify-between p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
+                  <div>
+                    <p className="font-medium text-white">Enable Subscriptions</p>
+                    <p className={`text-xs ${trollCityTheme.text.muted}`}>Fans can subscribe to support you</p>
+                  </div>
+                  <button
+                    onClick={() => setCreatorSubscriptionEnabled(!creatorSubscriptionEnabled)}
+                    className={`w-12 h-6 rounded-full transition-colors relative ${creatorSubscriptionEnabled ? 'bg-cyan-600' : 'bg-gray-700'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${creatorSubscriptionEnabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-sm ${trollCityTheme.text.muted}`}>Subscription Price (Troll Coins)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="10000"
+                    value={creatorSubscriptionPrice}
+                    onChange={(e) => setCreatorSubscriptionPrice(Math.max(10, Math.min(10000, parseInt(e.target.value) || 100)))}
+                    disabled={!creatorSubscriptionEnabled}
+                    className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors disabled:opacity-50`}
+                  />
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>
+                    Subscribers get badge, seat discounts, and instant seat approval.
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className={`text-sm ${trollCityTheme.text.muted}`}>Platform You Rep</label>
-              <select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
-              >
-                <option value="">Select platform</option>
-                <option value="trollcity">🏙️ Troll City</option>
-                <option value="tiktok">🎵 TikTok</option>
-                <option value="liveme">📺 LiveMe</option>
-                <option value="bigo">🎥 Bigo Live</option>
-                <option value="favortied">⭐ Favortied</option>
-              </select>
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>Shown on profile and during battles</p>
+
+            {/* Family & Minor Settings */}
+            {profile && (
+              <div className={`${trollCityTheme.components.card}`}>
+                <FamilyMinorSettings 
+                  profile={profile as any} 
+                  onUpdate={() => refreshProfile()}
+                />
+              </div>
+            )}
+
+            <div className={`${trollCityTheme.components.card}`}>
+              <div className="flex items-center gap-2 mb-4">
+                <Boxes className="w-5 h-5 text-purple-300" />
+                <h2 className="text-xl font-semibold">My Items</h2>
+              </div>
+              <UserInventory embedded />
             </div>
-            <div className={`flex items-center justify-between p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass} md:col-span-2`}>
-              <div>
-                <p className="font-medium text-white flex items-center gap-2">
-                  <span className="text-lg">🔞</span> Minor Account
-                </p>
-                <p className={`text-xs ${trollCityTheme.text.muted}`}>Enable if this account belongs to a minor under 18. A badge will be shown on your profile.</p>
+
+            {/* Password Reset */}
+            <div className={`${trollCityTheme.components.card}`}>
+              <div className="flex items-center gap-3">
+                <KeyRound className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h2 className="text-lg font-semibold">Password Reset</h2>
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>Use the &quot;Forgot Password&quot; link on the sign-in page to reset your password via email.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className={`${trollCityTheme.components.card} flex items-center justify-between`}>
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-pink-400" />
+                <div>
+                  <h2 className="text-lg font-semibold">Profile Picture Customizer</h2>
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>Equip clothing and update your look.</p>
+                </div>
               </div>
               <button
-                onClick={() => setIsMinor(!isMinor)}
-                className={`w-12 h-6 rounded-full transition-colors relative ${isMinor ? 'bg-purple-600' : 'bg-gray-700'}`}
+                onClick={() => navigate('/avatar-customizer')}
+                className={`px-4 py-2 rounded-lg ${trollCityTheme.gradients.button} text-white text-sm font-semibold`}
               >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isMinor ? 'left-7' : 'left-1'}`} />
+                Open
+              </button>
+            </div>
+
+            <div className={`${trollCityTheme.components.card} flex items-center justify-between`}>
+              <div className="flex items-center gap-3">
+                <Ban className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h2 className="text-lg font-semibold">Blocked Users</h2>
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>View and manage users you've blocked.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/blocked-users')}
+                className={`px-4 py-2 rounded-lg ${trollCityTheme.gradients.button} text-white text-sm font-semibold`}
+              >
+                Manage
+              </button>
+            </div>
+
+            <div className={`${trollCityTheme.components.card} border border-red-500/30 flex items-center justify-between`}>
+              <div className="flex items-center gap-3">
+                <Trash2 className="w-5 h-5 text-red-400" />
+                <div>
+                  <h2 className="text-lg font-semibold text-red-400">Delete Account</h2>
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>Permanently delete your account and all data.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/profile/delete')}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white text-sm font-semibold"
+              >
+                Delete
               </button>
             </div>
           </div>
-<div className="flex justify-end">
-             <button
-               onClick={handleSaveProfile}
-               disabled={savingProfile}
-               className={`px-6 py-2 ${trollCityTheme.gradients.button} rounded-xl font-semibold disabled:opacity-50 transition-colors text-white`}
-             >
-               {savingProfile ? 'Saving...' : 'Save Changes'}
-             </button>
-           </div>
-         </div>
-
-         {/* Creator Subscription Settings */}
-         <div className={`${trollCityTheme.components.card} space-y-4`}>
-           <h2 className="text-xl font-semibold flex items-center gap-2">
-             <span>👑</span> Creator Subscription
-           </h2>
-           <p className={`text-xs ${trollCityTheme.text.muted}`}>
-             Allow fans to subscribe to your content. You keep 90% of coins, 10% goes to CEO.
-           </p>
-           <div className="space-y-3">
-             <div className={`flex items-center justify-between p-4 ${trollCityTheme.backgrounds.glass} rounded-xl border ${trollCityTheme.borders.glass}`}>
-               <div>
-                 <p className="font-medium text-white">Enable Subscriptions</p>
-                 <p className={`text-xs ${trollCityTheme.text.muted}`}>Fans can subscribe to support you</p>
-               </div>
-               <button
-                 onClick={() => setCreatorSubscriptionEnabled(!creatorSubscriptionEnabled)}
-                 className={`w-12 h-6 rounded-full transition-colors relative ${creatorSubscriptionEnabled ? 'bg-cyan-600' : 'bg-gray-700'}`}
-               >
-                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${creatorSubscriptionEnabled ? 'left-7' : 'left-1'}`} />
-               </button>
-             </div>
-             <div className="space-y-2">
-               <label className={`text-sm ${trollCityTheme.text.muted}`}>Subscription Price (Troll Coins)</label>
-               <input
-                 type="number"
-                 min="10"
-                 max="10000"
-                 value={creatorSubscriptionPrice}
-                 onChange={(e) => setCreatorSubscriptionPrice(Math.max(10, Math.min(10000, parseInt(e.target.value) || 100)))}
-                 disabled={!creatorSubscriptionEnabled}
-                 className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors disabled:opacity-50`}
-               />
-               <p className={`text-xs ${trollCityTheme.text.muted}`}>
-                 Subscribers get badge, seat discounts, and instant seat approval.
-               </p>
-             </div>
-           </div>
-         </div>
-
-         {/* Family & Minor Settings */}
-        {profile && (
-          <div className={`${trollCityTheme.components.card}`}>
-            <FamilyMinorSettings 
-              profile={profile as any} 
-              onUpdate={() => refreshProfile()}
-            />
-          </div>
         )}
 
-        <div className={`${trollCityTheme.components.card}`}>
-          <div className="flex items-center gap-2 mb-4">
-            <Boxes className="w-5 h-5 text-purple-300" />
-            <h2 className="text-xl font-semibold">My Items</h2>
-          </div>
-          <UserInventory embedded />
-        </div>
-
-        {/* Password Reset */}
-        <div className={`${trollCityTheme.components.card}`}>
-          <div className="flex items-center gap-3">
-            <KeyRound className="w-5 h-5 text-emerald-400" />
-            <div>
-              <h2 className="text-lg font-semibold">Password Reset</h2>
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>Use the &quot;Forgot Password&quot; link on the sign-in page to reset your password via email.</p>
-            </div>
-          </div>
-        </div>
-
-        <div className={`${trollCityTheme.components.card} flex items-center justify-between`}>
-          <div className="flex items-center gap-3">
-            <Sparkles className="w-5 h-5 text-pink-400" />
-            <div>
-              <h2 className="text-lg font-semibold">Profile Picture Customizer</h2>
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>Equip clothing and update your look.</p>
-            </div>
-          </div>
-          <button
-            onClick={() => navigate('/avatar-customizer')}
-            className={`px-4 py-2 rounded-lg ${trollCityTheme.gradients.button} text-white text-sm font-semibold`}
-          >
-            Open
-          </button>
-        </div>
-
-        <div className={`${trollCityTheme.components.card} flex items-center justify-between`}>
-          <div className="flex items-center gap-3">
-            <Ban className="w-5 h-5 text-amber-400" />
-            <div>
-              <h2 className="text-lg font-semibold">Blocked Users</h2>
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>View and manage users you've blocked.</p>
-            </div>
-          </div>
-          <button
-            onClick={() => navigate('/blocked-users')}
-            className={`px-4 py-2 rounded-lg ${trollCityTheme.gradients.button} text-white text-sm font-semibold`}
-          >
-            Manage
-          </button>
-        </div>
-
-        <div className={`${trollCityTheme.components.card} border border-red-500/30 flex items-center justify-between`}>
-          <div className="flex items-center gap-3">
-            <Trash2 className="w-5 h-5 text-red-400" />
-            <div>
-              <h2 className="text-lg font-semibold text-red-400">Delete Account</h2>
-              <p className={`text-xs ${trollCityTheme.text.muted}`}>Permanently delete your account and all data.</p>
-            </div>
-          </div>
-          <button
-            onClick={() => navigate('/profile/delete')}
-            className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white text-sm font-semibold"
-          >
-            Delete
-          </button>
-        </div>
+        {/* Profile Customization Tab */}
+        {activeTab === 'customization' && (
+          <ProfileCustomization />
+        )}
       </div>
     </div>
   )

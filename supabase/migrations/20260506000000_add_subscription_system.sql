@@ -190,10 +190,10 @@ CREATE POLICY "Broadcaster can view own revenue" ON subscription_revenue_log
 -- INSERT DEFAULT TIERS
 -- ============================================
 INSERT INTO subscription_tiers (name, price_coins, benefits, color_hex, icon_name, sort_order) VALUES
-('Fan', 100, ARRAY['Subscriber-only chat', 'Special badge'], '#6B7280', 'Heart', 1),
-('VIP', 500, ARRAY['Fan benefits', 'Custom emotes', 'VIP badge', 'Ad-free'], '#3B82F6', 'Crown', 2),
-('Elite', 2000, ARRAY['VIP benefits', 'Priority chat', 'Elite badge', 'Monthly gift'], '#8B5CF6', 'Gem', 3),
-('Mythic', 10000, ARRAY['Elite benefits', 'Monthly 1:1 shoutout', 'Mythic badge', 'Direct DM access'], '#F59E0B', 'Star', 4)
+('Fan', 100, ARRAY['Subscriber-only chat', 'Special subscriber badge'], '#6B7280', 'Heart', 1),
+('VIP', 500, ARRAY['All Fan benefits', 'Custom emotes', 'Golden VIP badge', 'Auto-highlighted chat in all streams'], '#3B82F6', 'Crown', 2),
+('Elite', 2000, ARRAY['All VIP benefits', 'Priority chat', 'Elite badge', 'Monthly gift'], '#8B5CF6', 'Gem', 3),
+('Mythic', 10000, ARRAY['All Elite benefits', 'Monthly 1:1 shoutout', 'Mythic badge', 'Direct DM access'], '#F59E0B', 'Star', 4)
 ON CONFLICT (name) DO UPDATE SET 
     price_coins = EXCLUDED.price_coins,
     benefits = EXCLUDED.benefits,
@@ -227,7 +227,7 @@ BEGIN
 
     -- Level check (≥10)
     IF (v_subscriber.level < 10) THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Level 10 required to subscribe');
+        RETURN jsonb_build_object('success', false, 'error', 'Level 1 required to subscribe');
     END IF;
 
     -- Get broadcaster

@@ -104,8 +104,10 @@ export default function TCNNPopupWidget({ onRequireAuth }: TCNNPopupWidgetProps)
 
     fetchTCNNStream()
     
-    // Poll every 45 seconds (increased from 30s to reduce lock conflicts with other requests)
-    const interval = setInterval(fetchTCNNStream, 45000)
+    // OPTIMIZED: 45s interval with visibility check
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchTCNNStream();
+    }, 45000)
 
     return () => {
       mounted = false

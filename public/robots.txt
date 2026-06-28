@@ -5,33 +5,56 @@ Allow: /
 Sitemap: https://maitrollcity.com/sitemap.xml
 Sitemap: https://maitrollcity.com/sitemap-dynamic.xml
 
-# Allow public content (profiles, streams, live broadcasts)
-# /:username, /profile/:username, /live/:username, /stream/:username are all public
+# Block authentication
+Disallow: /auth/
 
-# Disallow auth and internal pages from indexing
-Disallow: /auth
-Disallow: /auth/callback
-Disallow: /exit
-Disallow: /stream-ended
+# Block account management
 Disallow: /profile/settings
 Disallow: /profile/delete
 Disallow: /profile/setup
-Disallow: /live/command-center/
-Disallow: /live/overlay/
-Disallow: /broadcast/setup
-Disallow: /broadcast/summary/
 
-# Disallow admin pages
+# Block admin areas
 Disallow: /admin/
 Disallow: /secretary/
 Disallow: /ceo-assistant-dashboard
 Disallow: /noah-assistant-dashboard
 
-# Disallow internal tools
+# Block internal tools
 Disallow: /dev/
 Disallow: /debug/
 
-# Crawl-delay for aggressive bots
+# Block internal broadcast pages
+Disallow: /broadcast/setup
+Disallow: /broadcast/summary/
+Disallow: /live/command-center/
+Disallow: /live/overlay/
+
+# Block one-time/internal pages
+Disallow: /exit
+Disallow: /stream-ended
+
+# Block internal API routes (allow public OG/sitemap endpoints)
+Disallow: /api/admin/
+Disallow: /api/broadcasts/
+Disallow: /api/telemetry
+Disallow: /api/health
+Disallow: /api/paypal/
+Disallow: /api/social/
+
+# AI training crawlers (does NOT affect Google Search indexing)
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+# Rate-limit aggressive bots
 User-agent: AhrefsBot
 Crawl-delay: 10
 

@@ -56,12 +56,12 @@ export default function FeaturedBroadcastersRow({ onItemClick }: FeaturedBroadca
     }
     fetchBroadcasters()
 
-    // Poll every 90 seconds to update viewer counts
+    // Poll every 120 seconds to update viewer counts — reduced frequency to lower DB load
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchBroadcasters()
       }
-    }, 90000)
+    }, 120000)
 
     return () => clearInterval(pollInterval)
   }, [])

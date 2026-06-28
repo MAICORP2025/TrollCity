@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import type { CreatorProfile } from '../types/database'
 import { supabase } from '../lib/supabase'
+import { toast } from 'sonner'
 
 interface SubscribeModalProps {
   creator: CreatorProfile
@@ -15,19 +16,24 @@ export default function SubscribeModal({ creator, onClose, onSubscribe }: Subscr
 
   const handleSubscribe = async () => {
     if (!user) return
-    
+
     setLoading(true)
-    const { error } = await supabase
-      .from('subscriptions')
-      .insert({
-        user_id: user.id,
-        ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    try {
+      const { data, error } = await supabase.rpc('subscribe_to_creator', {
+        p_creator_id: creator.id
       })
-    
-    if (!error) {
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Subscription failed')
+      }
+
+      toast.success(`Subscribed to ${creator.username || 'creator'}!`)
       onSubscribe()
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -35,7 +41,7 @@ export default function SubscribeModal({ creator, onClose, onSubscribe }: Subscr
       <div className="bg-gray-900 rounded-xl p-6 w-full max-w-md">
         <h2 className="text-xl font-bold mb-4">Subscribe to Creator</h2>
         <p className="text-gray-400 mb-6">Get exclusive access to chats and premium content</p>
-        
+
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-pink-500 rounded-full"></div>
@@ -45,7 +51,7 @@ export default function SubscribeModal({ creator, onClose, onSubscribe }: Subscr
             </div>
           </div>
         </div>
-        
+
         <div className="flex space-x-2">
           <button
             onClick={onClose}

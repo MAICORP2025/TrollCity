@@ -4,6 +4,42 @@ const path = require('path');
 const dotenv = require('dotenv');
 const { createClient } = require('@supabase/supabase-js');
 
+// Simple in-memory rate limiter (no external dependency needed)
+const rateLimitStore = new Map();
+function rateLimit(req, res, next) {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1 minute window
+  const maxRequests = 120; // 120 requests per minute per IP
+
+  if (!rateLimitStore.has(ip)) {
+    rateLimitStore.set(ip, { count: 1, resetAt: now + windowMs });
+    return next();
+  }
+
+  const record = rateLimitStore.get(ip);
+  if (now > record.resetAt) {
+    record.count = 1;
+    record.resetAt = now + windowMs;
+    return next();
+  }
+
+  record.count++;
+  if (record.count > maxRequests) {
+    res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil((record.resetAt - now) / 1000) });
+    return;
+  }
+  next();
+}
+
+// Clean up rate limit store every 5 minutes (prevent memory growth)
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimitStore.entries()) {
+    if (now > record.resetAt) rateLimitStore.delete(ip);
+  }
+}, 5 * 60 * 1000);
+
 // Load environment variables from the root directory
 const findConfig = require('find-config');
 dotenv.config({ path: findConfig('.env') });
@@ -62,7 +98,7 @@ if (supabaseServiceKey && supabaseServiceKey.startsWith('eyJ')) {
 const APP_URL = process.env.VITE_APP_URL || process.env.APP_URL || 'https://trollcity.app';
 
 // Default fallback image (used when no stream thumbnail available)
-const FALLBACK_PREVIEW_IMAGE = `${APP_URL}/preview-default.svg`;
+const FALLBACK_PREVIEW_IMAGE = `${APP_URL}/images/mai-troll-city-preview.png`;
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public'), {
@@ -71,6 +107,7 @@ app.use(express.static(path.join(__dirname, '../public'), {
 }));
 
 app.use(cors());
+app.use(rateLimit);
 app.use((req, res, next) => {
   express.json()(req, res, (err) => {
     if (err) {
@@ -194,6 +231,45 @@ app.post('/api/broadcasts/save-video', async (req, res) => {
   } catch (err) {
     console.error('[SaveVideo] Handler error:', err);
     res.status(500).json({ error: 'Failed to save video', details: err.message });
+  }
+});
+
+// Make supabase available to route handlers via app.locals
+app.locals.supabase = supabase;
+
+// ============================================================================
+// PROFILE SEO ENDPOINT
+// Returns full HTML with OG/Twitter meta tags for social crawlers
+// visiting profile URLs like /kain
+// ============================================================================
+const profileSEO = require('./api/profile-seo');
+
+app.get('/api/social/profile/:username', async (req, res) => {
+  await profileSEO.handleProfileSEO(req, res);
+});
+
+// ============================================================================
+// STREAM SEO ENDPOINT (username/slug format)
+// Returns full HTML with OG/Twitter meta tags for stream URLs
+// like /kain/live/smokeathon
+// ============================================================================
+app.get('/api/social/stream/:username/:slug', async (req, res) => {
+  await profileSEO.handleStreamSEO(req, res);
+});
+
+// ============================================================================
+// DYNAMIC SITEMAP
+// ============================================================================
+const { generateSitemap } = require('./api/sitemap');
+
+app.get('/sitemap-dynamic.xml', async (req, res) => {
+  try {
+    const sitemap = await generateSitemap(supabase);
+    res.setHeader('Content-Type', 'application/xml');
+    res.status(200).send(sitemap);
+  } catch (error) {
+    console.error('[Sitemap] Error:', error);
+    res.status(500).send('Error generating sitemap');
   }
 });
 
@@ -515,6 +591,111 @@ app.use((err, req, res, _next) => {
     error: 'Internal Server Error', 
     message: process.env.NODE_ENV === 'development' ? err.message : undefined 
   });
+});
+
+// ============================================================================
+// SERVER-SIDE SEO INJECTION FOR PROFILE & STREAM ROUTES
+// When a bot/crawler visits /:username or /:username/live/:slug,
+// we detect it and return full HTML with meta tags directly.
+// Regular users get the SPA (index.html) as usual.
+// ============================================================================
+
+const BOT_REGEX = /facebookexternalhit|twitterbot|bingbot|googlebot|slackbot|discordbot|telegrambot|whatsapp|metaexternalhit|linkedinbot|applebot|duckduckbot|baiduspider|yandexbot/i;
+
+// Profile route: /:username (for bots only — humans get SPA)
+app.get(/^\/([a-zA-Z0-9_-]{2,30})$/, async (req, res, next) => {
+  const username = req.params[0];
+  const userAgent = req.headers['user-agent'] || '';
+  const isBot = BOT_REGEX.test(userAgent);
+
+  // Skip API routes, static files, and known non-profile paths
+  const skipPaths = ['api/', 'assets/', 'images/', 'public/', 'favicon', 'robots', 'sitemap', 'embed/', 'watch/', 'health', 'static'];
+  if (skipPaths.some(p => username.startsWith(p))) {
+    return next();
+  }
+
+  if (!isBot) {
+    // Regular user — serve the SPA, client-side routing handles it
+    return next();
+  }
+
+  // Bot detected — return full SEO HTML
+  try {
+    const html = profileSEO.generateProfileSEOHTML(
+      { username, display_name: username, bio: `View ${username}'s profile on Mai Troll City` },
+      null,
+      APP_URL
+    );
+
+    // Fetch real profile data
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id, username, display_name, avatar_url, bio, is_banned, is_profile_public')
+      .ilike('username', username)
+      .maybeSingle();
+
+    if (profile && !profile.is_banned && profile.is_profile_public !== false) {
+      // Check if live
+      const { data: liveStream } = await supabase
+        .from('streams')
+        .select('id, title, slug, thumbnail_url, status')
+        .eq('user_id', profile.id)
+        .eq('status', 'live')
+        .eq('is_public', true)
+        .maybeSingle();
+
+      const seoHtml = profileSEO.generateProfileSEOHTML(profile, liveStream, APP_URL);
+      return res.status(200).send(seoHtml);
+    }
+
+    // Profile not found or not public — serve SPA (React handles 404)
+    return next();
+  } catch (error) {
+    console.error('[ProfileRouteSEO] Error:', error);
+    return next();
+  }
+});
+
+// Stream route: /:username/live/:slug (for bots only)
+app.get(/^\/([a-zA-Z0-9_-]{2,30})\/live\/([a-zA-Z0-9_-]+)$/, async (req, res, next) => {
+  const username = req.params[0];
+  const slug = req.params[1];
+  const userAgent = req.headers['user-agent'] || '';
+  const isBot = BOT_REGEX.test(userAgent);
+
+  if (!isBot) {
+    return next(); // Regular user gets SPA
+  }
+
+  try {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id, username, display_name, avatar_url, is_banned')
+      .ilike('username', username)
+      .maybeSingle();
+
+    if (!profile || profile.is_banned) {
+      return next();
+    }
+
+    const { data: stream } = await supabase
+      .from('streams')
+      .select('id, title, slug, thumbnail_url, status, is_public')
+      .eq('user_id', profile.id)
+      .eq('slug', slug)
+      .eq('is_public', true)
+      .maybeSingle();
+
+    if (!stream) {
+      return next();
+    }
+
+    const seoHtml = profileSEO.generateStreamSEOHTML(stream, profile, APP_URL);
+    return res.status(200).send(seoHtml);
+  } catch (error) {
+    console.error('[StreamRouteSEO] Error:', error);
+    return next();
+  }
 });
 
 const server = app.listen(PORT, '0.0.0.0', () => {

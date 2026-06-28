@@ -94,58 +94,23 @@ export const GlobalEventProvider: React.FC<GlobalEventProviderProps> = ({ childr
     setActiveEvents([]);
   }, [adminOverride, checkAdminExpiration]);
 
-  // Initialize and set up update loop
+  // Initialize and set up update loop — fixed 30s interval (no dynamic 1s timer)
   useEffect(() => {
     // Initial update
     updateEvents();
     
-    // Calculate optimal update interval based on nearest event end time
-    const getOptimalInterval = (): number => {
-      const allEvents = Object.values(GlobalEvents);
-      const now = getServerTime();
-      
-      // Find nearest event boundary
-      let nearestBoundary = Infinity;
-      
-      for (const event of allEvents) {
-        const start = new Date(event.startTimestamp).getTime();
-        const end = new Date(event.endTimestamp).getTime();
-        
-        // Check if start is in future
-        if (start > now.getTime()) {
-          nearestBoundary = Math.min(nearestBoundary, start - now.getTime());
-        }
-        
-        // Check if end is in future
-        if (end > now.getTime()) {
-          nearestBoundary = Math.min(nearestBoundary, end - now.getTime());
-        }
-      }
-      
-      // If there's an upcoming boundary within 1 minute, use 1-second intervals
-      if (nearestBoundary < 60000) {
-        return 1000; // 1 second
-      }
-      
-      // Otherwise use 30-second intervals (ample for event timing)
-      return 30000;
-    };
+    // Use a single fixed 30-second interval — events don't need sub-second precision
+    const FIXED_INTERVAL_MS = 30_000;
     
-    // Set up update loop
-    const scheduleUpdate = () => {
-      const interval = getOptimalInterval();
-      updateTimerRef.current = window.setTimeout(() => {
-        updateEvents();
-        scheduleUpdate();
-      }, interval);
-    };
-    
-    scheduleUpdate();
+    updateTimerRef.current = window.setInterval(() => {
+      updateEvents();
+    }, FIXED_INTERVAL_MS);
     
     // Clean up on unmount
     return () => {
       if (updateTimerRef.current !== null) {
-        clearTimeout(updateTimerRef.current);
+        clearInterval(updateTimerRef.current);
+        updateTimerRef.current = null;
       }
     };
   }, [updateEvents]);

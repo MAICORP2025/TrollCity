@@ -335,7 +335,46 @@ serve(async (req) => {
       }
     }
 
-    // 5. Rate Limiting (Fail-Open for availability)
+    // 5a. Check if user's chat is disabled (chat_blocks table)
+    const { data: chatBlock } = await supabase
+      .from("chat_blocks")
+      .select("id, expires_at")
+      .eq("stream_id", stream_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (chatBlock) {
+      const isExpired = chatBlock.expires_at && new Date(chatBlock.expires_at) < new Date();
+      if (!isExpired) {
+        console.log(`[AUTH] User chat disabled: ${user.id} in stream ${stream_id}`);
+        return new Response(JSON.stringify({ error: "Your chat has been disabled by moderation", code: "CHAT_DISABLED" }), {
+          status: 403,
+          headers: { ...headers, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // 5b. Check broadcast_mod_actions for active chat disable
+    const { data: activeChatDisable } = await supabase
+      .from("broadcast_mod_actions")
+      .select("id, expires_at")
+      .eq("target_user_id", user.id)
+      .eq("action_type", "disable_chat")
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (activeChatDisable) {
+      const isExpired = activeChatDisable.expires_at && new Date(activeChatDisable.expires_at) < new Date();
+      if (!isExpired) {
+        console.log(`[AUTH] User chat disabled via mod action: ${user.id} in stream ${stream_id}`);
+        return new Response(JSON.stringify({ error: "Your chat has been disabled by moderation", code: "CHAT_DISABLED" }), {
+          status: 403,
+          headers: { ...headers, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // 6. Rate Limiting (Fail-Open for availability)
     const isMod = userProfile.role === "admin" || userProfile.role === "moderator" || userProfile.troll_role === "officer";
     const currentViewerCount = Number(viewerCount) || 0;
 

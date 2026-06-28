@@ -1,6 +1,6 @@
 import React from 'react'
 import { ArrowUp } from 'lucide-react'
-import { getXPForNextLevel, getLevelFromXP } from '../lib/tierSystem'
+import { calculateLevel, getXPForNextLevel } from '../lib/xp'
 
 interface XPProgressBarProps {
   currentXP: number
@@ -9,8 +9,8 @@ interface XPProgressBarProps {
 }
 
 function XPProgressBar({ currentXP, isAdmin = false, className = '' }: XPProgressBarProps) {
-  const { needed, percentage } = getXPForNextLevel(currentXP, isAdmin)
-  const currentLevel = getLevelFromXP(currentXP, isAdmin)
+  const { needed, percentage } = getXPForNextLevel(currentXP)
+  const currentLevel = calculateLevel(currentXP)
 
   if (currentLevel >= (isAdmin ? 101 : 100)) {
     return (

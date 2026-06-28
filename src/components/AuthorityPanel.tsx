@@ -169,10 +169,12 @@ const AuthorityPanel: React.FC = () => {
     loadAuthorityData();
     loadCourtSession();
 
-    // Refresh every 30 seconds
+    // OPTIMIZED: 30s interval with visibility check
     const interval = setInterval(() => {
-      loadAuthorityData();
-      loadCourtSession();
+      if (document.visibilityState === 'visible') {
+        loadAuthorityData();
+        loadCourtSession();
+      }
     }, 30000);
 
     return () => clearInterval(interval);

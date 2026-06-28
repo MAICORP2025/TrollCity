@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import {
   Activity, BarChart3, Bug, Clock, Coins, Mail, Monitor, MoreVertical,
   Radio, RefreshCw, Send, Pause, Search, Shield, ShieldAlert, TrendingUp,
-  UserPlus, Users, X, Stamp, FileText,
+  UserPlus, Users, X, Stamp, FileText, AlertTriangle, Gavel, Lock,
 } from 'lucide-react';
 import BugCenterPanel from './BugCenterPanel';
 import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton';
@@ -122,7 +122,7 @@ interface StreamAnalyticsDaily {
   peak_concurrent_viewers: number;
 }
 
-type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'bug_center' | 'tromail' | 'walkie_talkie' | 'notary';
+type MainTab = 'rtc' | 'mod_actions' | 'signups' | 'analytics' | 'cashout' | 'bug_center' | 'tromail' | 'walkie_talkie' | 'notary' | 'arrest';
 
 interface TromailInboxItem {
   id: string;
@@ -249,6 +249,19 @@ const staffRoles = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer',
   const [arrestReason, setArrestReason] = useState('');
   const [arrestSeverity, setArrestSeverity] = useState('moderate');
   const [arrestBailAmount, setArrestBailAmount] = useState(100);
+
+  // Arrest tab state
+  const [arrestSearchUsername, setArrestSearchUsername] = useState('');
+  const [arrestSearchResults, setArrestSearchResults] = useState<any[]>([]);
+  const [arrestSearchLoading, setArrestSearchLoading] = useState(false);
+  const [arrestTabReason, setArrestTabReason] = useState('');
+  const [arrestTabSeverity, setArrestTabSeverity] = useState('moderate');
+  const [arrestTabLoading, setArrestTabLoading] = useState(false);
+  const [arrestLogs, setArrestLogs] = useState<any[]>([]);
+  const [arrestLogsLoading, setArrestLogsLoading] = useState(false);
+  const [arrestCurrentInmates, setArrestCurrentInmates] = useState<any[]>([]);
+  const [arrestInmatesLoading, setArrestInmatesLoading] = useState(false);
+  const [arrestReleaseLoading, setArrestReleaseLoading] = useState<string | null>(null);
 
   const [selectedStream, setSelectedStream] = useState<StreamDetail | null>(null);
   const [selectedStreamBroadcaster, setSelectedStreamBroadcaster] = useState('');
@@ -1032,7 +1045,10 @@ const openAction = useCallback((user: UserListItem, action: string) => {
   useEffect(() => {
     if (isOpen && isStaff && activeMainTab === 'tromail') {
       fetchTromailInbox()
-      const interval = window.setInterval(fetchTromailInbox, 30000)
+      // OPTIMIZED: visibility check
+      const interval = window.setInterval(() => {
+        if (document.visibilityState === 'visible') fetchTromailInbox()
+      }, 30000)
       return () => window.clearInterval(interval)
     }
   }, [isOpen, isStaff, activeMainTab, fetchTromailInbox])
@@ -1112,15 +1128,20 @@ const openAction = useCallback((user: UserListItem, action: string) => {
   useEffect(() => {
     if (!isStaff) return;
 
+    // OPTIMIZED: All admin polling uses visibility check
+    const visCheck = (fn: () => void) => () => {
+      if (document.visibilityState === 'visible') fn();
+    };
+
     if (activeMainTab === 'rtc') {
       fetchRTCStats();
-      const interval = window.setInterval(fetchRTCStats, 30000);
+      const interval = window.setInterval(visCheck(fetchRTCStats), 30000);
       return () => window.clearInterval(interval);
     }
 
     if (activeMainTab === 'signups') {
       fetchSignupData();
-      const interval = window.setInterval(fetchSignupData, 30000);
+      const interval = window.setInterval(visCheck(fetchSignupData), 30000);
       return () => window.clearInterval(interval);
     }
 
@@ -1128,15 +1149,17 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       fetchStreamAnalytics();
       fetchClickStats();
       const interval = window.setInterval(() => {
-        fetchStreamAnalytics();
-        fetchClickStats();
+        if (document.visibilityState === 'visible') {
+          fetchStreamAnalytics();
+          fetchClickStats();
+        }
       }, 30000);
       return () => window.clearInterval(interval);
     }
 
     if (activeMainTab === 'cashout') {
       fetchCashoutBonusData();
-      const interval = window.setInterval(fetchCashoutBonusData, 30000);
+      const interval = window.setInterval(visCheck(fetchCashoutBonusData), 30000);
       return () => window.clearInterval(interval);
     }
 
@@ -1522,8 +1545,9 @@ const renderFloatingButton = () => {
      { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="h-3 w-3" />, adminOnly: true },
       { id: 'cashout', label: 'Cashout Bonus', icon: <Coins className="h-3 w-3" />, adminOnly: true },
       { id: 'bug_center', label: 'Bug Center', icon: <Bug className="h-3 w-3" />, adminOnly: true },
-     { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
-     { id: 'notary', label: 'Notary', icon: <Stamp className="h-3 w-3" /> },
+      { id: 'tromail', label: 'Tromail', icon: <Mail className="h-3 w-3" /> },
+      { id: 'notary', label: 'Notary', icon: <Stamp className="h-3 w-3" /> },
+      { id: 'arrest', label: 'Arrest', icon: <Lock className="h-3 w-3" /> },
    ];
 
    const visibleMonitorTabs = monitorTabs.filter((tab) => {
@@ -2111,7 +2135,467 @@ return (
           )}
         </div>
       </div>
-    );
+     );
+
+    const fetchArrestSearch = useCallback(async () => {
+      if (!arrestSearchUsername.trim()) { setArrestSearchResults([]); return; }
+      setArrestSearchLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('id, username, avatar_url, role, is_admin, is_troll_officer, is_lead_officer')
+          .ilike('username', `%${arrestSearchUsername.trim()}%`)
+          .limit(10);
+        if (error) throw error;
+        setArrestSearchResults(data || []);
+      } catch (err: any) {
+        toast.error(err?.message || 'Search failed');
+      } finally {
+        setArrestSearchLoading(false);
+      }
+    }, [arrestSearchUsername]);
+
+    const fetchArrestLogs = useCallback(async () => {
+      setArrestLogsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('moderation_actions')
+          .select('id, created_at, target_user_id, reason, details, status, user_profiles!moderation_actions_target_user_id_fkey(username, avatar_url, role)')
+          .eq('action_type', 'arrest')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        setArrestLogs(data || []);
+      } catch {
+        try {
+          const { data, error: err2 } = await supabase
+            .from('moderation_actions')
+            .select('id, created_at, target_user_id, reason, details, status')
+            .eq('action_type', 'arrest')
+            .order('created_at', { ascending: false })
+            .limit(50);
+          if (err2) throw err2;
+          setArrestLogs(data || []);
+        } catch {
+          setArrestLogs([]);
+        }
+      } finally {
+        setArrestLogsLoading(false);
+      }
+    }, []);
+
+    const fetchCurrentInmates = useCallback(async () => {
+      setArrestInmatesLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('jail')
+          .select('id, user_id, reason, severity, bond_amount, status, created_at, release_time, user_profiles!jail_user_id_fkey(username, avatar_url, role)')
+          .in('status', ['jailed', 'released_pending_trial'])
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        setArrestCurrentInmates(data || []);
+      } catch {
+        try {
+          const { data, error: err2 } = await supabase
+            .from('jail')
+            .select('id, user_id, reason, severity, bond_amount, status, created_at, release_time')
+            .in('status', ['jailed', 'released_pending_trial'])
+            .order('created_at', { ascending: false });
+          if (err2) throw err2;
+          const userIds = [...new Set((data || []).map((j: any) => j.user_id).filter(Boolean))];
+          const { data: profiles } = await supabase.from('user_profiles').select('id, username, avatar_url, role').in('id', userIds);
+          const profileMap: Record<string, any> = {};
+          (profiles || []).forEach((p: any) => { profileMap[p.id] = p; });
+          setArrestCurrentInmates((data || []).map((j: any) => ({ ...j, user_profiles: profileMap[j.user_id] || null })));
+        } catch {
+          setArrestCurrentInmates([]);
+        }
+      } finally {
+        setArrestInmatesLoading(false);
+      }
+    }, []);
+
+    const releaseInmate = useCallback(async (jailId: string, userId: string, username: string) => {
+      if (!window.confirm(`Release ${username} from jail?`)) return;
+      setArrestReleaseLoading(jailId);
+      try {
+        const now = new Date().toISOString();
+        const { error: jailError } = await supabase
+          .from('jail')
+          .update({ status: 'released', release_time: now })
+          .eq('id', jailId);
+        if (jailError) throw jailError;
+
+        await supabase
+          .from('user_profiles')
+          .update({ is_jailed: false })
+          .eq('id', userId)
+          .then(() => undefined, () => undefined);
+
+        await supabase.from('moderation_actions').insert({
+          actor_id: profile?.id,
+          officer_id: profile?.id,
+          target_user_id: userId,
+          action: 'release',
+          action_type: 'release',
+          reason: 'Released by staff from Arrest tab',
+          details: `jail_id:${jailId}; released_at:${now}`,
+          status: 'completed',
+        }).then(() => undefined, () => undefined);
+
+        toast.success(`Released ${username} from jail`);
+        fetchCurrentInmates();
+        fetchArrestLogs();
+      } catch (err: any) {
+        toast.error(err?.message || 'Release failed');
+      } finally {
+        setArrestReleaseLoading(null);
+      }
+    }, [profile?.id, fetchCurrentInmates, fetchArrestLogs]);
+
+    const executeArrestTab = useCallback(async (targetUser: any) => {
+      if (!profile?.id) return;
+      const protectedRoles = ['admin', 'ceo', 'secretary', 'pastor', 'lead_troll_officer', 'troll_officer'];
+      if (protectedRoles.includes(targetUser.role || '') || targetUser.is_admin) {
+        toast.error(`Cannot arrest a user with protected role: ${targetUser.role || 'admin'}`);
+        return;
+      }
+      if (!arrestTabReason.trim()) {
+        toast.error('Arrest reason is required');
+        return;
+      }
+      setArrestTabLoading(true);
+      try {
+        const SEVERITY_LEVELS = [
+          { id: 'minor', bailMultiplier: 1 },
+          { id: 'moderate', bailMultiplier: 2 },
+          { id: 'serious', bailMultiplier: 5 },
+          { id: 'severe', bailMultiplier: 10 }
+        ];
+        const severity = SEVERITY_LEVELS.find(s => s.id === arrestTabSeverity);
+        const bail = severity ? severity.bailMultiplier * 100 : 100;
+
+        const today = new Date();
+        const dow = today.getDay();
+        let nextCourtDate: Date;
+        if (dow === 0 || dow === 1) nextCourtDate = new Date(today.getTime() + ((2 - dow) * 86400000));
+        else if (dow === 2 || dow === 3) nextCourtDate = new Date(today.getTime() + ((4 - dow) * 86400000));
+        else if (dow === 4) nextCourtDate = today;
+        else nextCourtDate = new Date(today.getTime() + (((2 + 7 - dow) % 7) * 86400000));
+        const courtDateStr = nextCourtDate.toISOString().split('T')[0];
+
+        const { data: userIpRecords } = await supabase
+          .from('user_ip_tracking')
+          .select('latitude, longitude, ip_address')
+          .eq('user_id', targetUser.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        const { error: jailError } = await supabase.from('jail').insert({
+          user_id: targetUser.id,
+          release_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          reason: arrestTabReason,
+          sentence_days: 1,
+          arrested_by: profile.id,
+          court_date: courtDateStr,
+          status: 'jailed',
+          severity: arrestTabSeverity,
+          bond_amount: bail,
+          arrest_latitude: userIpRecords?.[0]?.latitude ?? null,
+          arrest_longitude: userIpRecords?.[0]?.longitude ?? null,
+        });
+        if (jailError) throw jailError;
+
+        const { data: docket } = await supabase
+          .from('court_dockets')
+          .select('id, cases_count')
+          .eq('court_date', courtDateStr)
+          .maybeSingle();
+
+        let docketId: string;
+        if (docket && docket.cases_count < 20) {
+          docketId = docket.id;
+          await supabase.from('court_dockets').update({ cases_count: (docket.cases_count || 0) + 1 }).eq('id', docketId);
+        } else {
+          const { data: newDocket, error: insertError } = await supabase.from('court_dockets').insert({
+            court_date: courtDateStr, max_cases: 20, cases_count: 1, status: 'open',
+          }).select().single();
+          if (insertError) throw insertError;
+          docketId = newDocket?.id;
+          if (!docketId) throw new Error('Failed to create court docket');
+        }
+
+        await supabase.from('court_cases').insert({
+          docket_id: docketId,
+          defendant_id: targetUser.id,
+          plaintiff_id: profile.id,
+          reason: arrestTabReason,
+          status: 'pending',
+          case_type: 'criminal'
+        });
+
+        await supabase.from('moderation_actions').insert({
+          actor_id: profile.id,
+          officer_id: profile.id,
+          target_user_id: targetUser.id,
+          action: 'arrest',
+          action_type: 'arrest',
+          reason: arrestTabReason,
+          details: `court_date:${courtDateStr}; bail:${bail}; severity:${arrestTabSeverity}`,
+          status: 'active',
+        }).then(() => undefined, () => undefined);
+
+        toast.success(`Arrested ${targetUser.username} — ${arrestTabSeverity} severity, ${bail} coin bail`);
+        setArrestTabReason('');
+        setArrestTabSeverity('moderate');
+        setArrestSearchUsername('');
+        setArrestSearchResults([]);
+        fetchArrestLogs();
+      } catch (err: any) {
+        toast.error(err?.message || 'Arrest failed');
+      } finally {
+        setArrestTabLoading(false);
+      }
+    }, [profile?.id, arrestTabReason, arrestTabSeverity, fetchArrestLogs]);
+
+    useEffect(() => {
+      if (isOpen && isStaff && activeMainTab === 'arrest') {
+        fetchArrestLogs();
+        fetchCurrentInmates();
+      }
+    }, [isOpen, isStaff, activeMainTab, fetchArrestLogs, fetchCurrentInmates]);
+
+    const renderArrestTab = () => {
+      const SEVERITY_OPTIONS = [
+        { id: 'minor', label: 'Minor', color: 'text-yellow-400', bail: 100 },
+        { id: 'moderate', label: 'Moderate', color: 'text-orange-400', bail: 200 },
+        { id: 'serious', label: 'Serious', color: 'text-red-400', bail: 500 },
+        { id: 'severe', label: 'Severe', color: 'text-red-600', bail: 1000 },
+      ];
+      const selectedSeverity = SEVERITY_OPTIONS.find(s => s.id === arrestTabSeverity);
+
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-red-400">
+            <Lock className="h-4 w-4" />
+            <span>Arrest a User</span>
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 space-y-3">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-500" />
+                <input
+                  type="text"
+                  value={arrestSearchUsername}
+                  onChange={(e) => setArrestSearchUsername(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') fetchArrestSearch(); }}
+                  placeholder="Search username..."
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 py-1.5 pl-7 pr-2 text-xs text-white placeholder:text-gray-600 focus:border-cyan-400 focus:outline-none"
+                />
+              </div>
+              <button
+                onClick={fetchArrestSearch}
+                disabled={arrestSearchLoading}
+                className="rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-500 disabled:opacity-50"
+              >
+                {arrestSearchLoading ? '...' : 'Search'}
+              </button>
+            </div>
+
+            {arrestSearchResults.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[10px] uppercase tracking-wide text-gray-500">{arrestSearchResults.length} result(s)</div>
+                {arrestSearchResults.map((user) => {
+                  const isProtected = ['admin', 'ceo', 'secretary', 'pastor', 'lead_troll_officer', 'troll_officer'].includes(user.role || '') || user.is_admin;
+                  return (
+                    <div key={user.id} className="flex items-center justify-between rounded-md border border-white/5 bg-white/[0.02] px-2.5 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <img src={user.avatar_url || '/default-avatar.png'} alt="" className="h-6 w-6 rounded-full object-cover" />
+                        <div>
+                          <span className="text-xs font-semibold text-white">{user.username}</span>
+                          <span className="ml-1.5 text-[10px] text-gray-500">{user.role || 'user'}</span>
+                        </div>
+                      </div>
+                      {isProtected ? (
+                        <span className="text-[10px] text-yellow-500">Protected</span>
+                      ) : (
+                        <button
+                          onClick={() => { setActionTarget(user); }}
+                          className="rounded bg-red-600/80 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-red-500"
+                        >
+                          Select
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {(actionTarget && activeMainTab === 'arrest') && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <img src={actionTarget.avatar_url || '/default-avatar.png'} alt="" className="h-8 w-8 rounded-full object-cover" />
+                <div>
+                  <div className="text-sm font-bold text-white">{actionTarget.username}</div>
+                  <div className="text-[10px] text-gray-400">{actionTarget.role || 'user'}</div>
+                </div>
+                <button onClick={() => setActionTarget(null as any)} className="ml-auto text-gray-500 hover:text-white">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wide text-gray-400">Reason</label>
+                <input
+                  type="text"
+                  value={arrestTabReason}
+                  onChange={(e) => setArrestTabReason(e.target.value)}
+                  placeholder="Enter arrest reason..."
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white placeholder:text-gray-600 focus:border-red-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wide text-gray-400">Severity</label>
+                <div className="flex gap-1.5">
+                  {SEVERITY_OPTIONS.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setArrestTabSeverity(s.id)}
+                      className={`flex-1 rounded-md border px-2 py-1.5 text-[10px] font-bold uppercase transition-colors ${
+                        arrestTabSeverity === s.id
+                          ? `border-red-500/50 bg-red-500/20 ${s.color}`
+                          : 'border-white/10 bg-white/[0.02] text-gray-500 hover:border-white/20'
+                      }`}
+                    >
+                      {s.label}
+                      <div className="text-[9px] opacity-70">{s.bail} bail</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-md bg-white/[0.03] px-2.5 py-1.5 text-[10px]">
+                <span className="text-gray-400">Bail: <span className="font-bold text-white">{selectedSeverity?.bail || 100} coins</span></span>
+                <span className="text-gray-400">Court: <span className="font-bold text-white">Next Tue/Thu</span></span>
+              </div>
+
+              <button
+                onClick={() => executeArrestTab(actionTarget)}
+                disabled={arrestTabLoading || !arrestTabReason.trim()}
+                className="w-full rounded-md bg-red-600 py-2 text-xs font-bold uppercase text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                {arrestTabLoading ? (
+                  <span className="flex items-center justify-center gap-1"><RefreshCw className="h-3 w-3 animate-spin" /> Arresting...</span>
+                ) : (
+                  <span className="flex items-center justify-center gap-1"><Lock className="h-3 w-3" /> Arrest {actionTarget.username}</span>
+                )}
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-yellow-400">
+              <AlertTriangle className="h-4 w-4" />
+              <span>Current Inmates</span>
+              <span className="rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[9px] text-yellow-300">{arrestCurrentInmates.length}</span>
+            </div>
+            <button
+              onClick={fetchCurrentInmates}
+              disabled={arrestInmatesLoading}
+              className="rounded border border-white/10 px-2 py-0.5 text-[10px] text-gray-400 hover:border-white/20 hover:text-white disabled:opacity-50"
+            >
+              {arrestInmatesLoading ? '...' : 'Refresh'}
+            </button>
+          </div>
+
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-yellow-500/20 bg-white/[0.02]">
+            {arrestCurrentInmates.length === 0 ? (
+              <div className="p-4 text-center text-xs text-gray-600">No inmates currently jailed</div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {arrestCurrentInmates.map((inmate: any) => (
+                  <div key={inmate.id} className="flex items-center justify-between px-2.5 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={inmate.user_profiles?.avatar_url || '/default-avatar.png'}
+                        alt=""
+                        className="h-6 w-6 shrink-0 rounded-full object-cover"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold text-white truncate">
+                          {inmate.user_profiles?.username || 'Unknown'}
+                        </div>
+                        <div className="text-[10px] text-gray-500 truncate">
+                          {inmate.reason || 'No reason'} — {inmate.severity || 'N/A'}
+                          {inmate.bond_amount ? ` • ${inmate.bond_amount} bail` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => releaseInmate(inmate.id, inmate.user_id, inmate.user_profiles?.username || 'Unknown')}
+                      disabled={arrestReleaseLoading === inmate.id}
+                      className="ml-2 shrink-0 rounded bg-green-600/80 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-green-500 disabled:opacity-50"
+                    >
+                      {arrestReleaseLoading === inmate.id ? '...' : 'Release'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-orange-400">
+              <Gavel className="h-4 w-4" />
+              <span>Arrest Logs</span>
+            </div>
+            <button
+              onClick={fetchArrestLogs}
+              disabled={arrestLogsLoading}
+              className="rounded border border-white/10 px-2 py-0.5 text-[10px] text-gray-400 hover:border-white/20 hover:text-white disabled:opacity-50"
+            >
+              {arrestLogsLoading ? '...' : 'Refresh'}
+            </button>
+          </div>
+
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-white/5 bg-white/[0.02]">
+            {arrestLogs.length === 0 ? (
+              <div className="p-4 text-center text-xs text-gray-600">No arrest logs</div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {arrestLogs.map((log: any) => (
+                  <div key={log.id} className="flex items-center justify-between px-2.5 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500/20">
+                        <Lock className="h-3 w-3 text-red-400" />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold text-white">
+                          {log.user_profiles?.username || log.target_user_id?.slice(0, 8) || 'Unknown'}
+                        </div>
+                        <div className="text-[10px] text-gray-500 truncate max-w-[200px]">{log.reason || 'No reason'}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-gray-400">
+                        {log.created_at ? new Date(log.created_at).toLocaleDateString() : ''}
+                      </div>
+                      <div className="text-[9px] text-gray-600">
+                        {log.created_at ? new Date(log.created_at).toLocaleTimeString() : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
 
     const renderActiveTab = () => {
      if (activeMainTab === 'rtc') return renderRtcTab();
@@ -2121,8 +2605,9 @@ return (
       if (isFullAdmin && activeMainTab === 'cashout') return renderCashoutTab();
        if (isFullAdmin && activeMainTab === 'bug_center') return <BugCenterPanel />;
       if (isFullAdmin && activeMainTab === 'analytics') return renderAnalyticsTab();
-      if (activeMainTab === 'tromail') return renderTromailTab();
-      if (activeMainTab === 'notary') return renderNotaryTab();
+       if (activeMainTab === 'tromail') return renderTromailTab();
+       if (activeMainTab === 'notary') return renderNotaryTab();
+       if (activeMainTab === 'arrest') return renderArrestTab();
       return <div className="rounded-lg bg-white/5 p-4 text-center text-xs text-gray-500">No access to this tab.</div>;
    };
 

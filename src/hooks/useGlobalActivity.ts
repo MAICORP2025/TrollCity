@@ -50,6 +50,7 @@ const useGlobalActivity = () => {
     let mounted = true
 
     const loadEvents = async () => {
+      if (!mounted) return
       const since = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
       const { data, error } = await supabase
         .from('global_events')

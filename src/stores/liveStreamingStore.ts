@@ -323,13 +323,14 @@ export const useLiveStreamingStore = create<LiveStreamingState>((set, get) => ({
   streamStats: { viewer_count: 0, peak_viewers: 0, total_coins: 0, total_gifts: 0, chat_messages: 0, stream_duration: 0 },
   updateStreamStats: (stats) => set((state) => ({ streamStats: { ...state.streamStats, ...stats } })),
 
-  // Realtime
+  // Realtime — consolidated into a single channel per stream to reduce connection count
   subscriptions: new Map(),
   subscribe: (streamId) => {
     const subs = get().subscriptions
     if (subs.has(streamId)) return
 
-    const missionSub = supabase.channel(`missions:${streamId}`)
+    // Use a single channel per stream instead of 5 separate channels
+    const combinedSub = supabase.channel(`stream-live:${streamId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_missions', filter: `stream_id=eq.${streamId}` }, (payload) => {
         if (payload.eventType === 'INSERT') get().addMission(payload.new as StreamMission)
         else if (payload.eventType === 'UPDATE') {
@@ -338,15 +339,9 @@ export const useLiveStreamingStore = create<LiveStreamingState>((set, get) => ({
           else get().updateMissionProgress(m.id, m.current_value)
         }
       })
-      .subscribe()
-
-    const goalSub = supabase.channel(`goals:${streamId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_goals', filter: `stream_id=eq.${streamId}` }, (payload) => {
         if (payload.eventType === 'UPDATE') get().updateGoalProgress(payload.new.id, payload.new.current_value)
       })
-      .subscribe()
-
-    const pollSub = supabase.channel(`polls:${streamId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_polls', filter: `stream_id=eq.${streamId}` }, (payload) => {
         if (payload.eventType === 'INSERT') set((s) => ({ polls: [payload.new as StreamPoll, ...s.polls], activePoll: payload.new as StreamPoll }))
         else if (payload.eventType === 'UPDATE') {
@@ -357,28 +352,32 @@ export const useLiveStreamingStore = create<LiveStreamingState>((set, get) => ({
           }))
         }
       })
-      .subscribe()
-
-    const milestoneSub = supabase.channel(`milestones:${streamId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_milestones', filter: `stream_id=eq.${streamId}` }, (payload) => {
         if (payload.eventType === 'UPDATE') get().updateMilestone(payload.new.id, payload.new.current_value)
       })
-      .subscribe()
-
-    const energySub = supabase.channel(`energy:${streamId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stream_energy_meter', filter: `stream_id=eq.${streamId}` }, (payload) => {
         get().setEnergy(payload.new as Partial<EnergyMeter>)
       })
       .subscribe()
 
-    subs.set(streamId, { missionSub, goalSub, pollSub, milestoneSub, energySub })
+    subs.set(streamId, { combinedSub })
   },
-  unsubscribe: () => {
+  unsubscribe: (streamId?: string) => {
     const subs = get().subscriptions
-    subs.forEach((channels) => {
-      Object.values(channels).forEach((ch: any) => supabase.removeChannel(ch))
-    })
-    subs.clear()
+    if (streamId) {
+      // Unsubscribe from a specific stream
+      const channels = subs.get(streamId)
+      if (channels) {
+        Object.values(channels).forEach((ch: any) => supabase.removeChannel(ch))
+        subs.delete(streamId)
+      }
+    } else {
+      // Unsubscribe from all streams
+      subs.forEach((channels) => {
+        Object.values(channels).forEach((ch: any) => supabase.removeChannel(ch))
+      })
+      subs.clear()
+    }
   }
 }))
 

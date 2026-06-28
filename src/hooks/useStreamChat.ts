@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { generateUUID } from '../lib/uuid';
@@ -80,7 +80,46 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
   const { user, profile } = useAuthStore();
   const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [subscriberOnlyChat, setSubscriberOnlyChat] = useState(false);
+  const [isSubscriber, setIsSubscriber] = useState(false);
   const { trackChatMessage } = useMissionProgress(streamId);
+
+  // Check if stream has subscriber-only chat enabled and if user is subscribed
+  useEffect(() => {
+    if (!streamId || !hostId) return;
+    supabase
+      .from('streams')
+      .select('subscriber_only_chat, user_id')
+      .eq('id', streamId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        setSubscriberOnlyChat(!!data.subscriber_only_chat);
+        // Check if current user is subscribed to the broadcaster
+        if (user?.id && data.user_id !== user.id) {
+          supabase
+            .from('user_subscriptions')
+            .select('id')
+            .eq('subscriber_id', user.id)
+            .eq('broadcaster_id', data.user_id)
+            .eq('is_active', true)
+            .maybeSingle()
+            .then(({ data: sub }) => {
+              setIsSubscriber(!!sub);
+            });
+        } else {
+          setIsSubscriber(true); // broadcaster themselves
+        }
+      });
+  }, [streamId, hostId, user?.id]);
+
+  const canChat = useMemo(() => {
+    if (!user) return false;
+    if (isHost) return true;
+    if (isStaffProfile(profile)) return true;
+    if (subscriberOnlyChat && !isSubscriber) return false;
+    return true;
+  }, [user, isHost, profile, subscriberOnlyChat, isSubscriber]);
 
   const processedMessageIds = useRef<Set<string>>(new Set());
   const joinedUsersRef = useRef<Set<string>>(new Set());
@@ -302,6 +341,12 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
       return;
     }
 
+    // Subscriber-only chat enforcement
+    if (!canChat) {
+      toast.error('Subscriber-only chat — subscribe to the broadcaster to chat in this stream.');
+      return;
+    }
+
     const canBypassModeration = isHost || isStaffProfile(profile);
     if (!canBypassModeration) {
       const { data: blocked, error: blockError } = await supabase.rpc('is_user_chat_blocked', {
@@ -409,5 +454,8 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
     chatDisabledRemainingMinutes,
     streamMods: [],
     isSendingMessage,
+    subscriberOnlyChat,
+    isSubscriber,
+    canChat,
   };
 };

@@ -155,12 +155,16 @@ export type NotificationType =
   | 'subscription_renewed'
   | 'subscription_expired'
 
-  // CROWN REDEMPTIONS
-  | 'crown_redemption_submitted'
-  | 'crown_redemption_approved'
-  | 'crown_redemption_fulfilled'
-  | 'crown_redemption_rejected'
-  | 'crown_redemption_cancelled';
+   // CROWN REDEMPTIONS
+   | 'crown_redemption_submitted'
+   | 'crown_redemption_approved'
+   | 'crown_redemption_fulfilled'
+   | 'crown_redemption_rejected'
+   | 'crown_redemption_cancelled'
+
+   // CAREER / JOB APPLICATIONS
+   | 'career_application_submitted'
+   | 'application_submitted';
 
 export interface Notification {
   id: string
@@ -277,5 +281,9 @@ export interface NotificationMetadata {
   // Referral
   referred_user_id?: string
 
-  [key: string]: any
-}
+   application_id?: string
+   position_id?: string
+   position_title?: string
+
+   [key: string]: any
+ }

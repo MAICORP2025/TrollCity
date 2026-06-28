@@ -6,8 +6,8 @@
 --
 -- Tier Structure:
 --   Level 1-499:   Standard Payout  • Paid every Friday
---   Level 500-999:  Fast Pay         • Request any day • Processed within 24h
---   Level 1000+:    Instant Pay      • Instant • Multiple per week • Priority
+--   Level 500-999:  Fast Pay         • Request Every 24 Hrs • Processed within 24h
+--   Level 1000+:    Instant Pay      • Instant • Every 60 Minutes • Priority
 --
 -- NOTE: User level is derived from xp_ledger (via user_profiles.total_xp) and
 --       stored in user_stats by the grant_xp → calculate_level_details pipeline.

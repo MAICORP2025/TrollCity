@@ -224,8 +224,7 @@ export function useAdminFinanceRealtime() {
     staleTime: 1 * 60 * 1000,
   })
 
-  // Cashouts query. Use the canonical cashout_requests table; do not create a
-  // duplicate cashouts table just to satisfy older frontend references.
+  // Cashouts query. Uses the unified payout_requests table (Fast Pay / MAI Pay).
   const {
     data: cashouts,
     isLoading: cashoutsLoading,
@@ -234,11 +233,12 @@ export function useAdminFinanceRealtime() {
     queryKey: ['admin-cashouts'],
     queryFn: async (): Promise<Cashout[]> => {
       const { data, error } = await supabase
-        .from('cashout_requests')
+        .from('payout_requests')
         .select('*')
         .order('created_at', { ascending: false })
+        .limit(100)
       if (error) {
-        reportSupabaseError(error, { table: 'cashout_requests', action: 'select', source: 'admin' })
+        reportSupabaseError(error, { table: 'payout_requests', action: 'select', source: 'admin' })
         throw error
       }
       return data || []

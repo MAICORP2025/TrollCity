@@ -715,8 +715,8 @@ const BattleParticipantTile = ({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Camera toggle button for remote participants */}
-          {!isLocal && canToggleCamera && onToggleCamera && (
+           {/* Camera toggle button — show for current user (self-toggle) or remote participants */}
+           {canToggleCamera && onToggleCamera && (
             <button
               onClick={(e) => { e.stopPropagation(); onToggleCamera(); }}
               className={cn(
@@ -729,8 +729,8 @@ const BattleParticipantTile = ({
             </button>
           )}
 
-          {/* Mic toggle button for remote participants */}
-          {!isLocal && canToggleMic && onToggleMic && (
+           {/* Mic toggle button — show for current user (self-toggle) or remote participants */}
+           {canToggleMic && onToggleMic && (
             <button
               onClick={(e) => { e.stopPropagation(); onToggleMic(); }}
               className={cn(

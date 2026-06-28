@@ -82,16 +82,16 @@ export default function AutomatedPayouts() {
   const loadPayoutWindow = async () => {
     setWindowLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_payout_window_status');
-      if (error) throw error;
-      setPayoutWindow(data);
-      
-      // Load eligible users count
-      const minCoins = data?.min_coins || 5000;
+      // Payout window is now determined by user level in the backend
+      // Level 1-499: Fridays only, Level 500-999: Every 24hrs, Level 1000+: Every 30min
+      setPayoutWindow({ enabled: true, min_coins: 7500 });
+
+      // Load eligible users count (those with cashout_approved and enough escrow coins)
       const { count } = await supabase
         .from('user_profiles')
         .select('id', { count: 'exact', head: true })
-        .gte('troll_coins', minCoins);
+        .eq('cashout_approved', true)
+        .gte('cashout_coins', 7500);
       setEligibleUsers(count || 0);
     } catch (err) {
       console.error('Error loading payout window:', err);

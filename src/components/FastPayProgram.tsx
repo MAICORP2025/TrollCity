@@ -252,7 +252,7 @@ export default function FastPayProgram({ onNavigateToCashout, compact = false }:
             />
             <TierRow
               label="Level 500–999"
-              description="Fast Pay • Any day • Within 24h"
+              description="Fast Pay • Every 24 Hrs • Within 24h"
               fee={`${FAST_PAY_FEE_PERCENT}%`}
               active={tier === 'fast_pay'}
               current={tier === 'fast_pay'}
@@ -260,7 +260,7 @@ export default function FastPayProgram({ onNavigateToCashout, compact = false }:
             />
             <TierRow
               label="Level 1000+"
-              description="Instant • Multiple per week • Priority"
+              description="Instant • Every 60 Minutes • Priority"
               fee={`${FAST_PAY_FEE_PERCENT}%`}
               active={tier === 'instant'}
               current={tier === 'instant'}

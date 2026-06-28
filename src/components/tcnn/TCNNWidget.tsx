@@ -114,8 +114,10 @@ export default function TCNNWidget({ onRequireAuth }: TCNNWidgetProps) {
 
     fetchTCNNData();
     
-    // Poll every 15 seconds for updates
-    const interval = setInterval(fetchTCNNData, 15000);
+    // OPTIMIZED: 30s interval with visibility check
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchTCNNData();
+    }, 30000);
 
     return () => {
       mounted = false;

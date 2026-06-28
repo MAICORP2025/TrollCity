@@ -11,7 +11,7 @@ export default function PayoutHistoryCard() {
     if (!profile) return
     ;(async () => {
       const { data, error } = await supabase
-        .from('cashout_requests')
+        .from('payout_requests')
         .select('*')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false })

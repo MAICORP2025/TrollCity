@@ -73,7 +73,10 @@ export default function TickerQueueTab() {
         console.log('[TickerQueue] Channel status:', status);
       });
 
-    const interval = setInterval(loadTickerQueue, 30000);
+    // OPTIMIZED: visibility check
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadTickerQueue();
+    }, 30000);
 
     return () => {
       if (channel) {

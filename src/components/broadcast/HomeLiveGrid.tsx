@@ -143,7 +143,10 @@ export default function HomeLiveGrid() {
 
   useEffect(() => {
     fetchStreams()
-    const interval = setInterval(fetchStreams, 15000)
+    // OPTIMIZED: 30s interval with visibility check to reduce DB load
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchStreams()
+    }, 30000)
     return () => {
       clearInterval(interval)
     }

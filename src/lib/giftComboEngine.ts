@@ -65,7 +65,8 @@ export function processGiftCombo(
   }
 }
 
-// Clean up expired combos (call periodically or on animation end)
+// Clean up expired combos — called automatically on every processGiftCombo call
+// and also exposed for manual cleanup if needed
 export function cleanupExpiredCombos(): void {
   const now = Date.now();
   for (const [senderId, combo] of activeCombos.entries()) {
@@ -73,6 +74,14 @@ export function cleanupExpiredCombos(): void {
       activeCombos.delete(senderId);
     }
   }
+}
+
+// Auto-cleanup: run every 30 seconds to prevent memory growth
+let _comboCleanupInterval: ReturnType<typeof setInterval> | null = null;
+if (typeof window !== 'undefined') {
+  _comboCleanupInterval = setInterval(() => {
+    cleanupExpiredCombos();
+  }, 30_000);
 }
 
 // Get active combo for a specific sender

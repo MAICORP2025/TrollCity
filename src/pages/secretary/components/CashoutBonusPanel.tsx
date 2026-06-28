@@ -29,16 +29,22 @@ export default function CashoutBonusPanel() {
   const fetchRequests = useCallback(async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('admin-actions', {
-        body: { 
-          action: 'get_cashout_requests',
-          filterStatus 
-        }
-      })
+      // Use the unified payout_requests table directly
+      let query = supabase
+        .from('payout_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
-      
-      const requestsData = data?.requests || []
+
+      const requestsData = data || []
       setRequests(requestsData.map((req: any) => ({
         ...req,
         bonus_amount: req.bonus_amount || 0

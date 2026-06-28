@@ -6,7 +6,7 @@ import { PreflightStore } from '@/lib/preflightStore';
 import requestBroadcastMediaAccess from '@/lib/media/requestBroadcastMediaAccess';
 import { useStreamStore } from '@/lib/streamStore';
 import { LocalAudioTrack, LocalVideoTrack, AudioPresets, VideoPresets, Room } from 'livekit-client';
-import { Video, VideoOff, Mic, MicOff, RefreshCw, Swords, Gamepad2, Monitor, Lock, Eye, EyeOff, Radio, ShieldCheck } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, RefreshCw, Swords, Gamepad2, Monitor, Lock, Eye, EyeOff, Radio, ShieldCheck, Flame } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useScreenShare, StreamMode, canScreenShare } from '../../hooks/useScreenShare';
 import { DraggableCameraOverlay } from '../../components/broadcast/DraggableCameraOverlay';
@@ -224,6 +224,7 @@ export default function SetupPage() {
   const [loading, setLoading] = useState(false);
   const [broadcasterLimitInfo, setBroadcasterLimitInfo] = useState<{ current: number; max: number; canStart: boolean; unrestricted?: boolean; isStaffBypass?: boolean } | null>(null);
   const [seatCount, setSeatCount] = useState<number>(DEFAULT_SEAT_COUNT);
+  const [smokeEventEnabled, setSmokeEventEnabled] = useState(false);
 const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
   const [battleMode, setBattleMode] = useState<BattleModeType>('world');
   const [userState, setUserState] = useState<string | null>(null);
@@ -1817,6 +1818,20 @@ livekit_room_name: roomName,
            })
            .eq('id', data.id);
 
+        // Create smoke event if enabled
+        if (smokeEventEnabled) {
+          try {
+            await supabase.rpc('start_smoke_event', {
+              p_stream_id: data.id,
+              p_seat_count: seatCount,
+            });
+            console.log('[SetupPage] Smoke event created for stream:', data.id);
+          } catch (smokeErr) {
+            console.warn('[SetupPage] Failed to create smoke event:', smokeErr);
+            // Don't fail the stream start if smoke event creation fails
+          }
+        }
+
         if (updateError) {
           console.error('[SetupPage] Failed to mark stream as live:', updateError);
           toast.error('Failed to start broadcast: ' + updateError.message);
@@ -1983,6 +1998,9 @@ livekit_room_name: roomName,
 
       // Preserve stream while the route transition happens
       sessionStorage.setItem('tc_starting_stream', 'true');
+      if (smokeEventEnabled) {
+        sessionStorage.setItem('tc_smoke_event_enabled', 'true');
+      }
       failureStage = 'redirecting/opening broadcast room';
       broadcastStartLog('redirecting/opening broadcast room', { streamId: data.id, roomName });
       // Navigate to broadcast page
@@ -2669,6 +2687,27 @@ livekit_room_name: roomName,
                 </select>
              </div>
           </div>
+
+             {/* Smoke Event Toggle (admin only) */}
+             {isStreamAdmin && (
+               <div className="shrink-0">
+                 <button
+                   type="button"
+                   onClick={() => setSmokeEventEnabled(!smokeEventEnabled)}
+                   className={cn(
+                     "w-full md:w-auto px-4 py-2.5 rounded-xl text-xs font-bold transition-all border",
+                     smokeEventEnabled
+                       ? "bg-purple-600/20 border-purple-500/50 text-purple-300"
+                       : "bg-white/5 border-white/10 text-slate-500 hover:text-white hover:bg-white/10"
+                   )}
+                 >
+                   <span className="flex items-center gap-2">
+                     <Flame size={14} />
+                     Smoke Event {smokeEventEnabled ? 'ON' : 'OFF'}
+                   </span>
+                 </button>
+               </div>
+             )}
 
              {/* Start Broadcast Button */}
              <div className="shrink-0">

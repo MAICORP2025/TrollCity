@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { connectionBudget } from '../connectionBudget'
 
 type ChannelStatus = 'subscribing' | 'subscribed' | 'error' | 'timed_out' | 'closed'
 
@@ -36,7 +37,13 @@ function getChannelName(nameOrConfig: string | { name: string }): string {
   return nameOrConfig.name || 'unknown'
 }
 
-function createChannel(name: string): ChannelEntry {
+function createChannel(name: string): ChannelEntry | null {
+  // Check connection budget before creating
+  if (!connectionBudget.acquire(name)) {
+    console.warn(`[RealtimeManager] Connection budget full — skipping channel "${name}"`)
+    return null
+  }
+
   const channel = supabase.channel(name)
 
   const entry: ChannelEntry = {
@@ -74,6 +81,7 @@ function destroyChannel(name: string) {
   supabase.removeChannel(entry.channel)
   channels.delete(name)
   totalRemoved++
+  connectionBudget.release(name)
 }
 
 export function subscribe(
@@ -85,6 +93,10 @@ export function subscribe(
 
   if (!entry) {
     entry = createChannel(name)
+    if (!entry) {
+      // Connection budget full — return a no-op cleanup function
+      return () => {}
+    }
     channels.set(name, entry)
 
     if (builder) {

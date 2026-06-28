@@ -220,7 +220,13 @@ export default function PayPalPaymentModal({
           toast.success('Payment successful! Coins have been added to your account.')
         } catch (err: any) {
           console.error('[PayPalPaymentModal] PayPal payment verification error:', err)
-          toast.error(err?.message || 'Payment verification failed')
+          const errorMessage = String(err?.message || '')
+          // If the edge function returned a non-2xx status, show a clean message
+          if (errorMessage.includes('Edge Function returned a non-2xx status code')) {
+            toast.error('Payment verification failed')
+          } else {
+            toast.error(errorMessage || 'Payment verification failed')
+          }
           setStep('select')
         } finally {
           // PayPal flow finished – re-enable dialog close

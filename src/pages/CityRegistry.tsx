@@ -168,7 +168,7 @@ export default function CityRegistry() {
           shipping_state,
           shipping_zip,
           created_at,
-          marketplace_item ( title ),
+          marketplace_item:marketplace_items!marketplace_purchases_item_id_fkey ( title ),
           seller_profile: user_profiles!marketplace_purchases_seller_id_fkey ( username )
         `)
         .eq('buyer_id', user.id)

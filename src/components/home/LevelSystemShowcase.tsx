@@ -47,7 +47,8 @@ export default function LevelSystemShowcase({ className }: LevelSystemShowcasePr
       subscribeToXP(profile.id)
     }
     return () => {
-      // store manages its own channel
+      // Cleanup: remove the Supabase channel when unmounting
+      useXPStore.getState().unsubscribe()
     }
   }, [profile?.id, subscribeToXP])
 

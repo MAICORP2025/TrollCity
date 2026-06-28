@@ -92,7 +92,6 @@ export const useSubscriptionStore = create<SubscriptionStore>((set, get) => ({
 
     try {
       const { data, error } = await supabase.rpc('create_subscription', {
-        p_subscriber_id: user.id,
         p_broadcaster_id: broadcasterId,
         p_tier_id: tierId,
         p_auto_renew: true

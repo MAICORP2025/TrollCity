@@ -118,12 +118,15 @@ export default function CashoutRequestPage() {
    const feeCoins = selectedTier ? calculateFeeCoins(selectedTier.coins) : 0;
    const netCoins = selectedTier ? calculateNetCoins(selectedTier.coins, feeCoins) : 0;
    const usdAmount = selectedTier ? selectedTier.usd : 0;
+   // Total required = payout coins + fee (both deducted from escrow)
+   const totalRequired = (selectedTier?.coins || 0) + feeCoins;
 
      const isCashoutWindow = isCashoutWindowOpen();
      const isStandardTierRestricted = fastPayTier === 'standard' && !isCashoutWindow;
      const monthlyCapReached = monthlyCashoutCount >= MAX_MONTHLY_CASHOUTS;
      const hasActiveGamingLoan = activeGamingLoan?.has_active_loan === true;
-     const canRequest = (!isStandardTierRestricted || fastPayApproved) && eligibleCoins >= (selectedTier?.coins || 0) && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
+     // Must have enough escrow coins to cover BOTH the payout amount AND the fee
+     const canRequest = (!isStandardTierRestricted || fastPayApproved) && eligibleCoins >= totalRequired && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
 
   // Load user's troll_coins balance and recent payout requests
   const getSavedPayoutUsername = useCallback((method: PayoutMethod) => {
@@ -274,8 +277,8 @@ export default function CashoutRequestPage() {
       return;
     }
 
-    if (eligibleCoins < selectedTier.coins) {
-      toast.error('Insufficient eligible cashout coins');
+    if (eligibleCoins < totalRequired) {
+      toast.error(`Insufficient eligible cashout coins. You need ${totalRequired.toLocaleString()} coins (including ${feeCoins.toLocaleString()} fee) but only have ${eligibleCoins.toLocaleString()}.`);
       return;
     }
 

@@ -10,7 +10,7 @@ interface BatchConfig {
 }
 
 const DEFAULT_CONFIG: BatchConfig = {
-  flushIntervalMs: 60_000, // 1 minute
+  flushIntervalMs: 5_000, // 5 seconds — reduced from 60s to prevent data loss
   maxBatchSize: 50,
 }
 
@@ -57,8 +57,11 @@ export function createBatchWriter(config: Partial<BatchConfig> = {}) {
     if (flushTimer) return
     flushTimer = setInterval(flush, flushIntervalMs)
 
-    // Flush before page unload
+    // Flush before page unload and on tab hide
     window.addEventListener('beforeunload', flush)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush()
+    })
   }
 
   function stop() {
@@ -67,6 +70,7 @@ export function createBatchWriter(config: Partial<BatchConfig> = {}) {
       flushTimer = null
     }
     window.removeEventListener('beforeunload', flush)
+    document.removeEventListener('visibilitychange', flush)
   }
 
   return { enqueue, flush, start, stop, getQueueSize: () => queue.length }

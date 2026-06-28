@@ -20,6 +20,14 @@
     "webContentsDebuggingEnabled": true,
     "allowCleartext": true
   },
+  "ios": {
+    "backgroundColor": "#06030e",
+    "contentInset": "always",
+    "allowMixedContent": false,
+    "preferredContentMode": "mobile",
+    "scheme": "https",
+    "hostname": "maitrollcity.com"
+  },
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 2000,

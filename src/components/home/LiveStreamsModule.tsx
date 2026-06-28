@@ -54,36 +54,15 @@ export default function LiveStreamsModule({ onRequireAuth }: LiveStreamsModulePr
     enabled: true
   })
 
+  // OPTIMIZED: Replaced realtime channel with 30s polling to reduce connection count.
+  // Home page visitors don't need instant stream updates — React Query cache handles data.
   useEffect(() => {
-    const channel = supabase
-      .channel('home-live-streams')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'streams',
-          filter: 'status=eq.live',
-        },
-        () => queryClient.invalidateQueries({ queryKey: queryKeys.liveStreams }),
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'streams',
-          filter: 'status=eq.live',
-        },
-        () => queryClient.invalidateQueries({ queryKey: queryKeys.liveStreams }),
-      )
-      .subscribe()
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.liveStreams })
       }
-    }
+    }, 30000)
+    return () => clearInterval(interval)
   }, [queryClient])
 
   useEffect(() => {

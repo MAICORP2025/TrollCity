@@ -1,13 +1,23 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import AgoraRTC, { 
-  IAgoraRTCClient, 
-  IAgoraRTCRemoteUser,
-  ICameraVideoTrack,
-  IMicrophoneAudioTrack,
-  UID
-} from 'agora-rtc-sdk-ng';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
+
+// Agora SDK is lazy-loaded to avoid bundling 2MB+ for all users
+// Types are imported at the bottom of the file for type-checking only
+let AgoraRTC: any = null;
+async function loadAgoraRTC() {
+  if (!AgoraRTC) {
+    AgoraRTC = await import('agora-rtc-sdk-ng');
+  }
+  return AgoraRTC;
+}
+
+// Type-only import (erased at compile time, no bundle impact)
+type IAgoraRTCClient = import('agora-rtc-sdk-ng').IAgoraRTCClient;
+type IAgoraRTCRemoteUser = import('agora-rtc-sdk-ng').IAgoraRTCRemoteUser;
+type ICameraVideoTrack = import('agora-rtc-sdk-ng').ICameraVideoTrack;
+type IMicrophoneAudioTrack = import('agora-rtc-sdk-ng').IMicrophoneAudioTrack;
+type UID = import('agora-rtc-sdk-ng').UID;
 
 /**
  * Hook for managing Agora RTC connections
@@ -65,7 +75,7 @@ export function useAgoraRoom({
     }
   }
 
-  // Initialize Agora client
+  // Initialize Agora client (lazy-loads SDK on first call)
   const initAgoraClient = useCallback(async () => {
     try {
       const appId = getAgoraAppId();
@@ -75,8 +85,11 @@ export function useAgoraRoom({
 
       debugAgora('🔧 Initializing Agora client');
 
+      // Lazy-load Agora SDK (~2MB) only when needed
+      const Agora = await loadAgoraRTC();
+
       // Create client
-      const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      const client = Agora.createClient({ mode: 'rtc', codec: 'vp8' });
 
       // Event handlers
       client.on('user-joined', (user) => {
@@ -217,8 +230,9 @@ export function useAgoraRoom({
       if (role === 'publisher') {
         debugAgora('🎬 Creating local tracks for publisher');
 
-        const videoTrack = await AgoraRTC.createCameraVideoTrack();
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+        const Agora = await loadAgoraRTC();
+        const videoTrack = await Agora.createCameraVideoTrack();
+        const audioTrack = await Agora.createMicrophoneAudioTrack({
           encoderConfig: 'speech_standard',
           AEC: true,
           ANS: true,

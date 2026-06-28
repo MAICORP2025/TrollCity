@@ -40,12 +40,12 @@ export default function PayoutReview() {
     setLoading(true)
     try {
       const { data, error } = await supabase
-        .from('visa_redemptions')
+        .from('payout_requests')
         .select(`
           *,
           user_profiles!inner(username, avatar_url)
         `)
-        .in('status', ['pending', 'submitted', 'processing'])
+        .in('status', ['pending', 'reviewed'])
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -81,13 +81,13 @@ export default function PayoutReview() {
 
     // Realtime subscription
     const channel = supabase
-      .channel('payout_requests')
+      .channel('payout_requests_realtime')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'visa_redemptions',
+          table: 'payout_requests',
         },
         () => fetchRequests()
       )
@@ -100,47 +100,21 @@ export default function PayoutReview() {
     }
   }, [user, isAdmin, navigate, fetchRequests])
 
-  const updateStatus = async (requestId: string, status: CashoutStatus) => {
+  const updateStatus = async (requestId: string, action: 'approve' | 'reject', reason?: string) => {
     setProcessingId(requestId)
     try {
-      const updateData: any = { 
-        status,
-        updated_at: new Date().toISOString(),
-      }
-
-      if (status === 'processing') {
-        updateData.opened_at = new Date().toISOString()
-        updateData.opened_by_admin_id = user?.id
-      }
-
-      if (status === 'completed' || status === 'approved') {
-        updateData.processed_at = new Date().toISOString()
-        updateData.processed_by = user?.id
-      }
-
-      const { error } = await supabase
-        .from('visa_redemptions')
-        .update(updateData)
-        .eq('id', requestId)
+      // Use the unified admin_process_payout RPC
+      const { data, error } = await supabase.rpc('admin_process_payout', {
+        p_payout_id: requestId,
+        p_admin_id: user?.id,
+        p_action: action,
+        p_rejection_reason: reason || null,
+      })
 
       if (error) throw error
+      if (!data?.success) throw new Error(data?.error || 'Failed to process payout')
 
-      // Send notification to user
-      const request = requests.find(r => r.id === requestId)
-      if (request) {
-        const notificationMessage = status === 'completed' 
-          ? `Your payout of $${request.usd_amount} has been sent!` 
-          : `Your payout request is now ${status}`
-        
-        await supabase.from('notifications').insert({
-          user_id: request.user_id,
-          title: 'Payout Status Update',
-          message: notificationMessage,
-          type: 'cashout',
-        })
-      }
-
-      toast.success(`Request ${status}`)
+      toast.success(data.message || `Request ${action}d`)
       fetchRequests()
     } catch (error: any) {
       console.error('Update status error:', error)
@@ -215,27 +189,27 @@ export default function PayoutReview() {
 
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                       <div>
-                        <p className="text-xs text-slate-500">Amount</p>
+                        <p className="text-xs text-slate-500">USD Amount</p>
                         <p className="font-bold text-white">
-                          ${(request.usd_amount || 0).toFixed(2)}
+                          ${(request.cash_amount || 0).toFixed(2)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500">Coins</p>
+                        <p className="text-xs text-slate-500">Coins (incl. fee)</p>
                         <p className="font-bold text-yellow-400">
-                          {(request.net_coins || 0).toLocaleString()}
+                          {(request.coin_amount || 0).toLocaleString()}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Method</p>
                         <p className="font-bold text-cyan-300 capitalize">
-                          {request.payout_method?.replace('_', ' ') || 'N/A'}
+                          {request.provider_type?.replace('_', ' ') || 'N/A'}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Handle/Email</p>
                         <p className="font-mono text-sm text-white">
-                          {request.payout_details || 'N/A'}
+                          {request.provider_username || 'N/A'}
                         </p>
                       </div>
                     </div>
@@ -261,25 +235,20 @@ export default function PayoutReview() {
                       {request.status.toUpperCase()}
                     </span>
 
-                    {request.status === 'pending' || request.status === 'submitted' ? (
-                      <button
-                        onClick={() => updateStatus(request.id, 'processing')}
-                        disabled={processingId === request.id}
-                        className="rounded-xl bg-cyan-600 px-4 py-2 font-bold text-white hover:bg-cyan-500"
-                      >
-                        {processingId === request.id ? 'Processing...' : 'Start Review'}
-                      </button>
-                    ) : request.status === 'processing' ? (
+                    {request.status === 'pending' || request.status === 'reviewed' ? (
                       <>
                         <button
-                          onClick={() => updateStatus(request.id, 'completed')}
+                          onClick={() => updateStatus(request.id, 'approve')}
                           disabled={processingId === request.id}
                           className="rounded-xl bg-green-600 px-4 py-2 font-bold text-white hover:bg-green-500"
                         >
-                          Mark Complete
+                          {processingId === request.id ? 'Processing...' : 'Approve'}
                         </button>
                         <button
-                          onClick={() => updateStatus(request.id, 'denied')}
+                          onClick={() => {
+                            const reason = prompt('Rejection reason:');
+                            if (reason) updateStatus(request.id, 'reject', reason);
+                          }}
                           disabled={processingId === request.id}
                           className="rounded-xl bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-500"
                         >

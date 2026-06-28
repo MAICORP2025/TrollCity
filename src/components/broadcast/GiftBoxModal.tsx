@@ -451,14 +451,16 @@ const GiftBoxModalComponent = function GiftBoxModal({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('ar_gifts')}
+              onClick={() => {}}
+              disabled
               className={cn(
-                'flex flex-1 items-center justify-center gap-2 px-3 py-2 text-sm font-bold transition-colors',
-                activeTab === 'ar_gifts' ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'text-zinc-400 hover:bg-white/10 hover:text-white'
+                'flex flex-1 items-center justify-center gap-2 px-3 py-2 text-sm font-bold transition-colors opacity-40 cursor-not-allowed',
+                'text-zinc-500'
               )}
             >
               <Glasses size={16} />
               AR Gifts ✨
+              <span className="text-[9px]">(Soon)</span>
             </button>
             <button
               type="button"

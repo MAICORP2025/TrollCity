@@ -43,6 +43,12 @@ export const COIN_PACKAGES: CoinPackage[] = [
 // Exchange rate: 100 coins per $1 (all packages)
 export const COINS_PER_USD = 100;
 
+// Cash value for subscriptions: 300 coins = $100 USD
+// 1/3 (33.33%) goes to admin pool, 2/3 (66.67%) goes to creator
+export const CASH_VALUE_PER_300_COINS = 100;
+export const ADMIN_POOL_PERCENT = 33.33;
+export const CREATOR_POOL_PERCENT = 66.67;
+
 // New user bonus: 5% extra coins on all coin package purchases
 export const NEW_USER_BONUS_PERCENT = 5;
 
@@ -169,10 +175,10 @@ export function isAdminOrSecretary(userId: string): boolean {
 
 /**
  * Calculate fee coins for a cashout
- * Fee is 5% of the requested amount
+ * Fee is 2.9% of the requested amount
  */
 export function calculateFeeCoins(coinAmount: number): number {
-  return Math.ceil(coinAmount * 0.05);
+  return Math.ceil(coinAmount * 0.029);
 }
 
 /**
@@ -211,9 +217,9 @@ export function isCashoutWindowOpen(): boolean {
 
 /** Fast Pay tier thresholds */
 export const FAST_PAY_TIERS = {
-  standard: { minLevel: 1, maxLevel: 499, label: 'Standard', payoutDay: 'Friday', processingTime: 'Weekly on Fridays' },
-  fast_pay: { minLevel: 500, maxLevel: 999, label: 'Fast Pay', payoutDay: 'Any day', processingTime: 'Within 24 hours' },
-  instant: { minLevel: 1000, maxLevel: Infinity, label: 'Instant Pay', payoutDay: 'Any day', processingTime: 'Instant' },
+  standard: { minLevel: 1, maxLevel: 499, label: 'Standard', payoutDay: 'Friday only', processingTime: 'Every Friday (1AM-7PM MT)', cooldownHours: 168 },
+  fast_pay: { minLevel: 500, maxLevel: 999, label: 'Fast Pay', payoutDay: 'Any day', processingTime: 'Every 24 hours', cooldownHours: 24 },
+  instant: { minLevel: 1000, maxLevel: Infinity, label: 'Instant Pay', payoutDay: 'Any day', processingTime: 'Every 30 minutes', cooldownHours: 0.5 },
 } as const;
 
 /** Fast Pay cashout fee percentage (all tiers) */
@@ -250,4 +256,41 @@ export function calculateFastPayFee(coinAmount: number): number {
 export function calculateFastPayNet(coinAmount: number): number {
   const fee = calculateFastPayFee(coinAmount);
   return coinAmount - fee;
+}
+
+/**
+ * Get the cashout cooldown interval in hours for a given user level
+ * - Level 1-499:    Every Friday (168 hours)
+ * - Level 500-999:  Every 24 hours
+ * - Level 1000+:    Every 60 minutes (1 hour)
+ */
+export function getCashoutCooldownHours(level: number): number {
+  if (level >= 1000) return 0.5; // 30 minutes
+  if (level >= 500) return 24;
+  return 168; // 7 days (Friday to Friday)
+}
+
+/**
+ * Get a human-readable label for cashout frequency based on level
+ */
+export function getCashoutFrequencyLabel(level: number): string {
+  if (level >= 1000) return 'Every 30 minutes';
+  if (level >= 500) return 'Every 24 hours';
+  return 'Fridays only (1AM-7PM MT)';
+}
+
+/**
+ * Check if a user level allows cashout on any day (not just Friday)
+ */
+export function canCashoutAnyDay(level: number): boolean {
+  return level >= 500;
+}
+
+/**
+ * Get the cashout cooldown interval in minutes for a given user level
+ */
+export function getCashoutCooldownMinutes(level: number): number {
+  if (level >= 1000) return 30;
+  if (level >= 500) return 1440; // 24 hours
+  return 10080; // 7 days
 }

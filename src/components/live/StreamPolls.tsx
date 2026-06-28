@@ -92,7 +92,10 @@ function useCountdown(endTime: string | null): number {
       setRemaining(Math.max(0, diff))
     }
     update()
-    const interval = setInterval(update, 1000)
+    // OPTIMIZED: Use 2s interval instead of 1s to reduce CPU load
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') update()
+    }, 2000)
     return () => clearInterval(interval)
   }, [endTime])
 

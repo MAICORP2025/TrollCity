@@ -815,16 +815,18 @@ export default function CEOAssistantDashboard() {
                                 onClick={async () => {
                                   try {
                                     setSaving(true);
-                                    const { error } = await supabase.rpc('forward_payout_to_admin', {
+                                    // Use the unified admin_process_payout RPC to approve
+                                    const { data, error } = await supabase.rpc('admin_process_payout', {
                                       p_payout_id: req.id,
-                                      p_assistant_id: profile?.id,
-                                      p_assistant_username: profile?.username || 'ceo_assistant',
+                                      p_admin_id: profile?.id,
+                                      p_action: 'approve',
                                     });
                                     if (error) throw error;
-                                    setNotice(`Payout request forwarded to Admin Operations & Control Deck.`, 'success');
+                                    if (!data?.success) throw new Error(data?.error || 'Failed to approve');
+                                    setNotice(`Payout request approved and forwarded to Admin Operations.`, 'success');
                                     await loadDashboard();
                                   } catch (err: any) {
-                                    setNotice(`Failed to forward: ${err.message}`, 'error');
+                                    setNotice(`Failed to approve: ${err.message}`, 'error');
                                   } finally {
                                     setSaving(false);
                                   }
@@ -832,7 +834,7 @@ export default function CEOAssistantDashboard() {
                                 disabled={saving}
                                 className="px-3 py-1 rounded bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 text-xs font-bold disabled:opacity-50"
                               >
-                                Forward to Admin
+                                Approve & Forward
                               </button>
                             )}
                             {req.forwarded_to_admin && (

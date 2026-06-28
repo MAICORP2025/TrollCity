@@ -64,7 +64,7 @@
 /* ── PRESIDENTIAL BROADCAST SHELL ── */
 .pres-broadcast-shell {
   position: relative;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--pres-navy);
   color: #e2e8f0;
   overflow: hidden;

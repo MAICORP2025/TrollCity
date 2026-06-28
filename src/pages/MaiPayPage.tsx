@@ -101,6 +101,10 @@ export default function MaiPayPage() {
   const [cashoutReservedCoins, setCashoutReservedCoins] = useState(0);
   const [battleCrowns, setBattleCrowns] = useState(0);
 
+  // User level (for cashout timing rules)
+  const [userLevel, setUserLevel] = useState(1);
+  const [cashoutApproved, setCashoutApproved] = useState(false);
+
   // Crown redemption
   const [crownRedemptions, setCrownRedemptions] = useState<RedemptionRecord[]>([]);
   const [crownConvertAmount, setCrownConvertAmount] = useState('');
@@ -129,13 +133,25 @@ export default function MaiPayPage() {
   const eligibleCashoutCoins = Math.max(0, cashoutCoins - cashoutReservedCoins);
   const canConvertHype = hypeCoins > 0;
 
+  // Fee is 2.9% of the tier coins, deducted upfront from escrow balance
   const feeForSelectedTier = selectedTier
     ? Math.ceil(selectedTier.coins * 0.029)
     : 0;
-  const canAffordFee = trollCoins >= feeForSelectedTier;
+  const totalRequiredForTier = selectedTier
+    ? selectedTier.coins + feeForSelectedTier
+    : 0;
+  // User must have enough escrow coins to cover BOTH the payout amount AND the fee
+  const canAffordTier = eligibleCashoutCoins >= totalRequiredForTier;
   const canRequestCashout = selectedTier
-    ? eligibleCashoutCoins >= selectedTier.coins && canAffordFee && providerUsername.trim().length > 0
+    ? canAffordTier && providerUsername.trim().length > 0 && cashoutApproved
     : false;
+
+  // Level-based cashout frequency label
+  const cashoutFrequencyLabel = useMemo(() => {
+    if (userLevel >= 1000) return 'Every 30 minutes';
+    if (userLevel >= 500) return 'Every 24 hours';
+    return 'Fridays only (1AM-7PM MT)';
+  }, [userLevel]);
 
   const filteredGiftedUsers = useMemo(() => {
     if (!giftedSearch.trim()) return giftedUsers;
@@ -156,7 +172,7 @@ export default function MaiPayPage() {
       // Load profile balances
       const { data: profileData } = await supabase
         .from('user_profiles')
-        .select('troll_coins, paid_coins, hype_coins, cashout_coins, cashout_reserved_coins, battle_crowns, paypal_email, cashapp_handle, venmo_handle, preferred_payout_method')
+        .select('troll_coins, paid_coins, hype_coins, cashout_coins, cashout_reserved_coins, battle_crowns, paypal_email, cashapp_handle, venmo_handle, preferred_payout_method, cashout_approved')
         .eq('id', user.id)
         .single();
 
@@ -167,6 +183,7 @@ export default function MaiPayPage() {
         setCashoutCoins(profileData.cashout_coins ?? 0);
         setCashoutReservedCoins(profileData.cashout_reserved_coins ?? 0);
         setBattleCrowns(profileData.battle_crowns ?? 0);
+        setCashoutApproved(profileData.cashout_approved ?? false);
 
         // Pre-fill provider username
         const preferred = profileData.preferred_payout_method as PayoutMethod | null;
@@ -174,6 +191,16 @@ export default function MaiPayPage() {
         if (profileData.paypal_email) setProviderUsername(profileData.paypal_email);
         else if (profileData.cashapp_handle) setProviderUsername(profileData.cashapp_handle);
         else if (profileData.venmo_handle) setProviderUsername(profileData.venmo_handle);
+      }
+
+      // Load user level for cashout timing
+      const { data: statsData } = await supabase
+        .from('user_stats')
+        .select('level')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (statsData) {
+        setUserLevel(statsData.level ?? 1);
       }
 
       // Load crown redemptions
@@ -333,14 +360,7 @@ export default function MaiPayPage() {
 
     setSubmittingCashout(true);
     try {
-      // Deduct fee from troll_coins first
-      const { error: feeError } = await supabase.rpc('deduct_troll_coins', {
-        p_user_id: user?.id,
-        p_amount: feeForSelectedTier,
-      });
-      if (feeError) throw new Error('Failed to deduct fee from balance');
-
-      // Create the cashout request
+      // The RPC now handles fee deduction upfront from escrow balance
       const { data, error } = await supabase.rpc('request_friday_cashout', {
         p_user_id: user?.id,
         p_coins_to_redeem: selectedTier.coins,
@@ -350,7 +370,7 @@ export default function MaiPayPage() {
         p_id_verification_url: null,
       });
       if (error) throw error;
-      if (data?.success === false) throw new Error(data?.error || 'Cashout request failed');
+      if (data?.success === false) throw new Error(data.error || 'Cashout request failed');
 
       toast.success('Cashout request submitted! You can track its status in the Requests tab.');
       setSelectedTier(null);
@@ -362,7 +382,7 @@ export default function MaiPayPage() {
     } finally {
       setSubmittingCashout(false);
     }
-  }, [selectedTier, canRequestCashout, user?.id, feeForSelectedTier, selectedProvider, providerUsername, loadAllData]);
+  }, [selectedTier, canRequestCashout, user?.id, selectedProvider, providerUsername, loadAllData]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -745,6 +765,37 @@ export default function MaiPayPage() {
               </div>
               <p className="text-3xl font-black text-green-400">{eligibleCashoutCoins.toLocaleString()}</p>
               <p className="text-xs text-gray-500 mt-1">From purchased coins (excludes gifted & bonus coins)</p>
+            </div>
+
+            {/* Payout Tier Levels */}
+            <div className="bg-[#0E0A1A] rounded-xl border border-purple-500/20 p-6">
+              <h3 className="text-lg font-bold mb-4">Payout Tiers</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-2 w-2 rounded-full bg-cyan-400" />
+                    <span className="text-sm font-bold text-white">Level 1–499</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-1">Standard • Paid every Friday</p>
+                  <p className="text-xs text-gray-500">2.9% fee</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-2 w-2 rounded-full bg-yellow-400" />
+                    <span className="text-sm font-bold text-white">Level 500–999</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-1">Fast Pay • Any day • Within 24h</p>
+                  <p className="text-xs text-gray-500">2.9% fee</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-2 w-2 rounded-full bg-green-400" />
+                    <span className="text-sm font-bold text-white">Level 1000+</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-1">Instant • Every 60 Minutes • Priority</p>
+                  <p className="text-xs text-gray-500">2.9% fee</p>
+                </div>
+              </div>
             </div>
 
             {/* Cashout Tiers */}

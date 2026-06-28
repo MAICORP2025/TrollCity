@@ -7,10 +7,15 @@ import {
   Gift,
   Loader2,
   LogOut,
+  MessageSquare,
+  Pin,
   Plus,
   Share2,
   Users,
   Video,
+  VideoOff,
+  Mic,
+  MicOff,
   MonitorPlay,
   Shield,
   X,
@@ -56,7 +61,8 @@ import { useStreamSeats } from '../../hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '../../hooks/useStreamAudiencePresence'
 import { AudienceBubbleTicker } from '../../components/broadcast/AudienceBubbleTicker'
 import { TopSubscribersBar } from '../../components/broadcast/TopSubscribersBar'
-import { useSubscriberUsernames } from '../../hooks/useCreatorSubscription'
+import { useSubscriberUsernames, useCreatorSubscription } from '../../hooks/useCreatorSubscription'
+import SubscriptionTierSelector from '../../components/user/SubscriptionTierSelector'
 import { useStreamTopGifters } from '../../hooks/useStreamTopGifters'
 import { resolveUsername, DEFAULT_USERNAME } from '../../lib/chatUtils'
 import { getBroadcastChatLockRemainingMs, isBroadcastChatLockActive } from '../../lib/broadcastModeration'
@@ -65,6 +71,7 @@ import { useBroadcastTextPopup } from '../../hooks/useBroadcastTextPopup'
 import { useBroadcastViewerCap } from '../../hooks/useBroadcastViewerCap'
 import { logActiveChannels } from '../../lib/realtimeChannelDiagnostics'
 import BroadcastTextPopupOverlay from '../../components/broadcast/BroadcastTextPopupOverlay'
+import PaidChatViewerModal from '../../components/broadcast/PaidChatViewerModal'
 import RandomBattleBanner from '../../components/broadcast/RandomBattleBanner'
 import CityStatusPanel from '../../components/city/CityStatusPanel'
 import CityStatusOrb from '../../components/city/CityStatusOrb'
@@ -281,6 +288,7 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
   fallback,
   onTap,
   room,
+  objectFit = 'cover',
 }: {
   participant: any
   mirror?: boolean
@@ -288,6 +296,7 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
   fallback: React.ReactNode
   onTap?: () => void
   room?: any
+  objectFit?: 'cover' | 'contain'
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -420,7 +429,8 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
         playsInline
         muted={false}
         className={cn(
-          'h-full w-full object-cover',
+          'h-full w-full',
+          objectFit === 'contain' ? 'object-contain' : 'object-cover',
           shouldMirror && '-scale-x-100',
         )}
       />
@@ -733,7 +743,9 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
      createdAt: number
    }
    const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
+   const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(new Set())
    const [chatInput, setChatInput] = useState('')
+   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false)
    const [hostChatDisabledByOfficerState, setHostChatDisabledByOfficerState] = useState(false)
    const [hostChatDisabledUntil, setHostChatDisabledUntil] = useState<string | null>(null)
    const [hostChatDisabledStreamId, setHostChatDisabledStreamId] = useState<string | null>(null)
@@ -1074,7 +1086,44 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
 
     const watchTimeIntervalRef = useRef<number | null>(null)
   const clickTimesRef = useRef<number[]>([])
-  const blockedUntilRef = useRef<number | null>(null)
+   const blockedUntilRef = useRef<number | null>(null)
+
+   // Paid chat state for viewers
+   const [isPaidChatModalOpen, setIsPaidChatModalOpen] = useState(false)
+   const [paidChatPricePerUser, setPaidChatPricePerUser] = useState<number>(0)
+   const [paidChatPricePerChat, setPaidChatPricePerChat] = useState<number>(0)
+    const [isPaidChatEnabled, setIsPaidChatEnabled] = useState(false)
+
+    // Load paid chat settings from stream
+    useEffect(() => {
+      if (!streamId) return;
+      const fetchPaidChatSettings = async () => {
+        try {
+          const { data } = await supabase
+            .from('stream_settings')
+            .select('paid_chat_enabled, paid_chat_type, paid_chat_price')
+            .eq('stream_id', streamId)
+            .maybeSingle();
+          if (data?.paid_chat_enabled) {
+            const price = Number(data.paid_chat_price ?? 0);
+            const type = data.paid_chat_type || 'per_user';
+            if (type === 'per_chat') {
+              setPaidChatPricePerUser(0);
+              setPaidChatPricePerChat(price);
+            } else {
+              setPaidChatPricePerUser(price);
+              setPaidChatPricePerChat(0);
+            }
+            setIsPaidChatEnabled(price > 0);
+          } else {
+            setIsPaidChatEnabled(false);
+          }
+        } catch {
+          setIsPaidChatEnabled(false);
+        }
+      };
+      void fetchPaidChatSettings();
+    }, [streamId]);
 
   const defaultSeatCount = Array.isArray((stream as any)?.seat_prices)
     ? (stream as any).seat_prices.length
@@ -1455,7 +1504,8 @@ const isActive = isStreamActive(stream)
     leaveLiveKitRoomRef.current = leaveLiveKitRoom
 
   // Expose dev-only join debug overlay for mobile PWA troubleshooting
-  const [showJoinDebug, setShowJoinDebug] = useState(true);
+    const [showJoinDebug, setShowJoinDebug] = useState(true);
+    const [showSubscribeModal, setShowSubscribeModal] = useState(false);
 
   const remoteParticipants = useMemo(() => {
     return Array.isArray(remoteUsers) ? remoteUsers : []
@@ -1716,15 +1766,17 @@ const isActive = isStreamActive(stream)
     )
   }
 
-  const isModerator = Boolean(
-    isStaffProfile(profile) ||
-      profile?.role === 'moderator' ||
-      profile?.troll_role === 'moderator' ||
-      profile?.role === 'admin' ||
-      profile?.troll_role === 'admin'
-  )
+   const isModerator = Boolean(
+     isStaffProfile(profile) ||
+       profile?.role === 'moderator' ||
+       profile?.troll_role === 'moderator' ||
+       profile?.role === 'admin' ||
+       profile?.troll_role === 'admin'
+   )
 
-  // Ghost Mode hook for CEOs
+   const isModOrHigher = Boolean(isOfficer || isModerator || isCEO || isStaffProfile(profile))
+
+   // Ghost Mode hook for CEOs
   const {
     ghostSession,
     isJoiningGhost,
@@ -1800,31 +1852,44 @@ const isActive = isStreamActive(stream)
     setUserActionTarget(info)
   }, [])
 
-  const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
-    if (!username || isAnonymousDisplayName(username)) return
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, username, created_at, role, troll_role')
-        .eq('username', username)
-        .maybeSingle()
-      
-      if (error || !data?.id) {
-        toast.error('User not found')
-        return
-      }
-      
-      handleOpenUserAction({
-        userId: data.id,
-        username: data.username || username,
-        role: data.role || data.troll_role,
-        createdAt: data.created_at,
-      })
-    } catch (err) {
-      console.error('[ViewerPage] Error opening user action:', err)
-      toast.error('Failed to open user profile')
-    }
-  }, [])
+   const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
+     if (!username) return
+
+     // For anonymous users: only mods/officers can click, open arrest dialog directly
+     if (isAnonymousDisplayName(username)) {
+       if (!isModOrHigher) return
+       handleOpenUserAction({
+         userId: `anon-${username}`,
+         username,
+         role: 'anonymous',
+         createdAt: null,
+       })
+       return
+     }
+
+     try {
+       const { data, error } = await supabase
+         .from('user_profiles')
+         .select('id, username, created_at, role, troll_role')
+         .eq('username', username)
+         .maybeSingle()
+       
+       if (error || !data?.id) {
+         toast.error('User not found')
+         return
+       }
+       
+       handleOpenUserAction({
+         userId: data.id,
+         username: data.username || username,
+         role: data.role || data.troll_role,
+         createdAt: data.created_at,
+       })
+     } catch (err) {
+       console.error('[ViewerPage] Error opening user action:', err)
+       toast.error('Failed to open user profile')
+     }
+   }, [isModOrHigher])
 
   const refreshStream = useCallback(async () => {
     if (!streamId) return
@@ -1856,9 +1921,9 @@ const isActive = isStreamActive(stream)
           'battle_status',
           'battle_start_time',
           'battle_end_time',
-          'side_a_score',
-          'side_b_score',
-        ].join(','),
+            'side_a_score',
+            'side_b_score',
+          ].join(','),
       )
       .eq('id', streamId)
       .maybeSingle()
@@ -2060,9 +2125,9 @@ const handleLeaveSeat = useCallback(async () => {
             'battle_status',
             'battle_start_time',
             'battle_end_time',
-            'side_a_score',
-            'side_b_score',
-          ].join(','),
+             'side_a_score',
+             'side_b_score',
+           ].join(','),
         )
         .eq('id', streamId)
         .maybeSingle()
@@ -2187,6 +2252,83 @@ useStreamRealtime(
      } as any,
      stream?.battle_id ?? null,
    )
+
+  // Kick guard: check on page load if user was kicked from this broadcast
+  useEffect(() => {
+    if (!streamId || !user?.id) return
+
+    const checkKickGuard = async () => {
+      try {
+        // Check localStorage for recent kick
+        const kickData = parseKickData(localStorage.getItem(getKickStorageKey(streamId, user.id)))
+        if (isKickBanActive(kickData)) {
+          const remainingMs = KICK_BAN_DURATION_MS - (Date.now() - kickData.timestamp)
+          const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+          toast.error(`You were kicked from this broadcast and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+          navigate('/', { replace: true })
+          return
+        }
+
+        // Also check stream_kicks table for permanent kick
+        const { data: kickRecord } = await supabase
+          .from('stream_kicks')
+          .select('id, created_at')
+          .eq('stream_id', streamId)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (kickRecord) {
+          const kickTimestamp = new Date(kickRecord.created_at).getTime()
+          const timeSinceKick = Date.now() - kickTimestamp
+          if (timeSinceKick < KICK_BAN_DURATION_MS) {
+            const remainingMs = KICK_BAN_DURATION_MS - timeSinceKick
+            const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+            toast.error(`You were kicked from this broadcast and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+            localStorage.setItem(getKickStorageKey(streamId, user.id), JSON.stringify({
+              timestamp: kickTimestamp,
+              streamId,
+              reason: 'Kicked by moderator'
+            }))
+            navigate('/', { replace: true })
+          }
+        }
+      } catch (err) {
+        console.warn('[ViewerPage] Kick guard check failed:', err)
+      }
+    }
+
+    void checkKickGuard()
+  }, [streamId, user?.id, navigate])
+
+  // Pin/unpin messages (staff/broadcaster/broadofficer/admin/CEO only)
+  const canPinMessages = Boolean(
+    profile && (
+      profile.role === 'admin' ||
+      profile.role === 'superadmin' ||
+      profile.role === 'owner' ||
+      profile.role === 'ceo' ||
+      profile.role === 'staff' ||
+      profile.is_admin ||
+      profile.is_troll_officer ||
+      profile.is_lead_officer ||
+      profile.troll_role === 'lead_troll_officer' ||
+      profile.troll_role === 'troll_officer'
+    )
+  )
+
+  const handlePinMessage = useCallback((messageId: string) => {
+    setPinnedMessageIds(prev => new Set(prev).add(messageId))
+    toast.success('Message pinned')
+  }, [])
+
+  const handleUnpinMessage = useCallback((messageId: string) => {
+    setPinnedMessageIds(prev => {
+      const next = new Set(prev)
+      next.delete(messageId)
+      return next
+    })
+    toast.success('Message unpinned')
+  }, [])
 
   const floatingChatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -2512,25 +2654,22 @@ const heartbeat = window.setInterval(() => {
     })
   }, [effectiveBoxCount, seats, stream, user?.id])
 
-  // Mobile layout: broadcaster video stays fixed, seats flow below.
-  // For high seat counts (>6), use 4 columns × 3 rows for 12 boxes.
-  const mobileSeatGridHeight = useMemo(() => {
-    if (!isMobileViewer || seatCards.length === 0) return 0
-    const count = seatCards.length
-    if (count <= 2) return 260  // 1 row of 2-col, tall cards
-    if (count <= 4) return 380  // 2 rows of 2-col, tall cards
-    if (count <= 6) return 500  // 3 rows of 2-col (5-6 seats), tall cards
-    if (count <= 8) return 520  // 2 rows of 4-col (7-8 seats)
-    return 620                  // 3 rows of 4-col (9-11 seats), 4x3 grid for 12 total
-  }, [isMobileViewer, seatCards.length])
-
-  // Mobile seat grid columns: 2 for <=6 seats, 4 for >6 seats (4x3 grid for 12)
-  const mobileSeatGridCols = useMemo(() => {
-    if (!isMobileViewer || seatCards.length === 0) return 'grid-cols-2'
-    const count = seatCards.length
-    if (count <= 6) return count <= 2 ? 'grid-cols-2' : 'grid-cols-2'
-    return 'grid-cols-4'  // 4 columns for 7-11 seats (12 total boxes)
-  }, [isMobileViewer, seatCards.length])
+    // Mobile seat grid: square cards, scrollable below broadcaster
+     const mobileSeatGridHeight = useMemo(() => {
+       if (!isMobileViewer || seatCards.length === 0) return 0
+       const count = seatCards.length
+       if (count <= 2) return 200
+       if (count <= 4) return 300
+       if (count <= 6) return 380
+       return 460
+     }, [isMobileViewer, seatCards.length])
+ 
+    // Mobile seat grid columns: 2 for <=4 seats, 3 for >4 seats so seats dont overflow
+     const mobileSeatGridCols = useMemo(() => {
+       if (!isMobileViewer || seatCards.length === 0) return 'grid-cols-2'
+       if (seatCards.length <= 4) return 'grid-cols-2'
+       return 'grid-cols-3'
+     }, [isMobileViewer, seatCards.length])
 
   // Broadcaster video: fixed height that does NOT shrink when seats are added.
   // Seats scroll below in the remaining space.
@@ -2741,39 +2880,39 @@ const heartbeat = window.setInterval(() => {
              />
            )}
 
-<main
-             className={cn(
-               'relative z-10 flex flex-1 min-h-0',
-               isMobileViewer
-                 ? layoutMode === 'grid'
-                   ? 'grid overflow-hidden px-2 py-2'
-                   : 'flex-col overflow-hidden px-0 pt-0'
-                 : 'grid gap-4 px-5 py-4',
-                 // For >6 total seats, use a multi-column grid layout
-                 !isMobileViewer && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr]' : '',
-                 isMobileViewer && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr_1fr]' : ''
-             )}
-             style={
-               isMobileViewer && layoutMode === 'grid'
-                 ? {
-                     gridTemplateColumns: 'repeat(4, 1fr)',
-                     gap: '6px',
-                   }
-                 : !isMobileViewer
+  <main
+               className={cn(
+                 'relative z-10 flex flex-1 min-h-0',
+                 isMobileViewer
                    ? layoutMode === 'grid'
-                     ? {
-                         gridTemplateColumns: `repeat(${Math.min(effectiveBoxCount, 6)}, 1fr)`,
-                         gap: '12px',
-                       }
-                     : {
-                         gridTemplateColumns:
-                           seatCards.length > 0
-                             ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
-                             : 'minmax(560px, 1fr) 360px',
-                       }
-                   : undefined
-             }
-           >
+                     ? 'grid overflow-hidden pr-12'
+                     : 'flex-col overflow-hidden px-0 pt-0'
+                   : 'grid gap-4 px-5 py-4',
+                   !isMobileViewer && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr]' : '',
+               )}
+                style={
+                 isMobileViewer && layoutMode === 'grid'
+                   ? {
+                       gridTemplateColumns: 'repeat(2, 1fr)',
+                       gridAutoRows: '1fr',
+                       gap: '4px',
+                       maxHeight: `calc(100dvh - ${MOBILE_CHAT_INPUT_HEIGHT + 8}px - env(safe-area-inset-bottom))`,
+                     }
+                  : !isMobileViewer
+                    ? layoutMode === 'grid'
+                      ? {
+                          gridTemplateColumns: `repeat(${Math.min(effectiveBoxCount, 6)}, 1fr)`,
+                          gap: '12px',
+                        }
+                      : {
+                          gridTemplateColumns:
+                            seatCards.length > 0
+                              ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
+                              : 'minmax(560px, 1fr) 360px',
+                        }
+                    : undefined
+              }
+            >
              {/* Broadcast Frame as border decoration */}
              {broadcastFrame && (
                <BroadcastFrame frame={broadcastFrame} className="absolute inset-0 z-0 rounded-3xl pointer-events-none">
@@ -2785,10 +2924,10 @@ const heartbeat = window.setInterval(() => {
             {layoutMode === 'grid' ? (
               /* ===== GRID MODE: Broadcaster tile (same size as seat tiles) ===== */
               <div
-                className={cn(
-                  'relative min-h-0 overflow-hidden border border-cyan-400/30 bg-transparent',
-                  isMobileViewer ? 'rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(45,212,191,0.15)]'
-                )}
+               className={cn(
+                   'relative min-h-0 overflow-hidden border border-cyan-400/30 bg-transparent',
+                   isMobileViewer ? 'aspect-square rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(45,212,191,0.15)]'
+                 )}
               >
                 <RemoteVideoSurface
                   participant={broadcasterState.participant}
@@ -2906,8 +3045,8 @@ const heartbeat = window.setInterval(() => {
                 'relative min-h-0 overflow-hidden',
                 theme.hostVideoPanel,
                 isMobileViewer
-                  ? 'flex-none rounded-none border-0'
-                  : ''
+                  ? 'flex-none rounded-xl border-2 border-cyan-400/40'
+                  : 'rounded-2xl border border-cyan-400/30'
               )}
               style={
                 isMobileViewer
@@ -3026,55 +3165,24 @@ const heartbeat = window.setInterval(() => {
                   </button>
                   <button
                     type="button"
-                    onClick={handleShare}
+                    onClick={() => {
+                      if (!user) {
+                        navigate('/auth?mode=login');
+                        return;
+                      }
+                      setShowSubscribeModal(true);
+                    }}
                     className={cn('inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black backdrop-blur-xl', theme.cyanButton)}
                   >
-                    <Share2 className="h-4 w-4" />
+                    <Crown className="h-4 w-4" />
                     Subscribe
                   </button>
                 </div>
               )}
 
-              {/* ── Mobile PWA floating chat: messages float up from chat input to top of video ── */}
-              {isMobileViewer && (
-                <div
-                  className="pointer-events-none fixed inset-x-0 z-30 overflow-hidden"
-                  style={{
-                    top: 0,
-                    bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
-                  }}
-                >
-                  <AnimatePresence initial={false}>
-                    {floatingMessages.slice(0, 6).map((message) => (
-                      <motion.div
-                        key={message.id}
-                        initial={{ opacity: 0, y: 0 }}
-                        animate={{
-                          opacity: [0, 1, 1, 0.6, 0],
-                          y: ['70vh', '50vh', '25vh', '5vh', '-15vh'],
-                        }}
-                        transition={{
-                          duration: CHAT_FLOAT_MS / 1000,
-                          ease: 'linear',
-                          times: [0, 0.08, 0.5, 0.8, 1],
-                        }}
-                        className="pointer-events-none absolute max-w-[75%] rounded-2xl border border-cyan-300/20 bg-black/50 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(34,211,238,0.18)] backdrop-blur-md"
-                        style={{ right: '3%' }}
-                      >
-                        <span className="font-black text-cyan-200 inline-flex items-center gap-1">
-                          {message.username}
-                          {subscriberUsernames?.has(message.username) && (
-                            <Crown className="w-3 h-3 text-yellow-400" />
-                          )}
-                        </span>{' '}
-                        <span className="text-white/90">{message.content}</span>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-              )}
-            </section>
-            )}
+
+             </section>
+             )}
 
             {/* ── CENTER: Seats belong beside the broadcaster, never over it ── */}
             {hasMounted && !isMobileViewer && layoutMode === 'split' && seatCards.length > 0 && (
@@ -3102,7 +3210,7 @@ const heartbeat = window.setInterval(() => {
                   </div>
                 </div>
 
-                <div className="grid min-h-0 flex-1 grid-cols-2 gap-5">
+                <div className="grid min-h-0 flex-1 grid-cols-2 gap-5 auto-rows-fr">
                   {seatCards.map((seat) => {
                     const seatStatus = String(seat.seat?.status || '').toLowerCase()
                     const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
@@ -3144,7 +3252,7 @@ const heartbeat = window.setInterval(() => {
                       <div
                         key={seat.seatIndex}
                         className={cn(
-                          'relative min-h-[220px] overflow-hidden rounded-2xl border bg-transparent shadow-[inset_0_0_18px_rgba(15,23,42,0.78)] transition-all',
+                          'relative min-h-0 overflow-hidden rounded-2xl border bg-transparent shadow-[inset_0_0_18px_rgba(15,23,42,0.78)] transition-all',
                           isMine
                             ? 'border-emerald-300/60 shadow-[0_0_24px_rgba(16,185,129,0.18)]'
                             : seat.isOccupied
@@ -3293,7 +3401,7 @@ const heartbeat = window.setInterval(() => {
                   key={`grid-seat-${seat.seatIndex}`}
                   className={cn(
                     'relative min-h-0 overflow-hidden border bg-transparent transition-all',
-                    isMobileViewer ? 'rounded-lg' : 'rounded-2xl shadow-[inset_0_0_18px_rgba(15,23,42,0.78)]',
+                    isMobileViewer ? 'aspect-square rounded-lg' : 'rounded-2xl shadow-[inset_0_0_18px_rgba(15,23,42,0.78)]',
                     isMine
                       ? 'border-emerald-300/60'
                       : seat.isOccupied
@@ -3420,52 +3528,52 @@ const heartbeat = window.setInterval(() => {
               )
             })}
 
-          {/* ── MOBILE PWA: Seats overlay on broadcaster video (split mode only) ── */}
-          {hasMounted && isMobileViewer && layoutMode === 'split' && seatCards.length > 0 && (
-            <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col"
-              style={{
-                bottom: `calc(${MOBILE_CONTROL_BAR_HEIGHT}px + ${MOBILE_CHAT_INPUT_HEIGHT}px + 16px + env(safe-area-inset-bottom))`,
-                maxHeight: mobileSeatGridHeight,
-              }}
-            >
-              <div className="pointer-events-auto overflow-y-auto px-2 pb-1">
-                <div
-                  className={cn(
-                    'grid gap-2',
-                    mobileSeatGridCols
-                  )}
-                >
-                  {seatCards.map((seat) => {
-                    const seatStatus = String(seat.seat?.status || '').toLowerCase()
-                    const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
-                    const seatIdentity = seat.seat?.livekit_participant_identity || seatUserId
-                    const isMine = Boolean(user?.id && (seat.seat?.user_id === user.id || seat.seat?.guest_id === user.id))
-                    const seatParticipant = !isMine && seatIdentity
-                      ? remoteParticipants.find((participant: any) => {
-                          const participantIdentity = String(participant?.identity || '')
-                          return (
-                            participantMatchesUser(participant, seatIdentity) ||
-                            participantMatchesUser(participant, seatUserId) ||
-                            participantIdentity === String(seatIdentity) ||
-                            participantIdentity.endsWith(`-${seatIdentity}`) ||
-                            String(seatIdentity).endsWith(participantIdentity)
-                          )
-                        })
-                      : null
+           {/* ── MOBILE PWA: Seats overlay on broadcaster video (split mode only) ── */}
+           {hasMounted && isMobileViewer && layoutMode === 'split' && seatCards.length > 0 && (
+             <div
+               className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col"
+               style={{
+                 bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + 8px + env(safe-area-inset-bottom))`,
+                 maxHeight: mobileSeatGridHeight,
+               }}
+             >
+               <div className="pointer-events-auto overflow-y-auto px-2 pb-1 scrollbar-hide">
+                 <div
+                   className={cn(
+                     'grid gap-2',
+                     mobileSeatGridCols
+                   )}
+                 >
+                   {seatCards.map((seat) => {
+                     const seatStatus = String(seat.seat?.status || '').toLowerCase()
+                     const seatUserId = seat.seat?.user_id || seat.seat?.guest_id || null
+                     const seatIdentity = seat.seat?.livekit_participant_identity || seatUserId
+                     const isMine = Boolean(user?.id && (seat.seat?.user_id === user.id || seat.seat?.guest_id === user.id))
+                     const seatParticipant = !isMine && seatIdentity
+                       ? remoteParticipants.find((participant: any) => {
+                           const participantIdentity = String(participant?.identity || '')
+                           return (
+                             participantMatchesUser(participant, seatIdentity) ||
+                             participantMatchesUser(participant, seatUserId) ||
+                             participantIdentity === String(seatIdentity) ||
+                             participantIdentity.endsWith(`-${seatIdentity}`) ||
+                             String(seatIdentity).endsWith(participantIdentity)
+                           )
+                         })
+                       : null
 
-                    return (
-                      <div
-                        key={seat.seatIndex}
-                        className={cn(
-                          'relative aspect-[4/3] overflow-hidden rounded-xl border',
-                          isMine
-                            ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                            : seat.isOccupied
-                              ? 'border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
-                              : 'border-white/20',
-                          'bg-transparent'
-                        )}
+                     return (
+                          <div
+                          key={seat.seatIndex}
+                          className={cn(
+                            'relative aspect-square overflow-hidden rounded-xl border',
+                           isMine
+                             ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                             : seat.isOccupied
+                               ? 'border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
+                               : 'border-white/20',
+                           'bg-transparent'
+                         )}
                       >
                         {isMine ? (
                           <LocalVideoSurface
@@ -3576,7 +3684,9 @@ const heartbeat = window.setInterval(() => {
                       ) : (
 <div className="flex flex-col gap-1.5">
                            <AnimatePresence initial={false}>
-                             {floatingMessages.map((msg) => (
+                             {floatingMessages.map((msg) => {
+                               const isPinned = pinnedMessageIds.has(msg.id)
+                               return (
                                <motion.div
                                  key={msg.id}
                                  initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -3585,22 +3695,40 @@ const heartbeat = window.setInterval(() => {
                                  transition={{ duration: 0.4, ease: 'easeOut' }}
                                  className="text-sm leading-relaxed break-words"
                                >
-<button
-                                   type="button"
-                                   onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                                   className="cursor-pointer font-black text-cyan-300 transition-colors hover:text-cyan-100 inline-flex items-center gap-1"
-                                   title={`View ${msg.username}'s profile`}
-                                 >
-                                   {msg.username}
-                                   {subscriberUsernames?.has(msg.username) && (
-                                     <Crown className="w-3 h-3 text-yellow-400" />
+<div className="flex items-start gap-1">
+                                   {isPinned && (
+                                     <Pin className="w-3 h-3 text-yellow-400 flex-shrink-0 mt-0.5" fill="currentColor" />
                                    )}
-                                 </button>
-                                 <span className="mx-1 text-white/40">:</span>
-                                 <span className="text-white/90">{msg.content}</span>
-                              </motion.div>
-                            ))}
-                          </AnimatePresence>
+                                   <div className="flex-1 min-w-0">
+                                     <button
+                                       type="button"
+                                       onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                                       className="cursor-pointer font-black text-cyan-300 transition-colors hover:text-cyan-100 inline-flex items-center gap-1"
+                                       title={`View ${msg.username}'s profile`}
+                                     >
+                                       {msg.username}
+                                       {subscriberUsernames?.has(msg.username) && (
+                                         <Crown className="w-3 h-3 text-yellow-400" />
+                                       )}
+                                     </button>
+                                     <span className="mx-1 text-white/40">:</span>
+                                     <span className="text-white/90">{msg.content}</span>
+                                   </div>
+                                   {canPinMessages && (
+                                     <button
+                                       type="button"
+                                       onClick={() => isPinned ? handleUnpinMessage(msg.id) : handlePinMessage(msg.id)}
+                                       className="flex-shrink-0 p-0.5 rounded text-yellow-400/60 hover:text-yellow-300 hover:bg-yellow-400/10 transition-colors"
+                                       title={isPinned ? 'Unpin message' : 'Pin message'}
+                                     >
+                                       <Pin className="w-3 h-3" fill={isPinned ? 'currentColor' : 'none'} />
+                                     </button>
+                                   )}
+                                  </div>
+                                </motion.div>
+                            )})
+                            }
+                            </AnimatePresence>
                         </div>
                       )}
                     </div>
@@ -3974,7 +4102,7 @@ const heartbeat = window.setInterval(() => {
                   ) : (
                     <div className="space-y-3">
                       {myLeagues.map((league) => {
-                        const membership = myMemberships.find((m) => m.league_id === league.id)
+                        const membership = myMemberships[league.id]
                         const leagueMissionsForLeague = leagueMissions.filter((mission) => mission.league_id === league.id)
                         return (
                           <div key={league.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -4176,74 +4304,370 @@ const heartbeat = window.setInterval(() => {
                 Send
               </button>
             </form>
-          </div>
-        )}
+           </div>
+         )}
 
-{/* ── BOTTOM CONTROL BAR ─────────────────────────────────────────── */}
-         <div
-   className={cn(
-     'relative z-20 shrink-0 px-4 py-3',
-     theme.bottomBar,
-     isMobileViewer
-       ? 'fixed inset-x-0 border-none bg-transparent shadow-none rounded-none'
-       : 'border-t border-white/10'
-   )}
-   style={
-     isMobileViewer
-       ? {
-           bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
-           paddingBottom: `calc(4px + env(safe-area-inset-bottom))`,
-         }
-       : undefined
-   }
- >
-   <div className={cn('flex items-center justify-center gap-3', isMobileViewer ? 'mx-3' : 'mx-auto max-w-7xl')}>
-     <button
-       onClick={() => onGift(hostId)}
-       className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.purpleButton)}
-     >
-       <Gift className="h-5 w-5" />
-     </button>
-     <button
-       onClick={handleShare}
-       className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.cyanButton)}
-     >
-       <Share2 className="h-5 w-5" />
-     </button>
-     <button
-       onClick={() => {
-         if (recorder.isRecording) {
-           void recorder.stopRecording()
-         } else if (streamId) {
-           void recorder.startRecording(streamId)
-         }
-       }}
-       disabled={recorder.isUploading}
-       className={cn(
-         'inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold transition',
-         recorder.isRecording
-           ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
-           : recorder.isUploading
-             ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
-             : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
-       )}
-     >
-       {recorder.isUploading ? (
-         <Loader2 className="h-5 w-5 animate-spin" />
-       ) : recorder.isRecording ? (
-         <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span>
-       ) : (
-         <MonitorPlay className="h-5 w-5" />
-       )}
-     </button>
-     <button
-       onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
-       className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.danger)}
-     >
-       <LogOut className="h-5 w-5" />
-     </button>
+         {/* ── MOBILE: Chat ticker in center of screen ── */}
+         {isMobileViewer && floatingMessages.length > 0 && !isMobileChatOpen && (
+           <div
+             className="fixed inset-x-0 z-30 pointer-events-none flex flex-col items-center"
+             style={{
+               top: '35%',
+               left: 0,
+               right: '48px',
+             }}
+           >
+             <AnimatePresence initial={false}>
+               {floatingMessages.slice(0, 3).map((message, idx) => (
+                 <motion.div
+                   key={message.id}
+                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                   animate={{ opacity: 1, y: 0, scale: 1 }}
+                   exit={{ opacity: 0, y: -15, scale: 0.95 }}
+                   transition={{ duration: 0.4, ease: 'easeOut' }}
+                   className={cn(
+                     'pointer-events-auto mb-2 max-w-[85%] rounded-xl border-2 border-black px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.5)]',
+                     idx === 0 ? 'bg-purple-700/95' : 'bg-purple-700/70'
+                   )}
+                 >
+                   {isModOrHigher ? (
+                     <button
+                       type="button"
+                       onClick={(e) => { e.stopPropagation(); handleOpenFloatingChatUsername(message.username) }}
+                       className="font-black text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                       style={{
+                         color: '#39ff14',
+                         textShadow: '0 0 4px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
+                       }}
+                     >
+                       {message.username}
+                     </button>
+                   ) : (
+                     <span
+                       className="font-black text-[11px] inline-flex items-center gap-1"
+                       style={{
+                         color: '#39ff14',
+                         textShadow: '0 0 4px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
+                       }}
+                     >
+                       {message.username}
+                     </span>
+                   )}
+                   {' '}
+                   <span
+                     className="text-[11px]"
+                     style={{
+                       color: '#39ff14',
+                       textShadow: '0 0 3px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
+                     }}
+                   >
+                     {message.content}
+                   </span>
+                 </motion.div>
+               ))}
+             </AnimatePresence>
+           </div>
+         )}
+
+         {/* ── MOBILE: Toggleable chat box ── */}
+         {isMobileViewer && isMobileChatOpen && (
+           <div
+             className="fixed inset-x-0 z-40 pointer-events-auto flex flex-col"
+             style={{
+               top: '10%',
+               bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + 8px + env(safe-area-inset-bottom))`,
+               right: '48px',
+             }}
+           >
+             <div className="flex items-center justify-between border-b border-white/10 bg-zinc-900/95 px-3 py-2 backdrop-blur-xl">
+               <span className="text-xs font-black text-white uppercase tracking-wider">Chat</span>
+               <button
+                 type="button"
+                 onClick={() => setIsMobileChatOpen(false)}
+                 className="text-zinc-400 hover:text-white transition-colors"
+               >
+                 <X size={16} />
+               </button>
+             </div>
+             <div className="flex-1 overflow-y-auto bg-black/80 backdrop-blur-xl px-2 py-2 scrollbar-hide">
+               {floatingMessages.length === 0 ? (
+                 <div className="flex h-full items-center justify-center text-sm font-bold text-white/25">
+                   No messages yet
+                 </div>
+               ) : (
+                 <div className="flex flex-col gap-1">
+                   <AnimatePresence initial={false}>
+                     {floatingMessages.map((msg) => (
+                       <motion.div
+                         key={msg.id}
+                         initial={{ opacity: 0, y: 10 }}
+                         animate={{ opacity: 1, y: 0 }}
+                         exit={{ opacity: 0, y: -10 }}
+                         transition={{ duration: 0.25 }}
+                         className="rounded-lg border border-black/60 bg-purple-700/80 px-2 py-1"
+                       >
+                         <button
+                           onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                           className="font-black text-[11px] cursor-pointer inline-flex items-center gap-1"
+                           style={{
+                             color: '#39ff14',
+                             textShadow: '0 0 3px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
+                           }}
+                         >
+                           {msg.username}
+                         </button>
+                         <span className="mx-0.5 text-white/30">:</span>
+                         <span
+                           className="text-[11px]"
+                           style={{
+                             color: '#39ff14',
+                             textShadow: '0 0 2px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
+                           }}
+                         >
+                           {msg.content}
+                         </span>
+                       </motion.div>
+                     ))}
+                   </AnimatePresence>
+                 </div>
+               )}
+             </div>
+           </div>
+         )}
+
+         {/* ── MOBILE: Right-side vertical control bar ── */}
+         {isMobileViewer && (
+           <div
+             className="fixed right-0 z-20 flex flex-col items-center justify-center gap-2 pointer-events-auto"
+             style={{
+               top: '50%',
+               transform: 'translateY(-50%)',
+               paddingRight: '4px',
+             }}
+           >
+              {isPaidChatEnabled && (
+                <button
+                  onClick={() => setIsPaidChatModalOpen(true)}
+                   className="inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold border border-amber-400/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                 >
+                    <MessageSquare className="h-10 w-10" />
+                 </button>
+               )}
+               <button
+                 onClick={() => setIsMobileChatOpen(v => !v)}
+                 className={cn(
+                    'inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold border transition',
+                    isMobileChatOpen
+                      ? 'border-cyan-400/40 bg-cyan-500/20 text-cyan-300'
+                      : 'border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                  )}
+                >
+                  <MessageSquare className="h-10 w-10" />
+               </button>
+              <button
+                onClick={() => onGift(hostId)}
+className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold', theme.purpleButton)}
+               >
+                 <Gift className="h-10 w-10" />
+              </button>
+               <button
+                 onClick={handleShare}
+                 className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold', theme.cyanButton)}
+                >
+                  <Share2 className="h-10 w-10" />
+               </button>
+               {isUserOnStage && (
+                 <>
+                   <button
+                     onClick={handleToggleMic}
+                     className={cn(
+                       'inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold transition',
+                       seatMicOn
+                         ? 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                         : 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+                     )}
+                     title={seatMicOn ? 'Mute mic' : 'Unmute mic'}
+                   >
+                     {seatMicOn ? <Mic className="h-10 w-10" /> : <MicOff className="h-10 w-10" />}
+                   </button>
+                   <button
+                     onClick={handleToggleCamera}
+                     className={cn(
+                       'inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold transition',
+                       seatCamOn
+                         ? 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                         : 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+                     )}
+                     title={seatCamOn ? 'Turn off camera' : 'Turn on camera'}
+                   >
+                     {seatCamOn ? <Video className="h-10 w-10" /> : <VideoOff className="h-10 w-10" />}
+                   </button>
+                 </>
+               )}
+               <button
+                 onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
+                 className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold', theme.danger)}
+                >
+                  <LogOut className="h-10 w-10" />
+               </button>
+              <button
+                onClick={async () => {
+                  if (recorder.isRecording) {
+                    void recorder.stopRecording()
+                  } else if (streamId) {
+                    if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') {
+                      toast.error('Screen recording not supported on mobile.', { duration: 5000 })
+                      return
+                    }
+                    try {
+                      await recorder.startRecording(streamId)
+                    } catch (err: any) {
+                      if (err?.message?.includes('getDisplayMedia') || err?.name === 'NotSupportedError' || err?.message?.includes('not a function')) {
+                        toast.error('Screen recording not supported on this device.', { duration: 5000 })
+                      } else if (err?.name === 'NotAllowedError' || err?.message?.includes('cancelled')) {
+                        toast.error('Screen recording was cancelled.')
+                      } else {
+                        toast.error(`Recording failed: ${err?.message || 'Unknown error'}`)
+                      }
+                    }
+                  }
+                }}
+                disabled={recorder.isUploading}
+                className={cn(
+                  'inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold transition',
+                  recorder.isRecording
+                    ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+                    : recorder.isUploading
+                      ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
+                      : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                )}
+              >
+                {recorder.isUploading ? (
+                  <Loader2 className="h-10 w-10 animate-spin" />
+                ) : recorder.isRecording ? (
+                  <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span>
+                ) : (
+                  <MonitorPlay className="h-10 w-10" />
+                )}
+              </button>
+              <button
+                onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
+className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold', theme.danger)}
+               >
+                 <LogOut className="h-10 w-10" />
+              </button>
+           </div>
+         )}
+
+         {/* ── DESKTOP: Bottom control bar ── */}
+         {!isMobileViewer && (
+          <div
+    className={cn(
+      'relative z-20 shrink-0 px-4 py-3',
+      theme.bottomBar,
+      'border-t border-white/10'
+    )}
+  >
+     <div className="flex items-center justify-center gap-3 mx-auto max-w-7xl">
+       {isPaidChatEnabled && (
+         <button
+           onClick={() => setIsPaidChatModalOpen(true)}
+           className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', 'border border-amber-400/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20')}
+         >
+            <MessageSquare className="h-5 w-5" />
+          </button>
+        )}
+        <button
+          onClick={() => onGift(hostId)}
+          className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.purpleButton)}
+        >
+          <Gift className="h-5 w-5" />
+        </button>
+        <button
+          onClick={handleShare}
+          className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.cyanButton)}
+        >
+          <Share2 className="h-5 w-5" />
+        </button>
+        {isUserOnStage && (
+          <>
+            <button
+              onClick={handleToggleMic}
+              className={cn(
+                'inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold transition',
+                seatMicOn
+                  ? 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                  : 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+              )}
+              title={seatMicOn ? 'Mute mic' : 'Unmute mic'}
+            >
+              {seatMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+            </button>
+            <button
+              onClick={handleToggleCamera}
+              className={cn(
+                'inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold transition',
+                seatCamOn
+                  ? 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                  : 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+              )}
+              title={seatCamOn ? 'Turn off camera' : 'Turn on camera'}
+            >
+              {seatCamOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+            </button>
+          </>
+        )}
+        <button
+          onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
+          className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.danger)}
+        >
+           <LogOut className="h-5 w-5" />
+        </button>
+        <button
+          onClick={async () => {
+            if (recorder.isRecording) {
+              void recorder.stopRecording()
+            } else if (streamId) {
+              try {
+                await recorder.startRecording(streamId)
+              } catch (err: any) {
+                if (err?.message?.includes('getDisplayMedia') || err?.name === 'NotSupportedError' || err?.message?.includes('not a function')) {
+                  toast.error('Screen recording is not supported on this device. Please use the desktop site.', { duration: 5000 })
+                } else if (err?.name === 'NotAllowedError' || err?.message?.includes('cancelled')) {
+                  toast.error('Screen recording was cancelled.')
+                } else {
+                  toast.error(`Recording failed: ${err?.message || 'Unknown error'}`)
+                }
+              }
+            }
+          }}
+          disabled={recorder.isUploading}
+          className={cn(
+            'inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold transition',
+            recorder.isRecording
+              ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+              : recorder.isUploading
+                ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
+                : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+          )}
+        >
+         {recorder.isUploading ? (
+           <Loader2 className="h-5 w-5 animate-spin" />
+         ) : recorder.isRecording ? (
+           <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span>
+         ) : (
+           <MonitorPlay className="h-5 w-5" />
+         )}
+       </button>
+        <button
+          onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
+          className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.danger)}
+        >
+          <LogOut className="h-5 w-5" />
+        </button>
+     </div>
    </div>
- </div>
+         )}
 
         <div className="pointer-events-none absolute inset-0 z-30">
           <div className="pointer-events-auto">
@@ -4295,6 +4719,27 @@ const heartbeat = window.setInterval(() => {
         isBattleActive={!!stream?.is_battle && !!stream?.battle_id}
         mobileSafe={isMobileViewer}
       />
+
+      {showSubscribeModal && hostId && broadcasterProfile && (
+        <SubscriptionTierSelector
+          broadcasterId={hostId}
+          broadcasterUsername={getDisplayName(broadcasterProfile, 'Broadcaster')}
+          onClose={() => setShowSubscribeModal(false)}
+          onSelect={() => setShowSubscribeModal(false)}
+        />
+      )}
+
+      {isPaidChatModalOpen && (
+        <PaidChatViewerModal
+          isOpen={isPaidChatModalOpen}
+          onClose={() => setIsPaidChatModalOpen(false)}
+          streamId={streamId}
+          hostId={hostId}
+          pricePerUser={paidChatPricePerUser}
+          pricePerChat={paidChatPricePerChat}
+          isChatEnabled={isPaidChatEnabled}
+        />
+      )}
 
     </ErrorBoundary>
   </GiftSystemProvider>

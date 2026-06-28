@@ -1,45 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/lib/store';
+import React from 'react';
+import { usePresenceStore } from '@/lib/presenceStore';
 import { Users } from 'lucide-react';
 
+/**
+ * UserPresenceCounter — displays online user count.
+ * 
+ * OPTIMIZED: Uses the global presence store instead of creating its own channel.
+ * The GlobalPresenceTracker component handles the single shared presence channel.
+ */
 const UserPresenceCounter = () => {
-  const { profile } = useAuthStore();
-  const [onlineCount, setOnlineCount] = useState(0);
-
-  useEffect(() => {
-    if (!profile) return;
-
-    const channel = supabase.channel('global-presence', {
-      config: {
-        presence: {
-          key: profile.id,
-        },
-      },
-    });
-
-    const updateOnlineCount = () => {
-      const presenceState = channel.presenceState();
-      const userIds = Object.keys(presenceState).length;
-      setOnlineCount(userIds);
-    };
-
-    channel.on('presence', { event: 'sync' }, updateOnlineCount);
-    channel.on('presence', { event: 'join' }, updateOnlineCount);
-    channel.on('presence', { event: 'leave' }, updateOnlineCount);
-
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await channel.track({ online_at: new Date().toISOString() });
-      }
-    });
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, [profile]);
+  const onlineCount = usePresenceStore(state => state.onlineCount);
 
   return (
     <span className="text-xs text-slate-400">

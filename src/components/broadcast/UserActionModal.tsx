@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Gift, MicOff, Ban, Shield, X, UserPlus, MessageSquare, Eye, AlertTriangle, Wand2, MessageSquareOff, Coins } from 'lucide-react';
+import { User, Gift, MicOff, Ban, Shield, X, UserPlus, MessageSquare, Eye, AlertTriangle, Wand2, MessageSquareOff, Coins, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 import UserNameWithAge from '../UserNameWithAge';
@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../../lib/chatStore';
 import UserMiniProfile from '../user/UserMiniProfile';
 import { notifyBroadofficerAssigned } from '../../lib/notifications';
+import { isAnonymousDisplayName } from '../../lib/anonymousIdentity';
 
 function getTierColor(tier: string) {
   switch (tier) {
@@ -122,8 +123,55 @@ export default function UserActionModal({
   const displayName = username || fetchedUsername || userId;
   const displayCreatedAt = createdAt || fetchedCreatedAt || undefined;
   const isTargetStaff = targetRole === 'admin' || targetRole === 'moderator' || targetRole === 'staff';
+  const isAnonTarget = role === 'anonymous' || isAnonymousDisplayName(username) || isAnonymousDisplayName(fetchedUsername);
   const navigate = useNavigate();
   const hasModActions = isHost || isModerator || isOfficer;
+
+  const handleArrestAnon = async () => {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        toast.error('Not authenticated');
+        return;
+      }
+
+      const anonFingerprint = userId.startsWith('anon-') ? userId.slice(5) : username || userId;
+      const releaseTime = new Date();
+      releaseTime.setDate(releaseTime.getDate() + 90);
+
+      const { error: jailError } = await supabase.from('jail').upsert({
+        user_id: userId,
+        anon_fingerprint: anonFingerprint,
+        reason: 'Anon user arrested from stream chat (90-day mandatory sentence)',
+        sentence_days: 90,
+        release_at: releaseTime.toISOString(),
+        jailed_by: currentUser.id,
+        stream_id: streamId || null,
+        is_anon: true,
+      }, { onConflict: 'user_id' });
+
+      if (jailError) {
+        console.error('[UserActionModal] anon arrest error:', jailError);
+        toast.error('Failed to arrest anon user');
+        return;
+      }
+
+      await supabase.from('broadcast_mod_actions').insert({
+        stream_id: streamId,
+        moderator_id: currentUser.id,
+        target_user_id: userId,
+        action_type: 'arrest',
+        reason: 'Anon user arrested (90-day mandatory)',
+        severity: 'high',
+      }).catch(() => {});
+
+      toast.success(`Anon user ${username || anonFingerprint} arrested for 90 days`);
+      onClose();
+    } catch (err) {
+      console.error('[UserActionModal] anon arrest error:', err);
+      toast.error('Failed to arrest anon user');
+    }
+  };
 
   const handleKick = async () => {
     if (isTargetStaff) {
@@ -492,11 +540,11 @@ export default function UserActionModal({
              type: 'system'
          });
 
-         const channel = supabase.channel(`stream-chat:${streamId}`);
+         const channel = supabase.channel(`stream-chat:${streamId}-${Date.now()}`);
          channel.subscribe((status) => {
              if (status === 'SUBSCRIBED') {
-                  void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage })
-                      .finally(() => { if (channel) supabase.removeChannel(channel) });
+                  void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage });
+                  setTimeout(() => { supabase.removeChannel(channel) }, 3000);
              }
          });
 
@@ -650,8 +698,19 @@ const handleViewProfile = () => {
              </div>
           </div>
 
-          {/* Moderation Actions (Broadcaster / Staff / Broadofficer) */}
-          {hasModActions && (
+          {isAnonTarget && hasModActions ? (
+            <div className="space-y-2 pt-2 border-t border-white/10 mt-2">
+              <p className="text-xs font-bold text-red-400 uppercase tracking-wider">Anonymous User</p>
+              <p className="text-[11px] text-zinc-400">Anon users can only be arrested. Minimum sentence is 90 days.</p>
+              <button
+                onClick={handleArrestAnon}
+                className="w-full flex items-center justify-center gap-2 p-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-bold rounded-xl transition-colors border border-red-500/30 mt-2"
+              >
+                <Lock size={18} />
+                Arrest (90 Days)
+              </button>
+            </div>
+          ) : hasModActions ? (
             <div className="space-y-2 pt-2 border-t border-white/10 mt-2">
                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Moderation</p>
                
@@ -708,12 +767,12 @@ const handleViewProfile = () => {
                  )}
 
                  {/* Troll Spell Button - Show if current user has the perk */}
-                 <button onClick={handleTrollSpell} className="w-full flex items-center justify-center gap-2 p-2 bg-purple-900/20 hover:bg-purple-900/40 text-purple-400 rounded-lg transition-colors border border-purple-500/20 mt-2">
-                    <Wand2 size={16} />
-                    <span>Cast Troll Spell 🎭</span>
-                 </button>
+                  <button onClick={handleTrollSpell} className="w-full flex items-center justify-center gap-2 p-2 bg-purple-900/20 hover:bg-purple-900/40 text-purple-400 rounded-lg transition-colors border border-purple-500/20 mt-2">
+                     <Wand2 size={16} />
+                     <span>Cast Troll Spell 🎭</span>
+                  </button>
             </div>
-          )}
+          ) : null}
         </div>
 
       </div>

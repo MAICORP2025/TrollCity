@@ -113,12 +113,13 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ============ Cashout Requests ============
+      // ============ Cashout Requests (Fast Pay / MAI Pay unified) ============
       case "approve_cashout": {
         const { requestId } = params;
         if (!requestId) throw new Error("Missing requestId");
-        const { data, error } = await supabaseAdmin.from('cashout_requests').update({ status: 'approved', approved_at: new Date().toISOString(), approved_by: user.id }).eq('id', requestId).select().single();
+        const { data, error } = await supabaseAdmin.rpc('admin_process_payout', { p_payout_id: requestId, p_admin_id: user.id, p_action: 'approve' });
         if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Failed to approve');
         result = data;
         break;
       }
@@ -126,8 +127,9 @@ Deno.serve(async (req) => {
       case "reject_cashout": {
         const { requestId, reason } = params;
         if (!requestId) throw new Error("Missing requestId");
-        const { data, error } = await supabaseAdmin.rpc('process_cashout_refund', { p_request_id: requestId, p_admin_id: user.id, p_notes: reason || 'Request denied via Admin Panel' });
+        const { data, error } = await supabaseAdmin.rpc('admin_process_payout', { p_payout_id: requestId, p_admin_id: user.id, p_action: 'reject', p_rejection_reason: reason || 'Request denied via Admin Panel' });
         if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Failed to reject');
         result = data;
         break;
       }
@@ -135,8 +137,11 @@ Deno.serve(async (req) => {
       case "update_cashout_status": {
         const { requestId, status } = params;
         if (!requestId || !status) throw new Error("Missing required fields");
-        const { data, error } = await supabaseAdmin.from('cashout_requests').update({ status }).eq('id', requestId).select().single();
+        const action = status === 'approved' ? 'approve' : status === 'rejected' ? 'reject' : null;
+        if (!action) throw new Error("Invalid status");
+        const { data, error } = await supabaseAdmin.rpc('admin_process_payout', { p_payout_id: requestId, p_admin_id: user.id, p_action: action });
         if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Failed to update');
         result = data;
         break;
       }

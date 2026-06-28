@@ -2,17 +2,27 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 
+export interface SubscriptionTierInfo {
+  id: string
+  name: string
+  color_hex: string
+  icon_name: string
+  sort_order: number
+}
+
 export function useCreatorSubscription(broadcasterId?: string, userId?: string) {
   const { user } = useAuthStore()
   const targetBroadcasterId = broadcasterId
   const targetUserId = userId || user?.id
 
   const [isSubscribed, setIsSubscribed] = useState(false)
+  const [tier, setTier] = useState<SubscriptionTierInfo | null>(null)
   const [loading, setLoading] = useState(false)
 
   const checkSubscription = useCallback(async () => {
     if (!targetBroadcasterId || !targetUserId) {
       setIsSubscribed(false)
+      setTier(null)
       return
     }
 
@@ -20,15 +30,21 @@ export function useCreatorSubscription(broadcasterId?: string, userId?: string) 
     try {
       const { data } = await supabase
         .from('user_subscriptions')
-        .select('id')
+        .select('id, tier:subscription_tiers (id, name, color_hex, icon_name, sort_order)')
         .eq('subscriber_id', targetUserId)
         .eq('broadcaster_id', targetBroadcasterId)
         .eq('is_active', true)
         .maybeSingle()
 
       setIsSubscribed(!!data)
+      if (data?.tier) {
+        setTier(data.tier as SubscriptionTierInfo)
+      } else {
+        setTier(null)
+      }
     } catch {
       setIsSubscribed(false)
+      setTier(null)
     } finally {
       setLoading(false)
     }
@@ -38,7 +54,7 @@ export function useCreatorSubscription(broadcasterId?: string, userId?: string) 
     checkSubscription()
   }, [checkSubscription])
 
-  return { isSubscribed, loading, refresh: checkSubscription }
+  return { isSubscribed, tier, loading, refresh: checkSubscription }
 }
 
 export function useSubscriberUsernames(broadcasterId?: string) {
@@ -56,7 +72,8 @@ export function useSubscriberUsernames(broadcasterId?: string) {
       .from('user_subscriptions')
       .select(`
         subscriber_id,
-        user_profiles:subscriber_id (username)
+        user_profiles:subscriber_id (username),
+        tier:subscription_tiers (name, color_hex)
       `)
       .eq('broadcaster_id', broadcasterId)
       .eq('is_active', true)
@@ -81,12 +98,98 @@ export function useSubscriberUsernames(broadcasterId?: string) {
   return { subscriberUsernames: usernames, loading }
 }
 
+export interface SubscriberBadge {
+  username: string
+  tierName: string
+  tierColor: string
+}
+
 export function useSubscriberBadges(broadcasterId?: string) {
-  const { subscriberUsernames, loading } = useSubscriberUsernames(broadcasterId)
+  const [badges, setBadges] = useState<Map<string, SubscriberBadge>>(new Map())
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!broadcasterId) {
+      setBadges(new Map())
+      return
+    }
+
+    setLoading(true)
+    supabase
+      .from('user_subscriptions')
+      .select(`
+        subscriber_id,
+        user_profiles:subscriber_id (username),
+        tier:subscription_tiers (name, color_hex)
+      `)
+      .eq('broadcaster_id', broadcasterId)
+      .eq('is_active', true)
+      .then(({ data }) => {
+        const badgeMap = new Map<string, SubscriberBadge>()
+        if (data) {
+          data.forEach((row: any) => {
+            if (row.user_profiles?.username) {
+              badgeMap.set(row.user_profiles.username, {
+                username: row.user_profiles.username,
+                tierName: row.tier?.name || 'Fan',
+                tierColor: row.tier?.color_hex || '#6B7280',
+              })
+            }
+          })
+        }
+        setBadges(badgeMap)
+      })
+      .catch((err) => {
+        console.error('[useSubscriberBadges] error:', err)
+        setBadges(new Map())
+      })
+      .finally(() => setLoading(false))
+  }, [broadcasterId])
 
   const isSubscriber = useCallback((username: string) => {
-    return subscriberUsernames.has(username)
-  }, [subscriberUsernames])
+    return badges.has(username)
+  }, [badges])
 
-  return { isSubscriber, loading }
+  const getBadge = useCallback((username: string) => {
+    return badges.get(username) || null
+  }, [badges])
+
+  return { isSubscriber, getBadge, badges, loading }
+}
+
+/**
+ * Get the highest subscription tier a user holds across all broadcasters.
+ * VIP+ subscribers get auto-highlighted chat in ALL streams they watch.
+ */
+export function useUserSubscriptionTier(userId?: string) {
+  const { user } = useAuthStore()
+  const targetUserId = userId || user?.id
+  const [highestTier, setHighestTier] = useState<SubscriptionTierInfo | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!targetUserId) {
+      setHighestTier(null)
+      return
+    }
+    setLoading(true)
+    supabase
+      .from('user_subscriptions')
+      .select('tier:subscription_tiers (id, name, color_hex, icon_name, sort_order)')
+      .eq('subscriber_id', targetUserId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0 && data[0].tier) {
+          setHighestTier(data[0].tier as SubscriptionTierInfo)
+        } else {
+          setHighestTier(null)
+        }
+      })
+      .catch(() => setHighestTier(null))
+      .finally(() => setLoading(false))
+  }, [targetUserId])
+
+  return { highestTier, loading }
 }

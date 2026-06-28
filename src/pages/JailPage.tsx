@@ -287,9 +287,7 @@ export default function JailPage() {
       .subscribe();
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
+      try { if (channel) supabase.removeChannel(channel); } catch {}
     };
   }, [user, isJailed, profile?.username]);
 
@@ -563,9 +561,7 @@ export default function JailPage() {
       .subscribe();
 
     return () => { 
-      if (channel) {
-        supabase.removeChannel(channel); 
-      }
+      try { if (channel) supabase.removeChannel(channel); } catch {}
     };
   }, [activeConvId, user?.id, profile, activeOtherUserId, activeOtherUsername, activeOtherAvatar, fetchUtromailMessages]);
 
@@ -583,9 +579,7 @@ export default function JailPage() {
       })
       .subscribe();
     return () => { 
-      if (channel) {
-        supabase.removeChannel(channel); 
-      }
+      try { if (channel) supabase.removeChannel(channel); } catch {}
     };
   }, [user?.id, fetchConversations]);
 

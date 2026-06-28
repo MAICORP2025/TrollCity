@@ -2,27 +2,43 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthStore } from "../lib/store";
 import { toast } from "sonner";
-import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from "../lib/payoutWindow";
-// import { Coins, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { PAYOUT_WINDOW_LABEL } from "../lib/payoutWindow";
 import { TIERS } from '../config/coinConfig';
 
 export default function Withdraw() {
   const { user } = useAuthStore();
   const [balance, setBalance] = useState(0);
+  const [reservedCoins, setReservedCoins] = useState(0);
   const [amount, setAmount] = useState("");
-  const payoutWindowOpen = isPayoutWindowOpen();
+  const [payoutMethod, setPayoutMethod] = useState('paypal');
+  const [providerUsername, setProviderUsername] = useState('');
+
+  // Available = cashout_coins - cashout_reserved_coins
+  const availableCoins = Math.max(0, balance - reservedCoins);
 
   const loadBalance = useCallback(async () => {
     if (!user) return;
-    
+
     const { data } = await supabase
       .from("user_profiles")
-      .select("troll_coins, total_earned_coins")
+      .select("cashout_coins, cashout_reserved_coins, paypal_email, cashapp_handle, venmo_handle")
       .eq("id", user.id)
       .maybeSingle();
 
-    // Use troll_coins for withdrawals (withdrawable coins)
-    setBalance(data?.troll_coins || data?.total_earned_coins || 0);
+    if (data) {
+      setBalance(data?.cashout_coins || 0);
+      setReservedCoins(data?.cashout_reserved_coins || 0);
+      if (data.paypal_email) {
+        setPayoutMethod('paypal');
+        setProviderUsername(data.paypal_email);
+      } else if (data.cashapp_handle) {
+        setPayoutMethod('cash_app');
+        setProviderUsername(data.cashapp_handle);
+      } else if (data.venmo_handle) {
+        setPayoutMethod('venmo');
+        setProviderUsername(data.venmo_handle);
+      }
+    }
   }, [user]);
 
   useEffect(() => {
@@ -42,13 +58,17 @@ export default function Withdraw() {
       return;
     }
 
-    if (coinAmount > balance) {
-      toast.error("You cannot withdraw more than your balance.");
+    // Calculate fee (2.9%) — must have enough for both payout + fee
+    const feeCoins = Math.ceil(coinAmount * 0.029);
+    const totalRequired = coinAmount + feeCoins;
+
+    if (totalRequired > availableCoins) {
+      toast.error(`Insufficient balance. You need ${totalRequired.toLocaleString()} coins (including ${feeCoins.toLocaleString()} fee) but only have ${availableCoins.toLocaleString()} available.`);
       return;
     }
 
-    if (!payoutWindowOpen) {
-      toast.error(PAYOUT_WINDOW_LABEL);
+    if (!providerUsername.trim()) {
+      toast.error("Please enter your payout username/email");
       return;
     }
 
@@ -71,58 +91,109 @@ export default function Withdraw() {
       toast.error("Select a valid Cashout tier.");
       return;
     }
-    
+
     if (tier.manualReview) {
-       toast.info("This amount requires 3 day manual review and may take longer to process.");
+       toast.info("This amount requires manual review and may take longer to process.");
     }
 
-    const { data, error } = await supabase.rpc('request_visa_redemption', {
+    // Use the unified Fast Pay cashout RPC
+    const { data, error } = await supabase.rpc('request_friday_cashout', {
       p_user_id: user.id,
-      p_coins: tier.coins,
-      p_usd: tier.usd
+      p_coins_to_redeem: tier.coins,
+      p_provider_type: payoutMethod,
+      p_provider_username: providerUsername.trim(),
+      p_user_tag: null,
+      p_id_verification_url: null,
     });
 
     if (error) {
       console.error("Payout request error:", error);
-      return toast.error("Error submitting request");
+      return toast.error("Error submitting request: " + error.message);
     }
-    
-    toast.success(`PayPal payout request created: ID ${String(data?.redemption_id || '')}`);
+
+    if (!data?.success) {
+      return toast.error(data?.error || "Cashout request failed");
+    }
+
+    toast.success(`Cashout request submitted! Payout ID: ${data.payout_id}`);
     setAmount("");
     loadBalance();
   };
+
+  const selectedTier = TIERS.find(t => t.coins === parseInt(amount));
+  const feeForSelected = selectedTier ? Math.ceil(selectedTier.coins * 0.029) : 0;
+  const totalForSelected = selectedTier ? selectedTier.coins + feeForSelected : 0;
 
   return (
     <div className="min-h-screen bg-[#0A0814] p-6">
       <div className="max-w-md mx-auto text-white">
         <h2 className="text-2xl font-bold mb-4">Withdraw Earnings</h2>
 
+        <div className="mb-3 rounded-lg border border-cyan-500/30 bg-cyan-900/10 px-3 py-2 text-xs text-cyan-200">
+          {PAYOUT_WINDOW_LABEL}
+        </div>
+
         <p className="mb-2">
-          <strong>Your Balance:</strong> {balance.toLocaleString()} coins  
-          {/* Approximate using minimum tier rate */}
-          (${(balance * (TIERS[0].usd / TIERS[0].coins)).toFixed(2)})
+          <strong>Available Balance:</strong> {availableCoins.toLocaleString()} coins
+          <span className="text-xs text-gray-400 ml-2">
+            ({balance.toLocaleString()} total, {reservedCoins.toLocaleString()} reserved)
+          </span>
         </p>
 
-        {!payoutWindowOpen && (
-          <div className="mb-3 rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
-            {PAYOUT_WINDOW_LABEL}
+        <div className="mb-3">
+          <label className="text-xs text-gray-400 block mb-1">Payout Method</label>
+          <select
+            value={payoutMethod}
+            onChange={(e) => setPayoutMethod(e.target.value)}
+            className="w-full p-2 rounded bg-zinc-800 text-white border border-zinc-700"
+          >
+            <option value="paypal">PayPal</option>
+            <option value="cash_app">Cash App</option>
+            <option value="venmo">Venmo</option>
+          </select>
+        </div>
+
+        <div className="mb-3">
+          <label className="text-xs text-gray-400 block mb-1">Provider Username/Email</label>
+          <input
+            type="text"
+            className="w-full p-2 rounded bg-zinc-800 text-white placeholder-gray-400 border border-zinc-700"
+            placeholder="Enter username or email"
+            value={providerUsername}
+            onChange={(e) => setProviderUsername(e.target.value)}
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="text-xs text-gray-400 block mb-1">Cashout Tier</label>
+          <select
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-full p-2 rounded bg-zinc-800 text-white border border-zinc-700"
+          >
+            <option value="">Select a tier...</option>
+            {TIERS.map(t => (
+              <option key={t.coins} value={t.coins}>
+                {t.coins.toLocaleString()} coins → ${t.usd} ({t.name})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedTier && (
+          <div className="mb-3 rounded-lg border border-yellow-500/30 bg-yellow-900/10 px-3 py-2 text-xs text-yellow-200">
+            <div>Fee (2.9%): {feeForSelected.toLocaleString()} coins</div>
+            <div>Total required: {totalForSelected.toLocaleString()} coins</div>
+            <div>You receive: ${selectedTier.usd}</div>
           </div>
         )}
-
-        <input
-          type="number"
-          className="w-full p-2 rounded bg-zinc-800 text-white placeholder-gray-400 mb-3 border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-          placeholder={`Enter tier: ${TIERS.map(t => t.coins).join(', ')}`}
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
 
         <button
           onClick={requestPayout}
           className="bg-green-500 hover:bg-green-600 w-full mt-3 py-2 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={!amount || !TIERS.some(t => t.coins === parseInt(amount)) || parseInt(amount) > balance || !payoutWindowOpen}
+          disabled={!amount || !selectedTier || totalForSelected > availableCoins || !providerUsername.trim()}
         >
-          Request Withdrawal
+          Request Cashout
         </button>
       </div>
     </div>

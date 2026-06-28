@@ -230,7 +230,9 @@ export default function StreamEnergyMeter({ streamId, className = '' }: StreamEn
   }, []);
 
   useEffect(() => {
+    // OPTIMIZED: 5s interval with visibility check (was 2.5-4.5s random)
     const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       const types: EnergyAction['type'][] = ['gift', 'follow', 'share', 'superchat', 'boost'];
       const labels = ['Gift sent', 'New follow', 'Shared stream', 'Superchat', 'Energy boost'];
       const typeIdx = Math.floor(Math.random() * types.length);

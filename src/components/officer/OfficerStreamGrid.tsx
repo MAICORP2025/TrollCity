@@ -68,9 +68,10 @@ export default function OfficerStreamGrid() {
     const channel = supabase
       .channel('officer-streams-monitor')
       .on('postgres_changes', {
-        event: '*',
+        event: 'UPDATE',
         schema: 'public',
         table: 'streams',
+        filter: 'is_live=eq.true',
       }, () => fetchStreams())
       .subscribe();
 

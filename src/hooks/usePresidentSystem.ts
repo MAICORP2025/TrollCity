@@ -553,7 +553,7 @@ const fetchCurrentElection = useCallback(async () => {
           .from('president_elections')
           .select(`
             *,
-            candidates:president_candidates(
+            candidates:president_candidates!president_candidates_election_id_fkey(
               *,
               user:user_profiles(username, avatar_url)
             )

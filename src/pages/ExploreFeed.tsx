@@ -217,13 +217,13 @@ export default function ExploreFeed() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
-          table: 'streams'
+          table: 'streams',
+          filter: 'is_live=eq.true',
         },
         () => {
-          // Any change to streams (new stream, ended stream, viewer count change)
-          // We could be more surgical but refetching the first page is safest for ordering
+          // Only refresh when live streams change (not ended/inserted)
           if (window.scrollY < 500) {
             fetchBroadcasts(0, false);
           }

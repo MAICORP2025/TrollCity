@@ -101,7 +101,7 @@ export function calculateLevel(xp: number): number {
   let curr_lvl = 1;
   let xp_accum = 0;
   let xp_needed = 100;
-  
+
   while (true) {
     if (curr_lvl < 50) {
       xp_needed = Math.floor(100 * Math.pow(1.1, curr_lvl - 1));
@@ -116,6 +116,40 @@ export function calculateLevel(xp: number): number {
     xp_accum += xp_needed;
     curr_lvl++;
     if (curr_lvl >= 10000) return curr_lvl; // Safety break
+  }
+}
+
+/**
+ * Get XP progress info for the next level
+ * Returns: current XP, XP needed for next level, and percentage progress
+ */
+export function getXPForNextLevel(currentXp: number): { current: number; needed: number; percentage: number } {
+  let curr_lvl = 1;
+  let xp_accum = 0;
+  let xp_needed = 100;
+
+  while (true) {
+    if (curr_lvl < 50) {
+      xp_needed = Math.floor(100 * Math.pow(1.1, curr_lvl - 1));
+    } else {
+      xp_needed = 10000;
+    }
+
+    if (currentXp < (xp_accum + xp_needed)) {
+      const xpInLevel = currentXp - xp_accum;
+      const percentage = (xpInLevel / xp_needed) * 100;
+      return {
+        current: currentXp,
+        needed: xp_needed - xpInLevel,
+        percentage: Math.min(Math.max(percentage, 0), 100)
+      };
+    }
+
+    xp_accum += xp_needed;
+    curr_lvl++;
+    if (curr_lvl >= 10000) {
+      return { current: currentXp, needed: 0, percentage: 100 };
+    }
   }
 }
 

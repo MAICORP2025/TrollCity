@@ -194,8 +194,10 @@ export function useCustomerServiceUsers() {
       )
       .subscribe();
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchUsers, 30000);
+    // OPTIMIZED: 30s interval with visibility check
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchUsers();
+    }, 30000);
 
     return () => {
       if (channel) {

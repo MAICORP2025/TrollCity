@@ -84,6 +84,62 @@ export default function PodcastRoom() {
 
   const [podcast, setPodcast] = useState<Podcast | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Kick guard: check on page load if user was kicked from this podcast
+  useEffect(() => {
+    if (!id || !user?.id) return
+
+    const KICK_BAN_DURATION_MS = 24 * 60 * 60 * 1000
+    const getKickStorageKey = (sid: string, uid: string) => `kick_${sid}_${uid}`
+
+    const checkKickGuard = async () => {
+      try {
+        // Check localStorage for recent kick
+        const raw = localStorage.getItem(getKickStorageKey(id, user.id))
+        if (raw) {
+          const kickData = JSON.parse(raw)
+          if (kickData && typeof kickData.timestamp === 'number') {
+            const timeSinceKick = Date.now() - kickData.timestamp
+            if (timeSinceKick < KICK_BAN_DURATION_MS) {
+              const remainingMs = KICK_BAN_DURATION_MS - timeSinceKick
+              const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+              toast.error(`You were kicked from this podcast and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+              navigate('/', { replace: true })
+              return
+            }
+          }
+        }
+
+        // Check stream_kicks table
+        const { data: kickRecord } = await supabase
+          .from('stream_kicks')
+          .select('id, created_at')
+          .eq('stream_id', id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (kickRecord) {
+          const kickTimestamp = new Date(kickRecord.created_at).getTime()
+          const timeSinceKick = Date.now() - kickTimestamp
+          if (timeSinceKick < KICK_BAN_DURATION_MS) {
+            const remainingMs = KICK_BAN_DURATION_MS - timeSinceKick
+            const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+            toast.error(`You were kicked from this podcast and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+            localStorage.setItem(getKickStorageKey(id, user.id), JSON.stringify({
+              timestamp: kickTimestamp,
+              streamId: id,
+              reason: 'Kicked by moderator'
+            }))
+            navigate('/', { replace: true })
+          }
+        }
+      } catch (err) {
+        console.warn('[PodcastRoom] Kick guard check failed:', err)
+      }
+    }
+
+    void checkKickGuard()
+  }, [id, user?.id, navigate])
   const [endingPodcast, setEndingPodcast] = useState(false)
 
   const activePodcast = usePodcastStore((state) => state.activePodcast)

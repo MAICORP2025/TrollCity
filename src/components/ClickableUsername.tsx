@@ -422,7 +422,7 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
             if (!streamId) return;
 
             if (isCurrentTempAdmin) {
-                if (!confirm("Kick this user from the stream? (Logged Admin Action)")) return;
+                if (!confirm("Kick this user from the stream? They cannot rejoin.")) return;
                 try {
                    const { error } = await supabase.rpc('admin_kick_user', {
                        p_stream_id: streamId,
@@ -437,24 +437,34 @@ const ClickableUsername: React.FC<ClickableUsernameProps> = ({
                 break;
            }
 
-            if (!confirm("Kick this user for 100 coins? They will be removed for 30 minutes unless they pay the fee.")) return;
+            if (!confirm("Kick this user? They will be removed and cannot rejoin this broadcast.")) return;
 
             try {
-                // Use the new paid kick RPC and request a 30-minute duration for regular users
-                const { data, error } = await supabase.rpc('kick_user_paid', { 
-                    p_stream_id: streamId, 
-                    p_target_user_id: targetUserId,
-                    p_kicker_id: currentUser?.id,
-                    p_duration_minutes: 30
-                });
+                // Insert into stream_kicks (free, no coin cost)
+                const { error: kickError } = await supabase
+                  .from('stream_kicks')
+                  .insert({
+                    stream_id: streamId,
+                    user_id: targetUserId,
+                    kicked_by: currentUser?.id,
+                    reason: 'Kicked by moderator',
+                    created_at: new Date().toISOString()
+                  });
 
-                if (error) throw error;
+                if (kickError) throw kickError;
                 
-                if (data && !data.success) {
-                    toast.error(data.message || "Failed to kick user");
-                } else {
-                    toast.success("User kicked (100 coins deducted)");
-                }
+                // Log in broadcast_mod_actions for tracking
+                await supabase.from('broadcast_mod_actions').insert({
+                  actor_id: currentUser?.id,
+                  actor_role: 'moderator',
+                  target_user_id: targetUserId,
+                  action_type: 'kick',
+                  stream_id: streamId,
+                  reason: 'Kicked by moderator',
+                  status: 'completed'
+                });
+                
+                toast.success("User kicked");
             } catch (err: any) {
                 console.error('Error kicking user from stream:', err)
                 toast.error('Failed to kick user')

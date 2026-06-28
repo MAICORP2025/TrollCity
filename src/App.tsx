@@ -83,6 +83,7 @@ const Safety = lazyWithRetry(() => import("./pages/Safety"));
 const AdminRFC = lazyWithRetry(() => import("./components/AdminRFC"));
 const AdminEarningsDashboard = lazyWithRetry(() => import("./pages/admin/AdminEarningsDashboard"));
 const AdminDashboard = lazyWithRetry(() => import("./pages/admin/AdminDashboard"));
+const AdminPoolPage = lazyWithRetry(() => import("./pages/admin/AdminPoolPage"));
 const ApplicationsPage = lazyWithRetry(() => import("./pages/admin/Applications"));
 const AdminMarketplace = lazyWithRetry(() => import("./pages/admin/AdminMarketplace"));
 const MarketplaceReleaseRequests = lazyWithRetry(() => import("./pages/admin/MarketplaceReleaseRequests"));
@@ -110,10 +111,8 @@ const PayoutRequest = lazyWithRetry(() => import("./pages/PayoutRequest"));
 const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
 const BonusesPage = lazyWithRetry(() => import("./pages/Bonuses"));
 const CashoutPage = lazyWithRetry(() => import("./pages/CashoutPage"));
-const CashoutRequestPage = lazyWithRetry(() => import("./pages/CashoutRequestPage"));
 const FastPayApplication = lazyWithRetry(() => import("./pages/FastPayApplication"));
 const MaiPayPage = lazyWithRetry(() => import("./pages/MaiPayPage"));
-const Withdraw = lazyWithRetry(() => import("./pages/Withdraw"));
 
 const ShopPartnerPage = lazyWithRetry(() => import("./pages/ShopPartnerPage"));
 const ShopEarnings = lazyWithRetry(() => import("./pages/ShopEarnings"));
@@ -484,7 +483,6 @@ import AdvertisePage from "./pages/city-registry/AdvertisePage";
 import Following from "./pages/Following";
 import Marketplace from "./pages/Marketplace";
 import PublicPool from "./pages/PublicPool";
-import TrollGamesPage from "./pages/TrollGamesPage";
 import GiveawaysPage from "./pages/GiveawaysPage";
 import TrollWheel from "./pages/TrollWheel";
 import CarDealership from "./pages/CarDealership";
@@ -971,13 +969,15 @@ function AppContent() {
   }, [profile, location.pathname, navigate]);
 
   // 🔹 Global arrest handler - monitor jail table for real-time arrests
+  // Uses a single stable channel per user — only depends on user.id, not location
   useEffect(() => {
-    if (!user?.id || !profile || location.pathname === '/jail') return;
+    if (!user?.id || !profile) return;
 
     let channel: any = null;
+    let isCleanedUp = false;
 
     const setupArrestMonitoring = async () => {
-      // Check if user is jailed on navigation (for mobile and direct URL access)
+      // Check if user is currently jailed (for direct URL access)
       const checkJailStatus = async () => {
         const { data } = await supabase
           .from('jail')
@@ -989,7 +989,7 @@ function AppContent() {
 
         if (data && !data.bond_posted) {
           const releaseTime = new Date(data.release_time);
-          if (releaseTime > new Date()) {
+          if (releaseTime > new Date() && !isCleanedUp) {
             navigate('/jail', { replace: true });
             return true;
           }
@@ -998,9 +998,9 @@ function AppContent() {
       };
 
       const isAlreadyJailed = await checkJailStatus();
-      if (isAlreadyJailed) return;
+      if (isAlreadyJailed || isCleanedUp) return;
 
-      // Subscribe to real-time jail table changes
+      // Single stable channel per user — no location dependency
       channel = supabase
         .channel(`app-arrests:${user.id}`)
         .on(
@@ -1012,6 +1012,7 @@ function AppContent() {
             filter: `user_id=eq.${user.id}`,
           },
           (payload) => {
+            if (isCleanedUp) return;
             const data = (payload as any).new;
             if (data && data.user_id === user.id) {
               const releaseTime = new Date(data.release_time);
@@ -1028,11 +1029,12 @@ function AppContent() {
     setupArrestMonitoring();
 
     return () => {
+      isCleanedUp = true;
       if (channel) {
         supabase.removeChannel(channel);
       }
     };
-  }, [user?.id, profile, navigate, location.pathname]);
+  }, [user?.id, profile, navigate]);
 
   // 🔹 Track user IP address and check for IP bans
   useEffect(() => {
@@ -1511,7 +1513,7 @@ const handleVisibilityChange = async () => {
 
                 {/* 🏠 Home - Public with limited auth for interactions */}
                 <Route path="/home" element={<Navigate to="/" replace />} />
-                <Route path="/" element={<LiveContentProvider><AuthenticatedHome /></LiveContentProvider>} />
+                <Route path="/" element={<ErrorBoundary><LiveContentProvider><AuthenticatedHome /></LiveContentProvider></ErrorBoundary>} />
 
                 {/* 🎤 Live Auctions — Public browse/watch, studio gated below */}
                 <Route path="/auctions" element={<AuctionsPage />} />
@@ -1722,11 +1724,6 @@ const handleVisibilityChange = async () => {
                   <Route path="/marketplace/sales" element={<Marketplace />} />
                   <Route path="/pool" element={<PublicPool />} />
 
-                   <Route path="/troll-games" element={<TrollGamesPage />} />
-                  <Route path="/troll-games/queue" element={<TrollGamesPage />} />
-                  <Route path="/troll-games/live" element={<TrollGamesPage />} />
-                  <Route path="/troll-games/match/:matchId" element={<TrollGamesPage />} />
-                  <Route path="/troll-games/:gameType/:matchId" element={<TrollGamesPage />} />
                   <Route path="/troll-games/giveaways" element={<GiveawaysPage />} />
                   <Route path="/troll-wheel" element={<TrollWheel />} />
                   <Route path="/ktauto" element={<CarDealership />} />
@@ -1959,10 +1956,8 @@ const handleVisibilityChange = async () => {
 
                   <Route path="/bonuses" element={<BonusesPage />} />
                    <Route path="/cashout" element={<CashoutPage />} />
-                    <Route path="/cashout-request" element={<CashoutRequestPage />} />
                     <Route path="/fast-pay-application" element={<FastPayApplication />} />
                     <Route path="/mai-pay" element={<MaiPayPage />} />
-                   <Route path="/withdraw" element={<Withdraw />} />
 
                   <Route path="/shop-partner" element={<ShopPartnerPage />} />
                   <Route path="/sell" element={<SellOnTrollCity />} />
@@ -2220,10 +2215,19 @@ const handleVisibilityChange = async () => {
                           }
                         />
                       )
-                    })}
+                     })}
 
-                    <Route
-                      path="/admin/trollmers-tournament"
+                     <Route
+                       path="/admin/pool"
+                       element={
+                         <RequireRole roles={[UserRole.ADMIN]}>
+                           <AdminPoolPage />
+                         </RequireRole>
+                       }
+                     />
+
+                     <Route
+                       path="/admin/trollmers-tournament"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <TrollmersTournament />

@@ -51,16 +51,16 @@ export default function GamingCommunity() {
 
         if (stream?.broadcaster_id) {
           const { data: subs } = await supabase
-            .from('subscriptions')
-            .select('subscriber_id, profiles!subscriptions_subscriber_id_fkey(username, avatar_url)')
+            .from('user_subscriptions')
+            .select('subscriber_id, subscriber:user_profiles!user_subscriptions_subscriber_id_fkey(username, avatar_url)')
             .eq('broadcaster_id', stream.broadcaster_id)
-            .eq('status', 'active')
-            .limit(20)
+            .eq('is_active', true)
+            .limit(20);
 
           if (subs) {
             setFollowers(subs.map((s: any) => ({
-              username: s.profiles?.username || 'User',
-              avatar_url: s.profiles?.avatar_url || null,
+              username: s.subscriber?.username || 'User',
+              avatar_url: s.subscriber?.avatar_url || null,
             })))
           }
         }

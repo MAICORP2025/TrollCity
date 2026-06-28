@@ -1,52 +1,74 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../../lib/supabase'
-import { CashoutRequest } from '../../../../types/admin'
 import { toast } from 'sonner'
-import { DollarSign, Check, X, Lock, Unlock, Eye } from 'lucide-react'
+import { DollarSign, Check, X, Eye } from 'lucide-react'
 import { useAuthStore } from '../../../../lib/store'
 import { useNavigate } from 'react-router-dom'
+
+interface PayoutRequest {
+  id: string
+  user_id: string
+  coin_amount: number
+  cash_amount: number
+  net_amount: number
+  status: string
+  provider_type: string
+  provider_username: string
+  user_tag: string | null
+  id_verification_url: string | null
+  created_at: string
+  approved_at: string | null
+  paid_at: string | null
+  rejection_reason: string | null
+  user_profile?: {
+    username: string
+    email?: string
+  }
+}
 
 interface CashoutRequestsListProps {
   viewMode: 'admin' | 'secretary'
 }
 
-type ExtendedCashoutRequest = CashoutRequest & {
-  user_profile?: {
-    username: string;
-    email?: string;
-  }
-  is_held?: boolean;
-  held_reason?: string;
-  release_date?: string;
-  is_new_user_hold?: boolean;
-}
-
 export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequestsListProps) {
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const [requests, setRequests] = useState<ExtendedCashoutRequest[]>([])
+  const [requests, setRequests] = useState<PayoutRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedRequest, setSelectedRequest] = useState<ExtendedCashoutRequest | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>('pending')
   const [filterUser, setFilterUser] = useState<string>('')
-  const [holdReason, setHoldReason] = useState('')
-  const [requestToHold, setRequestToHold] = useState<ExtendedCashoutRequest | null>(null)
 
   const fetchRequests = useCallback(async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('admin-actions', {
-        body: { 
-          action: 'get_cashout_requests',
-          filterStatus 
-        }
-      });
+      let query = supabase
+        .from('payout_requests')
+        .select(`
+          *,
+          user_profiles!inner(username, email)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100)
 
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus)
+      }
+
+      const { data, error } = await query
       if (error) throw error
-      setRequests(data?.requests || [])
+
+      const formatted = (data || []).map((req: any) => ({
+        ...req,
+        user_profile: req.user_profiles ? {
+          username: req.user_profiles.username,
+          email: req.user_profiles.email,
+        } : undefined,
+      }))
+
+      setRequests(formatted)
     } catch (error) {
-      console.error('Error fetching cashouts:', error)
-      toast.error('Failed to load cashout requests')
+      console.error('Error fetching payouts:', error)
+      toast.error('Failed to load payout requests')
     } finally {
       setLoading(false)
     }
@@ -54,105 +76,78 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
 
   useEffect(() => {
     fetchRequests()
-    
-    // Polling every 30s instead of Realtime to save DB resources
+
     const interval = setInterval(fetchRequests, 30000)
-    
     return () => clearInterval(interval)
   }, [fetchRequests])
 
-  const handleUpdateStatus = async (id: string, status: string, notes?: string) => {
+  const handleApprove = async (id: string) => {
     if (!user) return
     try {
-      let action = 'update_cashout_status';
-      let params: any = { requestId: id, status };
-
-      if (status === 'approved') {
-        action = 'approve_cashout';
-        params = { requestId: id };
-      } else if (status === 'denied') {
-        action = 'reject_cashout';
-        params = { requestId: id, reason: notes || 'Request denied' };
-      }
-
-      const { error } = await supabase.functions.invoke('admin-actions', {
-        body: { action, ...params }
-      });
-
-      if (error) throw error;
-
-      toast.success(`Request marked as ${status}`)
-      fetchRequests()
-    } catch (error) {
-      console.error(error)
-      toast.error('Failed to update request')
-    }
-  }
-
-  const handleToggleHold = async (req: ExtendedCashoutRequest, hold: boolean, reason?: string) => {
-    if (!user) return
-    try {
-      const { error } = await supabase.functions.invoke('admin-actions', {
-        body: { 
-          action: 'toggle_cashout_hold',
-          requestId: req.id,
-          hold,
-          reason
-        }
-      });
-
+      const { data, error } = await supabase.rpc('admin_process_payout', {
+        p_payout_id: id,
+        p_admin_id: user.id,
+        p_action: 'approve',
+      })
       if (error) throw error
-      
-      toast.success(hold ? 'Request put on hold' : 'Request released from hold')
-      setRequestToHold(null)
-      setHoldReason('')
+      if (!data?.success) throw new Error(data?.error || 'Failed to approve')
+      toast.success('Request approved')
       fetchRequests()
-    } catch (error) {
-      console.error(error)
-      toast.error('Failed to update hold status')
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to approve')
     }
   }
+
+  const handleReject = async (id: string) => {
+    if (!user) return
+    const reason = window.prompt('Rejection reason:')
+    if (!reason) return
+    try {
+      const { data, error } = await supabase.rpc('admin_process_payout', {
+        p_payout_id: id,
+        p_admin_id: user.id,
+        p_action: 'reject',
+        p_rejection_reason: reason,
+      })
+      if (error) throw error
+      if (!data?.success) throw new Error(data?.error || 'Failed to reject')
+      toast.success('Request rejected')
+      fetchRequests()
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to reject')
+    }
+  }
+
+  const filteredRequests = requests.filter(req => {
+    if (!filterUser.trim()) return true
+    const q = filterUser.toLowerCase()
+    return (
+      req.user_profile?.username?.toLowerCase().includes(q) ||
+      req.user_profile?.email?.toLowerCase().includes(q) ||
+      req.user_id.toLowerCase().includes(q)
+    )
+  })
 
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 relative">
-      
-       {/* Schedule Banner */}
-       <div className="mb-6 bg-blue-900/20 border border-blue-800 rounded-lg p-3 flex items-center justify-between">
-         <div className="flex items-center gap-3">
-           <div className="bg-blue-900/50 p-2 rounded-full">
-               <DollarSign className="w-5 h-5 text-blue-400" />
-           </div>
-           <div>
-               <h4 className="text-sm font-bold text-blue-200">Payout Schedule</h4>
-               <p className="text-xs text-blue-300/80">
-                   Payouts are processed once a week on <span className="text-white font-bold">Fridays</span>.
-               </p>
-           </div>
-         </div>
-         <button
-           onClick={async () => {
-             if (!window.confirm('Force run all pending payouts now? This will bypass the Friday schedule.')) return
-             try {
-               const { error } = await supabase.functions.invoke('paypal-payout', {
-                 body: { payoutRequestId: 'batch', adminId: user?.id, force: true }
-               })
-               if (error) throw error
-               toast.success('Payout batch executed successfully')
-               fetchRequests()
-             } catch (e) {
-               toast.error('Failed to run payout batch')
-             }
-           }}
-           className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors"
-         >
-           🔓 Force Run Payouts Now
-         </button>
-       </div>
+      <div className="mb-6 bg-blue-900/20 border border-blue-800 rounded-lg p-3">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-900/50 p-2 rounded-full">
+            <DollarSign className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-blue-200">Fast Pay / MAI Pay Payouts</h4>
+            <p className="text-xs text-blue-300/80">
+              Level 1-499: Fridays only • Level 500-999: Every 24hrs • Level 1000+: Every 30min
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="flex justify-between items-center gap-4 mb-6 flex-wrap">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           <DollarSign className="w-5 h-5 text-green-400" />
-          Cashout Requests
+          Payout Requests
         </h2>
         <div className="flex items-center gap-3 flex-wrap">
           <input
@@ -161,18 +156,17 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
             value={filterUser}
             onChange={(e) => setFilterUser(e.target.value)}
           />
-          <select 
+          <select
             className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
             <option value="approved">Approved</option>
-            <option value="processing">Processing</option>
-            <option value="fulfilled">Fulfilled</option>
-            <option value="failed">Failed</option>
-            <option value="denied">Denied</option>
+            <option value="paid">Paid</option>
+            <option value="rejected">Rejected</option>
           </select>
         </div>
       </div>
@@ -183,7 +177,7 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
             <tr>
               <th className="p-3">User</th>
               <th className="p-3">Amount</th>
-              <th className="p-3">Tier</th>
+              <th className="p-3">Method</th>
               <th className="p-3">Status</th>
               <th className="p-3">Date</th>
               <th className="p-3 text-right">Actions</th>
@@ -192,179 +186,67 @@ export default function CashoutRequestsList({ viewMode: _viewMode }: CashoutRequ
           <tbody className="divide-y divide-slate-700">
             {loading ? (
               <tr><td colSpan={6} className="p-4 text-center">Loading...</td></tr>
-            ) : requests.length === 0 ? (
+            ) : filteredRequests.length === 0 ? (
               <tr><td colSpan={6} className="p-4 text-center">No requests found</td></tr>
             ) : (
-              requests
-                .filter(req => {
-                  if (!filterUser.trim()) return true
-                  const q = filterUser.toLowerCase()
-                  return (
-                    (req.user_profile?.username || '').toLowerCase().includes(q) ||
-                    (req.user_profile?.email || '').toLowerCase().includes(q) ||
-                    req.user_id.toLowerCase().includes(q)
-                  )
-                })
-                .map(req => (
-                <tr key={req.id} className="hover:bg-slate-700/30 transition-colors">
-                  <td className="p-3 font-medium text-white">
-                    {req.user_profile?.username || 'Unknown'}
-                    <div className="text-xs text-slate-500">{req.user_id.slice(0, 8)}</div>
-                    {req.is_new_user_hold && (
-                       <div className="text-[10px] text-orange-400 mt-1">New User Hold</div>
-                    )}
-                  </td>
-                  <td className="p-3 font-mono text-yellow-400">
-                    {(req.coin_amount || 0).toLocaleString()} coins
+              filteredRequests.map((req) => (
+                <tr key={req.id} className="hover:bg-slate-700/30">
+                  <td className="p-3">
+                    <div className="font-medium text-white">{req.user_profile?.username || 'Unknown'}</div>
+                    <div className="text-xs text-slate-500">{req.user_id.slice(0, 8)}...</div>
                   </td>
                   <td className="p-3">
-                    <span className="px-2 py-0.5 rounded border border-slate-600 text-xs">
-                      {req.tier || 'Standard'}
+                    <div className="font-bold text-green-400">${req.cash_amount?.toFixed(2) || '0.00'}</div>
+                    <div className="text-xs text-slate-500">{req.coin_amount?.toLocaleString()} coins (incl. fee)</div>
+                  </td>
+                  <td className="p-3 capitalize">{req.provider_type?.replace('_', ' ') || 'N/A'}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      req.status === 'pending' ? 'bg-yellow-900/50 text-yellow-300' :
+                      req.status === 'reviewed' ? 'bg-blue-900/50 text-blue-300' :
+                      req.status === 'approved' ? 'bg-green-900/50 text-green-300' :
+                      req.status === 'paid' ? 'bg-emerald-900/50 text-emerald-300' :
+                      'bg-red-900/50 text-red-300'
+                    }`}>
+                      {req.status.toUpperCase()}
                     </span>
                   </td>
-                  <td className="p-3">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        req.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' :
-                        req.status === 'approved' ? 'bg-blue-500/20 text-blue-300' :
-                        req.status === 'fulfilled' ? 'bg-green-500/20 text-green-300' :
-                        req.status === 'denied' ? 'bg-red-500/20 text-red-300' :
-                        'bg-slate-500/20 text-slate-300'
-                      }`}>
-                        {req.status.toUpperCase()}
-                      </span>
-                      {req.is_held && (
-                        <div className="flex flex-col gap-0.5">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-300 flex items-center gap-1 w-fit">
-                                <Lock className="w-3 h-3" />
-                                HELD
-                            </span>
-                            {req.release_date && (
-                                <span className="text-[10px] text-slate-400">
-                                    Release: {new Date(req.release_date).toLocaleDateString()}
-                                </span>
-                            )}
-                             {req.held_reason && (
-                                <span className="text-[10px] text-slate-500 italic max-w-[150px] truncate" title={req.held_reason}>
-                                    &quot;{req.held_reason}&quot;
-                                </span>
-                            )}
-                        </div>
+                  <td className="p-3 text-xs">{new Date(req.created_at).toLocaleDateString()}</td>
+                  <td className="p-3 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => navigate(`/admin/cashout/${req.id}`)}
+                        className="p-1 text-blue-400 hover:text-blue-300"
+                        title="View details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      {(req.status === 'pending' || req.status === 'reviewed') && (
+                        <>
+                          <button
+                            onClick={() => handleApprove(req.id)}
+                            className="p-1 text-green-400 hover:text-green-300"
+                            title="Approve"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleReject(req.id)}
+                            className="p-1 text-red-400 hover:text-red-300"
+                            title="Reject"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
-                  <td className="p-3 text-slate-400">
-                    {new Date(req.requested_at).toLocaleDateString()}
-                  </td>
-                   <td className="p-3 text-right space-x-2">
-                     <button
-                       onClick={() => navigate(`/admin/cashout/${req.id}`)}
-                       className="p-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded transition-colors"
-                       title="View Details"
-                     >
-                       <Eye className="w-4 h-4" />
-                     </button>
-                     {req.status === 'pending' && (
-                       <>
-                         {!req.is_held ? (
-                             <>
-                                 <button 
-                                   onClick={() => handleUpdateStatus(req.id, 'approved')}
-                                   className="p-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded transition-colors"
-                                   title="Approve"
-                                 >
-                                   <Check className="w-4 h-4" />
-                                 </button>
-                                 <button 
-                                   onClick={() => handleUpdateStatus(req.id, 'denied')}
-                                   className="p-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded transition-colors"
-                                   title="Deny"
-                                 >
-                                   <X className="w-4 h-4" />
-                                 </button>
-                                 <button 
-                                   onClick={() => setRequestToHold(req)}
-                                   className="p-1.5 bg-orange-600/20 hover:bg-orange-600/40 text-orange-400 rounded transition-colors"
-                                   title="Hold Request"
-                                 >
-                                   <Lock className="w-4 h-4" />
-                                 </button>
-                             </>
-                         ) : (
-                             <button 
-                               onClick={() => handleToggleHold(req, false)}
-                               className="p-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded transition-colors inline-flex items-center gap-1 px-2"
-                               title="Release Hold"
-                             >
-                               <Unlock className="w-4 h-4" />
-                               <span className="text-xs font-bold">Release</span>
-                             </button>
-                         )}
-                       </>
-                     )}
-                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
-
-      {requestToHold && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1A1A24] border border-[#2C2C2C] rounded-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <Lock className="w-5 h-5 text-orange-400" />
-                Hold Payout Request
-              </h3>
-              <button 
-                onClick={() => setRequestToHold(null)}
-                className="text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-lg">
-                <p className="text-sm text-orange-200/80">
-                    Holding this request will prevent it from being processed. 
-                    {requestToHold.is_new_user_hold && (
-                        <span className="block mt-1 font-bold text-orange-300">
-                            Note: This is already flagged as a New User Hold.
-                        </span>
-                    )}
-                </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-300">Reason (Optional)</label>
-              <input
-                type="text"
-                value={holdReason}
-                onChange={(e) => setHoldReason(e.target.value)}
-                placeholder="e.g. Verification needed, Suspicious activity..."
-                className="w-full bg-[#0D0D16] border border-[#2C2C2C] rounded-lg p-3 text-white focus:outline-none focus:border-orange-500"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setRequestToHold(null)}
-                className="flex-1 px-4 py-2 rounded-lg border border-[#2C2C2C] text-gray-300 hover:bg-[#2C2C2C] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleToggleHold(requestToHold, true, holdReason)}
-                className="flex-1 px-4 py-2 rounded-lg bg-orange-600 text-white font-medium hover:bg-orange-500 transition-colors"
-              >
-                Confirm Hold
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

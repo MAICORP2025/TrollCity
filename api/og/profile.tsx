@@ -26,8 +26,15 @@ export async function GET(request: Request) {
 
   try {
     const { data: profile, error } = await supabaseAdmin
-      .from('user_profiles')
-      .select('id, username, display_name, avatar_url, level, role, is_admin, is_broadcaster')
+      .from('v_user_profiles_complete')
+      .select(`
+        id, username, display_name, avatar_url, cover_url, banner_url,
+        level, role, is_admin, is_broadcaster, is_verified, bio,
+        city, country, website, pronouns, theme_color, accent_color,
+        total_broadcasts, total_podcasts, total_achievement,
+        followers_count, following_count, created_at,
+        xp, xp_to_next_level
+      `)
       .eq('username', username)
       .maybeSingle()
 
@@ -35,11 +42,10 @@ export async function GET(request: Request) {
       return renderFallbackOG(username)
     }
 
-    // Check if user is currently live
     const { data: liveStream } = await supabaseAdmin
       .from('streams')
-      .select('id')
-      .eq('user_id', profile.id || '')
+      .select('id, title')
+      .eq('broadcaster_id', profile.id)
       .eq('is_live', true)
       .eq('status', 'live')
       .maybeSingle()
@@ -48,6 +54,11 @@ export async function GET(request: Request) {
     const displayName = profile.display_name || profile.username || username
     const level = profile.level || 1
     const avatarUrl = profile.avatar_url || null
+    const coverUrl = profile.cover_url || profile.banner_url || null
+    const themeColor = profile.theme_color || '#9333ea'
+    const accentColor = profile.accent_color || '#22d3ee'
+    const bio = profile.bio || ''
+    const isVerified = profile.is_verified || false
 
     const [boldFont, regularFont] = await Promise.all([
       fetchFont('bold'),
@@ -62,9 +73,7 @@ export async function GET(request: Request) {
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'linear-gradient(135deg, #0f0a1e 0%, #1a1035 40%, #2d1b69 100%)',
+            background: `linear-gradient(135deg, #0f0a1e 0%, #1a1035 40%, #2d1b69 100%)`,
             fontFamily: 'Inter',
             position: 'relative',
             overflow: 'hidden',
@@ -79,7 +88,7 @@ export async function GET(request: Request) {
               width: '400px',
               height: '400px',
               borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(147,51,234,0.3) 0%, transparent 70%)',
+              background: `radial-gradient(circle, ${themeColor}40 0%, transparent 70%)`,
             }}
           />
           <div
@@ -90,7 +99,7 @@ export async function GET(request: Request) {
               width: '350px',
               height: '350px',
               borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(219,39,119,0.25) 0%, transparent 70%)',
+              background: `radial-gradient(circle, ${accentColor}30 0%, transparent 70%)`,
             }}
           />
 
@@ -104,14 +113,33 @@ export async function GET(request: Request) {
             }}
           />
 
+          {/* Cover image background if available */}
+          {coverUrl && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '200px',
+                backgroundImage: `url(${coverUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                opacity: 0.3,
+              }}
+            />
+          )}
+
           {/* Main content card */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '20px',
+              gap: '16px',
               zIndex: 1,
+              padding: '40px',
+              marginTop: '20px',
             }}
           >
             {/* Avatar */}
@@ -122,8 +150,9 @@ export async function GET(request: Request) {
                 height={140}
                 style={{
                   borderRadius: '50%',
-                  border: '4px solid rgba(147,51,234,0.6)',
+                  border: `4px solid ${themeColor}`,
                   objectFit: 'cover',
+                  boxShadow: `0 0 30px ${themeColor}60`,
                 }}
               />
             ) : (
@@ -132,42 +161,93 @@ export async function GET(request: Request) {
                   width: '140px',
                   height: '140px',
                   borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #9333ea, #db2777)',
+                  background: `linear-gradient(135deg, ${themeColor}, ${accentColor})`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '56px',
                   fontWeight: 700,
                   color: 'white',
-                  border: '4px solid rgba(147,51,234,0.6)',
+                  border: `4px solid ${themeColor}`,
                 }}
               >
                 {displayName.charAt(0).toUpperCase()}
               </div>
             )}
 
+            {/* Verified badge */}
+            {isVerified && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '170px',
+                  right: 'calc(50% - 90px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: '#1DA1F2',
+                  border: '3px solid #0f0a1e',
+                }}
+              >
+                <span style={{ color: 'white', fontSize: '16px', fontWeight: 'bold' }}>✓</span>
+              </div>
+            )}
+
             {/* Name */}
             <div
               style={{
-                fontSize: '48px',
+                fontSize: '42px',
                 fontWeight: 700,
                 color: 'white',
                 textAlign: 'center',
-                maxWidth: '900px',
+                maxWidth: '800px',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                marginTop: '10px',
               }}
             >
               {displayName}
             </div>
 
-            {/* Level + Live badge row */}
+            {/* Username */}
+            <div
+              style={{
+                fontSize: '24px',
+                color: accentColor,
+                fontWeight: 500,
+              }}
+            >
+              @{profile.username || username}
+            </div>
+
+            {/* Bio preview */}
+            {bio && (
+              <div
+                style={{
+                  fontSize: '16px',
+                  color: 'rgba(255,255,255,0.7)',
+                  textAlign: 'center',
+                  maxWidth: '600px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {bio.substring(0, 100)}{bio.length > 100 ? '...' : ''}
+              </div>
+            )}
+
+            {/* Level + Stats row */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '16px',
+                gap: '12px',
+                marginTop: '8px',
               }}
             >
               {/* Level badge */}
@@ -176,14 +256,31 @@ export async function GET(request: Request) {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  background: 'rgba(147,51,234,0.2)',
-                  border: '1px solid rgba(147,51,234,0.5)',
+                  background: `${themeColor}30`,
+                  border: `1px solid ${themeColor}60`,
                   borderRadius: '9999px',
                   padding: '8px 20px',
                 }}
               >
-                <span style={{ fontSize: '20px', color: '#c084fc', fontWeight: 700 }}>
+                <span style={{ fontSize: '18px', color: accentColor, fontWeight: 700 }}>
                   Level {level}
+                </span>
+              </div>
+
+              {/* Followers */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '9999px',
+                  padding: '8px 20px',
+                }}
+              >
+                <span style={{ fontSize: '16px', color: 'rgba(255,255,255,0.8)' }}>
+                  {(profile.followers_count || 0).toLocaleString()} Followers
                 </span>
               </div>
 
@@ -198,7 +295,6 @@ export async function GET(request: Request) {
                     border: '1px solid rgba(239,68,68,0.6)',
                     borderRadius: '9999px',
                     padding: '8px 20px',
-                    animation: 'pulse 2s infinite',
                   }}
                 >
                   <div
@@ -209,9 +305,44 @@ export async function GET(request: Request) {
                       background: '#ef4444',
                     }}
                   />
-                  <span style={{ fontSize: '20px', color: '#fca5a5', fontWeight: 700 }}>
+                  <span style={{ fontSize: '16px', color: '#fca5a5', fontWeight: 700 }}>
                     Live Now
                   </span>
+                </div>
+              )}
+            </div>
+
+            {/* Stats row */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '24px',
+                marginTop: '8px',
+              }}
+            >
+              {profile.total_broadcasts > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'white' }}>
+                    {profile.total_broadcasts.toLocaleString()}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Broadcasts</span>
+                </div>
+              )}
+              {profile.total_podcasts > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'white' }}>
+                    {profile.total_podcasts.toLocaleString()}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Podcasts</span>
+                </div>
+              )}
+              {profile.total_achievements > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'white' }}>
+                    {profile.total_achievements.toLocaleString()}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Achievements</span>
                 </div>
               )}
             </div>
@@ -222,7 +353,7 @@ export async function GET(request: Request) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
-                marginTop: '8px',
+                marginTop: '16px',
               }}
             >
               <div
@@ -230,19 +361,19 @@ export async function GET(request: Request) {
                   width: '32px',
                   height: '32px',
                   borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #9333ea, #db2777)',
+                  background: `linear-gradient(135deg, ${themeColor}, ${accentColor})`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <span style={{ fontSize: '18px' }}>👁</span>
+                <span style={{ fontSize: '18px' }}>TC</span>
               </div>
               <span
                 style={{
-                  fontSize: '28px',
+                  fontSize: '24px',
                   fontWeight: 700,
-                  background: 'linear-gradient(90deg, #9333ea, #db2777)',
+                  background: `linear-gradient(90deg, ${themeColor}, ${accentColor})`,
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}
@@ -284,26 +415,26 @@ function renderFallbackOG(username: string) {
           gap: '16px',
         }}
       >
-        <div style={{ fontSize: '52px', fontWeight: 700, color: 'white' }}>{username}</div>
+        <div style={{ fontSize: '52px', fontWeight: 700, color: 'white' }}>@{username}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
               width: '32px',
               height: '32px',
               borderRadius: '8px',
-              background: 'linear-gradient(135deg, #9333ea, #db2777)',
+              background: 'linear-gradient(135deg, #9333ea, #22d3ee)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <span style={{ fontSize: '18px' }}>👁</span>
+            <span style={{ fontSize: '18px' }}>TC</span>
           </div>
           <span
             style={{
               fontSize: '28px',
               fontWeight: 700,
-              background: 'linear-gradient(90deg, #9333ea, #db2777)',
+              background: 'linear-gradient(90deg, #9333ea, #22d3ee)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
             }}

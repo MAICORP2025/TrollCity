@@ -94,8 +94,10 @@ function GiftersBubbleStrip({ streamId, hostId }: GiftersBubbleStripProps) {
   useEffect(() => {
     if (streamId) {
       loadGifters();
-      // Refresh every 15 seconds
-      const interval = setInterval(loadGifters, 15000);
+      // OPTIMIZED: 30s interval with visibility check to reduce DB load
+      const interval = setInterval(() => {
+        if (document.visibilityState === 'visible') loadGifters();
+      }, 30000);
       return () => clearInterval(interval);
     }
   }, [streamId, loadGifters]);

@@ -189,24 +189,39 @@ useEffect(() => {
      fetchLiveAuctions()
      fetchOnlineUsers()
 
-     // Visibility-gated polling: 90 seconds to reduce Supabase load for likes
-     const streamInterval = setInterval(() => {
-       if (document.visibilityState !== 'visible') return
-       fetchLiveContent()
-     }, 90000)
-     const auctionInterval = setInterval(() => {
-       if (document.visibilityState !== 'visible') return
-       fetchLiveAuctions()
-     }, 30000)
-     const onlineInterval = setInterval(() => {
-       if (document.visibilityState !== 'visible') return
-       fetchOnlineUsers()
-     }, 60000)
+     // Visibility-gated polling: pause intervals when tab is hidden to reduce load
+     let streamInterval: ReturnType<typeof setInterval> | null = null
+     let auctionInterval: ReturnType<typeof setInterval> | null = null
+     let onlineInterval: ReturnType<typeof setInterval> | null = null
+
+     const startPolling = () => {
+       if (!streamInterval) streamInterval = setInterval(fetchLiveContent, 90000)
+       if (!auctionInterval) auctionInterval = setInterval(fetchLiveAuctions, 30000)
+       if (!onlineInterval) onlineInterval = setInterval(fetchOnlineUsers, 60000)
+     }
+
+     const stopPolling = () => {
+       if (streamInterval) { clearInterval(streamInterval); streamInterval = null }
+       if (auctionInterval) { clearInterval(auctionInterval); auctionInterval = null }
+       if (onlineInterval) { clearInterval(onlineInterval); onlineInterval = null }
+     }
+
+     const handleVisibilityChange = () => {
+       if (document.visibilityState === 'visible') {
+         startPolling()
+       } else {
+         stopPolling()
+       }
+     }
+
+     document.addEventListener('visibilitychange', handleVisibilityChange)
+     startPolling()
 
     // Consolidated single channel for home page (replaces 3 separate channels)
+    // OPTIMIZED: Only listen to UPDATE events on live streams to reduce event volume
     const homeChannel = supabase.channel('home:global')
     homeChannel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'streams' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams', filter: 'is_live=eq.true' }, (payload) => {
         try {
           const oldRow = (payload.old || null) as any
           const newRow = (payload.new || null) as any

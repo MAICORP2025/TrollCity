@@ -18,7 +18,7 @@ class RequestScheduler {
   private activeRequests: number = 0
   private maxConcurrent: number = 3 // Max simultaneous requests to DB
   private lastRequestTime: number = 0
-  private minRequestInterval: number = 100 // Min ms between request starts
+  private minRequestInterval: number = 0 // No artificial delay — only limit concurrency
 
   constructor(maxConcurrent: number = 3) {
     this.maxConcurrent = maxConcurrent

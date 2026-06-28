@@ -4,6 +4,20 @@ type StreamAnalyticsEventType = 'join' | 'leave' | 'gift' | 'stream_start' | 'st
 
 const lastEventAt = new Map<string, number>();
 
+// Auto-cleanup: evict entries older than 60 seconds every 60 seconds
+// Prevents unbounded memory growth during long sessions
+let _analyticsCleanupInterval: ReturnType<typeof setInterval> | null = null;
+if (typeof window !== 'undefined') {
+  _analyticsCleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [key, ts] of lastEventAt.entries()) {
+      if (now - ts > 60_000) {
+        lastEventAt.delete(key);
+      }
+    }
+  }, 60_000);
+}
+
 export async function logStreamAnalyticsEvent(
   streamId: string | null | undefined,
   userId: string | null | undefined,

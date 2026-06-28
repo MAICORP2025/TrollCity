@@ -30,14 +30,12 @@ export function PageVisibilityProvider({ children }: PageVisibilityProviderProps
     }
   }, [isVisible]);
 
-  // Update time since last visible
+  // Update time since last visible — compute on demand, no 1s interval
   useEffect(() => {
     if (!isVisible) {
-      const interval = setInterval(() => {
-        setTimeSinceLastVisible(Date.now() - lastVisibleTime);
-      }, 1000);
-
-      return () => clearInterval(interval);
+      // Compute elapsed time from timestamp instead of incrementing every 1s
+      // This avoids 10K backgrounded tabs × 1s interval = 10K state updates/sec
+      setTimeSinceLastVisible(Date.now() - lastVisibleTime);
     }
   }, [isVisible, lastVisibleTime]);
 

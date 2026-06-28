@@ -16,7 +16,10 @@ export default function GlobalPayoutBanner() {
       setUnlockAt(s?.payout_unlock_at || null)
     }
     void load()
-    const i = setInterval(() => setTick((t) => t + 1), 1000)
+    // OPTIMIZED: 2s interval with visibility check — countdown doesn't need 1s precision
+    const i = setInterval(() => {
+      if (document.visibilityState === 'visible') setTick((t) => t + 1)
+    }, 2000)
     return () => {
       mounted = false
       clearInterval(i)

@@ -444,7 +444,8 @@ const { data, error } = await supabase
   }, [streamId, effectiveUserId, fetchAudience, cleanupChannels])
 
   // Fetch ghost mode status for audience members (realtime doesn't support joins)
-  // Guard with a ref so we only fetch once per unique set of audience user IDs.
+  // Debounced: only fetch once per unique set of audience user IDs, max once per 30s
+  const ghostModeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!streamId) return
 
@@ -461,7 +462,11 @@ const { data, error } = await supabase
 
     if (!currentUserIds) return
 
-    const fetchGhostModeStatus = async () => {
+    // Debounce: wait 30s before fetching to avoid rapid re-fetches on audience changes
+    if (ghostModeTimerRef.current) {
+      clearTimeout(ghostModeTimerRef.current)
+    }
+    ghostModeTimerRef.current = setTimeout(async () => {
       const ids = currentUserIds.split(',')
       const profiles = await getProfiles(ids)
 
@@ -475,9 +480,14 @@ const { data, error } = await supabase
           }))
         )
       }
-    }
+    }, 30_000)
 
-    fetchGhostModeStatus()
+    return () => {
+      if (ghostModeTimerRef.current) {
+        clearTimeout(ghostModeTimerRef.current)
+        ghostModeTimerRef.current = null
+      }
+    }
   }, [streamId, audience])
 
   // REPLACED: 30s DB heartbeat interval removed.

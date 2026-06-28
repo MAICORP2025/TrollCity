@@ -1,14 +1,15 @@
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
-  testDir: './tests/smoke',
+  testDir: './tests',
+  testMatch: '**/*.spec.cjs',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: process.env.VITE_BASE_URL || 'http://localhost:5183',
+    baseURL: process.env.VITE_BASE_URL || 'http://localhost:5178',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -36,10 +37,10 @@ module.exports = defineConfig({
       },
     },
   ],
-  webServer: {
+  webServer: process.env.CI ? {
     command: 'npm run dev',
-    url: process.env.VITE_BASE_URL || 'http://localhost:5183',
+    url: process.env.VITE_BASE_URL || 'http://localhost:5178',
     reuseExistingServer: true,
     timeout: 120000,
-  },
+  } : undefined,
 });

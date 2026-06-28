@@ -400,7 +400,7 @@ export const systemManagementRoutes: AdminRoute[] = [
     icon: <PieChart className="w-5 h-5 text-blue-200" />,
     tileColor: 'text-blue-200',
     tileBgColor: 'bg-blue-500/10',
-    tileBorderColor: 'border-blue-500/30',
-    category: 'economy'
-  }
-  ]
+     tileBorderColor: 'border-blue-500/30',
+     category: 'economy'
+   }
+   ]

@@ -59,7 +59,9 @@ export function useLeagues(): UseLeaguesResult {
 
     const channel = supabase.channel('public-leagues')
     channel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_leagues' }, () => fetchPublicLeagues())
+      // OPTIMIZED: Only listen to INSERT/UPDATE (not DELETE) and only for public leagues
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_leagues' }, () => fetchPublicLeagues())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_leagues' }, () => fetchPublicLeagues())
       .subscribe()
 
     return () => { 

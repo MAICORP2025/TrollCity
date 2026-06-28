@@ -276,10 +276,12 @@ export default function LiveAuctionMiniWindow({ auction, onRequireAuth }: LiveAu
 
     fetchInitialData();
 
-    // Poll every 30 seconds for updates
+    // OPTIMIZED: 30s interval with visibility check
     const interval = setInterval(() => {
-      fetchLiveState();
-      fetchUserProfile();
+      if (document.visibilityState === 'visible') {
+        fetchLiveState();
+        fetchUserProfile();
+      }
     }, 30000);
 
     return () => clearInterval(interval);

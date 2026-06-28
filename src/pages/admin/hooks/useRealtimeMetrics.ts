@@ -57,8 +57,10 @@ export const useRealtimeMetrics = (): Metrics => {
   useEffect(() => {
     loadMetrics();
 
-    // Refresh every 30 seconds
-    const interval = setInterval(loadMetrics, 30000);
+    // OPTIMIZED: Refresh every 30s with visibility check
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadMetrics();
+    }, 30000);
 
     // Real-time subscriptions
     /* 

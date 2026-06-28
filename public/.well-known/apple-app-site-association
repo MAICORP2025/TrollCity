@@ -1,0 +1,37 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "6471861674",
+        "components": [
+          {
+            "/": "/mobile*",
+            "comment": "Matches /mobile and all sub-paths for the main app"
+          },
+          {
+            "/": "/broadcast*",
+            "comment": "Matches /broadcast deep links"
+          },
+          {
+            "/": "/stream*",
+            "comment": "Matches /stream deep links"
+          },
+          {
+            "/": "/auction*",
+            "comment": "Matches /auction deep links"
+          },
+          {
+            "/": "/profile*",
+            "comment": "Matches /profile deep links"
+          },
+          {
+            "/": "/!/*",
+            "exclude": true,
+            "comment": "Exclude auth/callback routes"
+          }
+        ]
+      }
+    ]
+  }
+}

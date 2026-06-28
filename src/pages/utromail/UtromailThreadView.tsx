@@ -16,10 +16,15 @@ import {
   Paperclip,
   Send,
   Loader2,
+  Crown,
+  Heart,
+  Gem,
+  Star as StarIcon,
 } from 'lucide-react';
 import { getThreadMessages, sendMessage, markAsRead, markThreadAsRead, starMessage, deleteThread } from '@/services/utromailService';
 import type { UtromailMessage } from '@/types/mail';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   threadId: string;
@@ -33,11 +38,45 @@ export default function UtromailThreadView({ threadId, onBack, onRefresh }: Prop
   const [loading, setLoading] = useState(true);
   const [replyBody, setReplyBody] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [subscriberBadge, setSubscriberBadge] = useState<{ tierName: string; tierColor: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchMessages();
+    fetchSubscriberBadge();
   }, [threadId]);
+
+  const fetchSubscriberBadge = async () => {
+    if (!user) return;
+    try {
+      // Get the other participant in this thread
+      const { data: thread } = await supabase
+        .from('utromail_threads')
+        .select('other_user_id, other_username')
+        .eq('id', threadId)
+        .maybeSingle();
+
+      if (!thread?.other_user_id || thread.other_user_id === user.id) return;
+
+      // Check if the other user is a broadcaster and current user is subscribed
+      const { data: sub } = await supabase
+        .from('user_subscriptions')
+        .select('tier:subscription_tiers (name, color_hex)')
+        .eq('subscriber_id', user.id)
+        .eq('broadcaster_id', thread.other_user_id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (sub?.tier) {
+        setSubscriberBadge({
+          tierName: (sub.tier as any).name,
+          tierColor: (sub.tier as any).color_hex,
+        });
+      }
+    } catch (err) {
+      console.error('[UtromailThreadView] Error fetching subscriber badge:', err);
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -137,7 +176,27 @@ export default function UtromailThreadView({ threadId, onBack, onRefresh }: Prop
                     {(msg.sender_name || '?')[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-white">{msg.sender_name || msg.sender_mail_address}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-white">{msg.sender_name || msg.sender_mail_address}</p>
+                      {!isOwn && subscriberBadge && (
+                        <span
+                          className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-black"
+                          style={{ backgroundColor: subscriberBadge.tierColor + '30', color: subscriberBadge.tierColor }}
+                          title={`${subscriberBadge.tierName} subscriber`}
+                        >
+                          {subscriberBadge.tierName === 'VIP' ? (
+                            <Crown className="h-2.5 w-2.5" />
+                          ) : subscriberBadge.tierName === 'Elite' ? (
+                            <Gem className="h-2.5 w-2.5" />
+                          ) : subscriberBadge.tierName === 'Mythic' ? (
+                            <StarIcon className="h-2.5 w-2.5" />
+                          ) : (
+                            <Heart className="h-2.5 w-2.5" />
+                          )}
+                          {subscriberBadge.tierName}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[9px] text-slate-500">{msg.sender_mail_address}</p>
                   </div>
                 </div>

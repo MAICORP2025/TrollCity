@@ -17,9 +17,9 @@ const AuthorityPresenceBadge: React.FC<AuthorityPresenceBadgeProps> = ({
   useEffect(() => {
     if (!showPulse) return;
 
-    // Pulse every 3 seconds
+    // OPTIMIZED: 3s pulse with visibility check
     const interval = setInterval(() => {
-      setIsVisible(prev => !prev);
+      if (document.visibilityState === 'visible') setIsVisible(prev => !prev);
     }, 3000);
 
     return () => clearInterval(interval);

@@ -11,7 +11,7 @@ import ViewerPage from './ViewerPage'
 import StreamEndedPage from './StreamEndedPage'
 
 const APP_URL = import.meta.env.VITE_APP_URL || 'https://trollcity.app'
-const FALLBACK_PREVIEW_IMAGE = `${APP_URL}/preview-default.svg`
+const FALLBACK_PREVIEW_IMAGE = `${APP_URL}/images/mai-troll-city-preview.png`
 
 type BroadcasterMeta = {
   username: string

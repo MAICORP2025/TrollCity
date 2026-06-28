@@ -242,7 +242,8 @@ export function BatterySaverProvider({ children }: { children: React.ReactNode }
     return Math.max(Math.round(defaultMs * 6), 60000)
   }
 
-  const value: BatterySaverContextValue = {
+  // Memoize context value to prevent unnecessary re-renders of all consumers
+  const value: BatterySaverContextValue = useMemo(() => ({
     setting,
     setSetting,
     effectiveMode,
@@ -264,7 +265,13 @@ export function BatterySaverProvider({ children }: { children: React.ReactNode }
     shouldPauseNonEssentialWork,
     getRealtimeThrottleMs,
     getPollingInterval,
-  }
+  }), [
+    setting, effectiveMode, isBatterySaverOn, isUltraMode, batteryLevel, charging,
+    saveData, isPageHidden, isMobileWidth, isStandalonePWA, isStreamRoute,
+    isViewerOnlyStreamRoute, isBroadcasterRoute, shouldReduceAnimations,
+    shouldReduceRealtime, shouldReducePolling, shouldReduceVideoQuality,
+    shouldPauseNonEssentialWork,
+  ])
 
   return <BatterySaverContext.Provider value={value}>{children}</BatterySaverContext.Provider>
 }

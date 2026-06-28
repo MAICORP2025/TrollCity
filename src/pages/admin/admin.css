@@ -2,7 +2,7 @@
 
 .admin-dashboard {
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
-  min-height: 100vh;
+  min-height: 100dvh;
   color: #ffffff;
 }
 

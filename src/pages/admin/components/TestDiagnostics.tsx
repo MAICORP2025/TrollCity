@@ -56,7 +56,7 @@ export default function TestDiagnostics() {
       'approve_officer_application',
       'approve_empire_partner',
       'reject_empire_partner',
-      'approve_visa_redemption', 
+      'admin_process_payout',
       'troll_bank_pay_officer',
       'get_admin_user_wallets_secure',
       'admin_grant_coins'
@@ -70,7 +70,7 @@ export default function TestDiagnostics() {
       'approve_officer_application': { p_user_id: DUMMY_UUID },
       'approve_empire_partner': { p_application_id: DUMMY_UUID, p_reviewer_id: DUMMY_UUID },
       'reject_empire_partner': { p_application_id: DUMMY_UUID, p_reviewer_id: DUMMY_UUID },
-      'approve_visa_redemption': { p_redemption_id: DUMMY_UUID },
+      'admin_process_payout': { p_payout_id: DUMMY_UUID, p_admin_id: DUMMY_UUID, p_action: 'approve' },
       'troll_bank_pay_officer': { p_officer_id: DUMMY_UUID, p_admin_id: DUMMY_UUID },
       'get_admin_user_wallets_secure': { p_search: '', p_limit: 1 },
       'admin_grant_coins': { p_target_id: DUMMY_UUID, p_amount: 1, p_reason: 'diagnostic_check' }

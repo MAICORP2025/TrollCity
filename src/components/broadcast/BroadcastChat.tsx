@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, User, Shield, Crown, Sparkles, Gift, Swords, Trash2 } from 'lucide-react';
+import { Send, User, Shield, Crown, Sparkles, Gift, Swords, Trash2, Pin } from 'lucide-react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -111,12 +111,16 @@ interface ChatMessageItemProps {
   openModActionsForUser: (userId: string, username: string, avatarUrl?: string, role?: string, trollRole?: string) => void;
   openGiftForUser: (userId: string) => void;
   deleteMessage: (id: string) => void;
+  onPinMessage?: (messageId: string) => void;
+  onUnpinMessage?: (messageId: string) => void;
+  isPinned?: boolean;
+  canPinMessages?: boolean;
   onAcceptChallenge?: (challengeId: string, challengerId: string) => void;
   onDenyChallenge?: (challengeId: string) => void;
   onOpenMiniProfile?: (userId: string, username: string, avatarUrl?: string) => void;
 }
 
-function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disappearingMessages, openModActionsForUser, openGiftForUser, deleteMessage, onAcceptChallenge, onDenyChallenge, onOpenMiniProfile }: ChatMessageItemProps) {
+function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disappearingMessages, openModActionsForUser, openGiftForUser, deleteMessage, onPinMessage, onUnpinMessage, isPinned, canPinMessages, onAcceptChallenge, onDenyChallenge, onOpenMiniProfile }: ChatMessageItemProps) {
   const isSystem = msg.type === 'system';
   const isGift = msg.type === 'gift' || msg.content?.startsWith('GIFT_EVENT:');
   const isChallenge = msg.type === 'challenge';
@@ -238,11 +242,14 @@ function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disap
     );
   }
 
-  // Regular chat message
+// Regular chat message
   return (
-    <div className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm p-2 rounded-lg ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''}`}>
+    <div className={`flex items-center gap-2 bg-black/50 backdrop-blur-sm p-2 rounded-lg ${disappearingMessages.has(msg.id) ? 'opacity-50 transition-opacity' : ''} ${isPinned ? 'border-2 border-yellow-500/50 bg-yellow-500/10' : ''}`}>
       {showGoldenBanner && msg.user_id === user?.id && (
         <span className="text-yellow-400 text-xs">👑</span>
+      )}
+      {isPinned && (
+        <Pin size={12} className="text-yellow-500 flex-shrink-0" fill="currentColor" />
       )}
       <div
         className="w-7 h-7 md:w-8 md:h-8 rounded-full flex-shrink-0 cursor-pointer"
@@ -277,18 +284,40 @@ function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disap
         >
           {msg.user_profiles?.username || 'User'}:
         </button>
-        <span className="text-white text-xs truncate">{msg.content}</span>
+        <span className={`text-xs truncate ${isPinned ? 'text-yellow-100 font-semibold' : 'text-white'}`}>{msg.content}</span>
       </div>
-      {isOfficer && (
-        <button
-          type="button"
-          onClick={() => deleteMessage(msg.id)}
-          className="p-1 rounded text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors"
-          title="Delete chat message"
-        >
-          <Trash2 size={12} />
-        </button>
-      )}
+      <div className="flex items-center gap-1">
+        {canPinMessages && !isPinned && (
+          <button
+            type="button"
+            onClick={() => onPinMessage?.(msg.id)}
+            className="p-1 rounded text-yellow-400 hover:bg-yellow-500/20 hover:text-yellow-300 transition-colors"
+            title="Pin this message"
+          >
+            <Pin size={12} />
+          </button>
+        )}
+        {isPinned && (
+          <button
+            type="button"
+            onClick={() => onUnpinMessage?.(msg.id)}
+            className="p-1 rounded text-yellow-400 hover:bg-yellow-500/20 hover:text-yellow-300 transition-colors"
+            title="Unpin this message"
+          >
+            <Pin size={12} fill="currentColor" />
+          </button>
+        )}
+        {isOfficer && (
+          <button
+            type="button"
+            onClick={() => deleteMessage(msg.id)}
+            className="p-1 rounded text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors"
+            title="Delete chat message"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -321,8 +350,30 @@ export default function BroadcastChat({
   // Cap total messages in memory to prevent unbounded growth
   const MAX_MESSAGES = 500;
 
+  // Pinned messages state (frontend-only, in-memory)
+  const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(new Set());
+
+  // Pin a message
+  const pinMessage = useCallback((messageId: string) => {
+    setPinnedMessageIds(prev => new Set(prev).add(messageId));
+  }, []);
+
+  // Unpin a message
+  const unpinMessage = useCallback((messageId: string) => {
+    setPinnedMessageIds(prev => {
+      const next = new Set(prev);
+      next.delete(messageId);
+      return next;
+    });
+  }, []);
+
   // Reverse messages once for virtual list (newest first)
-  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  // Pinned messages appear first, then regular messages
+  const reversedMessages = useMemo(() => {
+    const pinned = messages.filter(m => pinnedMessageIds.has(m.id));
+    const unpinned = messages.filter(m => !pinnedMessageIds.has(m.id));
+    return [...pinned, ...unpinned].reverse();
+  }, [messages, pinnedMessageIds]);
 
   // Scroll to bottom (index 0 in reversed list) when new messages arrive
   const scrollToBottom = useCallback(() => {
@@ -1352,10 +1403,15 @@ const fetchMessages = async () => {
         onMessageSent?.();
     } catch (err: any) {
         console.error('BroadcastChat send failed:', err);
-        if (String(err.message || '').toLowerCase().includes('rate limit')) {
+        const errMsg = String(err.message || '').toLowerCase();
+        if (errMsg.includes('rate limit')) {
             toast.error('You are sending messages too fast. Please slow down.');
+        } else if (errMsg.includes('chat') && errMsg.includes('disabled')) {
+            toast.error('Your chat has been disabled by moderation.');
+        } else if (errMsg.includes('missing required fields')) {
+            toast.error('Failed to send message. Please try again.');
         } else {
-            toast.error('Failed to send message: ' + err.message);
+            toast.error('Failed to send message. Please try again.');
         }
         setMessages(prev => prev.filter(m => m.txn_id !== txnId));
         setInput(content);
@@ -1377,6 +1433,9 @@ const fetchMessages = async () => {
   };
 
   const isOfficer = isStaffProfile(profile);
+
+  // Allow pin/unpin for broadcaster, broadofficer (moderator), admin, staff
+  const canPinMessages = isHost || isModerator || isOfficer;
 
   const openModActionsForUser = (
     targetUserId?: string | null,
@@ -1585,7 +1644,7 @@ const fetchMessages = async () => {
                   <Virtuoso
                     ref={virtuosoRef}
                     data={reversedMessages}
-                    itemContent={(index, msg) => <ChatMessageItem msg={msg} isHost={isHost} isOfficer={isOfficer} user={user} showGoldenBanner={showGoldenBanner} disappearingMessages={disappearingMessages} openModActionsForUser={openModActionsForUser} openGiftForUser={openGiftForUser} deleteMessage={deleteMessage} onAcceptChallenge={onAcceptChallenge} onDenyChallenge={onDenyChallenge} onOpenMiniProfile={handleOpenMiniProfile} />}
+                    itemContent={(index, msg) => <ChatMessageItem msg={msg} isHost={isHost} isOfficer={isOfficer} user={user} showGoldenBanner={showGoldenBanner} disappearingMessages={disappearingMessages} openModActionsForUser={openModActionsForUser} openGiftForUser={openGiftForUser} deleteMessage={deleteMessage} onPinMessage={pinMessage} onUnpinMessage={unpinMessage} isPinned={pinnedMessageIds.has(msg.id)} canPinMessages={canPinMessages} onAcceptChallenge={onAcceptChallenge} onDenyChallenge={onDenyChallenge} onOpenMiniProfile={handleOpenMiniProfile} />}
                     style={{ height: '100%', width: '100%' }}
                     overscan={20}
                     alignToBottom
