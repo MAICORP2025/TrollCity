@@ -28,6 +28,8 @@ import { websiteSchema, organizationSchema } from '@/utils/seoSchemas'
 import { useIsPwa } from '@/lib/hooks/useIsPwa'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useLiveContent, type AuctionShow, type LiveItem } from '@/contexts/LiveContentContext'
+import useGlobalActivity from '@/hooks/useGlobalActivity'
+import type { ActivityEvent } from '@/hooks/useGlobalActivity'
 import TrollWallFeed from '@/components/home/TrollWallFeed'
 import CityLawsFeesTab from '@/components/home/CityLawsFeesTab'
 import LeaguesTab from '@/components/home/LeaguesTab'
@@ -221,12 +223,104 @@ const BattleGrid = React.memo(function BattleGrid({ items, onClickItem }: { item
   )
 })
 
+/* ─── Mobile Global Ticker ─── */
+const MobileGlobalTicker = React.memo(function MobileGlobalTicker() {
+  const events = useGlobalActivity()
+
+  if (!events || events.length === 0) return null
+
+  return (
+    <div className="relative overflow-hidden border-b border-cyan-400/15 bg-[#070b19]/80 backdrop-blur-md">
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <span className="shrink-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500/20">
+          <Radio className="h-2.5 w-2.5 text-red-400" />
+        </span>
+        <div className="overflow-hidden whitespace-nowrap">
+          <div className="inline-flex animate-[ticker_20s_linear_infinite] items-center gap-6 text-[10px] font-bold text-cyan-200/80">
+            {events.slice(0, 8).map((event, i) => (
+              <span key={`${event.id}-${i}`} className="inline-flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-cyan-400/60" />
+                {event.message}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <style>{`
+        @keyframes ticker {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
+    </div>
+  )
+})
+MobileGlobalTicker.displayName = 'MobileGlobalTicker'
+
+/* ─── Mobile Tab Bar ─── */
+const MobileTabBar = React.memo(function MobileTabBar({
+  activeTab,
+  setActiveTab,
+  liveCount,
+  battleCount,
+}: {
+  activeTab: TabType
+  setActiveTab: (tab: TabType) => void
+  liveCount: number
+  battleCount: number
+}) {
+  const tabs: Array<{ id: TabType; label: string; icon: React.ElementType; count?: number }> = [
+    { id: 'wall', label: 'Wall', icon: MessageCircle },
+    { id: 'live', label: 'Live', icon: Radio, count: liveCount + battleCount },
+    { id: 'universe', label: 'Battles', icon: Sparkles, count: battleCount },
+    { id: 'leagues', label: 'Leagues', icon: Trophy },
+    { id: 'laws-fees', label: 'Laws', icon: FileText },
+    { id: 'academy', label: 'Academy', icon: BookOpen },
+  ]
+
+  return (
+    <div className="sticky top-0 z-40 border-b border-white/10 bg-[#050715]/95 backdrop-blur-xl">
+      <div className="flex items-center gap-0.5 overflow-x-auto px-1 py-1.5 scrollbar-hide">
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-bold transition-all ${
+                isActive
+                  ? 'bg-cyan-500/15 text-cyan-300'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <Icon className="h-3 w-3" />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className={`ml-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[7px] font-black ${
+                  isActive ? 'bg-cyan-500/30 text-cyan-200' : 'bg-white/10 text-slate-400'
+                }`}>
+                  {tab.count}
+                </span>
+              )}
+              {isActive && (
+                <span className="absolute -bottom-1.5 left-1/2 h-0.5 w-4 -translate-x-1/2 rounded-full bg-cyan-400" />
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+})
+MobileTabBar.displayName = 'MobileTabBar'
+
 export default function Home() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const isLoading = useAuthStore((state) => state.isLoading)
   const isPwa = useIsPwa()
-  const isMobile = useIsMobile()
+  const { isMobile } = useIsMobile()
 
   useSEO({
     title: 'Troll City | Social Streaming Platform - Livestream, Create, Connect',
@@ -354,6 +448,19 @@ const handleScrollItemClick = useCallback((id: string) => {
       </Suspense>
 
       <main className="relative z-10 mx-auto flex w-full max-w-[1520px] flex-col gap-3 px-3 pb-8 pt-3 md:px-5">
+        {/* Mobile Global Ticker */}
+        {isMobile && <MobileGlobalTicker />}
+
+        {/* Mobile Tab Bar */}
+        {isMobile && (
+          <MobileTabBar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            liveCount={allLiveItems.length}
+            battleCount={battleItems.length}
+          />
+        )}
+
         {kickedReason && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-950/60 px-4 py-3 backdrop-blur-sm">
             <div className="flex items-center gap-3">
@@ -428,9 +535,9 @@ const handleScrollItemClick = useCallback((id: string) => {
            </section>
          )}
 
-         {activeTab === 'live' && (
-           <div className="flex gap-4">
-             <LeftNavSidebar
+{activeTab === 'live' && (
+            <div className="flex gap-4">
+              <LeftNavSidebar
                activeTab={activeTab}
                setActiveTab={setActiveTab}
                liveCount={allLiveItems.length}
@@ -485,8 +592,8 @@ const handleScrollItemClick = useCallback((id: string) => {
            </div>
          )}
 
-         {activeTab === 'laws-fees' && (
-           <div className="flex gap-4">
+{activeTab === 'laws-fees' && (
+            <div className="flex gap-4">
              <LeftNavSidebar
                activeTab={activeTab}
                setActiveTab={setActiveTab}
@@ -506,8 +613,8 @@ const handleScrollItemClick = useCallback((id: string) => {
            </div>
          )}
 
-         {activeTab === 'leagues' && (
-           <div className="flex gap-4">
+{activeTab === 'leagues' && (
+            <div className="flex gap-4">
              <LeftNavSidebar
                activeTab={activeTab}
                setActiveTab={setActiveTab}

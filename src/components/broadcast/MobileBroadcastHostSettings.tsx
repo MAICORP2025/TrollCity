@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Coins,
   UserPlus,
+  Circle,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -46,6 +47,8 @@ interface MobileBroadcastHostSettingsProps {
   onAssignOfficer?: () => void;
   onPayOfficers?: () => void;
   onToggleSeatsLock?: () => void;
+  isRecording?: boolean;
+  onToggleRecord?: () => void;
 }
 
 // ─── Grid Item Definition ────────────────────────────────────────────────────
@@ -162,6 +165,8 @@ export default function MobileBroadcastHostSettings({
   onAssignOfficer,
   onPayOfficers,
   onToggleSeatsLock,
+  isRecording = false,
+  onToggleRecord,
 }: MobileBroadcastHostSettingsProps) {
   const [isGridOpen, setIsGridOpen] = useState(false);
   const [activePopup, setActivePopup] = useState<string | null>(null);
@@ -280,6 +285,18 @@ export default function MobileBroadcastHostSettings({
       hasPopup: true,
     },
     {
+      id: 'record',
+      label: isRecording ? 'Stop Rec' : 'Record',
+      icon: Circle,
+      color: isRecording ? 'text-red-400' : 'text-red-400',
+      bgColor: isRecording ? 'bg-red-500/25' : 'bg-red-500/10',
+      borderColor: isRecording ? 'border-red-400/50' : 'border-red-400/20',
+      action: () => {
+        onToggleRecord?.();
+        closeGrid();
+      },
+    },
+    {
       id: 'end',
       label: 'End Stream',
       icon: Power,
@@ -320,8 +337,12 @@ export default function MobileBroadcastHostSettings({
         aria-label="Settings"
       >
         <Settings className="h-5 w-5" />
+        {/* Recording indicator dot */}
+        {isRecording && (
+          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-slate-950 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+        )}
         {/* Live indicator dot */}
-        {isLive && (
+        {isLive && !isRecording && (
           <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-slate-950 shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
         )}
       </button>
@@ -363,7 +384,7 @@ export default function MobileBroadcastHostSettings({
             </div>
 
             {/* Grid */}
-            <div className="p-3">
+            <div className="p-3 max-h-[60vh] overflow-y-auto">
               <div className="grid grid-cols-3 gap-2">
                 {gridItems.map((item) => (
                   <button
@@ -377,7 +398,10 @@ export default function MobileBroadcastHostSettings({
                       item.borderColor
                     )}
                   >
-                    <item.icon className={cn('h-5 w-5', item.color)} />
+                    <item.icon
+                      className={cn('h-5 w-5', item.color)}
+                      fill={item.id === 'record' && isRecording ? 'currentColor' : 'none'}
+                    />
                     <span className="text-[10px] font-bold text-white/80 leading-tight text-center">
                       {item.label}
                     </span>

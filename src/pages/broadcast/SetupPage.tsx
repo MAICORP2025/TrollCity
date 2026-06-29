@@ -2377,23 +2377,17 @@ livekit_room_name: roomName,
                     +
                   </button>
                 </div>
-                <div className="flex gap-1 mt-2">
-                  {[1, 2, 4, 6, 8, 12].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setSeatCount(n)}
-                      className={cn(
-                        "flex-1 py-1 rounded text-[9px] font-bold transition-colors",
-                        seatCount === n
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                          : "bg-white/5 text-slate-500 border border-white/5 hover:bg-white/10"
-                      )}
-                    >
-                      {n}
-                    </button>
+                <select
+                  value={seatCount}
+                  onChange={(e) => setSeatCount(Number(e.target.value))}
+                  className="mt-2 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-bold text-amber-300 focus:outline-none focus:border-amber-500/50 appearance-none cursor-pointer"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                    <option key={n} value={n} className="bg-zinc-900 text-white">
+                      {n} {n === 1 ? 'seat' : 'seats'}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
             )}
 

@@ -225,9 +225,6 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
               {displayName.charAt(0).toUpperCase()}
             </div>
           )}
-          <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-950 text-[7px] font-black text-cyan-300 ring-1 ring-cyan-400/60">
-            {currentLevel}
-          </span>
         </div>
       </div>
     );
@@ -250,9 +247,6 @@ function ProfileModule({ collapsed }: { collapsed: boolean }) {
             {displayName.charAt(0).toUpperCase()}
           </div>
         )}
-        <span className="absolute -bottom-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-slate-950 px-1 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/60 md:h-5 md:min-w-[20px] md:text-[9px]">
-          {currentLevel}
-        </span>
       </div>
 
       {/* Info */}
@@ -290,9 +284,11 @@ interface NavButtonProps {
   badge?: number;
   badgeKey?: keyof import('@/hooks/useNavBadges').NavBadges;
   onBadgeDismiss?: (key: keyof import('@/hooks/useNavBadges').NavBadges) => void;
+  level?: number;
+  showLevelOrb?: boolean;
 }
 
-function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = 'normal', badge, badgeKey, onBadgeDismiss }: NavButtonProps) {
+function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = 'normal', badge, badgeKey, onBadgeDismiss, level, showLevelOrb }: NavButtonProps) {
   const isLarge = size === 'large';
 
   const handleClick = () => {
@@ -322,6 +318,11 @@ function NavButton({ icon: Icon, label, to, active, highlight, onClick, size = '
       {badge !== undefined && badge > 0 && (
         <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-0.5 text-[7px] font-bold text-white">
           {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+      {showLevelOrb && level !== undefined && (
+        <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-cyan-500 px-0.5 text-[6px] font-black text-white ring-1 ring-cyan-300/60">
+          {level}
         </span>
       )}
       {active && (
@@ -360,7 +361,20 @@ interface PageEntry {
 
 function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
   const { user, profile, logout } = useAuthStore();
+  const xpStore = useXPStore();
+  const { balances } = useCoins();
   const navigate = useNavigate_fixed();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const trollCoins = Number((balances as any)?.troll_coins ?? 0);
+  const hypeCoins = Number((balances as any)?.hype_coins ?? 0);
+  const crowns = Number((profile as any)?.crowns ?? 0);
+  const currentLevel = xpStore.level;
+  const displayName = profile?.display_name || profile?.username || 'Citizen';
+  const avatarUrl = profile?.avatar_url;
+  const equippedFrame = useUserFrame(user?.id);
+  const currentXp = xpStore.xpTotal ?? profile?.xp ?? profile?.total_xp ?? 0;
+  const nextXp = xpStore.xpToNext ?? profile?.next_level_xp ?? 1;
+  const progress = xpStore.progress ?? (nextXp > 0 ? Math.min((currentXp / nextXp) * 100, 100) : 0);
   const {
     isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isHRAdmin,
     isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster,
@@ -607,8 +621,55 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
               </div>
             </div>
 
+            {/* User Info Display - Mobile Only */}
+            {isMobile && user && (
+              <div className="mx-5 mb-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative shrink-0 h-11 w-11">
+                    {avatarUrl ? (
+                      <ProfileFrame frame={equippedFrame} avatarUrl={avatarUrl} username={displayName} size="sm" fillParent />
+                    ) : (
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-cyan-500 text-sm font-black text-white ring-2 ring-cyan-400/50">
+                        {displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-slate-950 px-0.5 text-[7px] font-black text-cyan-300 ring-1 ring-cyan-400/60">
+                      {currentLevel}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-black text-white">{displayName}</p>
+                    <p className="text-[9px] font-bold text-cyan-300/80">City Rank Lv. {currentLevel}</p>
+                    <div className="mt-1 flex items-center gap-2 text-[9px] font-bold">
+                      <span className="flex items-center gap-0.5 text-yellow-300">
+                        <Coins className="h-2.5 w-2.5" /> {formatCoins(trollCoins)}
+                      </span>
+                      <span className="flex items-center gap-0.5 text-cyan-300">
+                        <Zap className="h-2.5 w-2.5" /> {formatCoins(hypeCoins)}
+                      </span>
+                      {crowns > 0 && (
+                        <span className="flex items-center gap-0.5 text-amber-300">
+                          <Crown className="h-2.5 w-2.5" /> {crowns}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* XP Progress Bar */}
+                <div className="mt-2">
+                  <div className="flex items-center justify-between text-[8px] text-white/40 mb-0.5">
+                    <span>{formatCoins(currentXp)} XP</span>
+                    <span>{formatCoins(nextXp)} next</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full rounded-full bg-cyan-400 transition-all" style={{ width: `${progress}%` }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Scrollable content */}
-            <div className="overflow-y-auto px-5 pb-8" style={{ maxHeight: 'calc(85vh - 140px)' }}>
+            <div className="overflow-y-auto px-5 pb-8" style={{ maxHeight: isMobile ? 'calc(85vh - 280px)' : 'calc(85vh - 140px)' }}>
               <div className="space-y-6">
                 {filteredPages.map((cat) => (
                   <div key={cat.category}>
@@ -671,6 +732,7 @@ export default function BottomNavBar() {
   const location = useLocation();
   const { user, profile } = useAuthStore();
   const { isBroadcaster } = useRoleChecks(profile);
+  const xpStore = useXPStore();
   const [morePagesOpen, setMorePagesOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const badges = useNavBadges();
@@ -748,6 +810,8 @@ export default function BottomNavBar() {
                    onClick={() => setMorePagesOpen(true)}
                    active={morePagesOpen}
                    size="large"
+                   level={xpStore.level}
+                   showLevelOrb={isMobile}
                  />
                </nav>
             ) : (

@@ -105,4 +105,5 @@ const useGlobalActivity = () => {
   return events
 }
 
+export { useGlobalActivity }
 export default useGlobalActivity

@@ -5334,6 +5334,8 @@ const handleLike = useCallback(async () => {
                  streamStartedAt={stream.started_at}
                  onLiveKitMicMute={onLiveKitMicMute}
                  onLiveKitMicUnmute={onLiveKitMicUnmute}
+                 isRecording={recorder.isRecording}
+                 onToggleRecord={recorder.isRecording ? () => recorder.stopRecording() : () => recorder.startRecording(stream.id)}
                />
              )}
 
@@ -6915,6 +6917,8 @@ const handleLike = useCallback(async () => {
                     onToggleSeatsLock={() => {
                       // Toggle seats lock logic
                     }}
+                    isRecording={recorder.isRecording}
+                    onToggleRecord={recorder.isRecording ? () => recorder.stopRecording() : () => recorder.startRecording(stream.id)}
                   />
                 </div>
               </>

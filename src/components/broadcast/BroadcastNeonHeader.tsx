@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Flag,
   Heart,
+  Circle,
 } from 'lucide-react'
 import { useAuthStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
@@ -22,6 +23,7 @@ import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton'
 import StorageIndicator from './StorageIndicator'
 import ProfileFrame from '@/components/profile/ProfileFrame'
 import { useUserFrame } from '@/hooks/useUserFrame'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 const LIVE_DOT_CLASS = 'h-2 w-2 rounded-full bg-red-500 animate-pulse'
 
@@ -52,6 +54,8 @@ export interface BroadcastNeonHeaderProps {
    handleLike: () => void
    onLiveKitMicMute?: () => void
    onLiveKitMicUnmute?: () => void
+   isRecording?: boolean
+   onToggleRecord?: () => void
   }
 
 function formatTimer(ms: number): string {
@@ -80,10 +84,14 @@ export default function BroadcastNeonHeader({
    streamStartedAt,
    onLiveKitMicMute,
    onLiveKitMicUnmute,
+   isRecording = false,
+   onToggleRecord,
  }: BroadcastNeonHeaderProps) {
   const { profile } = useAuthStore()
   const navigate = useNavigate()
   const profileMenuRef = useRef<HTMLDivElement>(null)
+  const { isMobileWidth } = useIsMobile()
+  const isMobile = isMobileWidth
 
   const [now, setNow] = useState(Date.now())
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
@@ -203,17 +211,26 @@ export default function BroadcastNeonHeader({
         : coinDisplay.toLocaleString()
 
   return (
-    <header className="relative z-50 shrink-0 border-b border-white/10 bg-black/70 px-4 py-2 backdrop-blur-xl">
-      <div className="flex h-[68px] items-center justify-between gap-4">
+    <header className={cn(
+      "relative z-50 shrink-0 border-b border-white/10 bg-black/70 backdrop-blur-xl",
+      isMobile ? "px-2 py-1" : "px-4 py-2"
+    )}>
+      <div className={cn(
+        "flex items-center justify-between",
+        isMobile ? "h-[44px] gap-2" : "h-[68px] gap-4"
+      )}>
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0" ref={profileMenuRef}>
-            <div className="relative h-14 w-14" style={{ overflow: 'visible' }}>
+            <div className={cn("relative", isMobile ? "h-9 w-9" : "h-14 w-14")} style={{ overflow: 'visible' }}>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   setProfileMenuOpen((prev) => !prev)
                 }}
-                className="relative h-14 w-14 rounded-full bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 p-[2px] shadow-[0_0_22px_rgba(168,85,247,0.38)] transition-shadow hover:shadow-[0_0_30px_rgba(168,85,247,0.55)]"
+                className={cn(
+                  "relative rounded-full bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 p-[2px] shadow-[0_0_22px_rgba(168,85,247,0.38)] transition-shadow hover:shadow-[0_0_30px_rgba(168,85,247,0.55)]",
+                  isMobile ? "h-9 w-9" : "h-14 w-14"
+                )}
                 aria-label="Broadcaster profile menu"
               >
                 {broadcasterProfile?.avatar_url ? (
@@ -275,13 +292,16 @@ export default function BroadcastNeonHeader({
 
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <h1 className="truncate text-[21px] font-black leading-none tracking-tight text-white">
+              <h1 className={cn(
+                "truncate font-black leading-none tracking-tight text-white",
+                isMobile ? "text-[14px]" : "text-[21px]"
+              )}>
                 {broadcasterProfile?.display_name || broadcasterProfile?.username || streamTitle}
               </h1>
-              <BadgeCheck className="h-5 w-5 shrink-0 text-purple-400" />
+              <BadgeCheck className={cn("shrink-0 text-purple-400", isMobile ? "h-3.5 w-3.5" : "h-5 w-5")} />
             </div>
 
-            <div className="mt-1 flex min-w-0 items-center gap-2">
+            <div className={cn("mt-1 flex min-w-0 items-center gap-2", isMobile && "hidden")}>
               <p className="truncate text-[12px] font-semibold text-slate-300">
                 {broadcasterProfile?.username ? `${broadcasterProfile.username}'s Live` : streamTitle}
               </p>
@@ -293,64 +313,104 @@ export default function BroadcastNeonHeader({
           </div>
         </div>
 
-
-
-<div className="flex shrink-0 items-center gap-2">
-              {isHost && (
-                <StorageIndicator userId={profile?.id} storageType="broadcast" />
-              )}
-              
-              {isHost && (
-                <div className="relative">
-                  <StaffWalkieTalkieButton 
-                    showFullControls={false} 
-                    onLiveKitMicMute={onLiveKitMicMute}
-                    onLiveKitMicUnmute={onLiveKitMicUnmute}
-                  />
-                </div>
-              )}
-              
-              {isLive && (
-                <span className="flex items-center gap-2 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-black text-red-400">
-                  <span className={LIVE_DOT_CLASS} />
-                  LIVE
-                  <span className="tabular-nums text-red-300/80">{timerStr}</span>
-                </span>
-              )}
-
-              <div className="flex items-center gap-2 rounded-2xl border border-yellow-400/25 bg-yellow-500/10 px-3 py-2 shadow-[0_0_18px_rgba(234,179,8,0.14)]">
-                <Coins className="h-4 w-4 text-yellow-300" />
-                <span className="text-sm font-black tabular-nums text-yellow-300">
-                  {formattedCoins}
-                </span>
-
-                {onOpenCoinStore && (
-                  <button
-                    onClick={onOpenCoinStore}
-                    className="grid h-6 w-6 place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
-                    aria-label="Open coin store"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-white" />
-                  </button>
-                )}
-              </div>
-
-              <button
-                onClick={handleLike}
-                className="flex h-11 items-center gap-2 rounded-2xl border border-pink-400/50 bg-gradient-to-r from-pink-700/80 to-rose-600/80 px-5 text-sm font-black uppercase text-white shadow-[0_0_22px_rgba(236,72,153,0.38)] transition-transform hover:scale-[1.02]"
-              >
-                <Heart className="h-4 w-4 text-pink-300" />
-                <span className="tabular-nums">{stream.total_likes?.toLocaleString() || 0}</span>
-              </button>
-
-              <button
-                onClick={onGift}
-                className="flex h-11 items-center gap-2 rounded-2xl border border-fuchsia-400/50 bg-gradient-to-r from-purple-700/80 to-fuchsia-600/80 px-5 text-sm font-black uppercase text-white shadow-[0_0_22px_rgba(217,70,239,0.38)] transition-transform hover:scale-[1.02]"
-              >
-                <Gift className="h-4 w-4 text-yellow-300" />
-                Gift
-              </button>
+        {/* Right side actions */}
+        <div className={cn("flex shrink-0 items-center", isMobile ? "gap-1" : "gap-2")}>
+          {/* Storage indicator - desktop only */}
+          {isHost && !isMobile && (
+            <StorageIndicator userId={profile?.id} storageType="broadcast" />
+          )}
+          
+          {/* Staff walkie talkie - desktop only */}
+          {isHost && !isMobile && (
+            <div className="relative">
+              <StaffWalkieTalkieButton 
+                showFullControls={false} 
+                onLiveKitMicMute={onLiveKitMicMute}
+                onLiveKitMicUnmute={onLiveKitMicUnmute}
+              />
             </div>
+          )}
+          
+          {/* LIVE badge */}
+          {isLive && (
+            <span className={cn(
+              "flex items-center gap-1.5 rounded-lg bg-red-500/15 font-black text-red-400",
+              isMobile ? "px-1.5 py-1 text-[9px]" : "px-3 py-1.5 text-xs"
+            )}>
+              <span className={LIVE_DOT_CLASS} />
+              LIVE
+              <span className="tabular-nums text-red-300/80">{timerStr}</span>
+            </span>
+          )}
+
+          {/* Record button - mobile only in header */}
+          {isHost && isMobile && onToggleRecord && (
+            <button
+              onClick={onToggleRecord}
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black transition-colors",
+                isRecording
+                  ? "bg-red-500/30 text-red-300 border border-red-400/40"
+                  : "bg-white/10 text-white/70 border border-white/15"
+              )}
+              aria-label={isRecording ? "Stop recording" : "Start recording"}
+            >
+              <Circle className={cn("h-2.5 w-2.5", isRecording ? "fill-red-400 text-red-400" : "text-red-400")} />
+              {isRecording ? "Stop" : "Rec"}
+            </button>
+          )}
+
+          {/* Coins display */}
+          <div className={cn(
+            "flex items-center gap-1.5 rounded-2xl border border-yellow-400/25 bg-yellow-500/10 shadow-[0_0_18px_rgba(234,179,8,0.14)]",
+            isMobile ? "px-2 py-1" : "px-3 py-2"
+          )}>
+            <Coins className={cn("text-yellow-300", isMobile ? "h-3 w-3" : "h-4 w-4")} />
+            <span className={cn(
+              "font-black tabular-nums text-yellow-300",
+              isMobile ? "text-[10px]" : "text-sm"
+            )}>
+              {formattedCoins}
+            </span>
+
+            {onOpenCoinStore && (
+              <button
+                onClick={onOpenCoinStore}
+                className={cn(
+                  "grid place-items-center rounded-full bg-white/10 transition-colors hover:bg-white/20",
+                  isMobile ? "h-4 w-4" : "h-6 w-6"
+                )}
+                aria-label="Open coin store"
+              >
+                <Plus className={cn("text-white", isMobile ? "h-2.5 w-2.5" : "h-3.5 w-3.5")} />
+              </button>
+            )}
+          </div>
+
+          {/* Like button */}
+          <button
+            onClick={handleLike}
+            className={cn(
+              "flex items-center gap-1.5 rounded-2xl border border-pink-400/50 bg-gradient-to-r from-pink-700/80 to-rose-600/80 font-black uppercase text-white shadow-[0_0_22px_rgba(236,72,153,0.38)] transition-transform hover:scale-[1.02]",
+              isMobile ? "h-7 px-2.5 text-[10px]" : "h-11 px-5 text-sm"
+            )}
+          >
+            <Heart className={cn("text-pink-300", isMobile ? "h-3 w-3" : "h-4 w-4")} />
+            <span className="tabular-nums">{stream.total_likes?.toLocaleString() || 0}</span>
+          </button>
+
+          {/* Gift button */}
+          <button
+            onClick={onGift}
+            className={cn(
+              "flex items-center gap-1.5 rounded-2xl border border-fuchsia-400/50 bg-gradient-to-r from-purple-700/80 to-fuchsia-600/80 font-black uppercase text-white shadow-[0_0_22px_rgba(217,70,239,0.38)] transition-transform hover:scale-[1.02]",
+              isMobile ? "h-7 px-2.5 text-[10px]" : "h-11 px-5 text-sm"
+            )}
+          >
+            <Gift className={cn("text-yellow-300", isMobile ? "h-3 w-3" : "h-4 w-4")} />
+            {!isMobile && "Gift"}
+          </button>
+        </div>
       </div>
     </header>
   )

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
   Crown,
@@ -20,9 +20,6 @@ import {
 import { Link } from 'react-router-dom'
 import { formatDistanceToNowStrict, isAfter, isBefore } from 'date-fns'
 import { useLeagueSnapshot } from '@/hooks/useLeagueSnapshot'
-import { useLeagueStandings } from '@/hooks/useFamilyLeagues'
-import { useUserLeagues } from '@/hooks/useUserLeagues'
-import { useLeagues } from '@/hooks/useLeagues'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import {
@@ -34,6 +31,8 @@ import {
   getTierTasks,
   getCurrentWeek,
   getCycleKey,
+  TaskProgressSnapshot,
+  DEFAULT_SNAPSHOT,
   LeagueTask,
 } from '@/lib/leagueHelpers'
 
@@ -341,19 +340,14 @@ function LeagueSkeleton() {
 
 function TierTaskCard({
   task,
-  isClaimedByUser,
-  isClaiming,
-  onClaim,
 }: {
   task: LeagueTask
-  isClaimedByUser: boolean
-  isClaiming: boolean
-  onClaim: (task: LeagueTask) => void
 }) {
   const isLocked = task.status === 'locked'
   const isCompleted = task.status === 'completed'
-  const isClaimed = task.status === 'claimed' || isClaimedByUser
-  const progress = task.target > 0 ? Math.min(100, Math.round((task.current / task.target) * 100)) : 0
+  const isClaimed = task.status === 'claimed'
+  const rawProgress = (task.target ?? 0) > 0 ? Math.round(((Number(task.current) || 0) / task.target) * 100) : 0
+  const progress = Math.min(100, Math.max(0, rawProgress))
 
   const statusLabel = isLocked
     ? 'Locked'
@@ -424,14 +418,9 @@ function TierTaskCard({
       </div>
 
       {isCompleted && !isClaimed && (
-        <button
-          type="button"
-          onClick={() => onClaim(task)}
-          disabled={isClaiming}
-          className="mt-3 w-full rounded-xl border border-emerald-400/25 bg-emerald-500/20 py-1.5 text-xs font-black text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-50"
-        >
-          {isClaiming ? 'Claiming...' : 'Claim Reward'}
-        </button>
+        <div className="mt-3 w-full rounded-xl border border-emerald-400/20 bg-emerald-500/10 py-1.5 text-center text-xs font-black text-emerald-200">
+          Completed
+        </div>
       )}
       {!isCompleted && !isLocked && (
         <div className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] py-1.5 text-center text-[11px] font-black uppercase tracking-[0.14em] text-white/40">
@@ -452,105 +441,211 @@ function TierTaskCard({
  * Real-data first. No fake production usernames.
  */
 export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
+  const profile = useAuthStore(s => s.profile)
   const {
     activeEvent,
     leaderboard,
     isLoading,
     userRank,
     userLeagueProgress,
-    missions,
+    missions: leagueMissions,
     claimMission,
-    refreshLeague,
+    refreshLeague: _refreshLeague,
   } = useLeagueSnapshot({
     streamId: streamId || null,
     category,
     limit: 10,
   })
 
-  const { standings, season: familySeason } = useLeagueStandings()
-  const {
-    myLeagues,
-    myMemberships,
-    leagueMissions,
-    isLoading: isUserLeaguesLoading,
-    isCreating,
-    isJoining,
-    error: userLeaguesError,
-    createLeague,
-    joinLeague,
-    leaveLeague,
-     claimMission: claimLeagueMission,
-     refreshLeagues: refreshUserLeagues,
-   } = useUserLeagues()
-   const { publicLeagues, isLoading: isPublicLeaguesLoading } = useLeagues()
-   const { profile } = useAuthStore()
+  const [taskProgressSnapshot, setTaskProgressSnapshot] = useState<TaskProgressSnapshot>(DEFAULT_SNAPSHOT)
+  const [isClaimingTaskId, setIsClaimingTaskId] = useState<string | null>(null)
 
-   const [claimedTaskIds, setClaimedTaskIds] = useState<Set<string>>(new Set())
-   const [isClaimingTaskId, setIsClaimingTaskId] = useState<string | null>(null)
-
-   const handleClaimTask = async (task: LeagueTask) => {
-     if (!profile?.id || isClaimingTaskId) return
-     setIsClaimingTaskId(task.id)
-     try {
-       await supabase.rpc('grant_xp', {
-         p_user_id: profile.id,
-         p_amount: task.rewardXp,
-         p_source: 'tier_task',
-         p_source_id: task.id,
-       })
-       await supabase.rpc('add_coins', {
-         p_user_id: profile.id,
-         p_amount: task.rewardCoins,
-         p_coin_type: 'paid',
-       })
-       setClaimedTaskIds((prev) => {
-         const next = new Set(prev)
-         next.add(task.id)
-         return next
-       })
-     } finally {
-       setIsClaimingTaskId(null)
-     }
-   }
-
-   const userLevel = profile?.level ?? 0
-   const isAdmin = profile?.is_admin === true || String(profile?.role) === 'admin' || String(profile?.role) === 'ceo' || String(profile?.role) === 'superadmin'
-   const hasRole = profile?.role != null && String(profile.role) !== '' && String(profile.role) !== 'user'
-   const canCreateLeague = userLevel >= 10 || isAdmin || hasRole
-
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  // League browse/create state
   const [showBrowseLeagues, setShowBrowseLeagues] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
   const [newLeagueName, setNewLeagueName] = useState('')
   const [newLeagueDesc, setNewLeagueDesc] = useState('')
   const [newLeagueType, setNewLeagueType] = useState('standard')
+  const [isCreating, setIsCreating] = useState(false)
+  const [userLeaguesError, setUserLeaguesError] = useState<string | null>(null)
+  const [myLeagues, setMyLeagues] = useState<any[]>([])
+  const [publicLeagues, setPublicLeagues] = useState<any[]>([])
+  const [myMemberships, setMyMemberships] = useState<Record<string, any>>({})
+  const [isPublicLeaguesLoading, setIsPublicLeaguesLoading] = useState(false)
+  const [isJoining, setIsJoining] = useState(false)
+  const activeLeagueMissions = useMemo(() => leagueMissions.filter(m => m.status !== 'completed'), [leagueMissions])
 
-  const handleCreateLeague = async () => {
-    if (!newLeagueName.trim()) return
-    const id = await createLeague({
-      name: newLeagueName.trim(),
-      description: newLeagueDesc.trim() || undefined,
-      leagueType: newLeagueType,
-    })
-    if (id) {
-      setShowCreateForm(false)
-      setNewLeagueName('')
-      setNewLeagueDesc('')
-      setNewLeagueType('standard')
+  useEffect(() => {
+    const fetchTaskProgress = async () => {
+      if (!profile?.id) return
+      try {
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('total_gifts_sent, total_chat_messages, total_streams, login_streak, xp')
+          .eq('id', profile.id)
+          .maybeSingle()
+        setTaskProgressSnapshot({
+          totalGiftsSent: profileData?.total_gifts_sent ?? 0,
+          totalChatMessages: profileData?.total_chat_messages ?? 0,
+          totalStreams: profileData?.total_streams ?? 0,
+          loginStreak: profileData?.login_streak ?? 0,
+          xp: profileData?.xp ?? 0,
+          broadcastMinutes: 0,
+          battlesWon: 0,
+          battlesJoined: 0,
+          wallLikes: 0,
+          wallReplies: 0,
+          familyPoints: 0,
+          leaderboardRank: null,
+          daysActive: profileData?.login_streak ?? 0,
+        })
+      } catch {
+        // ignore
+      }
     }
-  }
+    fetchTaskProgress()
+  }, [profile?.id])
 
-  const handleJoinLeague = async (leagueId: string) => {
-    await joinLeague(leagueId)
-  }
+  // Fetch user's leagues and public leagues
+  useEffect(() => {
+    const fetchLeagues = async () => {
+      if (!profile?.id) return
+      try {
+        // Fetch user's memberships
+        const { data: membershipsData } = await supabase
+          .from('user_league_members')
+          .select('league_id, role, contribution_score')
+          .eq('user_id', profile.id)
+        const membershipsMap: Record<string, any> = {}
+        const leagueIds: string[] = []
+        for (const m of membershipsData || []) {
+          membershipsMap[m.league_id] = m
+          leagueIds.push(m.league_id)
+        }
+        setMyMemberships(membershipsMap)
 
-  const handleLeaveLeague = async (leagueId: string) => {
-    await leaveLeague(leagueId)
-  }
+        // Fetch user's leagues
+        if (leagueIds.length > 0) {
+          const { data: leaguesData } = await supabase
+            .from('user_leagues')
+            .select('id, name, description, league_type, member_count, max_members, league_score, icon_emoji, creator_id')
+            .in('id', leagueIds)
+          setMyLeagues(leaguesData || [])
+        } else {
+          setMyLeagues([])
+        }
+      } catch {
+        // ignore
+      }
+    }
+    fetchLeagues()
+  }, [profile?.id])
 
-  const activeLeagueMissions = useMemo(
-    () => leagueMissions.filter(m => m.status === 'active'),
-    [leagueMissions]
-  )
+  // Fetch public leagues when browse is opened
+  useEffect(() => {
+    if (!showBrowseLeagues) return
+    const fetchPublicLeagues = async () => {
+      setIsPublicLeaguesLoading(true)
+      try {
+        const { data } = await supabase
+          .from('user_leagues')
+          .select('id, name, description, league_type, member_count, max_members, league_score, icon_emoji, creator_id')
+          .eq('is_public', true)
+          .order('league_score', { ascending: false })
+          .limit(20)
+        setPublicLeagues(data || [])
+      } catch {
+        setPublicLeagues([])
+      } finally {
+        setIsPublicLeaguesLoading(false)
+      }
+    }
+    fetchPublicLeagues()
+  }, [showBrowseLeagues])
+
+  const handleJoinLeague = useCallback(async (leagueId: string) => {
+    if (!profile?.id) return
+    setIsJoining(true)
+    try {
+      const { error } = await supabase.from('user_league_members').insert({
+        user_id: profile.id,
+        league_id: leagueId,
+        role: 'member',
+        contribution_score: 0,
+      })
+      if (error) throw error
+      // Refresh leagues
+      const { data: membershipsData } = await supabase
+        .from('user_league_members')
+        .select('league_id, role, contribution_score')
+        .eq('user_id', profile.id)
+      const membershipsMap: Record<string, any> = {}
+      const leagueIds: string[] = []
+      for (const m of membershipsData || []) {
+        membershipsMap[m.league_id] = m
+        leagueIds.push(m.league_id)
+      }
+      setMyMemberships(membershipsMap)
+      if (leagueIds.length > 0) {
+        const { data: leaguesData } = await supabase
+          .from('user_leagues')
+          .select('id, name, description, league_type, member_count, max_members, league_score, icon_emoji, creator_id')
+          .in('id', leagueIds)
+        setMyLeagues(leaguesData || [])
+      }
+      // Refresh public leagues if browse is open
+      if (showBrowseLeagues) {
+        const { data: publicData } = await supabase
+          .from('user_leagues')
+          .select('id, name, description, league_type, member_count, max_members, league_score, icon_emoji, creator_id')
+          .eq('is_public', true)
+          .order('league_score', { ascending: false })
+          .limit(20)
+        setPublicLeagues(publicData || [])
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsJoining(false)
+    }
+  }, [profile?.id, showBrowseLeagues])
+
+  const handleLeaveLeague = useCallback(async (leagueId: string) => {
+    if (!profile?.id) return
+    try {
+      await supabase
+        .from('user_league_members')
+        .delete()
+        .eq('user_id', profile.id)
+        .eq('league_id', leagueId)
+      // Refresh leagues
+      const { data: membershipsData } = await supabase
+        .from('user_league_members')
+        .select('league_id, role, contribution_score')
+        .eq('user_id', profile.id)
+      const membershipsMap: Record<string, any> = {}
+      const leagueIds: string[] = []
+      for (const m of membershipsData || []) {
+        membershipsMap[m.league_id] = m
+        leagueIds.push(m.league_id)
+      }
+      setMyMemberships(membershipsMap)
+      if (leagueIds.length > 0) {
+        const { data: leaguesData } = await supabase
+          .from('user_leagues')
+          .select('id, name, description, league_type, member_count, max_members, league_score, icon_emoji, creator_id')
+          .in('id', leagueIds)
+        setMyLeagues(leaguesData || [])
+      } else {
+        setMyLeagues([])
+      }
+    } catch {
+      // ignore
+    }
+  }, [profile?.id])
+
+  const currentWeek = getCurrentWeek()
+  const currentCycle = getCycleKey()
 
   const completedLeagueMissions = useMemo(
     () => leagueMissions.filter(m => m.status === 'completed'),
@@ -566,6 +661,7 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
   const userTierInfo = getTierInfo(userTier)
   const nextTierInfo = getNextTier(userTier)
   const tierProgress = getTierProgress(userXpTotal)
+  const canCreateLeague = profile?.role === 'admin' || (profile?.xp ?? 0) >= 1000
 
   const leagueMissionMap = useMemo(() => {
     const map: Record<string, { current_value?: number; status?: string }> = {}
@@ -580,12 +676,9 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
     return map
   }, [leagueMissions])
 
-  const currentWeek = getCurrentWeek()
-  const currentCycle = getCycleKey()
-
   const tierTasks = useMemo(
-    () => getTierTasks(userTier, currentCycle, currentWeek, leagueMissionMap),
-    [userTier, currentCycle, currentWeek, leagueMissionMap]
+    () => getTierTasks(userTier, currentCycle, currentWeek, taskProgressSnapshot, leagueMissionMap),
+    [userTier, currentCycle, currentWeek, taskProgressSnapshot, leagueMissionMap]
   )
 
   const normalizedLeaderboard = useMemo(() => {
@@ -626,6 +719,38 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
       0
     )
   }, [normalizedLeaderboard])
+
+  const handleCreateLeague = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    if (!newLeagueName.trim()) return
+    setIsCreating(true)
+    setUserLeaguesError(null)
+    try {
+      const { data: user } = await supabase.auth.getUser()
+      if (!user?.user?.id) {
+        setUserLeaguesError('You must be logged in to create a league')
+        return
+      }
+      const { error } = await supabase.from('user_leagues').insert({
+        name: newLeagueName.trim(),
+        description: newLeagueDesc.trim() || null,
+        league_type: newLeagueType,
+        creator_id: user.user.id,
+        max_members: 50,
+        is_public: true,
+        icon_emoji: '🏆',
+      })
+      if (error) throw error
+      setShowCreateForm(false)
+      setNewLeagueName('')
+      setNewLeagueDesc('')
+      setNewLeagueType('standard')
+    } catch (err: any) {
+      setUserLeaguesError(err?.message ?? 'Failed to create league')
+    } finally {
+      setIsCreating(false)
+    }
+  }, [newLeagueName, newLeagueDesc, newLeagueType])
 
   return (
     <section className="relative overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-slate-950/80 text-white shadow-[0_0_60px_rgba(34,211,238,0.10)]">
@@ -843,9 +968,6 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
               <TierTaskCard
                 key={task.id}
                 task={task}
-                isClaimedByUser={claimedTaskIds.has(task.id)}
-                isClaiming={isClaimingTaskId === task.id}
-                onClaim={handleClaimTask}
               />
             ))}
           </div>
@@ -955,6 +1077,7 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
                   {publicLeagues.map((league) => {
                     const isMember = !!myMemberships[league.id]
                     const isMyLeague = league.creator_id === profile?.id
+
                     return (
                       <div
                         key={league.id}
@@ -1043,9 +1166,11 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
               <p className="text-sm font-black text-white mb-3">League Missions</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[...completedLeagueMissions, ...activeLeagueMissions].map((mission) => {
-                  const progress = mission.target_value
-                    ? Math.min(100, Math.round((mission.current_value / mission.target_value) * 100))
-                    : 0
+                  const mTarget = Number(mission.target_value) || 0
+                  const mCurrent = Number(mission.current_value) || 0
+                  const rawProgress = mTarget > 0 ? Math.round((mCurrent / mTarget) * 100) : 0
+                  const progress = Math.min(100, Math.max(0, rawProgress))
+
                   return (
                     <div
                       key={mission.id}
@@ -1085,13 +1210,11 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
                       {mission.status === 'completed' && (
                         <button
                           type="button"
-                          onClick={async () => {
-                            await claimLeagueMission(mission.id)
-                            refreshUserLeagues()
-                          }}
-                          className="mt-3 w-full rounded-xl border border-cyan-300/20 bg-cyan-300/10 py-1.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-300/20"
+                          onClick={() => claimMission(mission.id)}
+                          disabled={isClaimingTaskId === mission.id}
+                          className="mt-3 w-full rounded-xl border border-cyan-300/20 bg-cyan-300/10 py-1.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-300/20 disabled:opacity-50"
                         >
-                          Claim Reward
+                          {isClaimingTaskId === mission.id ? 'Claiming...' : 'Claim Reward'}
                         </button>
                       )}
                     </div>
@@ -1103,7 +1226,7 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
 
           {myLeagues.length === 0 && !showCreateForm && !showBrowseLeagues && (
             <p className="mt-3 text-sm text-slate-400">
-              You haven't joined any leagues yet. Browse public leagues or create your own!
+              You haven&apos;t joined any leagues yet. Browse public leagues or create your own!
             </p>
           )}
         </div>

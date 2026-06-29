@@ -138,6 +138,12 @@ export function useLeagueMissions(leagueEventId?: string | null): UseLeagueMissi
         }
 
         await fetchMissions()
+        // Refresh user profile so XP/coin balance updates immediately
+        try {
+          await useAuthStore.getState().refreshProfile(true)
+        } catch {
+          // Non-fatal — profile will refresh on next mount
+        }
         return { success: true, data }
       } catch (err) {
         if (process.env.NODE_ENV === 'development') {

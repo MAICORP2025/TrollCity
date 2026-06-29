@@ -54,8 +54,16 @@ export function useIsMobile() {
     }
   }, [updateDimensions])
 
+  // Reliable mobile UA detection — only matches actual mobile OS, not desktop browsers
+  // Desktop Chrome UA contains "Mobile" so we must check for mobile-specific tokens
+  // and explicitly exclude Windows/Mac/Linux desktop
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  const isDesktopOS = /Windows NT|Macintosh|Mac OS X|Linux x86_64|Linux i686|X11/i.test(ua)
+  const isMobileOS = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile Safari|CriOS|FxiOS/i.test(ua)
+  const isMobileUA = isMobileOS && !isDesktopOS
+
   return {
-    isMobile: isMobileWidth && isTouchDevice,
+    isMobile: isMobileWidth && isMobileUA,
     isMobileWidth,
     isTouchDevice,
     hasMounted,
