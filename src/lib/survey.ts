@@ -141,11 +141,25 @@ export async function getAllSurveys(): Promise<SurveyWithResponseCount[]> {
 }
 
 export async function getSurveyResponses(surveyId: string): Promise<SurveyResponse[]> {
+  // DEBUG: Check current auth state
+  const { data: sessionData } = await supabase.auth.getSession();
+  console.log('[survey DEBUG] Current session:', sessionData?.session?.user?.id || 'NO SESSION');
+  console.log('[survey DEBUG] Fetching responses for survey:', surveyId);
+
+  // DEBUG: Count all responses for this survey (no RLS filter on user)
+  const { count: totalCount } = await supabase
+    .from('survey_responses')
+    .select('*', { count: 'exact', head: true })
+    .eq('survey_id', surveyId);
+  console.log('[survey DEBUG] Total rows in DB for this survey (with RLS):', totalCount);
+
   const { data, error } = await supabase
     .from('survey_responses')
     .select('*')
     .eq('survey_id', surveyId)
     .order('submitted_at', { ascending: false })
+
+  console.log('[survey DEBUG] Query result data length:', data?.length, 'error:', error);
 
   if (error) {
     console.error('[survey] Failed to fetch responses:', error)

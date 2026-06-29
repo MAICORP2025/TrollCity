@@ -219,11 +219,12 @@ export default function OpenPositions() {
 
   useSEO({
     title: 'Careers | Troll City - Join Our Team & Make Money Online',
-    description: 'Explore career opportunities at Troll City. Join the creator economy, work from home, and earn competitive pay. Weekly payouts, remote positions, and growth opportunities.',
+    description: 'Troll City has its own proprietary HR system, payroll provider, built-in role applications, time clock, time off requests, internal handbook, and HR resources. Apply for roles in the HR Center.',
     keywords: [
       'careers', 'make money online', 'work from home', 'side income',
       'online opportunities', 'creator economy', 'remote jobs', 'Troll City careers',
-      'weekly payouts', 'earn money online', 'online business', 'jobs'
+      'weekly payouts', 'earn money online', 'online business', 'jobs',
+      'HR Center', 'Troll City HR', 'proprietary payroll', 'time clock'
     ]
   });
 
@@ -474,7 +475,8 @@ const handleApply = async (position: JobPosition) => {
               </h1>
 
               <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300 sm:text-lg">
-                Apply for official Troll City roles. Admins can control how many applications are available for each career.
+                Apply for official Troll City roles through our proprietary HR and payroll management system.
+                Track your applications, clock in/out, request time off, and manage payroll — all from HR Center.
               </p>
 
               {isAdminOrLead && (

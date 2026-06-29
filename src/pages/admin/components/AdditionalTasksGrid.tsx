@@ -202,6 +202,14 @@ export default function AdditionalTasksGrid({
            color: 'text-green-400',
            bgColor: 'bg-green-500/20'
          },
+         {
+           icon: <Shield className="w-5 h-5" />,
+           label: 'Staff Audit',
+           description: 'Audit staff actions & permissions',
+           action: () => window.location.href = '/admin/staff-audit',
+           color: 'text-red-400',
+           bgColor: 'bg-red-500/20'
+         },
         ...systemManagementRoutes
           .filter((r) => ['users', 'moderation'].includes(r.category || ''))
           .map(mapRouteToTask)

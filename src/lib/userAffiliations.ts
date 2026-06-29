@@ -74,23 +74,24 @@ export async function getUserAffiliation(userId: string): Promise<UserAffiliatio
     }
   }
 
-  // Check troll_family_members first (newer family system)
-  const { data: trollMember, error: trollError } = await supabase
-    .from('troll_family_members')
+  // Check family_members (canonical family membership table)
+  const { data: familyMember, error: familyMemberError } = await supabase
+    .from('family_members')
     .select('family_id, role')
     .eq('user_id', userId)
+    .eq('approval_status', 'approved')
     .limit(1)
     .maybeSingle()
 
-  if (trollError) {
-    console.error('Error fetching troll family membership:', trollError)
+  if (familyMemberError) {
+    console.error('Error fetching family membership:', familyMemberError)
   }
 
-  if (trollMember?.family_id) {
+  if (familyMember?.family_id) {
     const { data: family, error: familyDataError } = await supabase
       .from('troll_families')
       .select('id, name, slug')
-      .eq('id', trollMember.family_id)
+      .eq('id', familyMember.family_id)
       .maybeSingle()
 
     if (familyDataError) {
@@ -104,7 +105,7 @@ export async function getUserAffiliation(userId: string): Promise<UserAffiliatio
         id: family.id,
         name: family.name,
         slug: family.slug,
-        role: trollMember.role,
+        role: familyMember.role,
       }
     }
   }
@@ -128,41 +129,6 @@ export async function getUserAffiliation(userId: string): Promise<UserAffiliatio
       name: leaderData.name,
       slug: leaderData.slug,
       role: 'leader',
-    }
-  }
-
-  // Fall back to legacy family_members table
-  const { data: familyMember, error: familyError } = await supabase
-    .from('family_members')
-    .select('role, family_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (familyError) {
-    console.error('Error fetching family affiliation:', familyError)
-    throw familyError
-  }
-
-  if (familyMember?.family_id) {
-    const { data: family, error: familyDataError } = await supabase
-      .from('troll_families')
-      .select('id, name, slug')
-      .eq('id', familyMember.family_id)
-      .maybeSingle()
-
-    if (familyDataError) {
-      console.error('Error fetching family record:', familyDataError)
-      throw familyDataError
-    }
-
-    if (family?.id) {
-      return {
-        type: 'family',
-        id: family.id,
-        name: family.name,
-        slug: family.slug,
-        role: familyMember.role,
-      }
     }
   }
 

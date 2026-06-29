@@ -282,6 +282,7 @@ export default function Sidebar() {
             .from('family_members')
             .select('family_id')
             .eq('user_id', profile.id)
+            .eq('approval_status', 'approved')
             .limit(1)
             .maybeSingle()
 
@@ -292,24 +293,6 @@ export default function Sidebar() {
               .eq('id', memberData.family_id)
               .maybeSingle()
             if (familyFromMembers) finalFamilyData = familyFromMembers
-          }
-        }
-
-        if (!finalFamilyData) {
-          const { data: trollMemberData } = await supabase
-            .from('troll_family_members')
-            .select('family_id')
-            .eq('user_id', profile.id)
-            .limit(1)
-            .maybeSingle()
-
-          if (trollMemberData) {
-            const { data: familyFromTrollMembers } = await supabase
-              .from('troll_families')
-              .select('*')
-              .eq('id', trollMemberData.family_id)
-              .maybeSingle()
-            if (familyFromTrollMembers) finalFamilyData = familyFromTrollMembers
           }
         }
 
@@ -799,6 +782,7 @@ export default function Sidebar() {
             <GridItem collapsed={isSidebarCollapsed} icon={Trophy} label="Trollmers Tournament" to="/admin/trollmers-tournament" active={isActive('/admin/trollmers-tournament')} highlight={isUpdated('/admin/trollmers-tournament')} onClick={() => markAsViewed('/admin/trollmers-tournament')} tone="purple" />
             <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Officer Management" to="/admin/officer-management" active={isActive('/admin/officer-management')} highlight={isUpdated('/admin/officer-management')} onClick={() => markAsViewed('/admin/officer-management')} tone="cyan" />
             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Role Management" to="/admin/role-management" active={isActive('/admin/role-management')} highlight={isUpdated('/admin/role-management')} onClick={() => markAsViewed('/admin/role-management')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="Staff Audit" to="/admin/staff-audit" active={isActive('/admin/staff-audit')} highlight={isUpdated('/admin/staff-audit')} onClick={() => markAsViewed('/admin/staff-audit')} tone="red" />
             <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Media Library" to="/admin/media-library" active={isActive('/admin/media-library')} highlight={isUpdated('/admin/media-library')} onClick={() => markAsViewed('/admin/media-library')} tone="cyan" />
             <GridItem collapsed={isSidebarCollapsed} icon={Megaphone} label="Announcements" to="/admin/announcements" active={isActive('/admin/announcements')} highlight={isUpdated('/admin/announcements')} onClick={() => markAsViewed('/admin/announcements')} tone="pink" />
             <GridItem collapsed={isSidebarCollapsed} icon={Mail} label="Send Notifications" to="/admin/send-notifications" active={isActive('/admin/send-notifications')} highlight={isUpdated('/admin/send-notifications')} onClick={() => markAsViewed('/admin/send-notifications')} tone="blue" />

@@ -114,6 +114,15 @@ function useRoleChecks(profile: any) {
     !!(profile as any)?.is_agency_hr ||
     !!(profile as any)?.is_agency_hr_manager
 
+  const isHRAdmin =
+    isAdmin ||
+    role === String(UserRole.HR_ADMIN) ||
+    role === String(UserRole.HR_MANAGER) ||
+    trollRole === String(UserRole.HR_ADMIN) ||
+    trollRole === String(UserRole.HR_MANAGER) ||
+    !!(profile as any)?.is_hr_admin ||
+    !!(profile as any)?.is_hr_manager
+
   const isAgencyLeader =
     role === 'agency_leader' ||
     trollRole === 'agency_leader' ||
@@ -166,7 +175,7 @@ function useRoleChecks(profile: any) {
     trollRole === 'auctioneer' ||
     !!(profile as any)?.is_auctioneer
 
-  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster, isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer, role, trollRole };
+  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isHRAdmin, isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster, isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer, role, trollRole };
 }
 
 /* ─── Format helpers ─── */
@@ -353,7 +362,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
   const { user, profile, logout } = useAuthStore();
   const navigate = useNavigate_fixed();
   const {
-    isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR,
+    isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isHRAdmin,
     isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster,
     isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer,
   } = useRoleChecks(profile);
@@ -455,13 +464,16 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           ...(isNoahAssistant || isAdmin
             ? [{ label: 'Noah Assistant', icon: Briefcase as any, path: '/noah-assistant-dashboard' }]
             : []),
-          ...(isAuctioneer || isAdmin
-            ? [{ label: 'Auctioneer', icon: Gavel as any, path: '/auctions/studio' }]
-            : []),
-        ],
-      },
-      {
-        category: 'Learning',
+           ...(isAuctioneer || isAdmin
+             ? [{ label: 'Auctioneer', icon: Gavel as any, path: '/auctions/studio' }]
+             : []),
+           ...(isHRAdmin
+             ? [{ label: 'HR Center', icon: Briefcase as any, path: '/hr-center' }]
+             : []),
+         ],
+       },
+       {
+         category: 'Learning',
         items: [
           { label: 'Academy', icon: GraduationCap, path: '/academy' },
           { label: 'Courses', icon: BookOpen, path: '/academy/courses' },
@@ -509,7 +521,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
       ...cat,
       items: cat.items.filter((item) => item.show !== false),
     }));
-  }, [isAdmin, isSecretary, isLead, isOfficer, isPresident, isAgencyHR, profile?.username]);
+  }, [isAdmin, isSecretary, isLead, isOfficer, isPresident, isAgencyHR, isHRAdmin, profile?.username]);
 
   const filteredPages = useMemo(() => {
     if (!search.trim()) return allPages;
@@ -722,21 +734,22 @@ export default function BottomNavBar() {
             {/* CENTER: Nav buttons */}
             {isMobile ? (
               /* MOBILE: 7 tiles — Home, Go Live, Coins, Chats, Treelz, Podcast, More */
-              <nav className="flex flex-1 items-center justify-around">
-                <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
-                <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
-                <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
-                <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
-                <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
-                <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} size="large" />
-                <NavButton
-                  icon={LayoutGrid}
-                  label="More"
-                  onClick={() => setMorePagesOpen(true)}
-                  active={morePagesOpen}
-                  size="large"
-                />
-              </nav>
+               <nav className="flex flex-1 items-center justify-around">
+                 <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
+                 <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
+                 <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
+                 <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
+                 <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
+                 <NavButton icon={Shield} label="HR Center" to="/hr-center" active={isActive('/hr-center')} size="large" />
+                 <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} size="large" />
+                 <NavButton
+                   icon={LayoutGrid}
+                   label="More"
+                   onClick={() => setMorePagesOpen(true)}
+                   active={morePagesOpen}
+                   size="large"
+                 />
+               </nav>
             ) : (
               /* DESKTOP: Full nav row */
               <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide md:gap-1.5 lg:gap-2">
@@ -763,9 +776,10 @@ export default function BottomNavBar() {
 
                 <NavButton icon={Shuffle} label="Troll Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} />
                 <NavButton icon={Car} label="Cars" to="/ktauto" active={isActive('/ktauto')} />
-                <NavButton icon={Briefcase} label="Careers" to="/careers" active={isActive('/careers')} />
+                 <NavButton icon={Briefcase} label="Careers" to="/careers" active={isActive('/careers')} />
+                 <NavButton icon={Shield} label="HR Center" to="/hr-center" active={isActive('/hr-center')} />
 
-                <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} />
+                 <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} />
               </nav>
             )}
 

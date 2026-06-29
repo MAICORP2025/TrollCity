@@ -137,20 +137,6 @@ export default function FamilyBrowse() {
           return
         }
 
-        const { data: trollMemberData } = await supabase
-          .from('troll_family_members')
-          .select('family_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle()
-
-        if (trollMemberData?.family_id) {
-          setUserFamilyId(trollMemberData.family_id)
-          setHasFamily(true)
-          navigate('/family/home', { replace: true })
-          return
-        }
-
         setMembershipChecked(true)
       } catch (err) {
         console.error('Failed to check membership:', err)

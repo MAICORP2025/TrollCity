@@ -72,23 +72,12 @@ function FamilyMinutesStoreModal({
         .select('id')
         .eq('family_id', familyId)
         .eq('user_id', user?.id)
-        .single();
-      
+        .eq('approval_status', 'approved')
+        .maybeSingle();
+
       setIsFamilyMember(!!data);
     } catch {
-      // Try alternate table
-      try {
-        const { data: tfmData } = await supabase
-          .from('troll_family_members')
-          .select('id')
-          .eq('family_id', familyId)
-          .eq('user_id', user?.id)
-          .single();
-        
-        setIsFamilyMember(!!tfmData);
-      } catch {
-        setIsFamilyMember(false);
-      }
+      setIsFamilyMember(false);
     }
   };
 
@@ -492,26 +481,14 @@ export default function TrollFamilyChat() {
           .from('family_members')
           .select('family_id')
           .eq('user_id', user.id)
-          .single();
-        
+          .eq('approval_status', 'approved')
+          .maybeSingle();
+
         if (memberData?.family_id) {
           targetFamilyId = memberData.family_id;
           setFamilyId(targetFamilyId);
           // Update URL without navigation
           navigate(`/family/chat/${targetFamilyId}`, { replace: true });
-        } else {
-          // Try troll_family_members table
-          const { data: tfmData } = await supabase
-            .from('troll_family_members')
-            .select('family_id')
-            .eq('user_id', user.id)
-            .single();
-          
-          if (tfmData?.family_id) {
-            targetFamilyId = tfmData.family_id;
-            setFamilyId(targetFamilyId);
-            navigate(`/family/chat/${targetFamilyId}`, { replace: true });
-          }
         }
       } catch (err) {
         console.error('Error fetching user family:', err);

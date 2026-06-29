@@ -158,7 +158,7 @@ begin
        and exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'user_role_grants') then
       select id into v_role_id from public.system_roles where name = r.role limit 1;
       if v_role_id is not null then
-        insert into public.user_role_grants (user_id, role_id, granted_by, granted_at)
+        insert into public.user_role_grants (user_id, role_id, granted_by)
         values (v_uid, v_role_id, v_uid, now())
         on conflict do nothing;
       end if;

@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS public.family_stats_enhanced (
 );
 
 -- Index for fast lookups
-CREATE INDEX idx_family_stats_enhanced_family ON public.family_stats_enhanced(family_id);
-CREATE INDEX idx_family_stats_enhanced_level ON public.family_stats_enhanced(level DESC);
+CREATE INDEX IF NOT EXISTS idx_family_stats_enhanced_family ON public.family_stats_enhanced(family_id);
+CREATE INDEX IF NOT EXISTS idx_family_stats_enhanced_level ON public.family_stats_enhanced(level DESC);
 
 -- =============================================================================
 -- ACHIEVEMENT TIERS CONFIGURATION
@@ -124,9 +124,9 @@ CREATE TABLE IF NOT EXISTS public.achievement_definitions (
 );
 
 -- Indexes
-CREATE INDEX idx_achievement_definitions_tier ON public.achievement_definitions(tier_number);
-CREATE INDEX idx_achievement_definitions_metric ON public.achievement_definitions(metric_type);
-CREATE INDEX idx_achievement_definitions_secret ON public.achievement_definitions(secret) WHERE secret = true;
+CREATE INDEX IF NOT EXISTS idx_achievement_definitions_tier ON public.achievement_definitions(tier_number);
+CREATE INDEX IF NOT EXISTS idx_achievement_definitions_metric ON public.achievement_definitions(metric_type);
+CREATE INDEX IF NOT EXISTS idx_achievement_definitions_secret ON public.achievement_definitions(secret) WHERE secret = true;
 
 -- =============================================================================
 -- FAMILY ACHIEVEMENTS (instance per family)
@@ -145,8 +145,8 @@ CREATE TABLE IF NOT EXISTS public.family_achievements_new (
     UNIQUE(family_id, achievement_key)
 );
 
-CREATE INDEX idx_family_achievements_new_family ON public.family_achievements_new(family_id);
-CREATE INDEX idx_family_achievements_new_completed ON public.family_achievements_new(completed) WHERE completed = false;
+CREATE INDEX IF NOT EXISTS idx_family_achievements_new_family ON public.family_achievements_new(family_id);
+CREATE INDEX IF NOT EXISTS idx_family_achievements_new_completed ON public.family_achievements_new(completed) WHERE completed = false;
 
 -- =============================================================================
 -- WEEKLY FAMILY GOALS (auto-generated & rotating)
@@ -181,9 +181,9 @@ CREATE TABLE IF NOT EXISTS public.weekly_family_goals_new (
     UNIQUE(family_id, goal_key, week_number, year)
 );
 
-CREATE INDEX idx_weekly_goals_family ON public.weekly_family_goals_new(family_id);
-CREATE INDEX idx_weekly_goals_week ON public.weekly_family_goals_new(week_number, year);
-CREATE INDEX idx_weekly_goals_expires ON public.weekly_family_goals_new(expires_at);
+CREATE INDEX IF NOT EXISTS idx_weekly_goals_family ON public.weekly_family_goals_new(family_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_goals_week ON public.weekly_family_goals_new(week_number, year);
+CREATE INDEX IF NOT EXISTS idx_weekly_goals_expires ON public.weekly_family_goals_new(expires_at);
 
 -- =============================================================================
 -- HIDDEN ACHIEVEMENTS (secret triggers)
@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS public.family_rate_limits (
     UNIQUE(family_id, user_id, event_type)
 );
 
-CREATE INDEX idx_family_rate_limits ON public.family_rate_limits(family_id, user_id, event_type);
+CREATE INDEX IF NOT EXISTS idx_family_rate_limits ON public.family_rate_limits(family_id, user_id, event_type);
 
 -- =============================================================================
 -- RLS POLICIES
@@ -266,11 +266,6 @@ ALTER TABLE public.hidden_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.family_level_unlocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.family_rate_limits ENABLE ROW LEVEL SECURITY;
 
--- Family stats: members can view
-CREATE POLICY "Family members can view enhanced stats" ON public.family_stats_enhanced
-    FOR SELECT USING (family_id IN (
-        SELECT family_id FROM public.family_members WHERE user_id = auth.uid()
-    ));
 
 -- Achievement tiers: public read
 CREATE POLICY "Achievement tiers public read" ON public.achievement_tiers
@@ -282,17 +277,17 @@ CREATE POLICY "Achievement definitions public read" ON public.achievement_defini
 
 -- Family achievements: members can view
 CREATE POLICY "Family members can view achievements" ON public.family_achievements_new
-    FOR SELECT USING (family_id IN (
-        SELECT family_id FROM public.family_members WHERE user_id = auth.uid()
-    ));
+    FOR SELECT USING (
+        family_id IN (SELECT family_id FROM public.family_members WHERE user_id = auth.uid())
+    );
 
 -- Weekly goals: members can view
 CREATE POLICY "Family members can view weekly goals" ON public.weekly_family_goals_new
-    FOR SELECT USING (family_id IN (
-        SELECT family_id FROM public.family_members WHERE user_id = auth.uid()
-    ));
+    FOR SELECT USING (
+        family_id IN (SELECT family_id FROM public.family_members WHERE user_id = auth.uid())
+    );
 
--- Hidden achievements: public read (locked ones hidden via query)
+-- Hidden achievements: public read
 CREATE POLICY "Hidden achievements public read" ON public.hidden_achievements
     FOR SELECT USING (true);
 
@@ -303,8 +298,11 @@ CREATE POLICY "Family level unlocks public read" ON public.family_level_unlocks
 -- Rate limits: owner only
 CREATE POLICY "Rate limits owner only" ON public.family_rate_limits
     FOR ALL USING (
-        user_id = auth.uid() OR 
-        family_id IN (SELECT family_id FROM public.family_members WHERE user_id = auth.uid() AND role = 'leader')
+        user_id = auth.uid()
+        OR family_id IN (
+            SELECT family_id FROM public.family_members
+            WHERE user_id = auth.uid() AND role = 'leader'
+        )
     );
 
 -- =============================================================================
@@ -538,6 +536,7 @@ ON CONFLICT (level) DO NOTHING;
 -- =============================================================================
 
 -- Function: Calculate XP required for a given level
+DROP FUNCTION IF EXISTS public.get_xp_for_level(INTEGER);
 CREATE OR REPLACE FUNCTION public.get_xp_for_level(p_level INTEGER)
 RETURNS BIGINT AS $$
 BEGIN
@@ -547,6 +546,7 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Function: Calculate tier from family stats
+DROP FUNCTION IF EXISTS public.calculate_family_tier(BIGINT, BIGINT, BIGINT, BIGINT, INTEGER, INTEGER);
 CREATE OR REPLACE FUNCTION public.calculate_family_tier(
     p_messages BIGINT,
     p_calls BIGINT,
@@ -594,6 +594,7 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Function: Check and update family level
+DROP FUNCTION IF EXISTS public.check_and_update_family_level(UUID);
 CREATE OR REPLACE FUNCTION public.check_and_update_family_level(p_family_id UUID)
 RETURNS JSONB AS $$
 DECLARE
@@ -658,6 +659,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function: Award XP and coins to family
+DROP FUNCTION IF EXISTS public.award_family_xp(UUID, INTEGER, BIGINT, TEXT);
 CREATE OR REPLACE FUNCTION public.award_family_xp(
     p_family_id UUID,
     p_xp_amount INTEGER,
@@ -684,6 +686,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function: Generate weekly goals for a family
+DROP FUNCTION IF EXISTS public.generate_weekly_goals(UUID);
 CREATE OR REPLACE FUNCTION public.generate_weekly_goals(p_family_id UUID)
 RETURNS JSONB AS $$
 DECLARE
@@ -781,6 +784,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function: Check rate limit for user
+DROP FUNCTION IF EXISTS public.check_family_rate_limit(UUID, UUID, TEXT);
 CREATE OR REPLACE FUNCTION public.check_family_rate_limit(
     p_family_id UUID,
     p_user_id UUID,
@@ -832,6 +836,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function: Get family leaderboard
+DROP FUNCTION IF EXISTS public.get_family_leaderboard(INTEGER);
 CREATE OR REPLACE FUNCTION public.get_family_leaderboard(p_limit INTEGER DEFAULT 50)
 RETURNS TABLE (
     rank INTEGER,

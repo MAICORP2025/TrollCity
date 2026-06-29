@@ -60,8 +60,11 @@ const RequireRole: React.FC<RequireRoleProps> = ({
     return <>{children}</>;
   }
 
+  // God mode: Always allow admin email access regardless of role
+  const isAdminByEmail = user?.email && isAdminEmail(user.email)
+
   // Check role permissions with enhanced validation
-  const hasRequiredRole = hasRole(profile, roles, {
+  const hasRequiredRole = isAdminByEmail || hasRole(profile, roles, {
     allowAdminOverride: true
   });
 

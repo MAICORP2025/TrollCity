@@ -585,6 +585,15 @@ export enum UserRole {
   OWNER = 'owner',
   AGENCY_HR_MANAGER = 'agency_hr_manager',
   HR_ADMIN = 'hr_admin',
+  HR_MANAGER = 'hr_manager',
+  PASTOR = 'pastor',
+  AGENCY_LEADER = 'agency_leader',
+  ATTORNEY = 'attorney',
+  PROSECUTOR = 'prosecutor',
+  JOURNALIST = 'journalist',
+  AUCTIONEER = 'auctioneer',
+  CEO_ASSISTANT = 'ceo_assistant',
+  NOAH_ASSISTANT = 'noah_assistant',
   LEAD_TROLL_OFFICER = 'lead_troll_officer',
   TROLL_OFFICER = 'troll_officer',
   TROLL_FAMILY = 'troll_family',
@@ -874,18 +883,22 @@ export const hasRole = (
   const { allowAdminOverride = true } = options
   const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles]
   
-  // Admin override
-  const isElevatedCityAdmin =
+  // God mode: CEO/Owner/Superadmin always has access to everything
+  const isGodMode =
     profile.is_admin === true ||
     profile.role === UserRole.ADMIN ||
     profile.role === 'superadmin' ||
     profile.role === 'ceo' ||
+    profile.role === 'owner' ||
+    profile.role === UserRole.OWNER ||
     profile.troll_role === UserRole.ADMIN ||
     profile.troll_role === 'superadmin' ||
     profile.troll_role === 'ceo' ||
-    (profile as any).is_superadmin === true
+    profile.troll_role === 'owner' ||
+    (profile as any).is_superadmin === true ||
+    (profile as any).is_owner === true
 
-  if (allowAdminOverride && isElevatedCityAdmin) {
+  if (allowAdminOverride && isGodMode) {
     return true
   }
   
@@ -910,6 +923,8 @@ export const hasRole = (
     agency_hr: (profile as any).is_agency_hr,
     agency_hr_manager: (profile as any).is_agency_hr_manager,
     agency_leader: (profile as any).is_agency_leader,
+    hr_manager: (profile as any).is_hr_manager,
+    hr_admin: (profile as any).is_hr_admin,
     ceo_assistant: (profile as any).is_ceo_assistant,
     noah_assistant: (profile as any).is_noah_assistant,
     pastor: (profile as any).is_pastor,

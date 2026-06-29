@@ -1472,8 +1472,6 @@ const openAction = useCallback((user: UserListItem, action: string) => {
       }
     }, [openDropdownUserId]);
 
-    if (!isStaff) return null;
-
 const renderFloatingButton = () => {
       if (isMobileWidth) return null;
       
@@ -2718,6 +2716,9 @@ return (
     const panelStyle: React.CSSProperties = monitorPos
       ? { top: monitorPos.top, left: monitorPos.left, bottom: 'auto', right: 'auto' }
       : { bottom: '80px', right: '16px', top: 'auto', left: 'auto' }
+
+    // Early return after all hooks — non-staff users see nothing
+    if (!isStaff) return null;
 
     return (
       <div

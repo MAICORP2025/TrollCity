@@ -63,27 +63,14 @@ export default function FamilyProfilePage() {
           .from('family_members')
           .select('family_id')
           .eq('user_id', user.id)
+          .eq('approval_status', 'approved')
           .maybeSingle()
 
         if (membershipError) {
           console.error('Error checking family membership:', membershipError)
         }
 
-        if (membershipData?.family_id) {
-          setUserFamilyId(membershipData.family_id)
-        } else {
-          const { data: trollMembershipData, error: trollMembershipError } = await supabase
-            .from('troll_family_members')
-            .select('family_id')
-            .eq('user_id', user.id)
-            .maybeSingle()
-
-          if (trollMembershipError) {
-            console.error('Error checking troll family membership:', trollMembershipError)
-          }
-
-          setUserFamilyId(trollMembershipData?.family_id || null)
-        }
+        setUserFamilyId(membershipData?.family_id || null)
       } else {
         setUserFamilyId(null)
       }
@@ -95,7 +82,7 @@ export default function FamilyProfilePage() {
           .eq('id', familyId)
           .maybeSingle(),
         supabase
-          .from('troll_family_members')
+          .from('family_members')
           .select(
             `
             id,

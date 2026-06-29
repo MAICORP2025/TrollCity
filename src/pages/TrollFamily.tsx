@@ -57,22 +57,11 @@ export default function TrollFamily() {
           .from('family_members')
           .select('family_id')
           .eq('user_id', user.id)
+          .eq('approval_status', 'approved')
           .limit(1)
           .maybeSingle()
 
         if (memberData?.family_id) {
-          navigate('/family/home', { replace: true })
-          return
-        }
-
-        const { data: trollMemberData } = await supabase
-          .from('troll_family_members')
-          .select('family_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle()
-
-        if (trollMemberData?.family_id) {
           navigate('/family/home', { replace: true })
           return
         }

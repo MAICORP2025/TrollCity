@@ -117,8 +117,13 @@ export default function AdminSurveysPage() {
     setActiveTab('responses');
     setLoadingResponses(true);
     try {
+      console.log('[AdminSurveys] Viewing responses for survey:', surveyId);
+      console.log('[AdminSurveys] Current user:', user?.id, 'role:', profile?.role, 'is_admin:', profile?.is_admin);
       const data = await getSurveyResponses(surveyId);
+      console.log('[AdminSurveys] Responses fetched:', data.length, data);
       setResponses(data);
+    } catch (err) {
+      console.error('[AdminSurveys] Error fetching responses:', err);
     } finally {
       setLoadingResponses(false);
     }
@@ -375,9 +380,21 @@ export default function AdminSurveysPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
                 </div>
               ) : responses.length === 0 ? (
-                <div className="text-center py-12 rounded-2xl border border-purple-500/20 bg-slate-950/60">
-                  <FileText className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-400">No responses yet for this survey</p>
+                <div className="space-y-4">
+                  <div className="text-center py-12 rounded-2xl border border-purple-500/20 bg-slate-950/60">
+                    <FileText className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400">No responses yet for this survey</p>
+                  </div>
+                  {/* DEBUG PANEL */}
+                  <div className="rounded-xl border border-yellow-500/30 bg-yellow-950/20 p-4 text-xs font-mono">
+                    <p className="text-yellow-300 font-bold mb-2">🔍 DEBUG INFO</p>
+                    <p className="text-yellow-200">User ID: {user?.id || 'NULL'}</p>
+                    <p className="text-yellow-200">Role: {profile?.role || 'NULL'}</p>
+                    <p className="text-yellow-200">Is Admin: {String(profile?.is_admin)}</p>
+                    <p className="text-yellow-200">Survey ID: {selectedSurveyId}</p>
+                    <p className="text-yellow-200">Responses Found: {responses.length}</p>
+                    <p className="text-yellow-400 mt-2">Check browser console (F12) for more details</p>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">

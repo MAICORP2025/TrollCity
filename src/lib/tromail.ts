@@ -140,6 +140,10 @@ export const canAccessTromail = (profile: any): boolean => {
     role === 'tcnn_news_caster' ||
     role === 'tcnn_chief_news_caster' ||
     role === 'pastor' ||
+    role === 'hr_manager' ||
+    role === 'hr_admin' ||
+    profile?.is_hr_manager ||
+    profile?.is_hr_admin ||
     role === 'academy_teacher' ||
     role === 'academy_student' ||
     role === 'academy_director' ||

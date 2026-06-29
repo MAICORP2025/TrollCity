@@ -1130,6 +1130,191 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // --- Founder Rewards ---
+      case "grant_founder_reward": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { targetUserId, rewardType } = params;
+        if (!targetUserId || !rewardType) throw new Error("Missing targetUserId or rewardType");
+
+        const validRewards = ['ceo_fam_badge', 'agency_fee_waived', 'early_supporter', 'founder_status'];
+        if (!validRewards.includes(rewardType)) {
+          throw new Error(`Invalid reward type. Must be one of: ${validRewards.join(', ')}`);
+        }
+
+        // Use the database function to grant the reward
+        const { data, error } = await supabaseAdmin.rpc('grant_founder_reward', {
+          p_target_user_id: targetUserId,
+          p_reward_type: rewardType,
+          p_admin_id: user.id,
+        });
+
+        if (error) throw error;
+        if (data && !data.success) throw new Error(data.error || 'Failed to grant reward');
+
+        // Also update user_profiles metadata for backward compatibility
+        const { data: currentProfile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('metadata')
+          .eq('id', targetUserId)
+          .single();
+
+        const currentMeta = (currentProfile?.metadata as Record<string, any>) || {};
+        const updatedMeta = { ...currentMeta, [rewardType]: true };
+
+        await supabaseAdmin
+          .from('user_profiles')
+          .update({ metadata: updatedMeta })
+          .eq('id', targetUserId);
+
+        // If granting CEO Fam Badge, also equip the founder frame
+        if (rewardType === 'ceo_fam_badge') {
+          const { data: frameData } = await supabaseAdmin
+            .from('profile_frames')
+            .select('id')
+            .eq('rarity', 'founder')
+            .maybeSingle();
+
+          if (frameData?.id) {
+            // Insert or update user_profile_frames
+            await supabaseAdmin
+              .from('user_profile_frames')
+              .upsert({
+                user_id: targetUserId,
+                frame_id: frameData.id,
+                is_equipped: true,
+              }, { onConflict: 'user_id, frame_id' });
+          }
+        }
+
+        // If granting agency fee waived, update agency_applications if exists
+        if (rewardType === 'agency_fee_waived') {
+          await supabaseAdmin
+            .from('agency_applications')
+            .update({ fee_waived: true })
+            .eq('user_id', targetUserId)
+            .eq('status', 'pending');
+        }
+
+        result = data;
+        break;
+      }
+
+      case "get_founder_rewards": {
+        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
+        const { targetUserId } = params;
+
+        let query = supabaseAdmin
+          .from('founder_rewards')
+          .select('*');
+
+        if (targetUserId) {
+          query = query.eq('user_id', targetUserId);
+        }
+
+        const { data: rewards, error } = await query;
+        if (error) throw error;
+
+        // Also get grant history
+        const { data: grants, error: grantsError } = await supabaseAdmin
+          .from('founder_rewards_grants')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        result = { rewards: rewards || [], grants: grants || [] };
+        break;
+      }
+
+      // --- Executive Secretary Management ---
+      case "get_secretary_assignments": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        
+        const { data: assignments, error } = await supabaseAdmin
+          .from('secretary_assignments')
+          .select('*');
+        
+        if (error) throw error;
+        
+        // Fetch profiles separately since FK points to auth.users, not user_profiles
+        const secretaryIds = (assignments || []).map(a => a.secretary_id);
+        let profilesMap: Record<string, { username: string; avatar_url: string }> = {};
+        
+        if (secretaryIds.length > 0) {
+          const { data: profiles } = await supabaseAdmin
+            .from('user_profiles')
+            .select('id, username, avatar_url')
+            .in('id', secretaryIds);
+          
+          if (profiles) {
+            profilesMap = Object.fromEntries(profiles.map(p => [p.id, { username: p.username, avatar_url: p.avatar_url }]));
+          }
+        }
+        
+        result = { 
+          assignments: (assignments || []).map(a => ({
+            ...a,
+            secretary: profilesMap[a.secretary_id] || { username: 'Unknown', avatar_url: '' }
+          }))
+        };
+        break;
+      }
+
+      case "search_users_for_secretary": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { query } = params;
+        if (!query || query.length < 3) throw new Error("Invalid query");
+
+        const { data, error } = await supabaseAdmin
+          .from('user_profiles')
+          .select('id, username, avatar_url')
+          .ilike('username', `%${query}%`)
+          .limit(5);
+
+        if (error) throw error;
+        result = { users: data };
+        break;
+      }
+
+      case "assign_secretary": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { secretaryId } = params;
+        if (!secretaryId) throw new Error("Missing secretaryId");
+
+        // Check current count
+        const { count, error: countError } = await supabaseAdmin
+            .from('secretary_assignments')
+            .select('*', { count: 'exact', head: true });
+        
+        if (countError) throw countError;
+        if ((count || 0) >= 2) throw new Error("Maximum of 2 executive secretaries allowed");
+
+        const { error } = await supabaseAdmin
+            .from('secretary_assignments')
+            .insert({
+                secretary_id: secretaryId,
+                assigned_by: user.id
+            });
+
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
+      case "remove_secretary": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { assignmentId } = params;
+        if (!assignmentId) throw new Error("Missing assignmentId");
+
+        const { error } = await supabaseAdmin
+            .from('secretary_assignments')
+            .delete()
+            .eq('id', assignmentId);
+
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }

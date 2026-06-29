@@ -7208,8 +7208,8 @@ const handleLike = useCallback(async () => {
                   role={userActionTarget.role}
                   createdAt={userActionTarget.createdAt}
                   isHost={isHost}
-                  isModerator={false}
-                  isOfficer={isOfficer || isCurrentUserBroadofficer}
+                  isModerator={isOfficer || isCurrentUserBroadofficer}
+                  isOfficer={isOfficer}
                   onGift={() => onGift(userActionTarget.userId)}
                   onKickStage={() => handleGeneralKick()}
                 />

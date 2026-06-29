@@ -282,6 +282,7 @@ export default function Sidebar() {
             .from('family_members')
             .select('family_id')
             .eq('user_id', profile.id)
+            .eq('approval_status', 'approved')
             .limit(1)
             .maybeSingle()
 
@@ -292,24 +293,6 @@ export default function Sidebar() {
               .eq('id', memberData.family_id)
               .maybeSingle()
             if (familyFromMembers) finalFamilyData = familyFromMembers
-          }
-        }
-
-        if (!finalFamilyData) {
-          const { data: trollMemberData } = await supabase
-            .from('troll_family_members')
-            .select('family_id')
-            .eq('user_id', profile.id)
-            .limit(1)
-            .maybeSingle()
-
-          if (trollMemberData) {
-            const { data: familyFromTrollMembers } = await supabase
-              .from('troll_families')
-              .select('*')
-              .eq('id', trollMemberData.family_id)
-              .maybeSingle()
-            if (familyFromTrollMembers) finalFamilyData = familyFromTrollMembers
           }
         }
 

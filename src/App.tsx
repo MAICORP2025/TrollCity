@@ -168,6 +168,7 @@ const CreditScorePage = lazyWithRetry(() => import("./pages/CreditScorePage"));
 // Admin pages
 const AdminJailManagement = lazyWithRetry(() => import("./pages/admin/AdminJailManagement"));
 const RoleManagement = lazyWithRetry(() => import("./pages/admin/RoleManagement"));
+const StaffAuditDashboard = lazyWithRetry(() => import("./pages/admin/StaffAuditDashboard"));
 const MediaLibrary = lazyWithRetry(() => import("./pages/admin/MediaLibrary"));
 const ChatModeration = lazyWithRetry(() => import("./pages/admin/ChatModeration"));
 const Announcements = lazyWithRetry(() => import("./pages/admin/Announcements"));
@@ -198,7 +199,7 @@ const ShareAThonVerification = lazyWithRetry(() => import("./pages/shareathon/Sh
 const ResetMaintenance = lazyWithRetry(() => import("./pages/admin/ResetMaintenance"));
 const Government = lazyWithRetry(() => import("./pages/Government"));
 const GovernmentStreams = lazyWithRetry(() => import("./pages/government/GovernmentStreams"));
-const AdminHR = lazyWithRetry(() => import("./pages/admin/AdminHR"));
+const HRCenter = lazyWithRetry(() => import("./pages/HRCenter"));
 const UserFormsTab = lazyWithRetry(() => import("./pages/admin/components/UserFormsTab"));
 const BucketsDashboard = lazyWithRetry(() => import("./pages/admin/BucketsDashboard"));
 const GrantCoins = lazyWithRetry(() => import("./pages/admin/GrantCoins"));
@@ -212,6 +213,7 @@ const TaxUpload = lazyWithRetry(() => import("./pages/TaxUpload"));
 const AdminPayoutDashboard = lazyWithRetry(() => import("./pages/admin/components/AdminPayoutDashboard"));
 const AdminLiveOfficersTracker = lazyWithRetry(() => import("./pages/admin/AdminLiveOfficersTracker"));
 const AdminVerifiedUsers = lazyWithRetry(() => import("./pages/admin/AdminVerifiedUsers"));
+const AdminActivity = lazyWithRetry(() => import("./pages/admin/AdminActivity"));
 const AdminVerificationReview = lazyWithRetry(() => import("./pages/admin/AdminVerificationReview"));
 const AdminPoliciesDocs = lazyWithRetry(() => import("./pages/admin/AdminPoliciesDocs"));
 const ExecutiveSecretaries = lazyWithRetry(() => import("./pages/admin/ExecutiveSecretaries"));
@@ -1611,8 +1613,35 @@ const handleVisibilityChange = async () => {
                         <AgencyHRDashboard />
                       </RequireRole>
                     }
-                  />
-                  <Route path="/broadcast/setup" element={<SetupPage />} />
+                   />
+                   <Route
+                     path="/hr-center"
+                     element={
+                       <RequireRole
+                         roles={[
+                           UserRole.ADMIN,
+                           UserRole.HR_ADMIN,
+                           UserRole.HR_MANAGER,
+                           UserRole.AGENCY_HR_MANAGER,
+                           UserRole.TROLL_OFFICER,
+                           UserRole.LEAD_TROLL_OFFICER,
+                           UserRole.PASTOR,
+                           UserRole.AGENCY_LEADER,
+                           UserRole.SECRETARY,
+                           UserRole.ATTORNEY,
+                           UserRole.PROSECUTOR,
+                           UserRole.JOURNALIST,
+                           UserRole.AUCTIONEER,
+                           UserRole.TROLLER,
+                           UserRole.CEO_ASSISTANT,
+                           UserRole.NOAH_ASSISTANT,
+                         ]}
+                       >
+                         <HRCenter />
+                       </RequireRole>
+                     }
+                   />
+                   <Route path="/broadcast/setup" element={<SetupPage />} />
 <Route path="/broadcast/setup/gaming" element={<GamingSetupPage />}>
   <Route path="analytics" element={<GamingAnalytics />} />
   <Route path="community" element={<GamingCommunity />} />
@@ -2338,6 +2367,14 @@ const handleVisibilityChange = async () => {
                       }
                     />
                     <Route
+                      path="/admin/staff-audit"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN, UserRole.SECRETARY, UserRole.LEAD_TROLL_OFFICER]}>
+                          <StaffAuditDashboard />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
                       path="/admin/media-library"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
@@ -2452,6 +2489,14 @@ const handleVisibilityChange = async () => {
                       }
                     />
                     <Route
+                      path="/admin/activity"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <AdminActivity />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
                       path="/admin/finance"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
@@ -2560,14 +2605,10 @@ const handleVisibilityChange = async () => {
                         </RequireRole>
                       }
                     />
-                  <Route
-                    path="/admin/hr"
-                    element={
-                      <RequireRole roles={[UserRole.ADMIN, UserRole.TROLL_OFFICER, UserRole.HR_ADMIN]}>
-                        <AdminHR />
-                      </RequireRole>
-                    }
-                  />
+                   <Route
+                     path="/admin/hr"
+                     element={<Navigate to="/hr-center" replace />}
+                   />
                   <Route
                     path="/admin/appeals"
                     element={

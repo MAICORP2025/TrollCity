@@ -5,7 +5,7 @@ import {
   Eye,
   Flame,
   Gift,
-  Heart,
+  Lock,
   Medal,
   Plus,
   Radio,
@@ -19,12 +19,23 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatDistanceToNowStrict, isAfter, isBefore } from 'date-fns'
-import { trollCityTheme } from '@/styles/trollCityTheme'
 import { useLeagueSnapshot } from '@/hooks/useLeagueSnapshot'
-import { useLeagueStandings, useMyFamilyLeagueStanding } from '@/hooks/useFamilyLeagues'
+import { useLeagueStandings } from '@/hooks/useFamilyLeagues'
 import { useUserLeagues } from '@/hooks/useUserLeagues'
 import { useLeagues } from '@/hooks/useLeagues'
 import { useAuthStore } from '@/lib/store'
+import { supabase } from '@/lib/supabase'
+import {
+  formatTierLabel,
+  getTierFromXp,
+  getTierInfo,
+  getNextTier,
+  getTierProgress,
+  getTierTasks,
+  getCurrentWeek,
+  getCycleKey,
+  LeagueTask,
+} from '@/lib/leagueHelpers'
 
 interface LeaguesTabProps {
   streamId?: string | null
@@ -54,6 +65,7 @@ type LeagueEventLike = {
   starts_at?: string
   ends_at?: string
   metadata?: Record<string, unknown> | null
+  points_multiplier?: number
 }
 
 const formatCompactNumber = (value?: number | null) => {
@@ -327,101 +339,110 @@ function LeagueSkeleton() {
   )
 }
 
-function PrideChallengesLeaguesView() {
-  const now = new Date()
-  const currentWeek = Math.min(4, Math.max(1, Math.ceil(now.getDate() / 7)))
-  const dayOfWeek = now.getDay()
-  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
+function TierTaskCard({
+  task,
+  isClaimedByUser,
+  isClaiming,
+  onClaim,
+}: {
+  task: LeagueTask
+  isClaimedByUser: boolean
+  isClaiming: boolean
+  onClaim: (task: LeagueTask) => void
+}) {
+  const isLocked = task.status === 'locked'
+  const isCompleted = task.status === 'completed'
+  const isClaimed = task.status === 'claimed' || isClaimedByUser
+  const progress = task.target > 0 ? Math.min(100, Math.round((task.current / task.target) * 100)) : 0
 
-  const allPrideChallenges: Array<{ week: number; title: string; description: string; xp: string; color: string }> = [
-    // Week 1
-    { week: 1, title: 'Show Your Pride', description: 'Update your profile frame to a Pride theme', xp: '500 XP', color: 'pink' },
-    { week: 1, title: 'Rainbow Greeting', description: 'Send 10 positive chat messages today', xp: '750 XP', color: 'red' },
-    { week: 1, title: 'Pride Profile', description: 'Add a Pride badge to your profile', xp: '300 XP', color: 'orange' },
-    { week: 1, title: 'Spread Love', description: 'Like 20 posts on the Troll Wall', xp: '400 XP', color: 'yellow' },
-    { week: 1, title: 'Community Spirit', description: 'Reply to 5 different wall posts', xp: '600 XP', color: 'green' },
-    // Week 2
-    { week: 2, title: 'Ally Actions', description: 'Support 5 different users with gifts', xp: '1,000 XP', color: 'cyan' },
-    { week: 2, title: 'Wall Storyteller', description: 'Post 3 Pride-themed messages on the wall', xp: '800 XP', color: 'purple' },
-    { week: 2, title: 'Gift of Pride', description: 'Send a Pride gift to 3 friends', xp: '900 XP', color: 'pink' },
-    { week: 2, title: 'Pride Explorer', description: 'Visit 5 different neighborhoods', xp: '600 XP', color: 'red' },
-    // Week 3
-    { week: 3, title: 'Pride Champion', description: 'Win a battle with a Pride theme equipped', xp: '1,200 XP', color: 'orange' },
-    { week: 3, title: 'Family Pride', description: 'Invite a friend to join your Troll Family', xp: '1,000 XP', color: 'yellow' },
-    { week: 3, title: 'Pride Collector', description: 'Purchase a Pride item from the store', xp: '750 XP', color: 'green' },
-    { week: 3, title: 'Voice of Pride', description: 'Spend 30 minutes in a voice room', xp: '500 XP', color: 'cyan' },
-    { week: 3, title: 'Pride Shoutout', description: 'Give 10 compliments in chat', xp: '800 XP', color: 'blue' },
-    // Week 4
-    { week: 4, title: 'Pride Legend', description: 'Reach top 10 on any leaderboard', xp: '2,000 XP', color: 'purple' },
-    { week: 4, title: 'Pride Marathon', description: 'Be active for 5 days this week', xp: '1,500 XP', color: 'pink' },
-    { week: 4, title: 'Pride Connector', description: 'Add 5 new friends to your list', xp: '900 XP', color: 'red' },
-    { week: 4, title: 'Pride Creator', description: 'Share a Pride moment on your wall', xp: '1,000 XP', color: 'orange' },
-    { week: 4, title: 'Ultimate Pride', description: 'Complete all other Pride challenges', xp: '5,000 XP', color: 'yellow' },
-  ]
+  const statusLabel = isLocked
+    ? 'Locked'
+    : isClaimed
+      ? 'Claimed'
+      : isCompleted
+        ? 'Completed'
+        : 'Active'
 
-  const colorMap: Record<string, string> = {
-    pink: 'border-pink-400/25 bg-pink-500/[0.07]',
-    red: 'border-red-400/25 bg-red-500/[0.07]',
-    orange: 'border-orange-400/25 bg-orange-500/[0.07]',
-    yellow: 'border-yellow-300/25 bg-yellow-300/[0.07]',
-    green: 'border-green-400/25 bg-green-500/[0.07]',
-    cyan: 'border-cyan-400/25 bg-cyan-500/[0.07]',
-    blue: 'border-blue-400/25 bg-blue-500/[0.07]',
-    purple: 'border-purple-400/25 bg-purple-500/[0.07]',
-  }
-
-  const xpColorMap: Record<string, string> = {
-    pink: 'text-pink-300',
-    red: 'text-red-300',
-    orange: 'text-orange-300',
-    yellow: 'text-yellow-300',
-    green: 'text-green-300',
-    cyan: 'text-cyan-300',
-    blue: 'text-blue-300',
-    purple: 'text-purple-300',
-  }
-
-  const visibleChallenges = allPrideChallenges.filter(c => c.week <= currentWeek)
+  const statusTone = isLocked
+    ? 'bg-slate-700/40 text-slate-300 border-slate-500/20'
+    : isClaimed
+      ? 'bg-slate-700/60 text-slate-200 border-slate-500/30'
+      : isCompleted
+        ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/25'
+        : 'bg-cyan-500/10 text-cyan-200 border-cyan-400/25'
 
   return (
-    <div className="mt-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-lg font-black text-white">Week {currentWeek} of 4</p>
-          <p className="text-xs text-slate-400">Updates every Sunday</p>
+    <div
+      className={`relative overflow-hidden rounded-2xl border p-4 transition ${
+        isLocked
+          ? 'border-white/5 bg-white/[0.02] opacity-70'
+          : 'border-white/10 bg-white/[0.04] hover:border-cyan-300/30 hover:bg-cyan-300/[0.05]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
+              {task.tierLabel}
+            </span>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] ${statusTone}`}>
+              {statusLabel}
+            </span>
+          </div>
+          <p className="mt-2 text-sm font-black text-white">{task.title}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">{task.description}</p>
         </div>
-        <span className="rounded-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 px-3 py-1.5 text-[11px] font-black text-pink-200">
-          {visibleChallenges.length}/{allPrideChallenges.length}
+        {isLocked && <Lock className="mt-1 h-4 w-4 shrink-0 text-slate-500" />}
+      </div>
+
+      {!isLocked && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+            <span>{task.current}/{task.target}</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full rounded-full transition-all ${
+                isCompleted || isClaimed ? 'bg-emerald-400' : 'bg-cyan-400'
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center gap-3 text-[11px] text-slate-300">
+        <span className="inline-flex items-center gap-1">
+          <Zap className="h-3 w-3 text-yellow-300" />
+          {formatCompactNumber(task.rewardXp)} XP
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Gift className="h-3 w-3 text-pink-300" />
+          {formatCompactNumber(task.rewardCoins)} coins
         </span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {visibleChallenges.map((ch) => (
-          <div key={ch.title} className={`rounded-2xl border p-4 ${colorMap[ch.color] || 'border-white/10 bg-white/[0.04]'}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-black text-white">{ch.title}</p>
-                <p className="mt-2 text-sm text-slate-300">{ch.description}</p>
-              </div>
-              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${xpColorMap[ch.color] || 'text-yellow-300'}`}>
-                {ch.xp}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-purple-400/20 bg-purple-500/10 p-4">
-        <div className="flex gap-3">
-          <Heart className="mt-0.5 h-5 w-5 shrink-0 text-purple-200" />
-          <div>
-            <p className="font-black text-white">Next update in {daysUntilSunday} day{daysUntilSunday !== 1 ? 's' : ''}</p>
-            <p className="mt-1 text-sm text-slate-300">
-              Check back Sunday for new challenges and updated rewards! 🏳️‍🌈
-            </p>
-          </div>
+      {isCompleted && !isClaimed && (
+        <button
+          type="button"
+          onClick={() => onClaim(task)}
+          disabled={isClaiming}
+          className="mt-3 w-full rounded-xl border border-emerald-400/25 bg-emerald-500/20 py-1.5 text-xs font-black text-emerald-100 transition hover:bg-emerald-500/25 disabled:opacity-50"
+        >
+          {isClaiming ? 'Claiming...' : 'Claim Reward'}
+        </button>
+      )}
+      {!isCompleted && !isLocked && (
+        <div className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] py-1.5 text-center text-[11px] font-black uppercase tracking-[0.14em] text-white/40">
+          In Progress
         </div>
-      </div>
+      )}
+      {isClaimed && (
+        <div className="mt-3 w-full rounded-xl border border-emerald-400/20 bg-emerald-500/10 py-1.5 text-center text-xs font-black text-emerald-200">
+          Claimed
+        </div>
+      )}
     </div>
   )
 }
@@ -439,8 +460,6 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
     userLeagueProgress,
     missions,
     claimMission,
-    isClaimingMission,
-    claimingMissionId,
     refreshLeague,
   } = useLeagueSnapshot({
     streamId: streamId || null,
@@ -449,12 +468,6 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
   })
 
   const { standings, season: familySeason } = useLeagueStandings()
-  const { standing: myFamilyStanding } = useMyFamilyLeagueStanding()
-  const familyTopStandings = useMemo(
-    () => (standings || []).slice(0, 4),
-    [standings]
-  )
-
   const {
     myLeagues,
     myMemberships,
@@ -466,19 +479,45 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
     createLeague,
     joinLeague,
     leaveLeague,
-    claimMission: claimLeagueMission,
-    refreshLeagues: refreshUserLeagues,
-  } = useUserLeagues()
+     claimMission: claimLeagueMission,
+     refreshLeagues: refreshUserLeagues,
+   } = useUserLeagues()
+   const { publicLeagues, isLoading: isPublicLeaguesLoading } = useLeagues()
+   const { profile } = useAuthStore()
 
-  const { publicLeagues, isLoading: isPublicLeaguesLoading } = useLeagues()
-  const { profile } = useAuthStore()
+   const [claimedTaskIds, setClaimedTaskIds] = useState<Set<string>>(new Set())
+   const [isClaimingTaskId, setIsClaimingTaskId] = useState<string | null>(null)
 
-  const userLevel = profile?.level ?? 0
-  const isAdmin = profile?.is_admin === true || String(profile?.role) === 'admin' || String(profile?.role) === 'ceo' || String(profile?.role) === 'superadmin'
-  const hasRole = profile?.role != null && String(profile.role) !== '' && String(profile.role) !== 'user'
-  const canCreateLeague = userLevel >= 10 || isAdmin || hasRole
+   const handleClaimTask = async (task: LeagueTask) => {
+     if (!profile?.id || isClaimingTaskId) return
+     setIsClaimingTaskId(task.id)
+     try {
+       await supabase.rpc('grant_xp', {
+         p_user_id: profile.id,
+         p_amount: task.rewardXp,
+         p_source: 'tier_task',
+         p_source_id: task.id,
+       })
+       await supabase.rpc('add_coins', {
+         p_user_id: profile.id,
+         p_amount: task.rewardCoins,
+         p_coin_type: 'paid',
+       })
+       setClaimedTaskIds((prev) => {
+         const next = new Set(prev)
+         next.add(task.id)
+         return next
+       })
+     } finally {
+       setIsClaimingTaskId(null)
+     }
+   }
 
-  const [selectedFilter, setSelectedFilter] = useState<'Weekly' | 'Monthly' | 'All-Time'>('Weekly')
+   const userLevel = profile?.level ?? 0
+   const isAdmin = profile?.is_admin === true || String(profile?.role) === 'admin' || String(profile?.role) === 'ceo' || String(profile?.role) === 'superadmin'
+   const hasRole = profile?.role != null && String(profile.role) !== '' && String(profile.role) !== 'user'
+   const canCreateLeague = userLevel >= 10 || isAdmin || hasRole
+
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showBrowseLeagues, setShowBrowseLeagues] = useState(false)
   const [newLeagueName, setNewLeagueName] = useState('')
@@ -518,34 +557,36 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
     [leagueMissions]
   )
 
-  const seasonDateRange = familySeason
-    ? `${new Date(familySeason.season_start_date).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      })} — ${new Date(familySeason.season_end_date).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      })}`
-    : ''
-
   const event = activeEvent as LeagueEventLike | null
   const timeStatus = getTimeStatus(event)
 
-  const activeMissions = useMemo(
-    () => (missions || []).filter((mission) => mission.status === 'active'),
-    [missions]
-  )
-
-  const claimableMissions = useMemo(
-    () => (missions || []).filter((mission) => mission.status === 'completed'),
-    [missions]
-  )
-
   const rankLabel = userRank ? `#${userRank}` : '—'
-  const userTier = userLeagueProgress?.tier || 'Rookie Citizen League'
-  const userXpProgress = userLeagueProgress?.xpProgress ?? 0
-  const xpToNext = userLeagueProgress?.xpToNext ?? 0
-  const nextReward = userLeagueProgress?.nextReward || 'Rookie Bonus Pack'
+  const userXpTotal = userLeagueProgress?.xpTotal ?? profile?.xp ?? 0
+  const userTier = getTierFromXp(userXpTotal)
+  const userTierInfo = getTierInfo(userTier)
+  const nextTierInfo = getNextTier(userTier)
+  const tierProgress = getTierProgress(userXpTotal)
+
+  const leagueMissionMap = useMemo(() => {
+    const map: Record<string, { current_value?: number; status?: string }> = {}
+    for (const mission of leagueMissions) {
+      if (mission.mission_key) {
+        map[mission.mission_key] = {
+          current_value: mission.current_value,
+          status: mission.status,
+        }
+      }
+    }
+    return map
+  }, [leagueMissions])
+
+  const currentWeek = getCurrentWeek()
+  const currentCycle = getCycleKey()
+
+  const tierTasks = useMemo(
+    () => getTierTasks(userTier, currentCycle, currentWeek, leagueMissionMap),
+    [userTier, currentCycle, currentWeek, leagueMissionMap]
+  )
 
   const normalizedLeaderboard = useMemo(() => {
     return (leaderboard || [])
@@ -664,9 +705,9 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-white/45">
-                  League Progress
+                  Troll City Tier System
                 </p>
-                <h4 className="mt-2 text-2xl font-black text-white">{userTier}</h4>
+                <h4 className="mt-2 text-2xl font-black text-white">{formatTierLabel(userTier)}</h4>
               </div>
 
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-white/70">
@@ -675,40 +716,52 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
             </div>
 
             <p className="mt-4 text-sm leading-6 text-slate-300">
-              Level {userLeagueProgress?.level ?? 1} • {userLeagueProgress?.paidChatUnlock ? 'Paid chat ready' : `Level ${userLeagueProgress?.paidChatTargetLevel ?? 420} unlock`}
+              Your T0–T10 tier grows from real activity: watching, chatting, gifting, battles, family wars, and agency missions.
             </p>
 
             <div className="mt-4 rounded-3xl bg-white/5 p-4">
               <div className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
-                <span>{formatCompactNumber(userLeagueProgress?.xpTotal ?? 0)} XP</span>
-                <span>{xpToNext} to next</span>
+                <span>{formatCompactNumber(userXpTotal)} XP</span>
+                <span>
+                  {tierProgress.isMaxTier
+                    ? 'Max tier reached'
+                    : `${formatCompactNumber(tierProgress.xpNeededForNextTier)} to next`}
+                </span>
               </div>
               <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full bg-cyan-400 transition-all"
-                  style={{ width: `${userXpProgress}%` }}
+                  style={{ width: `${tierProgress.progressPercent}%` }}
                 />
               </div>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-white/45">Level</p>
-                <p className="mt-2 text-lg font-black text-white">{userLeagueProgress?.level ?? 1}</p>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/45">Current Tier</p>
+                <p className="mt-2 text-lg font-black text-white">{userTierInfo.shortLabel}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-white/45">Progress</p>
-                <p className="mt-2 text-lg font-black text-white">{userXpProgress}%</p>
+                <p className="mt-2 text-lg font-black text-white">{tierProgress.progressPercent}%</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-white/45">Paid Chat</p>
-                <p className="mt-2 text-lg font-black text-white">{userLeagueProgress?.paidChatUnlock ? 'Unlocked' : 'Locked'}</p>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/45">Next Tier</p>
+                <p className="mt-2 text-lg font-black text-white">
+                  {nextTierInfo ? nextTierInfo.shortLabel : '—'}
+                </p>
               </div>
             </div>
 
             <div className="mt-4 rounded-3xl border border-cyan-300/15 bg-cyan-300/5 p-4 text-sm text-slate-200">
-              <p className="font-black text-white">Next league reward</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{nextReward}</p>
+              <p className="font-black text-white">
+                {nextTierInfo ? `Next unlock: ${nextTierInfo.name}` : 'You reached the Final Boss tier'}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                {nextTierInfo
+                  ? `Earn ${formatCompactNumber(tierProgress.xpNeededForNextTier)} more XP to unlock ${nextTierInfo.reward}.`
+                  : 'Maintain top rank and complete seasonal goals to stay on top of Troll City.'}
+              </p>
             </div>
           </div>
 
@@ -717,9 +770,9 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
               <div className="flex items-center gap-3">
                 <Sparkles className="h-5 w-5 text-cyan-200" />
                 <div>
-                  <p className="font-black text-white">League Creator Status</p>
+                  <p className="font-black text-white">Troll City Tier System</p>
                   <p className="mt-1 text-sm leading-6 text-slate-300">
-                    Auto-generated Troll City league events refresh as the current event closes. Stay active to maintain rank and unlock the next system event.
+                    Your T0–T10 tier grows from real activity: watching, chatting, gifting, battles, family wars, and agency missions.
                   </p>
                 </div>
               </div>
@@ -766,6 +819,35 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* ═══ TIER TASKS SECTION ═══ */}
+        <div className="rounded-[1.75rem] border border-purple-300/15 bg-purple-500/[0.06] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">
+                T0–T10 League Tasks
+              </p>
+              <p className="mt-1 text-sm text-slate-300">
+                Complete tasks for your current tier to climb toward T10 · Final Boss. Higher tiers unlock as you grow.
+              </p>
+            </div>
+            <span className="rounded-full border border-purple-300/20 bg-purple-400/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-purple-100">
+              {userTierInfo.shortLabel} · {userTierInfo.name}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {tierTasks.map((task) => (
+              <TierTaskCard
+                key={task.id}
+                task={task}
+                isClaimedByUser={claimedTaskIds.has(task.id)}
+                isClaiming={isClaimingTaskId === task.id}
+                onClaim={handleClaimTask}
+              />
+            ))}
           </div>
         </div>
 
@@ -1024,21 +1106,6 @@ export default function LeaguesTab({ streamId, category }: LeaguesTabProps) {
               You haven't joined any leagues yet. Browse public leagues or create your own!
             </p>
           )}
-        </div>
-
-        <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">
-                🏳️‍🌈 Pride Challenges
-              </p>
-              <p className="mt-1 text-sm text-slate-300">
-                Complete Pride Month challenges to earn XP and celebrate with the community.
-              </p>
-            </div>
-          </div>
-
-          <PrideChallengesLeaguesView />
         </div>
 
         {isLoading ? (

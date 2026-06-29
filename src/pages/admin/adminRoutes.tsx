@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image, TrendingUp, PieChart, HeadphonesIcon, Gift, Calendar, Crown } from 'lucide-react'
+import { Database, Shield, RefreshCw, Settings, FileText, AlertTriangle, Phone, Gavel, Trophy, DollarSign, Lock, Zap, MapPin, ShoppingCart, Megaphone, Share2, Image, TrendingUp, PieChart, HeadphonesIcon, Gift, Calendar, Crown, Award, Activity } from 'lucide-react'
 import { UserRole } from '../../lib/supabase'
 
 const CustomerServiceDashboard = lazy(() => import('./CustomerServiceDashboard'))
@@ -12,6 +12,7 @@ const CacheClear = lazy(() => import('./CacheClear'))
 const SystemConfig = lazy(() => import('./SystemConfig'))
 const CoinPackPurchasesLedger = lazy(() => import('./CoinPackPurchasesLedger'))
 const StartupExpenseTracker = lazy(() => import('./StartupExpenseTracker'))
+const AdminActivity = lazy(() => import('./AdminActivity'))
 
 const UserFormsTab = lazy(() => import('./components/UserFormsTab'))
 const AdminErrors = lazy(() => import('./AdminErrors'))
@@ -31,6 +32,7 @@ const FridayBattlesDashboard = lazy(() => import('./FridayBattlesDashboard'))
 const LoadLab = lazy(() => import('../../components/admin/LoadLab'))
 const AdminCrownRedemptions = lazy(() => import('./AdminCrownRedemptions'))
 const SellerManagement = lazy(() => import('./SellerManagement'))
+const ExecutiveSecretaries = lazy(() => import('./ExecutiveSecretaries'))
 
 export interface AdminRoute {
   id: string
@@ -72,6 +74,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileColor: 'text-yellow-200',
     tileBgColor: 'bg-yellow-500/10',
     tileBorderColor: 'border-yellow-500/30',
+    category: 'system'
+  },
+  {
+    id: 'activity',
+    title: 'Activity',
+    path: '/admin/activity',
+    component: AdminActivity,
+    roles: [UserRole.ADMIN],
+    description: 'Monitor frontend user activity by page, user, errors, and actions',
+    icon: <Activity className="w-5 h-5 text-cyan-200" />,
+    tileColor: 'text-cyan-200',
+    tileBgColor: 'bg-cyan-500/10',
+    tileBorderColor: 'border-cyan-500/30',
     category: 'system'
   },
   {
@@ -402,5 +417,18 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileBgColor: 'bg-blue-500/10',
      tileBorderColor: 'border-blue-500/30',
      category: 'economy'
-   }
+   },
+  {
+    id: 'executive-secretaries',
+    title: 'Secretary & Founder Rewards',
+    path: '/admin/secretary',
+    component: ExecutiveSecretaries,
+    roles: [UserRole.ADMIN, UserRole.SECRETARY, UserRole.EXECUTIVE_SECRETARY, UserRole.TROLL_CITY_SECRETARY],
+    description: 'Manage secretary assignments and grant exclusive founder rewards (CEO Fam Badge, Agency Fee Waiver, Early Supporter, Founder Status)',
+    icon: <Award className="w-5 h-5 text-amber-200" />,
+    tileColor: 'text-amber-200',
+    tileBgColor: 'bg-amber-500/10',
+    tileBorderColor: 'border-amber-500/30',
+    category: 'users'
+  }
    ]

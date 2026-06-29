@@ -43,7 +43,6 @@ interface RoleGrant {
   id: string
   user_id: string
   role_id: string
-  granted_at?: string | null
   expires_at?: string | null
   created_at?: string | null
   is_active?: boolean | null
@@ -255,7 +254,7 @@ export default function PresidentialOversightPanel() {
 
       const { data: grants, error } = await supabase
         .from('user_role_grants')
-        .select('id, user_id, role_id, granted_at, expires_at, created_at, is_active')
+        .select('id, user_id, role_id, expires_at, created_at, is_active')
         .in('role_id', roleIds)
         .order('created_at', { ascending: false })
 
@@ -288,7 +287,7 @@ export default function PresidentialOversightPanel() {
           userId: grant.user_id,
           username: profile?.username || `user_${grant.user_id.slice(0, 8)}`,
           avatarUrl: profile?.avatar_url || null,
-          grantedAt: grant.granted_at || grant.created_at || null,
+          grantedAt: grant.created_at || null,
           expiresAt: grant.expires_at || currentElection?.ends_at || null,
           source: 'role_grant',
         }

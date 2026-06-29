@@ -36,13 +36,12 @@ export function useLeagueMissions(leagueEventId?: string | null): UseLeagueMissi
     try {
       let eventId = leagueEventId
       if (!eventId) {
-        const { data: eventData, error: ensureError } = await supabase.rpc('ensure_league_system_ready')
-        if (ensureError) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('[useLeagueMissions] ensure_league_system_ready failed:', ensureError)
-          }
+        try {
+          const { data: eventData } = await supabase.rpc('ensure_league_system_ready')
+          eventId = eventData?.id ?? eventId
+        } catch {
+          // RPC may not exist yet or has mismatched signature — non-fatal
         }
-        eventId = eventData?.id ?? eventId
 
         if (!eventId) {
           const now = new Date().toISOString()

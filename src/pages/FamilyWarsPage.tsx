@@ -32,10 +32,11 @@ export default function FamilyWarsPage() {
 
   const loadMyFamily = useCallback(async () => {
     const { data: member } = await supabase
-      .from('troll_family_members')
+      .from('family_members')
       .select('family_id, family:troll_families(id, name)')
       .eq('user_id', user!.id)
-      .single()
+      .eq('approval_status', 'approved')
+      .maybeSingle()
 
     if (member?.family) {
       setMyFamily(member.family as unknown as Family)
@@ -49,7 +50,7 @@ export default function FamilyWarsPage() {
 
   const loadWars = useCallback(async () => {
     const { data } = await supabase
-      .from('troll_family_wars')
+      .from('family_wars')
       .select(
         `
         *,
@@ -88,7 +89,7 @@ export default function FamilyWarsPage() {
       return
     }
 
-    const { error } = await supabase.from('troll_family_wars').insert({
+    const { error } = await supabase.from('family_wars').insert({
       challenger_family_id: myFamily.id,
       defender_family_id: challengingId,
       status: 'pending',

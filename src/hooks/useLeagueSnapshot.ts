@@ -68,7 +68,7 @@ export function useLeagueSnapshot({
       try {
         await supabase.rpc('ensure_league_system_ready')
       } catch {
-        // RPC may not exist yet if migrations haven't been applied
+        // RPC may not exist yet or has mismatched signature — non-fatal
       }
 
       // Fetch active league event
