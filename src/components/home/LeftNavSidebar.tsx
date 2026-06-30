@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   MessageCircle,
   Mic,
@@ -10,13 +11,14 @@ import {
   Star,
   Crown,
   Zap,
+  PenSquare,
 } from 'lucide-react'
 import { useLiveContent } from '@/contexts/LiveContentContext'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import FloatingPoster from './FloatingPoster'
 import LevelStatusCard from './LevelStatusCard'
 
-type TabType = 'wall' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'home' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
 interface LeftNavSidebarProps {
   activeTab: TabType
@@ -26,6 +28,7 @@ interface LeftNavSidebarProps {
   followersLiveCount: number
   presidentTabLabel: string
   showPresidentTab: boolean
+  wallNotificationCount?: number
 }
 
 export default function LeftNavSidebar({
@@ -35,17 +38,30 @@ export default function LeftNavSidebar({
   battleCount,
   followersLiveCount,
   showPresidentTab,
+  wallNotificationCount = 0,
 }: LeftNavSidebarProps) {
   const { liveAuctions } = useLiveContent()
+  const navigate = useNavigate()
+
+  const handleTabClick = (tab: typeof tabs[0]) => {
+    if (tab.isExternal) {
+      navigate(tab.path!)
+    } else {
+      setActiveTab(tab.id)
+    }
+  }
 
   const tabs: Array<{
-    id: TabType
+    id?: TabType
     label: string
     icon: React.ElementType
     activeGradient: string
     count?: number
+    isExternal?: boolean
+    path?: string
   }> = [
-    { id: 'wall', label: 'Wall', icon: MessageCircle, activeGradient: 'from-pink-500 to-purple-600' },
+    { id: 'home', label: 'Home', icon: MessageCircle, activeGradient: 'from-pink-500 to-purple-600' },
+    { label: 'Wall', icon: PenSquare, activeGradient: 'from-purple-500 to-pink-600', count: wallNotificationCount, isExternal: true, path: '/wall' },
     { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount + battleCount },
     { id: 'universe', label: 'Universe', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
     { id: 'podcast', label: 'Podcast', icon: Mic, activeGradient: 'from-purple-500 to-fuchsia-600' },
@@ -60,11 +76,11 @@ export default function LeftNavSidebar({
       <div className="flex flex-col gap-1.5 rounded-2xl border border-white/[0.08] bg-[#070b19]/70 backdrop-blur-xl p-2">
         {tabs.map((tab) => {
           const Icon = tab.icon
-          const isActive = activeTab === tab.id
+          const isActive = tab.id && activeTab === tab.id
           return (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              key={tab.label}
+              onClick={() => handleTabClick(tab)}
               className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-all duration-200 ${
                 isActive
                   ? `bg-gradient-to-r ${tab.activeGradient} shadow-lg`

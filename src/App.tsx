@@ -496,7 +496,7 @@ import ProfileSettings from "./pages/ProfileSettings";
 import DeleteAccount from "./pages/DeleteAccount";
 import TrollBank from "./pages/TrollBank";
 import Leaderboard from "./pages/Leaderboard";
-import TrollCityWall from "./pages/TrollCityWall";
+import WallPage from "./pages/WallPage";
 import WallPostPage from "./pages/WallPostPage";
 import LivingPage from "./pages/UnderConstructionPage";
 import ChurchPage from "./pages/ChurchPage";
@@ -1773,7 +1773,7 @@ const handleVisibilityChange = async () => {
                   <Route path="/jail" element={<JailPage />} />
                   <Route path="/inmates" element={<InmatesPage />} />
                   <Route path="/jail/appeal" element={<JailAppealPage />} />
-                  <Route path="/wall" element={<TrollCityWall />} />
+                  <Route path="/wall" element={<WallPage />} />
                   <Route path="/wall/:postId" element={<WallPostPage />} />
 <Route path="/profile/setup" element={<ProfileSetup />} />
                    <Route path="/profile/settings" element={<ProfileSettings />} />

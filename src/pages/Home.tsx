@@ -7,7 +7,6 @@ import {
   FileText,
   Flame,
   Gavel,
-  Gift,
   Heart,
   MessageCircle,
   Play,
@@ -30,7 +29,6 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { useLiveContent, type AuctionShow, type LiveItem } from '@/contexts/LiveContentContext'
 import useGlobalActivity from '@/hooks/useGlobalActivity'
 import type { ActivityEvent } from '@/hooks/useGlobalActivity'
-import TrollWallFeed from '@/components/home/TrollWallFeed'
 import CityLawsFeesTab from '@/components/home/CityLawsFeesTab'
 import LeaguesTab from '@/components/home/LeaguesTab'
 import PresidentCandidatesTab from '@/components/home/PresidentCandidatesTab'
@@ -39,6 +37,7 @@ import LiveAuctionMiniWindow from '@/components/home/LiveAuctionMiniWindow'
 import SupportGoalReminderModal from '@/components/SupportGoalReminderModal'
 import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
+import { useWallNotifications } from '@/hooks/useWallNotifications'
 import LeftNavSidebar from '@/components/home/LeftNavSidebar'
 import FeaturedBroadcastersRow from '@/components/home/FeaturedBroadcastersRow'
 import HyTroGamingRow from '@/components/home/HyTroGamingRow'
@@ -48,7 +47,7 @@ import BestTrollersRow from '@/components/home/BestTrollersRow'
 import PromoSlot from '@/components/promo/PromoSlot'
 import PodcastCentral from '@/pages/PodcastCentral'
 
-type TabType = 'wall' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'home' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
 const PWAInstallPrompt = lazyWithRetry(() => import('../components/PWAInstallPrompt'))
 const TCNNPopupWidget = lazyWithRetry(() => import('@/components/tcnn/TCNNPopupWidget'))
@@ -263,14 +262,16 @@ const MobileTabBar = React.memo(function MobileTabBar({
   setActiveTab,
   liveCount,
   battleCount,
+  wallNotificationCount,
 }: {
   activeTab: TabType
   setActiveTab: (tab: TabType) => void
   liveCount: number
   battleCount: number
+  wallNotificationCount: number
 }) {
   const tabs: Array<{ id: TabType; label: string; icon: React.ElementType; count?: number }> = [
-    { id: 'wall', label: 'Wall', icon: MessageCircle },
+    { id: 'home', label: 'Home', icon: MessageCircle },
     { id: 'live', label: 'Live', icon: Radio, count: liveCount + battleCount },
     { id: 'universe', label: 'Battles', icon: Sparkles, count: battleCount },
     { id: 'leagues', label: 'Leagues', icon: Trophy },
@@ -335,14 +336,15 @@ export default function Home() {
     structuredData: [websiteSchema(), organizationSchema()]
   })
 
-  const [activeTab, setActiveTab] = useState<TabType>('wall')
+  const [activeTab, setActiveTab] = useState<TabType>('home')
+  const { newPostCount: wallNotificationCount } = useWallNotifications(false)
   const [showLiveGrid, setShowLiveGrid] = useState<boolean | null>(null)
   const [kickedReason, setKickedReason] = useState<string | null>(null)
   // Read tab query param on mount (e.g. from More panel navigation)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tabParam = params.get('tab')
-    if (tabParam && ['wall', 'live', 'universe', 'laws-fees', 'leagues', 'president', 'academy'].includes(tabParam)) {
+    if (tabParam && ['home', 'live', 'universe', 'laws-fees', 'leagues', 'president', 'academy'].includes(tabParam)) {
       setActiveTab(tabParam as TabType)
     }
   }, [])
@@ -400,13 +402,13 @@ export default function Home() {
 
   useEffect(() => {
     if (isPwa && ['laws-fees', 'leagues', 'president', 'academy'].includes(activeTab)) {
-      setActiveTab('wall')
+      setActiveTab('home')
     }
   }, [isPwa, activeTab])
 
   useEffect(() => {
     if (activeTab === 'president' && currentElection?.status !== 'open') {
-      setActiveTab('wall')
+      setActiveTab('home')
     }
   }, [activeTab, currentElection?.status])
 
@@ -458,6 +460,7 @@ const handleScrollItemClick = useCallback((id: string) => {
             setActiveTab={setActiveTab}
             liveCount={allLiveItems.length}
             battleCount={battleItems.length}
+            wallNotificationCount={wallNotificationCount}
           />
         )}
 
@@ -511,7 +514,7 @@ const handleScrollItemClick = useCallback((id: string) => {
           </div>
         )}
 
-{activeTab === 'wall' && (
+{activeTab === 'home' && (
            <section className="flex gap-4">
              <LeftNavSidebar
                activeTab={activeTab}
@@ -521,9 +524,9 @@ const handleScrollItemClick = useCallback((id: string) => {
                followersLiveCount={0}
                presidentTabLabel={presidentTabLabel}
                showPresidentTab={showPresidentTab}
+               wallNotificationCount={wallNotificationCount}
              />
              <div className="min-w-0 flex-1 space-y-4">
-               <TrollWallFeed onRequireAuth={requireAuth} feedClassName="w-full" />
                <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
                <PodcastRow />
                <HyTroGamingRow onItemClick={handleScrollItemClick} />
@@ -545,6 +548,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                followersLiveCount={0}
                presidentTabLabel={presidentTabLabel}
                showPresidentTab={showPresidentTab}
+               wallNotificationCount={wallNotificationCount}
              />
              <div className="min-w-0 flex-1 space-y-4">
                <NewStreamersRow onClickItem={handleScrollItemClick} />
@@ -564,6 +568,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                 followersLiveCount={battleItems.length}
                 presidentTabLabel={presidentTabLabel}
                 showPresidentTab={showPresidentTab}
+                wallNotificationCount={wallNotificationCount}
               />
               <div className="min-w-0 flex-1">
                 <BattleGrid items={battleItems} onClickItem={handleScrollItemClick} />
@@ -581,6 +586,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                followersLiveCount={0}
                presidentTabLabel={presidentTabLabel}
                showPresidentTab={showPresidentTab}
+               wallNotificationCount={wallNotificationCount}
              />
              <div className="min-w-0 flex-1">
                <section className={`${glass} rounded-2xl p-4`}>
@@ -602,6 +608,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                followersLiveCount={0}
                presidentTabLabel={presidentTabLabel}
                showPresidentTab={showPresidentTab}
+               wallNotificationCount={wallNotificationCount}
              />
              <div className="min-w-0 flex-1">
                <section className={`${glass} rounded-2xl p-4`}>
@@ -623,6 +630,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                followersLiveCount={0}
                presidentTabLabel={presidentTabLabel}
                showPresidentTab={showPresidentTab}
+               wallNotificationCount={wallNotificationCount}
              />
              <div className="min-w-0 flex-1">
                <section className={`${glass} rounded-2xl p-4`}>
@@ -644,6 +652,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                followersLiveCount={0}
                presidentTabLabel={presidentTabLabel}
                showPresidentTab={showPresidentTab}
+               wallNotificationCount={wallNotificationCount}
              />
              <div className="min-w-0 flex-1">
                <section className={`${glass} rounded-2xl p-4`}>
@@ -665,6 +674,7 @@ const handleScrollItemClick = useCallback((id: string) => {
                followersLiveCount={0}
                presidentTabLabel={presidentTabLabel}
                showPresidentTab={showPresidentTab}
+               wallNotificationCount={wallNotificationCount}
              />
              <div className="min-w-0 flex-1">
                <AcademyTab />

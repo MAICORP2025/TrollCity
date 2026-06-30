@@ -56,18 +56,18 @@ export const NEW_USER_BONUS_PERCENT = 5;
 // CASHOUT TIERS (Single Source of Truth)
 // ============================================================================
 export const CASHOUT_TIERS = [
-  { coins: 7500, usd: 25, manualReview: false, name: 'Tier 1', color: '#cd7f32', label: '' },
-  { coins: 15000, usd: 50, manualReview: false, name: 'Tier 2', color: '#c0c0c0', label: '' },
-  { coins: 30000, usd: 150, manualReview: false, name: 'Tier 3', color: '#ffd700', label: '' },
-  { coins: 60000, usd: 300, manualReview: false, name: 'Tier 4', color: '#ff4dd2', label: '' },
-  { coins: 120000, usd: 600, manualReview: false, name: 'Tier 5', color: '#00ff00', label: '' },
-  { coins: 200000, usd: 1000, manualReview: true, name: 'Tier 6', color: '#ff0000', label: 'Manual Review' },
-  { coins: 400000, usd: 2000, manualReview: true, name: 'Tier 7', color: '#ff0000', label: 'Manual Review' },
-  { coins: 600000, usd: 3000, manualReview: true, name: 'Tier 8', color: '#ff0000', label: 'Manual Review' },
-  { coins: 1000000, usd: 5000, manualReview: true, name: 'Tier 9', color: '#ff0000', label: 'Manual Review' },
-  { coins: 1500000, usd: 7500, manualReview: true, name: 'Tier 10', color: '#ff0000', label: 'Manual Review' },
-  { coins: 2000000, usd: 10000, manualReview: true, name: 'Tier 11', color: '#ff0000', label: 'Manual Review' },
-  { coins: 3000000, usd: 15000, manualReview: true, name: 'Tier 12', color: '#ff0000', label: 'Manual Review' },
+  { coins: 9000, usd: 25, manualReview: false, name: 'Tier 1', color: '#cd7f32', label: '' },
+  { coins: 16500, usd: 50, manualReview: false, name: 'Tier 2', color: '#c0c0c0', label: '' },
+  { coins: 31500, usd: 150, manualReview: false, name: 'Tier 3', color: '#ffd700', label: '' },
+  { coins: 61500, usd: 300, manualReview: false, name: 'Tier 4', color: '#ff4dd2', label: '' },
+  { coins: 121500, usd: 600, manualReview: false, name: 'Tier 5', color: '#00ff00', label: '' },
+  { coins: 201500, usd: 1000, manualReview: true, name: 'Tier 6', color: '#ff0000', label: 'Manual Review' },
+  { coins: 401500, usd: 2000, manualReview: true, name: 'Tier 7', color: '#ff0000', label: 'Manual Review' },
+  { coins: 601500, usd: 3000, manualReview: true, name: 'Tier 8', color: '#ff0000', label: 'Manual Review' },
+  { coins: 1001500, usd: 5000, manualReview: true, name: 'Tier 9', color: '#ff0000', label: 'Manual Review' },
+  { coins: 1501500, usd: 7500, manualReview: true, name: 'Tier 10', color: '#ff0000', label: 'Manual Review' },
+  { coins: 2001500, usd: 10000, manualReview: true, name: 'Tier 11', color: '#ff0000', label: 'Manual Review' },
+  { coins: 3001500, usd: 15000, manualReview: true, name: 'Tier 12', color: '#ff0000', label: 'Manual Review' },
 ] as const;
 
 // Alias exports for backward compatibility with old payoutTiers imports
@@ -78,7 +78,7 @@ export type CashoutTier = typeof CASHOUT_TIERS[number];
 export const FIXED_FEE_USD = 3;
 
 // Minimum coins required for any cashout
-export const MIN_CASHOUT_COINS = 7500;
+export const MIN_CASHOUT_COINS = 9000;
 
 // Coins amount that requires manual admin review
 export const MANUAL_REVIEW_THRESHOLD = 200000;
