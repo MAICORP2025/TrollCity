@@ -11,6 +11,31 @@ import FamilyMinorSettings from '../components/profile/FamilyMinorSettings'
 import BatterySaverToggle from '@/components/BatterySaverToggle'
 import ProfileCustomization from '@/components/profile/ProfileCustomization'
 
+async function postToMaiTalentLink(payload: Record<string, any>) {
+  const session = await supabase.auth.getSession()
+  const token = session?.data?.session?.access_token
+
+  if (!token) {
+    throw new Error('Authentication token unavailable. Please sign in again.')
+  }
+
+  const response = await fetch('/api/maitalent/link-account', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.error || body?.detail?.error || body?.detail || 'Failed to link MaiTalent account')
+  }
+
+  return response.json()
+}
+
 export default function ProfileSettings() {
   const { user, profile, refreshProfile } = useAuthStore()
   const navigate = useNavigate()
@@ -23,6 +48,13 @@ export default function ProfileSettings() {
   const [platform, setPlatform] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
   const [activeTab, setActiveTab] = useState<'basic' | 'customization'>('basic')
+  const [maitalentUserId, setMaiTalentUserId] = useState('')
+  const [maiLinkStatus, setMaiLinkStatus] = useState<string | null>(null)
+  const [maiLinkPlatform, setMaiLinkPlatform] = useState('troll-city')
+  const [maiLinkExternalUserId, setMaiLinkExternalUserId] = useState<string | null>(null)
+  const [maiLinkVerifiedAt, setMaiLinkVerifiedAt] = useState<string | null>(null)
+  const [maiLinkMessage, setMaiLinkMessage] = useState<string | null>(null)
+  const [maiLinkLoading, setMaiLinkLoading] = useState(false)
   
   // Creator Subscription Settings
   const [creatorSubscriptionEnabled, setCreatorSubscriptionEnabled] = useState(false)
@@ -46,6 +78,18 @@ export default function ProfileSettings() {
       }
       if ((profile as any).creator_subscription_price_coins !== undefined) {
         setCreatorSubscriptionPrice((profile as any).creator_subscription_price_coins)
+      }
+
+      const persistedLinkStatus = (profile as any).maitalent_link_status || null
+      if (persistedLinkStatus) {
+        setMaiLinkStatus(persistedLinkStatus)
+        setMaiLinkPlatform((profile as any).maitalent_link_platform || 'troll-city')
+        setMaiLinkExternalUserId((profile as any).maitalent_external_user_id || null)
+        setMaiLinkVerifiedAt((profile as any).maitalent_link_verified_at || null)
+      } else {
+        setMaiLinkStatus(null)
+        setMaiLinkExternalUserId(null)
+        setMaiLinkVerifiedAt(null)
       }
     }
   }, [profile])
@@ -107,6 +151,58 @@ export default function ProfileSettings() {
     }
   }
 
+  const handleLinkMaiTalent = async () => {
+    if (!user) return
+
+    setMaiLinkLoading(true)
+    setMaiLinkMessage(null)
+
+    try {
+      const payload: Record<string, any> = {
+        maitalent_user_id: maitalentUserId || undefined,
+        metadata: { requested_from: 'profile_page' },
+      }
+
+      const result = await postToMaiTalentLink(payload)
+      const status = result?.payload?.status || result?.status || 'linked'
+      const message = result?.payload?.message || result?.message || ''
+
+      if (status === 'linked') {
+        setMaiLinkStatus('linked')
+        setMaiLinkPlatform('troll-city')
+        setMaiLinkExternalUserId(result?.payload?.external_user_id || user.id)
+        setMaiLinkVerifiedAt(result?.payload?.verified_at || new Date().toISOString())
+        setMaiLinkMessage('MaiTalent account connected successfully.')
+        await refreshProfile(true)
+        toast.success('MaiTalent account linked')
+      } else if (result?.payload?.status === 'linked') {
+        setMaiLinkStatus('linked')
+        setMaiLinkPlatform('troll-city')
+        setMaiLinkExternalUserId(result?.payload?.external_user_id || user.id)
+        setMaiLinkVerifiedAt(result?.payload?.verified_at || new Date().toISOString())
+        setMaiLinkMessage('MaiTalent account connected successfully.')
+        await refreshProfile(true)
+        toast.success('MaiTalent account linked')
+      } else if (status === 'review') {
+        setMaiLinkStatus('review')
+        setMaiLinkMessage('Multiple Troll City accounts match this email; admin review is required.')
+      } else if (status === 'flagged') {
+        setMaiLinkStatus('flagged')
+        setMaiLinkMessage('MaiTalent flagged this account link due to a conflict.')
+      } else {
+        setMaiLinkStatus(status)
+        setMaiLinkMessage(message || 'MaiTalent returned an unexpected response.')
+      }
+    } catch (error) {
+      console.error('Error linking MaiTalent account:', error)
+      setMaiLinkStatus('error')
+      setMaiLinkMessage(error instanceof Error ? error.message : 'Failed to link MaiTalent account')
+      toast.error('Unable to connect MaiTalent account')
+    } finally {
+      setMaiLinkLoading(false)
+    }
+  }
+
   if (!user) {
     navigate('/auth')
     return null
@@ -120,7 +216,10 @@ export default function ProfileSettings() {
             <Settings className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Profile Settings</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold">Profile Settings</h1>
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.25)]" aria-label="Multiple settings pages available" />
+            </div>
             <p className={`text-sm ${trollCityTheme.text.muted}`}>Manage your items and account preferences.</p>
           </div>
         </div>
@@ -147,7 +246,10 @@ export default function ProfileSettings() {
             }`}
           >
             <Palette className="w-4 h-4" />
-            Profile Customization
+            <span className="flex items-center gap-2">
+              Profile Customization
+              <span className="h-2 w-2 rounded-full bg-red-500" aria-label="Additional settings page" />
+            </span>
           </button>
         </div>
 
@@ -251,6 +353,69 @@ export default function ProfileSettings() {
                   {savingProfile ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
+            </div>
+
+            {/* MaiTalent Connection */}
+            <div className={`${trollCityTheme.components.card} space-y-4`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">MaiTalent Connection</h2>
+                  <p className={`text-sm ${trollCityTheme.text.muted}`}>
+                    This uses the Troll City backend to send your verified email and user id to MaiTalent. Once it succeeds, your profile shows a linked state here.
+                  </p>
+                </div>
+              </div>
+
+              {maiLinkStatus === 'linked' ? (
+                <div className="space-y-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                  <p className="text-sm font-semibold text-emerald-300">✅ MaiTalent account linked</p>
+                  <div className="grid grid-cols-1 gap-2 text-sm text-white/80">
+                    <div>
+                      <span className="font-medium text-white">Status:</span> linked
+                    </div>
+                    <div>
+                      <span className="font-medium text-white">Platform:</span> {maiLinkPlatform}
+                    </div>
+                    <div>
+                      <span className="font-medium text-white">External user id:</span> {maiLinkExternalUserId || user?.id}
+                    </div>
+                    {maiLinkVerifiedAt && (
+                      <div>
+                        <span className="font-medium text-white">Verified at:</span> {new Date(maiLinkVerifiedAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className={`text-sm ${trollCityTheme.text.muted}`}>MaiTalent Profile ID (optional)</label>
+                    <input
+                      type="text"
+                      value={maitalentUserId}
+                      onChange={(e) => setMaiTalentUserId(e.target.value)}
+                      className={`w-full px-4 py-2 ${trollCityTheme.components.input} rounded-xl text-white focus:outline-none transition-colors`}
+                      placeholder="Enter your MaiTalent profile ID"
+                    />
+                    <p className={`text-xs ${trollCityTheme.text.muted}`}>Providing your MaiTalent profile ID helps match your account precisely.</p>
+                  </div>
+                  <button
+                    onClick={handleLinkMaiTalent}
+                    disabled={maiLinkLoading}
+                    className={`px-6 py-2 ${trollCityTheme.gradients.button} rounded-xl font-semibold disabled:opacity-50 transition-colors text-white`}
+                  >
+                    {maiLinkLoading ? 'Linking...' : 'Link MaiTalent account'}
+                  </button>
+                  <p className={`text-xs ${trollCityTheme.text.muted}`}>
+                    If the link succeeds, this panel will switch to a green “linked” state automatically.
+                  </p>
+                  {maiLinkMessage && (
+                    <p className={`text-sm ${maiLinkStatus === 'review' ? 'text-amber-300' : maiLinkStatus === 'flagged' ? 'text-red-300' : 'text-white/80'}`}>
+                      {maiLinkMessage}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Creator Subscription Settings */}

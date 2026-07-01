@@ -3,6 +3,7 @@ const {
   EgressClient,
   RoomServiceClient,
 } = require('livekit-server-sdk');
+const { syncVerifiedMaiTalentActivity, buildSourceEventId } = require('../lib/maitalentSync');
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -133,6 +134,51 @@ function getLiveKitAuthHint(error) {
     return 'LiveKit rejected the server API token. Make sure the backend LIVEKIT_API_KEY and LIVEKIT_API_SECRET belong to the same LiveKit project as LIVEKIT_URL and match the secrets used by the livekit-token edge function.';
   }
   return undefined;
+}
+
+async function emitBroadcastMaiTalentEvent({ activityType, streamId, userId, tokensAwarded, metadata, logger = console }) {
+  if (!supabase || !streamId || !userId) {
+    return null;
+  }
+
+  try {
+    const { data: profile, error } = await supabase
+      .from('user_profiles')
+      .select('id,email')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error || !profile?.email) {
+      logger.warn?.('[MaiTalent Broadcast] skipped sync because the profile was unavailable', {
+        activityType,
+        streamId,
+        userId,
+      });
+      return null;
+    }
+
+    return syncVerifiedMaiTalentActivity({
+      supabase,
+      externalUserId: profile.id,
+      normalizedEmail: profile.email,
+      sourceEventId: buildSourceEventId({ scope: activityType, streamId, userId }),
+      activityType,
+      tokensAwarded,
+      metadata: {
+        streamId,
+        ...(metadata || {}),
+      },
+      logger,
+    });
+  } catch (error) {
+    logger.warn?.('[MaiTalent Broadcast] sync failed', {
+      activityType,
+      streamId,
+      userId,
+      error: error?.message || error,
+    });
+    return null;
+  }
 }
 
 /* ============================================================================
@@ -459,6 +505,16 @@ async function startStreaming(req, res) {
 
     // Create Troll Wall system post for live stream
     await handleTrollWallSystemPost(streamId, broadcasterId, true, title);
+    void emitBroadcastMaiTalentEvent({
+      activityType: 'broadcast-start',
+      streamId,
+      userId: broadcasterId,
+      tokensAwarded: 25,
+      metadata: {
+        source: 'broadcast_start',
+        title: title || existingStream.title || 'Live Stream',
+      },
+    });
 
     return safeJson(200, {
       success: true,

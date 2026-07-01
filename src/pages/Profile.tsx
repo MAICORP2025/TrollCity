@@ -483,8 +483,8 @@ function ProfileInner() {
                     <div className="space-y-6">
                         <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-6">
                             <h3 className="text-lg font-bold text-white mb-4">Account Settings</h3>
-                            <button onClick={() => navigate('/profile/setup')} className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 font-semibold text-white hover:bg-white/10 transition">
-                                Edit Profile
+                            <button onClick={() => navigate('/profile/settings')} className="w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 font-semibold text-white hover:bg-white/10 transition">
+                                Open Profile Settings
                             </button>
                         </div>
                     </div>
@@ -505,7 +505,7 @@ function ProfileInner() {
                     isOwnProfile={isOwnProfile}
                     isFollowing={isFollowing}
                     onFollow={handleFollow}
-                    onEdit={() => navigate('/profile/setup')}
+                    onEdit={() => navigate('/profile/settings')}
                     onShare={handleShare}
                     onMessage={handleMessage}
                     onSubscribe={() => setShowSubscriptionModal(true)}

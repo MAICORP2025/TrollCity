@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { usePresenceStore } from '@/lib/presenceStore'
 import { supabase } from '@/lib/supabase'
 
 export interface LiveItem {
@@ -55,14 +56,16 @@ interface LiveContentState {
 
 const LiveContentContext = createContext<LiveContentState | null>(null)
 
- export function LiveContentProvider({ children }: { children: React.ReactNode }) {
-   const [liveItems, setLiveItems] = useState<LiveItem[]>([])
-   const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([])
-   const [totalViewers, setTotalViewers] = useState(0)
-   const [onlineUsers, setOnlineUsers] = useState(0)
-   const [loadingLive, setLoadingLive] = useState(true)
-   const [loadingOnline, setLoadingOnline] = useState(true)
-   const mountedRef = useRef(true)
+export function LiveContentProvider({ children }: { children: React.ReactNode }) {
+    // Initialize all state variables to avoid undefined references
+    const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
+    const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([]);
+    const [totalViewers, setTotalViewers] = useState(0);
+    const [onlineUsers, setOnlineUsers] = useState(0); // Ensures onlineUsers is always defined
+    const [loadingLive, setLoadingLive] = useState(true);
+    const [loadingOnline, setLoadingOnline] = useState(true);
+    const presenceOnlineCount = usePresenceStore((state) => state.onlineCount);
+    const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true
@@ -149,6 +152,13 @@ const LiveContentContext = createContext<LiveContentState | null>(null)
       if (mountedRef.current) setLoadingLive(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (presenceOnlineCount > 0) {
+      setOnlineUsers(presenceOnlineCount)
+      setLoadingOnline(false)
+    }
+  }, [presenceOnlineCount])
 
 const fetchLiveAuctions = useCallback(async () => {
      try {
@@ -271,14 +281,14 @@ useEffect(() => {
   }, [fetchLiveContent, fetchLiveAuctions])
 
 const value = useMemo(() => ({
-     liveItems,
-     liveAuctions,
-     totalViewers,
-     onlineUsers,
-     loadingLive,
-     loadingOnline,
-     refresh,
-   }), [liveItems, liveAuctions, totalViewers, onlineUsers, loadingLive, loadingOnline, refresh])
+      liveItems: liveItems || [],
+      liveAuctions: liveAuctions || [],
+      totalViewers: totalViewers || 0,
+      onlineUsers: onlineUsers || 0,
+      loadingLive: loadingLive !== undefined ? loadingLive : true,
+      loadingOnline: loadingOnline !== undefined ? loadingOnline : true,
+      refresh,
+    }), [liveItems, liveAuctions, totalViewers, onlineUsers, loadingLive, loadingOnline, refresh])
 
   return (
     <LiveContentContext.Provider value={value}>

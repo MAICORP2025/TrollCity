@@ -482,7 +482,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
              ? [{ label: 'Auctioneer', icon: Gavel as any, path: '/auctions/studio' }]
              : []),
            ...(isHRAdmin
-             ? [{ label: 'HR Center', icon: Briefcase as any, path: '/hr-center' }]
+             ? [{ label: '', icon: Briefcase as any, path: '/hr-center' }]
              : []),
          ],
        },
@@ -801,9 +801,8 @@ export default function BottomNavBar() {
                  <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
                  <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
                  <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
-                 <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
-                 <NavButton icon={Shield} label="HR Center" to="/hr-center" active={isActive('/hr-center')} size="large" />
-                 <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} size="large" />
+<NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
+                  <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} size="large" />
                  <NavButton
                    icon={LayoutGrid}
                    label="More"
@@ -839,11 +838,10 @@ export default function BottomNavBar() {
                 <NavButton icon={Compass} label="Explore" to="/explore" active={isActive('/explore') || isActive('/live')} />
 
                 <NavButton icon={Shuffle} label="Troll Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} />
-                <NavButton icon={Car} label="Cars" to="/ktauto" active={isActive('/ktauto')} />
-                 <NavButton icon={Briefcase} label="Careers" to="/careers" active={isActive('/careers')} />
-                 <NavButton icon={Shield} label="HR Center" to="/hr-center" active={isActive('/hr-center')} />
+<NavButton icon={Car} label="Cars" to="/ktauto" active={isActive('/ktauto')} />
+                  <NavButton icon={Briefcase} label="Careers" to="/careers" active={isActive('/careers')} />
 
-                 <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} />
+                  <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} />
               </nav>
             )}
 

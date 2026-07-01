@@ -46,6 +46,7 @@ dotenv.config({ path: findConfig('.env') });
 
 // Telemetry handler - safe to load early (no Supabase client at module level)
 const telemetryHandler = require('./api/telemetryHandler');
+const { normalizeEmail, syncVerifiedMaiTalentActivity, buildSourceEventId, resolveMaiTalentConfig } = require('./lib/maitalentSync');
 
 /* ============================================================================
  * 🛡️  CRITICAL STREAMING INFRASTRUCTURE - PROTECTED
@@ -160,6 +161,214 @@ app.post('/api/admin/cache/clear', (req, res) => {
 app.post('/api/admin/backup/trigger', (req, res) => {
   console.log('Backup trigger requested');
   res.status(200).json({ success: true, message: 'Backup process started', jobId: Date.now() });
+});
+
+// MaiTalent account link proxy
+app.post('/api/maitalent/sync-activity', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const normalizedEmail = normalizeEmail(
+      body.normalized_email || body.normalizedEmail || body.email || 'trollcity2025@gmail.com'
+    );
+
+    const response = await syncVerifiedMaiTalentActivity({
+      supabase,
+      externalUserId: body.external_user_id || body.externalUserId || null,
+      normalizedEmail,
+      sourceEventId: body.source_event_id || body.sourceEventId || `trollcity:${Date.now()}`,
+      activityType: body.activity_type || body.activityType || 'broadcast',
+      tokensAwarded: Number(body.tokens_awarded || body.tokensAwarded || 0),
+      metadata: body.metadata || {
+        source: 'troll_city_server_sync',
+        requested_by: 'server',
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      payload: response.body,
+      normalized_email: normalizedEmail,
+      source_event_id: body.source_event_id || body.sourceEventId || `trollcity:${Date.now()}`,
+    });
+  } catch (err) {
+    console.error('[MaiTalent Sync] Unexpected error', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Unexpected server error' });
+  }
+});
+
+app.post('/api/maitalent/test-sync', async (req, res) => {
+  try {
+    const response = await syncVerifiedMaiTalentActivity({
+      supabase,
+      externalUserId: req.body?.external_user_id || req.body?.externalUserId || null,
+      normalizedEmail: 'trollcity2025@gmail.com',
+      sourceEventId: req.body?.source_event_id || req.body?.sourceEventId || 'trollcity:test-sync',
+      activityType: req.body?.activity_type || req.body?.activityType || 'broadcast',
+      tokensAwarded: Number(req.body?.tokens_awarded || req.body?.tokensAwarded || 25),
+      metadata: req.body?.metadata || {
+        source: 'troll_city_test_sync',
+        note: 'Uses the shared test email trollcity2025@gmail.com',
+      },
+    });
+
+    return res.status(200).json({ success: true, payload: response.body, normalized_email: 'trollcity2025@gmail.com' });
+  } catch (err) {
+    console.error('[MaiTalent Sync] Test sync failed', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Unexpected server error' });
+  }
+});
+
+app.post('/api/maitalent/track-broadcast-view', async (req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Server misconfigured: Supabase client unavailable' });
+    }
+
+    const { streamId, userId } = req.body || {};
+    const authHeader = String(req.headers.authorization || '');
+    if (!streamId || !userId) {
+      return res.status(400).json({ success: false, error: 'streamId and userId are required' });
+    }
+
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.slice(7).trim();
+    const { data: authData, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !authData?.user || authData.user.id !== userId) {
+      return res.status(401).json({ success: false, error: 'Invalid authentication token' });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id,email')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileError || !profile?.email) {
+      return res.status(404).json({ success: false, error: 'Viewer profile not found' });
+    }
+
+    await syncVerifiedMaiTalentActivity({
+      supabase,
+      externalUserId: profile.id,
+      normalizedEmail: profile.email,
+      sourceEventId: buildSourceEventId({ scope: 'broadcast-view', streamId, userId }),
+      activityType: 'broadcast-view',
+      tokensAwarded: 5,
+      metadata: { streamId, source: 'broadcast_view' },
+    });
+
+    return res.status(200).json({
+      success: true,
+      source_event_id: buildSourceEventId({ scope: 'broadcast-view', streamId, userId }),
+    });
+  } catch (err) {
+    console.error('[MaiTalent Broadcast View] Unexpected error', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Unexpected server error' });
+  }
+});
+
+app.post('/api/maitalent/link-account', async (req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Server misconfigured: Supabase client unavailable' });
+    }
+
+    const authHeader = String(req.headers.authorization || '');
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const token = authHeader.slice(7).trim();
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Authentication token missing' });
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !authData?.user) {
+      console.error('[MaiTalent Link] auth.getUser failed', authError?.message || authError);
+      return res.status(401).json({ success: false, error: 'Invalid authentication token' });
+    }
+
+    const user = authData.user;
+    const normalizedEmail = String(user.email || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ success: false, error: 'Verified email is required to link MaiTalent account' });
+    }
+
+    const { maitalent_user_id, metadata } = req.body || {};
+    const payload = {
+      maitalent_user_id: typeof maitalent_user_id === 'string' && maitalent_user_id.trim().length > 0 ? maitalent_user_id.trim() : undefined,
+      external_user_id: user.id,
+      normalized_email: normalizedEmail,
+      metadata: metadata || { requested_from: 'profile_page' },
+    };
+
+    const { url: maiTalentLinkUrl, secret: maiTalentSecret } = resolveMaiTalentConfig(process.env);
+
+    if (!maiTalentLinkUrl || !maiTalentSecret) {
+      console.error('[MaiTalent Link] Missing MaiTalent endpoint or secret');
+      return res.status(500).json({ success: false, error: 'MaiTalent service endpoint or secret is not configured' });
+    }
+
+    const maiResponse = await fetch(maiTalentLinkUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-service-role': maiTalentSecret,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await maiResponse.text();
+    let parsed = null;
+    try {
+      parsed = result ? JSON.parse(result) : null;
+    } catch (err) {
+      console.error('[MaiTalent Link] invalid JSON response', err);
+    }
+
+    if (!maiResponse.ok) {
+      return res.status(502).json({
+        success: false,
+        error: parsed?.error || 'MaiTalent link request failed',
+        detail: parsed || result,
+      });
+    }
+
+    const linkStatus = parsed?.status || 'linked';
+    const profileUpdatePayload = {
+      maitalent_link_status: linkStatus,
+      maitalent_link_platform: 'troll-city',
+      maitalent_external_user_id: user.id,
+      maitalent_link_verified_at: linkStatus === 'linked' ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: profileUpdateError } = await supabase
+      .from('user_profiles')
+      .update(profileUpdatePayload)
+      .eq('id', user.id);
+
+    if (profileUpdateError) {
+      console.error('[MaiTalent Link] profile update failed', profileUpdateError);
+    }
+
+    return res.status(200).json({
+      success: true,
+      payload: parsed,
+      status: linkStatus,
+      external_user_id: payload.external_user_id,
+      maitalent_user_id: payload.maitalent_user_id || null,
+      normalized_email: payload.normalized_email,
+      detail: parsed,
+    });
+  } catch (err) {
+    console.error('[MaiTalent Link] Unexpected error', err);
+    return res.status(500).json({ success: false, error: 'Unexpected server error' });
+  }
 });
 
 // Broadcast API Routes - lazy load handler

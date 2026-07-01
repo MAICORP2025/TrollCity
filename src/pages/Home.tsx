@@ -484,8 +484,8 @@ const handleScrollItemClick = useCallback((id: string) => {
           </div>
         )}
 
-        {/* Sign In / Sign Up prompt for non-authenticated mobile/PWA users */}
-        {!user && isMobile && (
+        {/* Sign In / Sign Up prompt for non-authenticated users */}
+        {!user && (
           <div className="mb-4 rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-purple-900/40 via-slate-900/60 to-cyan-900/40 backdrop-blur-xl p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
               <div className="flex-1 text-center sm:text-left">

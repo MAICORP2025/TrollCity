@@ -119,12 +119,12 @@ export default function SurveyPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0A0814] text-white">
+<div className="min-h-screen bg-[#0A0814] text-white max-h-screen overflow-hidden">
       <div className="pointer-events-none fixed inset-0 opacity-60">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.12),transparent_40%),radial-gradient(circle_at_70%_80%,rgba(168,85,247,0.1),transparent_40%)]" />
       </div>
 
-      <div className="relative mx-auto max-w-2xl p-4 md:p-8">
+      <div className="relative mx-auto max-w-2xl p-4 md:p-8 h-full overflow-y-auto max-h-screen">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -138,7 +138,7 @@ export default function SurveyPage() {
             Back
           </button>
 
-          <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/80 shadow-[0_0_40px_rgba(34,211,238,0.08)] overflow-hidden">
+          <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/80 shadow-[0_0_40px_rgba(34,211,238,0.08)] overflow-hidden max-h-[calc(100vh-200px)]">
             <div className="bg-gradient-to-r from-cyan-600/20 via-purple-600/20 to-pink-600/20 p-6 border-b border-cyan-500/20">
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-purple-600 shadow-lg">
@@ -156,7 +156,7 @@ export default function SurveyPage() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[calc(100vh-300px)] overflow-y-auto">
               {questions.map((question, index) => (
                 <motion.div
                   key={question.id}
@@ -173,8 +173,8 @@ export default function SurveyPage() {
                     value={answers[question.id] || ''}
                     onChange={(e) => setAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
                     placeholder="Type your response..."
-                    rows={4}
-                    className="border-cyan-500/20 bg-slate-900/60 text-white placeholder:text-slate-500 focus:border-cyan-500/50 resize-none"
+                    rows={3}
+                    className="border-cyan-500/20 bg-slate-900/60 text-white placeholder:text-slate-500 focus:border-cyan-500/50 resize-none max-h-[120px]"
                   />
                 </motion.div>
               ))}
