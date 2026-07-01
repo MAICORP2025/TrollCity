@@ -9,7 +9,7 @@ import { CityAd } from '../../types/cityAds';
 import { supabase } from '../../lib/supabase';
 import { queueCityAdClick } from '../../lib/batchWrites';
 
-const AUTO_REDIRECT_DELAY = 5000;
+const AUTO_REDIRECT_DELAY = 3000;
 
 interface PromoAdCardProps {
   ad: CityAd;
