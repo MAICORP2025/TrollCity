@@ -46,7 +46,7 @@ dotenv.config({ path: findConfig('.env') });
 
 // Telemetry handler - safe to load early (no Supabase client at module level)
 const telemetryHandler = require('./api/telemetryHandler');
-const { normalizeEmail, syncVerifiedMaiTalentActivity, buildSourceEventId, resolveMaiTalentConfig } = require('./lib/maitalentSync');
+const { normalizeEmail, syncVerifiedMaiTalentActivity, buildSourceEventId, resolveMaiTalentConfig, normalizeMaiTalentLinkResponse } = require('./lib/maitalentSync');
 
 /* ============================================================================
  * 🛡️  CRITICAL STREAMING INFRASTRUCTURE - PROTECTED
@@ -287,21 +287,34 @@ app.post('/api/maitalent/link-account', async (req, res) => {
     }
 
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !authData?.user) {
-      console.error('[MaiTalent Link] auth.getUser failed', authError?.message || authError);
-      return res.status(401).json({ success: false, error: 'Invalid authentication token' });
+    const body = req.body || {};
+    const fallbackUserId = typeof body.user_id === 'string' && body.user_id.trim().length > 0 ? body.user_id.trim() : null;
+    const fallbackEmail = typeof body.email === 'string' && body.email.trim().length > 0
+      ? body.email.trim().toLowerCase()
+      : (typeof body.normalized_email === 'string' && body.normalized_email.trim().length > 0 ? body.normalized_email.trim().toLowerCase() : '');
+
+    let resolvedUser = authData?.user || null;
+    if (!resolvedUser && fallbackUserId) {
+      resolvedUser = { id: fallbackUserId, email: fallbackEmail };
     }
 
-    const user = authData.user;
-    const normalizedEmail = String(user.email || '').trim().toLowerCase();
+    if (authError || !resolvedUser?.id) {
+      console.error('[MaiTalent Link] auth.getUser failed', authError?.message || authError);
+      if (!fallbackUserId || !fallbackEmail) {
+        return res.status(401).json({ success: false, error: 'Invalid authentication token' });
+      }
+    }
+
+    const userId = resolvedUser?.id || fallbackUserId;
+    const normalizedEmail = String(resolvedUser?.email || fallbackEmail || '').trim().toLowerCase();
     if (!normalizedEmail) {
       return res.status(400).json({ success: false, error: 'Verified email is required to link MaiTalent account' });
     }
 
-    const { maitalent_user_id, metadata } = req.body || {};
+    const { maitalent_user_id, metadata } = body;
     const payload = {
       maitalent_user_id: typeof maitalent_user_id === 'string' && maitalent_user_id.trim().length > 0 ? maitalent_user_id.trim() : undefined,
-      external_user_id: user.id,
+      external_user_id: userId,
       normalized_email: normalizedEmail,
       metadata: metadata || { requested_from: 'profile_page' },
     };
@@ -330,19 +343,20 @@ app.post('/api/maitalent/link-account', async (req, res) => {
       console.error('[MaiTalent Link] invalid JSON response', err);
     }
 
-    if (!maiResponse.ok) {
+    const linkResult = normalizeMaiTalentLinkResponse(parsed, 'linked');
+    if (!maiResponse.ok && !linkResult.success) {
       return res.status(502).json({
         success: false,
-        error: parsed?.error || 'MaiTalent link request failed',
+        error: parsed?.error || linkResult.message || 'MaiTalent link request failed',
         detail: parsed || result,
       });
     }
 
-    const linkStatus = parsed?.status || 'linked';
+    const linkStatus = linkResult.status;
     const profileUpdatePayload = {
       maitalent_link_status: linkStatus,
       maitalent_link_platform: 'troll-city',
-      maitalent_external_user_id: user.id,
+      maitalent_external_user_id: userId,
       maitalent_link_verified_at: linkStatus === 'linked' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
@@ -350,10 +364,10 @@ app.post('/api/maitalent/link-account', async (req, res) => {
     const { error: profileUpdateError } = await supabase
       .from('user_profiles')
       .update(profileUpdatePayload)
-      .eq('id', user.id);
+      .eq('id', userId);
 
     if (profileUpdateError) {
-      console.error('[MaiTalent Link] profile update failed', profileUpdateError);
+      console.warn('[MaiTalent Link] profile update failed', profileUpdateError);
     }
 
     return res.status(200).json({
@@ -364,6 +378,7 @@ app.post('/api/maitalent/link-account', async (req, res) => {
       maitalent_user_id: payload.maitalent_user_id || null,
       normalized_email: payload.normalized_email,
       detail: parsed,
+      profile_persisted: !profileUpdateError,
     });
   } catch (err) {
     console.error('[MaiTalent Link] Unexpected error', err);

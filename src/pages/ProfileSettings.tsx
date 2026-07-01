@@ -159,6 +159,8 @@ export default function ProfileSettings() {
 
     try {
       const payload: Record<string, any> = {
+        user_id: user?.id,
+        email: user?.email,
         maitalent_user_id: maitalentUserId || undefined,
         metadata: { requested_from: 'profile_page' },
       }

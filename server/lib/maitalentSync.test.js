@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeEmail, buildMaiTalentPayload, buildSourceEventId, resolveMaiTalentConfig } = require('./maitalentSync');
+const { normalizeEmail, buildMaiTalentPayload, buildSourceEventId, resolveMaiTalentConfig, normalizeMaiTalentLinkResponse } = require('./maitalentSync');
 
 test('normalizes email addresses for MaiTalent linking', () => {
   assert.equal(normalizeEmail('  User@Example.COM  '), 'user@example.com');
@@ -49,5 +49,21 @@ test('resolves the MaiTalent endpoint and secret from either link or sync env va
   assert.deepEqual(resolveMaiTalentConfig({ MAITALENT_SYNC_URL: 'https://sync.example', MAITALENT_SYNC_SECRET: 'sync-secret' }), {
     url: 'https://sync.example',
     secret: 'sync-secret',
+  });
+});
+
+test('treats successful MaiTalent link responses as success even when the payload is minimal', () => {
+  assert.deepEqual(normalizeMaiTalentLinkResponse({ success: true, status: 'linked' }), {
+    success: true,
+    status: 'linked',
+    detail: { success: true, status: 'linked' },
+    message: '',
+  });
+
+  assert.deepEqual(normalizeMaiTalentLinkResponse({ linked: true }), {
+    success: true,
+    status: 'linked',
+    detail: { linked: true },
+    message: '',
   });
 });

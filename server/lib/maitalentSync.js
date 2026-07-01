@@ -43,6 +43,44 @@ function buildMaiTalentPayload({
   };
 }
 
+function normalizeMaiTalentLinkResponse(responseBody, fallbackStatus = 'linked') {
+  if (responseBody === null || responseBody === undefined) {
+    return { success: true, status: fallbackStatus, detail: null, message: '' };
+  }
+
+  if (typeof responseBody === 'string') {
+    const trimmed = responseBody.trim();
+    if (!trimmed) {
+      return { success: true, status: fallbackStatus, detail: responseBody, message: '' };
+    }
+
+    return {
+      success: ['linked', 'review', 'flagged', 'pending', 'success'].includes(trimmed.toLowerCase()),
+      status: trimmed.toLowerCase(),
+      detail: responseBody,
+      message: trimmed,
+    };
+  }
+
+  const payload = responseBody && typeof responseBody === 'object' ? responseBody : {};
+  const statusValue = typeof payload.status === 'string' && payload.status.trim()
+    ? payload.status.trim().toLowerCase()
+    : (payload.linked === true ? 'linked' : fallbackStatus);
+
+  const success = Boolean(
+    payload.success === true ||
+    payload.linked === true ||
+    ['linked', 'review', 'flagged', 'pending', 'success'].includes(statusValue)
+  );
+
+  return {
+    success,
+    status: statusValue,
+    detail: payload,
+    message: typeof payload.message === 'string' && payload.message.trim() ? payload.message.trim() : '',
+  };
+}
+
 function postJson({ url, headers, body }) {
   const payload = JSON.stringify(body);
   const parsedUrl = new URL(url);
@@ -204,5 +242,6 @@ module.exports = {
   buildSourceEventId,
   resolveMaiTalentConfig,
   buildMaiTalentPayload,
+  normalizeMaiTalentLinkResponse,
   syncVerifiedMaiTalentActivity,
 };
