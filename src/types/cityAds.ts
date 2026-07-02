@@ -61,6 +61,11 @@ export interface CityAdWithCreator extends CityAd {
   creator_username?: string;
 }
 
+export const HOME_PAGE_PROMO_PLACEMENTS: AdPlacement[] = [
+  'home_right_upper',
+  'home_right_lower',
+];
+
 export const AD_PLACEMENTS: { value: AdPlacement; label: string; description: string }[] = [
   { value: 'left_rail', label: 'Left Ad Rail', description: 'Vertical card between sidebar and feed' },
   { value: 'right_rail', label: 'Right Ad Rail', description: 'Vertical card beside right panel' },

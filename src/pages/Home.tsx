@@ -46,6 +46,7 @@ import NewStreamersRow from '@/components/home/NewStreamersRow'
 import BestTrollersRow from '@/components/home/BestTrollersRow'
 import PromoSlot from '@/components/promo/PromoSlot'
 import PodcastCentral from '@/pages/PodcastCentral'
+import { HOME_PAGE_PROMO_PLACEMENTS } from '@/types/cityAds'
 
 type TabType = 'home' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
@@ -532,8 +533,8 @@ const handleScrollItemClick = useCallback((id: string) => {
                <HyTroGamingRow onItemClick={handleScrollItemClick} />
              </div>
              <aside className="hidden xl:flex xl:flex-col xl:gap-3 xl:w-[320px] xl:shrink-0 xl:sticky xl:top-3 xl:self-start">
-               <PromoSlot placement="home_right_upper" variant="featured" />
-               <PromoSlot placement="home_right_lower" variant="featured" />
+               <PromoSlot placement={HOME_PAGE_PROMO_PLACEMENTS[0]} variant="featured" />
+               <PromoSlot placement={HOME_PAGE_PROMO_PLACEMENTS[1]} variant="featured" />
              </aside>
            </section>
          )}

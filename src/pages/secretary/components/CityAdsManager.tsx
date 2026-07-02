@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { CityAd, AdPlacement, CampaignType, AD_PLACEMENTS } from '../../../types/cityAds';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { CityAd, AdPlacement, CampaignType, AD_PLACEMENTS, HOME_PAGE_PROMO_PLACEMENTS } from '../../../types/cityAds';
 import { supabase } from '../../../lib/supabase';
 import { uploadCityAdImage, deleteCityAdImage } from '../../../lib/uploadCityAdImage';
 import { toast } from 'sonner';
@@ -44,6 +44,14 @@ export default function CityAdsManager() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [adToRemove, setAdToRemove] = useState<UserAdvertisement | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  const placementOptions = useMemo(() => {
+    const homePlacementSet = new Set(HOME_PAGE_PROMO_PLACEMENTS);
+    return [
+      ...AD_PLACEMENTS.filter((option) => homePlacementSet.has(option.value)),
+      ...AD_PLACEMENTS.filter((option) => !homePlacementSet.has(option.value)),
+    ];
+  }, []);
 
   // Fetch city ads with filters
   const fetchAds = useCallback(async () => {
@@ -146,7 +154,7 @@ export default function CityAdsManager() {
       image_url: '',
       cta_text: '',
       cta_link: '',
-      placement: 'left_sidebar_screensaver',
+      placement: HOME_PAGE_PROMO_PLACEMENTS[0],
       is_active: true,
       start_at: '',
       end_at: '',
@@ -291,7 +299,7 @@ export default function CityAdsManager() {
       image_url: ad.image_url,
       cta_text: ad.cta_text || '',
       cta_link: ad.cta_link || '',
-      placement: ad.placement,
+      placement: ad.placement || HOME_PAGE_PROMO_PLACEMENTS[0],
       is_active: ad.is_active,
       start_at: ad.start_at || '',
       end_at: ad.end_at || '',
@@ -423,9 +431,9 @@ export default function CityAdsManager() {
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Image*</label>
               <p className="text-xs text-slate-500 mb-2">
-                {(formData.placement || 'left_sidebar_screensaver') === 'home_horizontal_banner'
+                {(formData.placement || HOME_PAGE_PROMO_PLACEMENTS[0]) === 'home_horizontal_banner'
                   ? 'Recommended: 1200x150px (horizontal banner)'
-                  : (formData.placement || 'left_sidebar_screensaver') === 'right_panel_featured'
+                  : (formData.placement || HOME_PAGE_PROMO_PLACEMENTS[0]) === 'right_panel_featured'
                   ? 'Recommended: 1200x500px (featured card)'
                   : 'Recommended: 400x600px (sidebar card)'}
               </p>
@@ -459,11 +467,11 @@ export default function CityAdsManager() {
               <label className="block text-sm font-medium text-slate-300 mb-1">Placement*</label>
               <select
                 name="placement"
-                value={formData.placement || 'left_sidebar_screensaver'}
+                value={formData.placement || HOME_PAGE_PROMO_PLACEMENTS[0]}
                 onChange={handleFormChange}
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:border-purple-500 focus:ring-purple-500"
               >
-                {AD_PLACEMENTS.map(option => (
+                {placementOptions.map(option => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
