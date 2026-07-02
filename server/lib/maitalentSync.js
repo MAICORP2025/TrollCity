@@ -17,7 +17,7 @@ function buildSourceEventId({ scope, streamId, userId }) {
 function resolveMaiTalentConfig(env = process.env) {
   return {
     url: env.MAITALENT_LINK_URL || env.MAITALENT_SYNC_URL || env.MAITALENT_SYNC_ENDPOINT || env.MAITALENT_LINK_ENDPOINT || '',
-    secret: env.MAITALENT_LINK_SECRET || env.MAITALENT_SYNC_SECRET || env.MAITALENT_SERVICE_ROLE_KEY || '',
+    secret: env.MAITALENT_LINK_SECRET || env.MAITALENT_SYNC_SECRET || env.MAITALENT_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   };
 }
 
@@ -39,6 +39,26 @@ function buildMaiTalentPayload({
     activity_type: activityType,
     tokens_awarded: tokensAwarded,
     normalized_email: email,
+    metadata: metadata || {},
+  };
+}
+
+function buildMaiTalentLinkPayload({
+  externalUserId,
+  normalizedEmail,
+  sourceEventId,
+  maitalentUserId,
+  metadata,
+}) {
+  const email = normalizeEmail(normalizedEmail);
+
+  return {
+    action: 'link',
+    external_platform: 'troll-city',
+    external_user_id: externalUserId,
+    normalized_email: email,
+    source_event_id: sourceEventId,
+    maitalent_user_id: maitalentUserId,
     metadata: metadata || {},
   };
 }
@@ -220,8 +240,8 @@ async function syncVerifiedMaiTalentActivity({
 
   const response = await postJson({
     url: resolvedSyncUrl,
-    headers: {
-      'x-service-role': resolvedSecret,
+headers: {
+      'Authorization': `Bearer ${resolvedSecret}`,
     },
     body: payload,
   });
@@ -242,6 +262,7 @@ module.exports = {
   buildSourceEventId,
   resolveMaiTalentConfig,
   buildMaiTalentPayload,
+  buildMaiTalentLinkPayload,
   normalizeMaiTalentLinkResponse,
   syncVerifiedMaiTalentActivity,
 };

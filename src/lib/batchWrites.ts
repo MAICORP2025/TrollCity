@@ -82,19 +82,21 @@ const adImpressionCounts = new Map<number, number>()
 const adClickCounts = new Map<number, number>()
 let cityAdsFlushTimer: ReturnType<typeof setInterval> | null = null
 
-function flushCityAds() {
+async function flushCityAds() {
   if (adImpressionCounts.size === 0 && adClickCounts.size === 0) return
 
   // Fire-and-forget: send aggregated counts per ad
   for (const [adId, count] of adImpressionCounts.entries()) {
-    supabase.rpc('increment_ad_impressions', { ad_id: adId, count }).catch((err: any) => {
-      console.warn('[cityAds] impression flush failed', err)
-    })
+    const { error } = await supabase.rpc('increment_ad_impressions', { ad_id: adId, count })
+    if (error) {
+      console.warn('[cityAds] impression flush failed', error)
+    }
   }
   for (const [adId, count] of adClickCounts.entries()) {
-    supabase.rpc('increment_ad_clicks', { ad_id: adId, count }).catch((err: any) => {
-      console.warn('[cityAds] click flush failed', err)
-    })
+    const { error } = await supabase.rpc('increment_ad_clicks', { ad_id: adId, count })
+    if (error) {
+      console.warn('[cityAds] click flush failed', error)
+    }
   }
 
   adImpressionCounts.clear()

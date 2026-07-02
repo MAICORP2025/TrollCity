@@ -42,11 +42,11 @@ setInterval(() => {
 
 // Load environment variables from the root directory
 const findConfig = require('find-config');
-dotenv.config({ path: findConfig('.env') });
+dotenv.config({ path: findConfig('.env.local') || findConfig('.env') });
 
 // Telemetry handler - safe to load early (no Supabase client at module level)
 const telemetryHandler = require('./api/telemetryHandler');
-const { normalizeEmail, syncVerifiedMaiTalentActivity, buildSourceEventId, resolveMaiTalentConfig, normalizeMaiTalentLinkResponse } = require('./lib/maitalentSync');
+const { normalizeEmail, syncVerifiedMaiTalentActivity, buildSourceEventId, resolveMaiTalentConfig, normalizeMaiTalentLinkResponse, buildMaiTalentLinkPayload } = require('./lib/maitalentSync');
 
 /* ============================================================================
  * 🛡️  CRITICAL STREAMING INFRASTRUCTURE - PROTECTED
@@ -312,12 +312,14 @@ app.post('/api/maitalent/link-account', async (req, res) => {
     }
 
     const { maitalent_user_id, metadata } = body;
-    const payload = {
-      maitalent_user_id: typeof maitalent_user_id === 'string' && maitalent_user_id.trim().length > 0 ? maitalent_user_id.trim() : undefined,
-      external_user_id: userId,
-      normalized_email: normalizedEmail,
+    const sourceEventId = body.source_event_id || body.sourceEventId || `trollcity:link:${userId}`;
+    const payload = buildMaiTalentLinkPayload({
+      externalUserId: userId,
+      normalizedEmail: normalizedEmail,
+      sourceEventId,
+      maitalentUserId: typeof maitalent_user_id === 'string' && maitalent_user_id.trim().length > 0 ? maitalent_user_id.trim() : undefined,
       metadata: metadata || { requested_from: 'profile_page' },
-    };
+    });
 
     const { url: maiTalentLinkUrl, secret: maiTalentSecret } = resolveMaiTalentConfig(process.env);
 
@@ -335,12 +337,39 @@ app.post('/api/maitalent/link-account', async (req, res) => {
       body: JSON.stringify(payload),
     });
 
-    const result = await maiResponse.text();
+    console.log('[MaiTalent Link] Response status:', maiResponse.status);
+    console.log('[MaiTalent Link] Response headers:', Object.fromEntries(maiResponse.headers));
+
+    let result = null;
     let parsed = null;
+    
     try {
-      parsed = result ? JSON.parse(result) : null;
+      result = await maiResponse.text();
+      console.log('[MaiTalent Link] Response body (first 500 chars):', result?.substring(0, 500) || '(empty)');
+      
+      if (result && result.trim()) {
+        try {
+          parsed = JSON.parse(result);
+        } catch (parseErr) {
+          console.error('[MaiTalent Link] Failed to parse MaiTalent JSON response:', parseErr.message);
+          console.error('[MaiTalent Link] Raw response (first 500 chars):', result.substring(0, 500));
+          
+          // MaiTalent returned invalid JSON - this is a service error
+          return res.status(502).json({
+            success: false,
+            error: 'MaiTalent service returned invalid JSON',
+            detail: 'The MaiTalent service may be temporarily unavailable. Please try again later.',
+            statusCode: maiResponse.status,
+          });
+        }
+      }
     } catch (err) {
-      console.error('[MaiTalent Link] invalid JSON response', err);
+      console.error('[MaiTalent Link] Error reading response body:', err.message);
+      return res.status(502).json({
+        success: false,
+        error: 'MaiTalent service unreachable',
+        detail: 'Failed to communicate with MaiTalent service.',
+      });
     }
 
     const linkResult = normalizeMaiTalentLinkResponse(parsed, 'linked');
@@ -348,7 +377,8 @@ app.post('/api/maitalent/link-account', async (req, res) => {
       return res.status(502).json({
         success: false,
         error: parsed?.error || linkResult.message || 'MaiTalent link request failed',
-        detail: parsed || result,
+        detail: parsed?.error || 'MaiTalent service error',
+        statusCode: maiResponse.status,
       });
     }
 
@@ -368,6 +398,65 @@ app.post('/api/maitalent/link-account', async (req, res) => {
 
     if (profileUpdateError) {
       console.warn('[MaiTalent Link] profile update failed', profileUpdateError);
+    }
+
+    // Now sync the user's profile data to MaiTalent
+    if (linkStatus === 'linked') {
+      try {
+        const { data: userProfile, error: fetchProfileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+
+        if (fetchProfileError) {
+          console.warn('[MaiTalent Link] failed to fetch profile for sync', fetchProfileError);
+        } else if (userProfile) {
+          // Send profile data to MaiTalent
+          console.log('[MaiTalent Link] syncing profile data to MaiTalent');
+          const syncPayload = buildMaiTalentPayload({
+            externalUserId: userId,
+            normalizedEmail,
+            sourceEventId: body.source_event_id || body.sourceEventId || `trollcity:profile-sync:${userId}`,
+            activityType: 'profile_sync',
+            tokensAwarded: 0,
+            metadata: {
+              requested_from: 'profile_page',
+              linked_at: new Date().toISOString(),
+              profile_data: {
+                username: userProfile.username || '',
+                full_name: userProfile.full_name || '',
+                avatar_url: userProfile.avatar_url || '',
+                bio: userProfile.bio || '',
+                troll_coins: userProfile.troll_coins || 0,
+                bonus_coin_balance: userProfile.bonus_coin_balance || 0,
+                tier: userProfile.tier || 'Bronze',
+                role: userProfile.role || 'user',
+                is_verified: userProfile.is_verified || false,
+                influencer_tier: userProfile.influencer_tier || null,
+              },
+            },
+          });
+
+          const syncResponse = await fetch(maiTalentLinkUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-service-role': maiTalentSecret,
+            },
+            body: JSON.stringify(syncPayload),
+          });
+
+          const syncResult = await syncResponse.text();
+          console.log('[MaiTalent Link] profile sync response:', syncResult?.substring(0, 200) || '(empty)');
+          
+          if (!syncResponse.ok) {
+            console.warn('[MaiTalent Link] profile sync failed with status', syncResponse.status);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('[MaiTalent Link] profile sync error:', syncErr.message);
+      }
     }
 
     return res.status(200).json({

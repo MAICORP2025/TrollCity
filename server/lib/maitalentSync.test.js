@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeEmail, buildMaiTalentPayload, buildSourceEventId, resolveMaiTalentConfig, normalizeMaiTalentLinkResponse } = require('./maitalentSync');
+const { normalizeEmail, buildMaiTalentPayload, buildMaiTalentLinkPayload, buildSourceEventId, resolveMaiTalentConfig, normalizeMaiTalentLinkResponse } = require('./maitalentSync');
 
 test('normalizes email addresses for MaiTalent linking', () => {
   assert.equal(normalizeEmail('  User@Example.COM  '), 'user@example.com');
@@ -38,6 +38,26 @@ test('builds deterministic source event IDs for broadcast activity', () => {
     buildSourceEventId({ scope: 'broadcast-view', streamId: 'stream-123', userId: 'user-456' }),
     'trollcity:broadcast-view:stream-123:user-456'
   );
+});
+
+test('builds the expected payload for MaiTalent link requests', () => {
+  const payload = buildMaiTalentLinkPayload({
+    externalUserId: 'user-123',
+    normalizedEmail: '  User@Example.COM  ',
+    sourceEventId: 'trollcity:link:user-123',
+    maitalentUserId: 'mai-user-456',
+    metadata: { source: 'profile_page' },
+  });
+
+  assert.deepEqual(payload, {
+    action: 'link',
+    external_platform: 'troll-city',
+    external_user_id: 'user-123',
+    normalized_email: 'user@example.com',
+    source_event_id: 'trollcity:link:user-123',
+    maitalent_user_id: 'mai-user-456',
+    metadata: { source: 'profile_page' },
+  });
 });
 
 test('resolves the MaiTalent endpoint and secret from either link or sync env vars', () => {
