@@ -125,7 +125,7 @@ function formatTime(value: string | null | undefined) {
 export default function AuctionsPage() {
   const navigate = useNavigate()
   const { profile } = useAuthStore()
-  const isMobile = useIsMobile()
+  const { isMobileWidth } = useIsMobile()
 
   const isAuctioneer =
     profile?.role === 'auctioneer' ||
@@ -222,15 +222,15 @@ export default function AuctionsPage() {
 
             <div className="relative flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <div className={cn('relative flex shrink-0 items-center justify-center rounded-[1.65rem] border border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_34px_rgba(34,211,238,0.2)]', isMobile ? 'h-14 w-14' : 'h-20 w-20')}>
-                  <Gavel className={cn('text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]', isMobile ? 'h-7 w-7' : 'h-10 w-10')} />
+                <div className={cn('relative flex shrink-0 items-center justify-center rounded-[1.65rem] border border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_34px_rgba(34,211,238,0.2)]', isMobileWidth ? 'h-14 w-14' : 'h-20 w-20')}>
+                  <Gavel className={cn('text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]', isMobileWidth ? 'h-7 w-7' : 'h-10 w-10')} />
                   <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-xl border border-purple-300/25 bg-purple-500/20">
                     <Sparkles className="h-4 w-4 text-purple-100" />
                   </div>
                 </div>
 
                 <div>
-                  {!isMobile && (
+                  {!isMobileWidth && (
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-100">
                         Troll City Auction House
@@ -241,10 +241,10 @@ export default function AuctionsPage() {
                     </div>
                   )}
 
-                  <h1 className={cn('bg-gradient-to-r from-white via-cyan-100 to-blue-300 bg-clip-text font-black tracking-tight text-transparent', isMobile ? 'text-2xl' : 'text-4xl md:text-6xl')}>
+                  <h1 className={cn('bg-gradient-to-r from-white via-cyan-100 to-blue-300 bg-clip-text font-black tracking-tight text-transparent', isMobileWidth ? 'text-2xl' : 'text-4xl md:text-6xl')}>
                     Live Auctions
                   </h1>
-                  {!isMobile && (
+                  {!isMobileWidth && (
                     <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 md:text-base">
                       Enter official live auction shows, place real-time bids with Troll Coins, and follow upcoming
                       drops from verified auctioneers.
@@ -259,6 +259,13 @@ export default function AuctionsPage() {
                   Refresh Floor
                 </button>
 
+                {isMobileWidth && isAuctioneer && (
+                  <button onClick={() => navigate('/auctioneer/scanner')} className={secondaryButton}>
+                    <Scan className="h-4 w-4" />
+                    Scanner
+                  </button>
+                )}
+
                 <button onClick={() => navigate('/auctions/studio')} className={primaryButton}>
                   <Video className="h-4 w-4" />
                   Auctioneer Studio
@@ -267,13 +274,13 @@ export default function AuctionsPage() {
             </div>
           </div>
 
-          <div className={cn('grid gap-3 p-4', isMobile ? 'grid-cols-2' : 'md:grid-cols-3')}>
+          <div className={cn('grid gap-3 p-4', isMobileWidth ? 'grid-cols-2' : 'md:grid-cols-3')}>
             <StatCard icon={<Zap className="h-5 w-5" />} label="Live Now" value={liveCount} tone="red" />
             <StatCard icon={<Trophy className="h-5 w-5" />} label="Recently Ended" value={endedCount} tone="green" />
           </div>
         </header>
 
-        {featured && activeTab === 'live' && !isMobile && (
+        {featured && activeTab === 'live' && !isMobileWidth && (
           <section className={cn(panel, 'overflow-hidden p-4 md:p-5')}>
             <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="relative aspect-video overflow-hidden rounded-[1.65rem] border border-cyan-300/16 bg-slate-900 shadow-[0_0_38px_rgba(34,211,238,0.10)]">
@@ -333,8 +340,8 @@ export default function AuctionsPage() {
         <section className={cn(panel, 'p-4 md:p-5')}>
           <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex gap-2 overflow-x-auto pb-1">
-              <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={<Play className="h-4 w-4" />} label={isMobile ? 'Live' : 'Live Now'} count={liveCount} />
-              <TabButton active={activeTab === 'ended'} onClick={() => setActiveTab('ended')} icon={<Trophy className="h-4 w-4" />} label={isMobile ? 'Ended' : 'Recently Ended'} count={endedCount} />
+              <TabButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={<Play className="h-4 w-4" />} label={isMobileWidth ? 'Live' : 'Live Now'} count={liveCount} />
+              <TabButton active={activeTab === 'ended'} onClick={() => setActiveTab('ended')} icon={<Trophy className="h-4 w-4" />} label={isMobileWidth ? 'Ended' : 'Recently Ended'} count={endedCount} />
             </div>
 
             <div className="flex items-center gap-2 rounded-2xl border border-cyan-300/15 bg-cyan-400/6 px-4 py-3 text-sm font-bold text-cyan-100">
@@ -343,7 +350,7 @@ export default function AuctionsPage() {
             </div>
           </div>
 
-          <div className={cn('mb-4 grid gap-3', isMobile ? 'grid-cols-[1fr_48px]' : 'lg:grid-cols-[1fr_260px_52px]')}>
+          <div className={cn('mb-4 grid gap-3', isMobileWidth ? 'grid-cols-[1fr_48px]' : 'lg:grid-cols-[1fr_260px_52px]')}>
             <div className="relative">
               <Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-500" />
               <input
@@ -376,7 +383,7 @@ export default function AuctionsPage() {
           ) : visibleAuctions.length === 0 ? (
             <EmptyState activeTab={activeTab} setActiveTab={setActiveTab} />
           ) : (
-            <div className={cn('grid gap-4', isMobile ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-3')}>
+            <div className={cn('grid gap-4', isMobileWidth ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-3')}>
               {visibleAuctions.map((auction) => (
                 <AuctionCard
                   key={auction.id}

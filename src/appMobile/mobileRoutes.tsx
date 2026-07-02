@@ -13,6 +13,7 @@ import {
   Mic,
   Radio,
   Scale,
+  Scan,
   Settings,
   Shield,
   Sparkles,
@@ -40,6 +41,7 @@ import MobilePrideChallenges from "./pages/MobilePrideChallenges";
 import MobilePodcastPage from "./pages/MobilePodcastPage";
 
 import MobilePlaceholder from "./components/MobilePlaceholder";
+import AuctioneerScanner from "../pages/auction/AuctioneerScanner";
 
 export type MobileUserRole =
   | "user"
@@ -382,9 +384,19 @@ export const mobileRoutes: MobileRouteItem[] = [
     key: "auctioneer",
     label: "Auctioneer",
     path: "/auctioneer",
-    element: <MobilePlaceholder title="Auctioneer Studio" />,
+    element: <AuctioneerScanner />,
     icon: Hammer,
     priority: 190,
+    roles: ["auctioneer", "president", "ceo", "admin"],
+    showInBottomBubble: true,
+  },
+  {
+    key: "auctioneer-scanner",
+    label: "Scanner",
+    path: "/auctioneer/scanner",
+    element: <AuctioneerScanner />,
+    icon: Scan,
+    priority: 191,
     roles: ["auctioneer", "president", "ceo", "admin"],
     showInBottomBubble: true,
   },

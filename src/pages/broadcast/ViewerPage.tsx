@@ -108,6 +108,7 @@ function isStreamEnded(stream: Stream | null): boolean {
 }
 
 const KICK_BAN_DURATION_MS = 24 * 60 * 60 * 1000
+const MAX_TOTAL_BOXES = 8
 
 function getKickStorageKey(streamId: string, userId: string) {
   return `kick_${streamId}_${userId}`
@@ -1136,17 +1137,17 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
   })
 
   const effectiveBoxCount = useMemo(() => {
-    // Prefer seat_count (new field), fall back to box_count, then seat_prices
-    // seat_count = 0 means broadcaster only (no guest seats)
+    // Prefer seat_count (new field), fall back to box_count, then seat_prices.
+    // The broadcaster occupies the first box, so we cap the total at 8 boxes (7 seats + host).
     const seatCount = (stream as any)?.seat_count !== undefined ? Number((stream as any).seat_count) : undefined
     if (seatCount !== undefined) {
       if (seatCount === 0) return 1 // broadcaster only, 1 box
-      return Math.max(1, Math.min(12, seatCount))
+      return Math.max(1, Math.min(MAX_TOTAL_BOXES, seatCount))
     }
 
     const boxCount = Number((stream as any)?.box_count ?? 0)
     if (boxCount > 0) {
-      return Math.max(1, Math.min(12, boxCount))
+      return Math.max(1, Math.min(MAX_TOTAL_BOXES, boxCount))
     }
 
     const seatCountFromPrices = Array.isArray((stream as any)?.seat_prices)
@@ -1154,7 +1155,7 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
       : 0
 
     if (seatCountFromPrices > 0) {
-      return Math.max(1, Math.min(12, seatCountFromPrices))
+      return Math.max(1, Math.min(MAX_TOTAL_BOXES, seatCountFromPrices))
     }
 
     return 1 // default: broadcaster only
@@ -1361,7 +1362,7 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
       const currentSeatPrices = Array.isArray((stream as any)?.seat_prices)
         ? (stream as any).seat_prices
         : []
-      const desiredBoxCount = Math.min(12, currentBoxCount + 1)
+      const desiredBoxCount = Math.min(MAX_TOTAL_BOXES, currentBoxCount + 1)
       const newSeatPrices = [...currentSeatPrices]
       while (newSeatPrices.length < desiredBoxCount) {
         newSeatPrices.push(0)
@@ -1727,6 +1728,7 @@ const isActive = isStreamActive(stream)
 
   // Staff/CEO/admin/roles can add seats to any broadcast
   const canManageSeats = Boolean(
+    user?.id === hostId ||
     isOfficer ||
     isStaffProfile(profile) ||
     isCEO ||
@@ -1851,6 +1853,29 @@ const isActive = isStreamActive(stream)
   const handleOpenUserAction = useCallback((info: { userId: string; username?: string; role?: string; createdAt?: string }) => {
     setUserActionTarget(info)
   }, [])
+
+  const pushFloatingSystemMessage = useCallback((content: string) => {
+    const activeUsername = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+    const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    setFloatingMessages((prev) => [{ id: msgId, username: activeUsername, content, createdAt: Date.now() }, ...prev].slice(0, 50))
+
+    window.setTimeout(() => {
+      setFloatingMessages((prev) => prev.filter((message) => message.id !== msgId))
+    }, CHAT_FLOAT_MS)
+
+    const chatChannel = floatingChatChannelRef.current
+    chatChannel?.send({
+      type: 'broadcast',
+      event: 'floating_chat',
+      payload: { username: activeUsername, content },
+    }).catch(() => {})
+  }, [profile?.username, profile?.display_name, user?.email])
+
+  const handleFollowBroadcaster = useCallback((targetLabel: string) => {
+    const broadcasterLabel = targetLabel || hostName || 'the broadcaster'
+    pushFloatingSystemMessage(`${profile?.username || (profile as any)?.display_name || 'A viewer'} followed ${broadcasterLabel}`)
+  }, [hostName, profile?.display_name, profile?.username, pushFloatingSystemMessage])
 
    const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
      if (!username) return
@@ -2303,16 +2328,16 @@ useStreamRealtime(
   // Pin/unpin messages (staff/broadcaster/broadofficer/admin/CEO only)
   const canPinMessages = Boolean(
     profile && (
-      profile.role === 'admin' ||
-      profile.role === 'superadmin' ||
-      profile.role === 'owner' ||
-      profile.role === 'ceo' ||
-      profile.role === 'staff' ||
+      String(profile.role).toLowerCase() === 'admin' ||
+      String(profile.role).toLowerCase() === 'superadmin' ||
+      String(profile.role).toLowerCase() === 'owner' ||
+      String(profile.role).toLowerCase() === 'ceo' ||
+      String(profile.role).toLowerCase() === 'staff' ||
       profile.is_admin ||
       profile.is_troll_officer ||
       profile.is_lead_officer ||
-      profile.troll_role === 'lead_troll_officer' ||
-      profile.troll_role === 'troll_officer'
+      String(profile.troll_role).toLowerCase() === 'lead_troll_officer' ||
+      String(profile.troll_role).toLowerCase() === 'troll_officer'
     )
   )
 
@@ -2658,16 +2683,15 @@ const heartbeat = window.setInterval(() => {
      const mobileSeatGridHeight = useMemo(() => {
        if (!isMobileViewer || seatCards.length === 0) return 0
        const count = seatCards.length
-       if (count <= 2) return 200
-       if (count <= 4) return 300
-       if (count <= 6) return 380
-       return 460
+       if (count <= 3) return 180
+       if (count <= 6) return 240
+       if (count <= 9) return 320
+       return 380
      }, [isMobileViewer, seatCards.length])
  
-    // Mobile seat grid columns: 2 for <=4 seats, 3 for >4 seats so seats dont overflow
+    // Mobile seat grids use a tighter 3-column layout so all seats remain visible.
      const mobileSeatGridCols = useMemo(() => {
-       if (!isMobileViewer || seatCards.length === 0) return 'grid-cols-2'
-       if (seatCards.length <= 4) return 'grid-cols-2'
+       if (!isMobileViewer || seatCards.length === 0) return 'grid-cols-3'
        return 'grid-cols-3'
      }, [isMobileViewer, seatCards.length])
 
@@ -2682,8 +2706,8 @@ const heartbeat = window.setInterval(() => {
 
   // ── Channel diagnostics (dev only, admin only) ──
   const isStreamAdmin = !!(profile && (
-    profile.role === 'admin' || profile.is_admin ||
-    profile.is_superadmin || profile.role === 'owner'
+    String(profile.role).toLowerCase() === 'admin' || profile.is_admin ||
+    profile.is_superadmin || String(profile.role).toLowerCase() === 'owner'
   ));
   useEffect(() => {
     if (!isStreamAdmin) return;
@@ -2901,7 +2925,8 @@ const heartbeat = window.setInterval(() => {
                   : !isMobileViewer
                     ? layoutMode === 'grid'
                       ? {
-                          gridTemplateColumns: `repeat(${Math.min(effectiveBoxCount, 6)}, 1fr)`,
+                          gridTemplateColumns: `repeat(${Math.min(4, Math.max(2, Math.min(effectiveBoxCount, 8)))}, minmax(0, 1fr))`,
+                          gridAutoRows: 'minmax(0, 1fr)',
                           gap: '12px',
                         }
                       : {
@@ -2926,7 +2951,8 @@ const heartbeat = window.setInterval(() => {
               <div
                className={cn(
                    'relative min-h-0 overflow-hidden border border-cyan-400/30 bg-transparent',
-                   isMobileViewer ? 'aspect-square rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(45,212,191,0.15)]'
+                   'aspect-square',
+                   isMobileViewer ? 'rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(45,212,191,0.15)]'
                  )}
               >
                 <RemoteVideoSurface
@@ -3019,16 +3045,11 @@ const heartbeat = window.setInterval(() => {
                   S1
                 </div>
 
-                {/* Username + City Status */}
                 <div className={cn(
                   'absolute z-10 flex items-center',
                   isMobileViewer ? 'right-1 bottom-1 gap-0.5' : 'right-3 bottom-3 gap-2'
                 )}>
-                  <span className={cn(
-                    'font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]',
-                    isMobileViewer ? 'text-[8px]' : 'text-xs'
-                  )}>{hostName}</span>
-                  {broadcasterCityStatus.data && !isMobileViewer && (
+                  {broadcasterCityStatus.data && (
                     <CityStatusOrb
                       data={broadcasterCityStatus.data}
                       permissions={{ isSelf: false, canCheckLicense: false, canRaid: false, canRepair: false, canEnforce: false, canRemoveFromSeat: false, canAccessAll: false }}
@@ -3093,10 +3114,6 @@ const heartbeat = window.setInterval(() => {
               {!isMobileViewer && (
                 <>
                   <div className="absolute left-5 top-5 z-20 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.25)] backdrop-blur-xl">
-                      <Crown className="h-4 w-4" />
-                      Host
-                    </div>
                     {/* City Status Orb — compact inline (clickable) */}
                     {broadcasterCityStatus.data && (
                       <div className="pointer-events-auto">
@@ -3129,27 +3146,6 @@ const heartbeat = window.setInterval(() => {
               {viewerError && (
                 <div className="absolute inset-x-4 top-16 z-30 rounded-2xl border border-red-400/35 bg-gradient-to-r from-red-950/90 to-red-900/80 px-4 py-3 text-sm font-bold text-red-100 shadow-[0_0_30px_rgba(239,68,68,0.25)] backdrop-blur-2xl">
                   {viewerError}
-                </div>
-              )}
-
-              {!isMobileViewer && (
-                <div className="absolute bottom-24 left-6 z-20 flex items-center gap-1.5" style={{ overflow: 'visible' }}>
-                  {broadcasterProfile?.avatar_url ? (
-                    <div className="h-10 w-10" style={{ overflow: 'visible' }}>
-                      <ProfileFrame
-                        frame={broadcasterFrame}
-                        avatarUrl={broadcasterProfile.avatar_url}
-                        username={hostName}
-                        size="sm"
-                      />
-                    </div>
-                  ) : (
-                    <div className="grid h-9 w-9 place-items-center rounded-md border border-white/20 bg-white/10">
-                      <Crown className="h-5 w-5 text-cyan-200" />
-                    </div>
-                  )}
-                  <span className="text-base font-black text-white">{hostName}</span>
-                  {broadcasterProfile?.is_verified && <BadgeCheck className="h-5 w-5 text-purple-400" />}
                 </div>
               )}
 
@@ -3566,13 +3562,13 @@ const heartbeat = window.setInterval(() => {
                           <div
                           key={seat.seatIndex}
                           className={cn(
-                            'relative aspect-square overflow-hidden rounded-xl border',
+                            'relative overflow-hidden rounded-lg border',
                            isMine
                              ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
                              : seat.isOccupied
                                ? 'border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
                                : 'border-white/20',
-                           'bg-transparent'
+                           'bg-transparent h-[68px] w-full'
                          )}
                       >
                         {isMine ? (
@@ -4504,12 +4500,6 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
                    </button>
                  </>
                )}
-               <button
-                 onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
-                 className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold', theme.danger)}
-                >
-                  <LogOut className="h-10 w-10" />
-               </button>
               <button
                 onClick={async () => {
                   if (recorder.isRecording) {
@@ -4549,12 +4539,6 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
                 ) : (
                   <MonitorPlay className="h-10 w-10" />
                 )}
-              </button>
-              <button
-                onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
-className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold', theme.danger)}
-               >
-                 <LogOut className="h-10 w-10" />
               </button>
            </div>
          )}
@@ -4618,12 +4602,6 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
           </>
         )}
         <button
-          onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
-          className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.danger)}
-        >
-           <LogOut className="h-5 w-5" />
-        </button>
-        <button
           onClick={async () => {
             if (recorder.isRecording) {
               void recorder.stopRecording()
@@ -4659,12 +4637,6 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
            <MonitorPlay className="h-5 w-5" />
          )}
        </button>
-        <button
-          onClick={isUserOnStage ? handleLeaveSeat : handleLeave}
-          className={cn('inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold', theme.danger)}
-        >
-          <LogOut className="h-5 w-5" />
-        </button>
      </div>
    </div>
          )}

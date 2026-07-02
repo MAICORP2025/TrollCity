@@ -422,8 +422,7 @@ export default function Home() {
     },
     [navigate, user],
   )
-
-const handleScrollItemClick = useCallback((id: string) => {
+  const handleScrollItemClick = useCallback((id: string) => {
      navigate(`/watch/${id}`)
    }, [navigate])
 
@@ -551,13 +550,13 @@ const handleScrollItemClick = useCallback((id: string) => {
                showPresidentTab={showPresidentTab}
                wallNotificationCount={wallNotificationCount}
              />
-             <div className="min-w-0 flex-1 space-y-4">
-               <NewStreamersRow onClickItem={handleScrollItemClick} />
-               <BestTrollersRow onClickItem={handleScrollItemClick} />
-               <HyTroGamingRow onItemClick={handleScrollItemClick} />
-             </div>
-           </div>
-         )}
+              <div className="min-w-0 flex-1 space-y-4">
+                <NewStreamersRow onClickItem={handleScrollItemClick} />
+                <BestTrollersRow onClickItem={handleScrollItemClick} />
+                <HyTroGamingRow onItemClick={handleScrollItemClick} />
+              </div>
+            </div>
+           )}
 
 {activeTab === 'universe' && (
             <div className="flex gap-4">

@@ -89,6 +89,7 @@ export default function AuctioneerScanner() {
 
   // Scanner state
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
   const [flashOn, setFlashOn] = useState(false)
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
   const [lastScan, setLastScan] = useState<ScanResult | null>(null)
@@ -149,28 +150,45 @@ export default function AuctioneerScanner() {
   // ── Camera management ─────────────────────────────────────────────────────
 
   const startCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Camera access is not supported in this browser.')
+      setCameraActive(false)
+      setCameraReady(false)
+      return
+    }
+
     try {
       setError(null)
+      setCameraReady(false)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode,
+          facingMode: isMobileDevice ? { ideal: facingMode } : facingMode,
           width: { ideal: 1280 },
           height: { ideal: 720 },
+          frameRate: { ideal: 30 },
         },
         audio: false,
       })
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        await videoRef.current.play()
+        videoRef.current.setAttribute('playsinline', 'true')
+        videoRef.current.muted = true
+        try {
+          await videoRef.current.play()
+        } catch (playError) {
+          console.warn('[Scanner] Video playback failed, continuing with stream:', playError)
+        }
       }
       setCameraActive(true)
+      setCameraReady(true)
     } catch (err: any) {
       console.error('[Scanner] Camera error:', err)
       setError(err?.message || 'Camera access denied. Please allow camera permissions.')
       setCameraActive(false)
+      setCameraReady(false)
     }
-  }, [facingMode])
+  }, [facingMode, isMobileDevice])
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -181,6 +199,7 @@ export default function AuctioneerScanner() {
       videoRef.current.srcObject = null
     }
     setCameraActive(false)
+    setCameraReady(false)
   }, [])
 
   const toggleCamera = useCallback(() => {
@@ -209,7 +228,7 @@ export default function AuctioneerScanner() {
   // ── Barcode scanning loop ─────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!cameraActive || !barcodeDetectorRef.current) return
+    if (!cameraActive || !cameraReady || !barcodeDetectorRef.current) return
 
     let animFrame: number
     const detectFrame = async () => {
@@ -259,7 +278,7 @@ export default function AuctioneerScanner() {
 
     animFrame = requestAnimationFrame(detectFrame)
     return () => cancelAnimationFrame(animFrame)
-  }, [cameraActive, connectionState, session])
+  }, [cameraActive, cameraReady, connectionState, session])
 
   // ── Send scan to desktop via Supabase realtime ────────────────────────────
 
@@ -622,7 +641,7 @@ export default function AuctioneerScanner() {
           </div>
         ) : cameraActive ? (
           /* ── Connected + camera active: show scanner ── */
-          <div className="relative h-full w-full bg-black">
+          <div className="relative h-full w-full overflow-hidden bg-black">
             <video
               ref={videoRef}
               className="h-full w-full object-cover"
@@ -632,17 +651,27 @@ export default function AuctioneerScanner() {
             />
             <canvas ref={canvasRef} className="hidden" />
 
-            {/* Scan overlay */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="relative h-56 w-56">
-                {/* Corner brackets */}
-                <div className="absolute -left-1 -top-1 h-8 w-8 border-l-2 border-t-2 border-cyan-400" />
-                <div className="absolute -right-1 -top-1 h-8 w-8 border-r-2 border-t-2 border-cyan-400" />
-                <div className="absolute -bottom-1 -left-1 h-8 w-8 border-b-2 border-l-2 border-cyan-400" />
-                <div className="absolute -bottom-1 -right-1 h-8 w-8 border-b-2 border-r-2 border-cyan-400" />
-                {/* Scanning line */}
-                <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse" />
+            <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.3)_55%,rgba(0,0,0,0.72)_100%)]" />
+
+            <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center px-6">
+              <div className="w-full max-w-[360px]">
+                <div className="relative mx-auto aspect-[4/5] w-full max-w-[320px] rounded-[2rem] border border-white/15 bg-black/20 shadow-[0_0_0_9999px_rgba(0,0,0,0.32)] backdrop-blur-sm">
+                  <div className="absolute inset-3 rounded-[1.45rem] border border-cyan-300/30" />
+                  <div className="absolute inset-6 rounded-[1.2rem] border-[2px] border-cyan-400/90 shadow-[0_0_24px_rgba(34,211,238,0.25)]" />
+                  <div className="absolute left-5 top-5 h-8 w-8 rounded-tl-2xl border-l-2 border-t-2 border-cyan-400" />
+                  <div className="absolute right-5 top-5 h-8 w-8 rounded-tr-2xl border-r-2 border-t-2 border-cyan-400" />
+                  <div className="absolute bottom-5 left-5 h-8 w-8 rounded-bl-2xl border-b-2 border-l-2 border-cyan-400" />
+                  <div className="absolute bottom-5 right-5 h-8 w-8 rounded-br-2xl border-b-2 border-r-2 border-cyan-400" />
+                  <div className="absolute left-0 right-0 top-[50%] h-0.5 -translate-y-1/2 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse" />
+                </div>
+                <p className="mt-4 text-center text-[11px] font-black uppercase tracking-[0.35em] text-cyan-100/90">
+                  Align the barcode inside the frame
+                </p>
               </div>
+            </div>
+
+            <div className="absolute left-4 top-4 z-30 rounded-full border border-cyan-400/30 bg-black/55 px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-cyan-200 backdrop-blur-xl">
+              {cameraReady ? 'Live Camera' : 'Starting Camera'}
             </div>
 
             {/* Camera controls overlay */}

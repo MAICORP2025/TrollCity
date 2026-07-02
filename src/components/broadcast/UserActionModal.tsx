@@ -37,6 +37,7 @@ interface UserActionModalProps {
   onGift: () => void;
   onGiftAll?: () => void;
   onKickStage?: () => void;
+  onFollowSuccess?: (targetLabel: string) => void;
 }
 
 export default function UserActionModal({ 
@@ -51,7 +52,8 @@ export default function UserActionModal({
   onClose,
   onGift,
   onGiftAll,
-  onKickStage
+  onKickStage,
+  onFollowSuccess,
 }: UserActionModalProps) {
   const [fetchedUsername, setFetchedUsername] = React.useState<string | null>(null);
   const [fetchedCreatedAt, setFetchedCreatedAt] = React.useState<string | null>(null);
