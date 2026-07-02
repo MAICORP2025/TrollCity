@@ -119,35 +119,36 @@ export default function SurveyPage() {
   ];
 
   return (
-<div className="min-h-screen bg-[#0A0814] text-white max-h-screen overflow-hidden">
-      <div className="pointer-events-none fixed inset-0 opacity-60">
+    <div className="min-h-screen overflow-x-hidden bg-[#0A0814] text-white">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden opacity-60">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.12),transparent_40%),radial-gradient(circle_at_70%_80%,rgba(168,85,247,0.1),transparent_40%)]" />
       </div>
 
-      <div className="relative mx-auto max-w-2xl p-4 md:p-8 h-full overflow-y-auto max-h-screen">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-3 py-4 sm:px-4 md:px-8 md:py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
+          className="w-full min-w-0"
         >
           <button
             onClick={() => navigate(-1)}
-            className="mb-6 flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+            className="mb-6 flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
 
-          <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/80 shadow-[0_0_40px_rgba(34,211,238,0.08)] overflow-hidden max-h-[calc(100vh-200px)]">
-            <div className="bg-gradient-to-r from-cyan-600/20 via-purple-600/20 to-pink-600/20 p-6 border-b border-cyan-500/20">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-purple-600 shadow-lg">
+          <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-950/80 shadow-[0_0_40px_rgba(34,211,238,0.08)]">
+            <div className="border-b border-cyan-500/20 bg-gradient-to-r from-cyan-600/20 via-purple-600/20 to-pink-600/20 p-4 sm:p-6">
+              <div className="mb-3 flex items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-purple-600 shadow-lg">
                   <ClipboardList className="h-6 w-6 text-white" />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-black tracking-tight">{survey.title}</h1>
+                <div className="min-w-0 flex-1">
+                  <h1 className="break-words text-xl font-black tracking-tight sm:text-2xl">{survey.title}</h1>
                   {survey.description && (
-                    <p className="text-sm text-slate-400 mt-1">{survey.description}</p>
+                    <p className="mt-1 break-words text-sm text-slate-400">{survey.description}</p>
                   )}
                 </div>
               </div>
@@ -156,7 +157,7 @@ export default function SurveyPage() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[calc(100vh-300px)] overflow-y-auto">
+            <form onSubmit={handleSubmit} className="max-h-[calc(100vh-320px)] space-y-6 overflow-y-auto p-4 sm:p-6">
               {questions.map((question, index) => (
                 <motion.div
                   key={question.id}
@@ -167,14 +168,14 @@ export default function SurveyPage() {
                 >
                   <label className="block text-sm font-semibold text-slate-200">
                     {question.label}
-                    {question.required && <span className="text-red-400 ml-1">*</span>}
+                    {question.required && <span className="ml-1 text-red-400">*</span>}
                   </label>
                   <Textarea
                     value={answers[question.id] || ''}
-                    onChange={(e) => setAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
+                    onChange={(e) => setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))}
                     placeholder="Type your response..."
                     rows={3}
-                    className="border-cyan-500/20 bg-slate-900/60 text-white placeholder:text-slate-500 focus:border-cyan-500/50 resize-none max-h-[120px]"
+                    className="max-h-[120px] resize-none border-cyan-500/20 bg-slate-900/60 text-white placeholder:text-slate-500 focus:border-cyan-500/50"
                   />
                 </motion.div>
               ))}
@@ -183,7 +184,7 @@ export default function SurveyPage() {
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-bold py-3 shadow-lg shadow-cyan-500/20"
+                  className="w-full bg-gradient-to-r from-cyan-600 to-purple-600 py-3 font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-500 hover:to-purple-500"
                 >
                   {submitting ? (
                     <>

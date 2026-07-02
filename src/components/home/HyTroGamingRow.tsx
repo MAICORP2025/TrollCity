@@ -4,12 +4,13 @@ import HorizontalScrollRow from './HorizontalScrollRow'
 import { useLiveContent } from '@/contexts/LiveContentContext'
 import ProfileFrame from '@/components/profile/ProfileFrame'
 import { useUserFrame } from '@/hooks/useUserFrame'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 interface HyTroGamingRowProps {
   onItemClick: (id: string) => void
 }
 
-function GamingStreamItem({ item, onItemClick }: { item: any; onItemClick: (id: string) => void }) {
+function GamingStreamItem({ item, onItemClick, isMobile }: { item: any; onItemClick: (id: string) => void; isMobile: boolean }) {
   const frame = useUserFrame(item.broadcasterId)
   const avatarUrl =
     item.streamerAvatar ||
@@ -19,10 +20,10 @@ function GamingStreamItem({ item, onItemClick }: { item: any; onItemClick: (id: 
     <button
       key={item.id}
       onClick={() => onItemClick(item.id)}
-      className="group relative flex h-[220px] w-[180px] shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-orange-400/30 hover:shadow-[0_0_24px_rgba(251,146,60,0.12)]"
+      className={`group relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-orange-400/30 hover:shadow-[0_0_24px_rgba(251,146,60,0.12)] ${isMobile ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}
     >
       {/* Thumbnail */}
-      <div className="relative h-[130px] w-full shrink-0 overflow-hidden">
+      <div className={`relative w-full shrink-0 overflow-hidden ${isMobile ? 'h-[62px]' : 'h-[130px]'}`}>
         {item.streamerAvatar ? (
           <img
             src={item.streamerAvatar}
@@ -56,18 +57,18 @@ function GamingStreamItem({ item, onItemClick }: { item: any; onItemClick: (id: 
       </div>
 
       {/* Info */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-2.5">
+      <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${isMobile ? 'p-1.5' : 'p-2.5'}`}>
         <div className="flex items-center gap-1.5">
           <Gamepad2 className="h-3 w-3 text-orange-400" />
           <span className="text-[9px] font-bold text-orange-300/70">Gaming</span>
           <Flame className="ml-auto h-3 w-3 text-orange-400/50" />
         </div>
-        <p className="line-clamp-2 flex-1 text-xs font-black text-white">{item.title}</p>
+        <p className="line-clamp-2 flex-1 text-[8px] font-black text-white">{item.title}</p>
         <div className="flex items-center gap-1.5">
-          <div className="h-5 w-5 shrink-0 overflow-visible rounded-full ring-1 ring-white/15">
+          <div className={`shrink-0 overflow-visible rounded-full ring-1 ring-white/15 ${isMobile ? 'h-4 w-4' : 'h-5 w-5'}`}>
             <ProfileFrame frame={frame} avatarUrl={avatarUrl} username={item.streamerName || 'User'} size="xs" fillParent />
           </div>
-          <span className="truncate text-[10px] font-bold text-white/40">{item.streamerName}</span>
+          <span className="truncate text-[8px] font-bold text-white/40">{item.streamerName}</span>
         </div>
       </div>
     </button>
@@ -76,7 +77,8 @@ function GamingStreamItem({ item, onItemClick }: { item: any; onItemClick: (id: 
 
 export default function HyTroGamingRow({ onItemClick }: HyTroGamingRowProps) {
   const { liveItems } = useLiveContent()
-  const gamingStreams = liveItems.filter(item => item.category === 'gaming').slice(0, 12)
+  const { isMobileWidth } = useIsMobile()
+  const gamingStreams = liveItems.filter(item => item.category === 'gaming').slice(0, isMobileWidth ? 6 : 12)
 
   const hasData = gamingStreams.length > 0
 
@@ -87,11 +89,13 @@ export default function HyTroGamingRow({ onItemClick }: HyTroGamingRowProps) {
       icon={<Gamepad2 className="h-3.5 w-3.5 text-orange-400" />}
     >
       {hasData ? (
-        gamingStreams.map((item) => (
-          <GamingStreamItem key={item.id} item={item} onItemClick={onItemClick} />
-        ))
+        <div className={isMobileWidth ? 'grid w-full grid-cols-2 gap-3' : 'flex gap-3'}>
+          {gamingStreams.map((item) => (
+            <GamingStreamItem key={item.id} item={item} onItemClick={onItemClick} isMobile={isMobileWidth} />
+          ))}
+        </div>
       ) : (
-        <div className="flex h-[220px] w-[180px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.08] bg-[#080c1a]/60 p-4 text-center">
+        <div className={`flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.08] bg-[#080c1a]/60 p-4 text-center ${isMobileWidth ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}>
           <Gamepad2 className="h-8 w-8 text-orange-400/40" />
           <p className="text-xs font-bold text-white/30">Start a HyTro Stream Now</p>
           <p className="text-[10px] text-white/15">Be the first gaming stream!</p>

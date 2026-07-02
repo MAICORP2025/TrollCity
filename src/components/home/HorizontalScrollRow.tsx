@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 interface HorizontalScrollRowProps {
   title: string
@@ -21,6 +22,7 @@ export default function HorizontalScrollRow({
   className = '',
 }: HorizontalScrollRowProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { isMobileWidth } = useIsMobile()
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(true)
 
@@ -84,7 +86,7 @@ export default function HorizontalScrollRow({
       <div
         ref={scrollRef}
         onScroll={checkScroll}
-        className="flex gap-3 overflow-x-auto pb-1 select-none"
+        className={`flex gap-3 pb-1 select-none ${isMobileWidth ? 'w-full flex-wrap overflow-x-visible' : 'overflow-x-auto'}`}
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
       >
         {children}

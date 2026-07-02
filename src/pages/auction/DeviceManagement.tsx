@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Activity,
-  Bluetooth,
   CheckCircle2,
   Copy,
   Loader2,
@@ -10,13 +9,11 @@ import {
   Printer,
   QrCode,
   Scan,
-  Settings,
   Smartphone,
   Trash2,
-  Usb,
-  Wifi,
   X,
   Zap,
+  Send,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -25,7 +22,7 @@ import { cn } from '../../lib/utils'
 import { generateUUID } from '../../lib/uuid'
 
 type DeviceType = 'scanner' | 'printer'
-type ConnectionType = 'usb' | 'bluetooth' | 'hid' | 'network'
+type ConnectionType = 'phone' | 'browser'
 type DeviceStatus = 'connected' | 'disconnected' | 'pairing' | 'error'
 
 interface MobileScannerSession {
@@ -98,7 +95,7 @@ export default function DeviceManagement() {
     device_name: '',
     device_type: 'scanner' as DeviceType,
     device_brand: '',
-    connection_type: 'usb' as ConnectionType,
+    connection_type: 'phone' as ConnectionType,
   })
 
   const fetchDevices = useCallback(async () => {
@@ -128,13 +125,13 @@ export default function DeviceManagement() {
         device_name: form.device_name.trim(),
         device_type: form.device_type,
         device_brand: form.device_brand || null,
-        connection_type: form.connection_type,
+        connection_type: form.device_type === 'printer' ? 'browser' : 'phone',
         status: 'disconnected',
       })
       if (error) throw error
       toast.success('Device added')
       setShowAddModal(false)
-      setForm({ device_name: '', device_type: 'scanner', device_brand: '', connection_type: 'usb' })
+      setForm({ device_name: '', device_type: 'scanner', device_brand: '', connection_type: 'phone' })
       await fetchDevices()
     } catch (error: any) {
       toast.error(error?.message || 'Failed to add device')
@@ -353,6 +350,12 @@ export default function DeviceManagement() {
   const generatePairingCode = useCallback(async () => {
     if (!user?.id) return
 
+    const activeScannerCount = mobileSessions.filter((s) => ['connected', 'pending', 'paired'].includes(s.status)).length
+    if (activeScannerCount >= 2) {
+      toast.error('Only 2 active phone scanner connections are allowed for auctioneers at once.')
+      return
+    }
+
     const code = String(Math.floor(100000 + Math.random() * 900000))
     const token = generateUUID()
 
@@ -432,6 +435,12 @@ export default function DeviceManagement() {
       if (findError) throw findError
 
       if (existingSession) {
+        const activeScannerCount = mobileSessions.filter((s) => ['connected', 'pending', 'paired'].includes(s.status)).length
+        if (activeScannerCount >= 2) {
+          toast.error('Only 2 active phone scanner connections are allowed for auctioneers at once.')
+          return
+        }
+
         // Found a pending session from mobile — mark as connected
         const { data, error: updateError } = await supabase
           .from('auction_device_sessions')
@@ -451,6 +460,12 @@ export default function DeviceManagement() {
         await fetchMobileSessions()
         toast.success(`Scanner connected: ${data.device_name || 'Mobile Device'}`)
       } else {
+        const activeScannerCount = mobileSessions.filter((s) => ['connected', 'pending', 'paired'].includes(s.status)).length
+        if (activeScannerCount >= 2) {
+          toast.error('Only 2 active phone scanner connections are allowed for auctioneers at once.')
+          return
+        }
+
         // No pending session — create a new connected session with this code
         const token = generateUUID()
         const { data, error: createError } = await supabase
@@ -498,6 +513,32 @@ export default function DeviceManagement() {
     toast.success('Pairing code copied!')
   }, [pairingCode])
 
+  const addBrowserPrinter = useCallback(async () => {
+    if (!user?.id) return
+
+    try {
+      if (typeof window !== 'undefined' && typeof window.print === 'function') {
+        window.print()
+      }
+
+      const { error } = await supabase.from('auction_devices').insert({
+        user_id: user.id,
+        device_name: 'Browser Printer',
+        device_type: 'printer',
+        device_brand: 'System Printer',
+        connection_type: 'browser',
+        status: 'connected',
+      })
+
+      if (error) throw error
+
+      toast.success('Browser printer detected and added')
+      await fetchDevices()
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to detect browser printer')
+    }
+  }, [fetchDevices, user?.id])
+
   // Subscribe to scan events from mobile scanners
   useEffect(() => {
     if (!user?.id) return
@@ -541,7 +582,7 @@ export default function DeviceManagement() {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-white">Device Management</h1>
-                <p className="text-sm text-slate-400">Manage scanners, printers, and hardware integrations.</p>
+                <p className="text-sm text-slate-400">Use your phone for scanner pairing and your browser/PC printer options for labels and slips.</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -578,9 +619,9 @@ export default function DeviceManagement() {
           {mobileSessions.length === 0 ? (
             <div className="py-8 text-center">
               <Smartphone className="mx-auto mb-3 h-10 w-10 text-slate-700" />
-              <p className="text-sm text-slate-500">No mobile scanners connected</p>
+              <p className="text-sm text-slate-500">No phone scanners connected</p>
               <p className="mt-1 text-xs text-slate-600">
-                Click &quot;Connect Mobile Scanner&quot; to generate a QR code or pairing code.
+                Click &quot;Connect Mobile Scanner&quot; to generate a pairing code for your phone.
                 <br />
                 Open <span className="font-mono text-cyan-400">/auctioneer/scanner</span> on your mobile device.
               </p>
@@ -671,8 +712,8 @@ export default function DeviceManagement() {
           ) : scanners.length === 0 ? (
             <div className="py-10 text-center">
               <Scan className="mx-auto mb-3 h-10 w-10 text-slate-700" />
-              <p className="text-sm text-slate-500">No scanners configured</p>
-              <p className="text-xs text-slate-600 mt-1">USB HID keyboard scanners are auto-detected. Add Bluetooth scanners manually.</p>
+              <p className="text-sm text-slate-500">Phone-based scanning is the supported path</p>
+              <p className="text-xs text-slate-600 mt-1">Use the mobile pairing flow above to connect your phone as the scanner.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -689,11 +730,16 @@ export default function DeviceManagement() {
             <Printer className="h-5 w-5 text-cyan-300" />
             Connected Printers ({printers.length})
           </h2>
+          <div className="mb-3 flex justify-end">
+            <button onClick={() => void addBrowserPrinter()} className={secondary}>
+              <Printer className="h-4 w-4" /> Detect Browser Printer
+            </button>
+          </div>
           {printers.length === 0 ? (
             <div className="py-10 text-center">
               <Printer className="mx-auto mb-3 h-10 w-10 text-slate-700" />
               <p className="text-sm text-slate-500">No printers configured</p>
-              <p className="text-xs text-slate-600 mt-1">Add DYMO, Brother, Zebra, or thermal printers.</p>
+              <p className="text-xs text-slate-600 mt-1">Use the browser print dialog on your PC or laptop to pick a printer.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -775,25 +821,12 @@ export default function DeviceManagement() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">Connection</label>
-                  <div className="flex gap-2">
-                    {([
-                      { id: 'usb', icon: Usb, label: 'USB' },
-                      { id: 'bluetooth', icon: Bluetooth, label: 'Bluetooth' },
-                      { id: 'hid', icon: Monitor, label: 'HID' },
-                      { id: 'network', icon: Wifi, label: 'Network' },
-                    ] as const).map(conn => (
-                      <button
-                        key={conn.id}
-                        onClick={() => setForm(f => ({ ...f, connection_type: conn.id }))}
-                        className={cn('flex-1 rounded-xl border p-2 text-xs font-bold transition', form.connection_type === conn.id ? 'border-cyan-300/30 bg-cyan-400/12 text-cyan-100' : 'border-white/10 bg-white/[0.035] text-slate-400')}
-                      >
-                        <conn.icon className="mx-auto mb-1 h-4 w-4" />
-                        {conn.label}
-                      </button>
-                    ))}
-                  </div>
+                <div className="rounded-xl border border-cyan-300/10 bg-cyan-400/5 p-3 text-xs text-slate-400">
+                  {form.device_type === 'scanner' ? (
+                    <p>Phone pairing is the supported scanner path for auctioneers. No wired or Bluetooth scanner options are available.</p>
+                  ) : (
+                    <p>Printers are detected through your browser/PC print options. Use the print dialog to select your local printer.</p>
+                  )}
                 </div>
 
                 <button onClick={addDevice} className={cn(primary, 'w-full')}>

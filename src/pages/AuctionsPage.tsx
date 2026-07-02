@@ -263,13 +263,6 @@ export default function AuctionsPage() {
                   <Video className="h-4 w-4" />
                   Auctioneer Studio
                 </button>
-
-                {isAuctioneer && isMobile && (
-                  <button onClick={() => navigate('/auctioneer/scanner')} className={secondaryButton}>
-                    <Scan className="h-4 w-4" />
-                    Scanner
-                  </button>
-                )}
               </div>
             </div>
           </div>

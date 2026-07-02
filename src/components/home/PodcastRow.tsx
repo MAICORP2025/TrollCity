@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store'
 import { usePodcastStore } from '@/stores/podcastStore'
 import HorizontalScrollRow from './HorizontalScrollRow'
 import StorageIndicator from '@/components/broadcast/StorageIndicator'
+import { useIsMobile } from '@/hooks/useIsMobile'
 
 interface PodcastRowProps {
   onItemClick?: (id: string) => void
@@ -14,6 +15,7 @@ export default function PodcastRow({ onItemClick }: PodcastRowProps) {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const activePodcast = usePodcastStore((state) => state.activePodcast)
+  const { isMobileWidth } = useIsMobile()
 
   const isLive = activePodcast?.status === 'live' || activePodcast?.status === 'active'
 
@@ -39,7 +41,7 @@ export default function PodcastRow({ onItemClick }: PodcastRowProps) {
       {isLive && activePodcast ? (
         <button
           onClick={handleClick}
-          className="flex h-[220px] w-[180px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/[0.06] p-4 text-center transition hover:border-red-400/50 hover:bg-red-500/[0.10] cursor-pointer relative overflow-hidden"
+          className={`flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-red-500/30 bg-red-500/[0.06] p-3 text-center transition hover:border-red-400/50 hover:bg-red-500/[0.10] cursor-pointer relative overflow-hidden ${isMobileWidth ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}
         >
           {/* Pulsing live indicator */}
           <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-red-600 px-2 py-0.5">
@@ -62,11 +64,11 @@ export default function PodcastRow({ onItemClick }: PodcastRowProps) {
       ) : (
         <button
           onClick={handleClick}
-          className="flex h-[220px] w-[180px] shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-purple-500/30 bg-purple-500/[0.04] p-4 text-center transition hover:border-purple-400/50 hover:bg-purple-500/[0.08] cursor-pointer"
+          className={`flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-purple-500/30 bg-purple-500/[0.04] p-3 text-center transition hover:border-purple-400/50 hover:bg-purple-500/[0.08] cursor-pointer ${isMobileWidth ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}
         >
-          <Mic className="h-8 w-8 text-purple-400/60" />
-          <p className="text-xs font-bold text-purple-300/70">Start a Podcast</p>
-          <p className="text-[10px] text-purple-400/50">Click to go live with audio!</p>
+          <Mic className="h-6 w-6 text-purple-400/60" />
+          <p className="text-[10px] font-bold text-purple-300/70">Start a Podcast</p>
+          <p className="text-[8px] text-purple-400/50">Click to go live with audio!</p>
         </button>
       )}
     </HorizontalScrollRow>

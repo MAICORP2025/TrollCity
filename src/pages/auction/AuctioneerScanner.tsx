@@ -330,6 +330,21 @@ export default function AuctioneerScanner() {
     if (navigator.vibrate) navigator.vibrate(50)
   }, [manualCode, connectionState, session, sendScanToDesktop])
 
+  // ── Heartbeat ──────────────────────────────────────────────────────────────
+
+  const startHeartbeat = useCallback((sessionId?: string) => {
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current)
+    heartbeatRef.current = setInterval(async () => {
+      const activeSessionId = sessionId ?? session?.id
+      if (activeSessionId) {
+        await supabase
+          .from('auction_device_sessions')
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq('id', activeSessionId)
+      }
+    }, 15000)
+  }, [session?.id])
+
   // ── Pairing: connect with manual code ─────────────────────────────────────
 
   const connectWithCode = useCallback(async () => {
@@ -343,7 +358,6 @@ export default function AuctioneerScanner() {
     setError(null)
 
     try {
-      // Find the device session by pairing code
       const { data: existingSession, error: findError } = await supabase
         .from('auction_device_sessions')
         .select('*')
@@ -354,50 +368,31 @@ export default function AuctioneerScanner() {
       if (findError) throw findError
 
       if (!existingSession) {
-        // No pending session found — create a new one with this code
-        // This handles the case where the mobile device initiates
-        const token = generateSessionToken()
-        const { data, error: createError } = await supabase
-          .from('auction_device_sessions')
-          .insert({
-            auctioneer_id: user!.id,
-            auction_id: auctionId,
-            pairing_code: code,
-            session_token: token,
-            device_id: `mobile-${generateUUID().slice(0, 8)}`,
-            device_name: 'Mobile Scanner',
-            status: 'connected',
-            connected_at: new Date().toISOString(),
-          })
-          .select('*')
-          .single()
+        setConnectionState('error')
+        setError('Invalid or expired pairing code.')
+        toast.error('Invalid or expired pairing code.')
+        setManualCode('')
+        return
+      }
 
-        if (createError) throw createError
+      const { data, error: updateError } = await supabase
+        .from('auction_device_sessions')
+        .update({
+          status: 'connected',
+          connected_at: new Date().toISOString(),
+        })
+        .eq('id', existingSession.id)
+        .select('*')
+        .single()
 
-        setSession(data as DeviceSession)
-        setConnectionState('connected')
-        setShowPairingModal(false)
-        toast.success('Connected to auction!')
-        startHeartbeat()
-      } else {
-        // Found a pending session — mark as connected
-        const { data, error: updateError } = await supabase
-          .from('auction_device_sessions')
-          .update({
-            status: 'connected',
-            connected_at: new Date().toISOString(),
-          })
-          .eq('id', existingSession.id)
-          .select('*')
-          .single()
+      if (updateError) throw updateError
 
-        if (updateError) throw updateError
-
-        setSession(data as DeviceSession)
-        setConnectionState('connected')
-        setShowPairingModal(false)
-        toast.success('Connected to auction!')
-        startHeartbeat()
+      setSession(data as DeviceSession)
+      setConnectionState('connected')
+      setShowPairingModal(false)
+      toast.success('Connected to auction!')
+      if (data?.id) {
+        startHeartbeat(data.id)
       }
     } catch (err: any) {
       console.error('[Scanner] Connect failed:', err)
@@ -406,21 +401,7 @@ export default function AuctioneerScanner() {
     }
 
     setManualCode('')
-  }, [manualCode, user, auctionId])
-
-  // ── Heartbeat ──────────────────────────────────────────────────────────────
-
-  const startHeartbeat = useCallback(() => {
-    if (heartbeatRef.current) clearInterval(heartbeatRef.current)
-    heartbeatRef.current = setInterval(async () => {
-      if (session?.id) {
-        await supabase
-          .from('auction_device_sessions')
-          .update({ last_seen_at: new Date().toISOString() })
-          .eq('id', session.id)
-      }
-    }, 15000)
-  }, [session?.id])
+  }, [manualCode, startHeartbeat])
 
   // ── Disconnect ─────────────────────────────────────────────────────────────
 
@@ -858,32 +839,56 @@ export default function AuctioneerScanner() {
 
             {!session || connectionState !== 'connected' ? (
               <div className="mt-4 space-y-4">
-                {/* Enter mobile code */}
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Enter Mobile Code</p>
-                  <p className="mt-1 text-[10px] text-slate-500">Generate a code on your mobile device and enter it below.</p>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      value={manualCode}
-                      onChange={(e) => setManualCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="6-digit code"
-                      className="flex-1 rounded-xl border border-cyan-300/20 bg-[#07101f] px-4 py-3 text-center text-lg font-black tracking-[0.2em] text-white placeholder:text-slate-600 outline-none focus:border-cyan-300/50"
-                      maxLength={6}
-                    />
-                    <button
-                      onClick={connectWithCode}
-                      disabled={manualCode.length !== 6}
-                      className="rounded-xl border border-cyan-200/40 bg-cyan-300 px-4 text-sm font-black text-slate-950 disabled:opacity-40"
-                    >
-                      <Send className="h-4 w-4" />
-                    </button>
+                {isMobileDevice ? (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Enter Desktop Code</p>
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      Enter the 6-digit code shown on your desktop Auction Studio.
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={manualCode}
+                        onChange={(e) => setManualCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="6-digit code"
+                        className="flex-1 rounded-xl border border-cyan-300/20 bg-[#07101f] px-4 py-3 text-center text-lg font-black tracking-[0.2em] text-white placeholder:text-slate-600 outline-none focus:border-cyan-300/50"
+                        maxLength={6}
+                      />
+                      <button
+                        onClick={connectWithCode}
+                        disabled={manualCode.length !== 6}
+                        className="rounded-xl border border-cyan-200/40 bg-cyan-300 px-4 text-sm font-black text-slate-950 disabled:opacity-40"
+                      >
+                        <Send className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Pairing Code</p>
+                    <p className="mt-1 text-[10px] text-slate-500">A 6-digit code will appear on your desktop scanner.</p>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={manualCode}
+                        onChange={(e) => setManualCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="6-digit code"
+                        className="flex-1 rounded-xl border border-cyan-300/20 bg-[#07101f] px-4 py-3 text-center text-lg font-black tracking-[0.2em] text-white placeholder:text-slate-600 outline-none focus:border-cyan-300/50"
+                        maxLength={6}
+                      />
+                      <button
+                        onClick={connectWithCode}
+                        disabled={manualCode.length !== 6}
+                        className="rounded-xl border border-cyan-200/40 bg-cyan-300 px-4 text-sm font-black text-slate-950 disabled:opacity-40"
+                      >
+                        <Send className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Active auction selector */}
                 {activeAuctions.length > 0 && (
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Auction</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Auction</p>
                     <select
                       value={auctionId || ''}
                       onChange={(e) => setAuctionId(e.target.value || null)}
@@ -968,7 +973,7 @@ export default function AuctioneerScanner() {
               {scanHistory.length === 0 ? (
                 <p className="py-8 text-center text-xs text-slate-500">No scans yet</p>
               ) : (
-                scanHistory.map((scan) => (
+                scanHistory.map((scan: { id: React.Key; synced: any; barcode: string | number | boolean | React.ReactElement<any, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal; barcodeType: string | number | boolean | React.ReactElement<any, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal; timestamp: string | number | Date }) => (
                   <div
                     key={scan.id}
                     className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2"
