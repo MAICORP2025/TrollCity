@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 import {
@@ -390,14 +391,50 @@ function GoalCard({
   const [justCompleted, setJustCompleted] = useState(false)
   const prevCompletedRef = useRef(goal.is_completed)
 
+  // Function to determine token reward based on goal title
+  const getTokenReward = (title: string): number => {
+    const titleLower = title.toLowerCase().trim();
+    
+    // Exact matching for predefined goal titles (normalized)
+    const normalizedMap: { [key: string]: number } = {
+      'start a broadcast': 10,
+      'broadcast for 1 hour': 20,
+      'broadcast for 4 hours': 40,
+      'watch live broadcasts': 10,
+      'share your link': 10,
+    };
+    
+    // Check exact matches first
+    for (const [pattern, reward] of Object.entries(normalizedMap)) {
+      if (titleLower === pattern) {
+        return reward;
+      }
+    }
+    
+    // Fallback: Check if any pattern is contained (for partial matches)
+    for (const [pattern, reward] of Object.entries(normalizedMap)) {
+      if (titleLower.includes(pattern)) {
+        return reward;
+      }
+    }
+    
+    // Default reward for other goals
+    return 5;
+  };
+
   useEffect(() => {
     if (goal.is_completed && !prevCompletedRef.current) {
       setJustCompleted(true)
+      const tokenReward = getTokenReward(goal.title);
+      toast.success(`Goal complete: ${goal.title} (+${tokenReward} Tokens!)`, {
+        duration: 5000,
+      })
       const timer = setTimeout(() => setJustCompleted(false), 2500)
+      prevCompletedRef.current = goal.is_completed
       return () => clearTimeout(timer)
     }
     prevCompletedRef.current = goal.is_completed
-  }, [goal.is_completed])
+  }, [goal.is_completed, goal.title])
 
   // Trigger celebration sound
   useEffect(() => {

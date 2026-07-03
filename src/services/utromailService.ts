@@ -9,6 +9,9 @@ import type {
   TromailRoleAccount, MailFolder, MailSearchResult,
 } from '@/types/mail';
 
+export const UTROMAIL_SYSTEM_SENDER_ID = '00000000-0000-0000-0000-000000000000';
+export const UTROMAIL_SYSTEM_SENDER_MAIL = 'system@tromail.trollcity';
+
 // ============================================================
 // ACCOUNTS
 // ============================================================
@@ -296,6 +299,7 @@ export const sendMessage = async (params: {
   body: string;
   messageType?: string;
   parentMessageId?: string;
+  threadId?: string;
   attachments?: { file_name: string; file_url: string; file_size?: number; mime_type?: string }[];
 }): Promise<UtromailMessage> => {
 
@@ -313,10 +317,11 @@ export const sendMessage = async (params: {
     }
   }
 
-  // Find or create thread
-  let threadId: string;
+  // Find or create thread. Promo cards and system mail should reuse the same
+  // thread for a given sender/recipient pair rather than creating a fresh one.
+  let threadId = params.threadId;
 
-  if (params.recipientId) {
+  if (!threadId && params.recipientId) {
     // Check for existing 1-on-1 thread
     const { data: existingThread } = await supabase.rpc('find_utromail_thread', {
       user_a: params.senderId,
@@ -329,7 +334,7 @@ export const sendMessage = async (params: {
       // Create new thread
       const { data: newThread, error: threadError } = await supabase
         .from('utromail_threads')
-        .insert({ subject: params.subject, created_by: params.senderId })
+        .insert({ subject: params.subject || 'Troll City System', created_by: params.senderId })
         .select('id')
         .single();
       if (threadError) throw threadError;
@@ -350,11 +355,11 @@ export const sendMessage = async (params: {
       console.warn('[sendMessage] Thread member upsert warning (non-fatal):', memberError);
       // Don't throw — message can still be delivered even if member upsert has issues
     }
-  } else {
+  } else if (!threadId) {
     // System/broadcast message
     const { data: newThread, error: threadError } = await supabase
       .from('utromail_threads')
-      .insert({ subject: params.subject, created_by: params.senderId })
+      .insert({ subject: params.subject || 'Troll City System', created_by: params.senderId })
       .select('id')
       .single();
     if (threadError) throw threadError;

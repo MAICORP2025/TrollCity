@@ -127,11 +127,11 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Create function to increment impressions
-CREATE OR REPLACE FUNCTION public.increment_ad_impressions(ad_id UUID)
+CREATE OR REPLACE FUNCTION public.increment_ad_impressions(ad_id UUID, count BIGINT DEFAULT 1)
 RETURNS VOID AS $$
 BEGIN
     UPDATE public.city_ads
-    SET impressions_count = impressions_count + 1
+    SET impressions_count = impressions_count + count
     WHERE id = ad_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
