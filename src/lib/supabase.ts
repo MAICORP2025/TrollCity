@@ -69,7 +69,23 @@ const originalRemoveAllChannels = (supabase.removeAllChannels as any)?.bind(supa
   } catch (err) {
     console.warn('[supabase] Failed to track channel removal', err)
   }
-  return originalRemoveChannel(channel)
+
+  // The underlying realtime client can throw synchronously (e.g.
+  // "Cannot read property 'unsubscribe' of null") when a channel is removed
+  // while it is in a partially-subscribed state. Swallow it so it does not
+  // surface as an unhandled promise rejection / App.unhandledRejection.
+  try {
+    const result = originalRemoveChannel(channel)
+    if (result && typeof (result as any).catch === 'function') {
+      ;(result as any).catch((err: any) =>
+        console.warn('[supabase] removeChannel async error suppressed:', err)
+      )
+    }
+    return result
+  } catch (err) {
+    console.warn('[supabase] removeChannel error suppressed:', err)
+    return Promise.resolve({ data: null, error: null } as any)
+  }
 }
 
 if (originalRemoveAllChannels) {
@@ -142,6 +158,7 @@ export const PLATFORM_OPTIONS = [
 export type Platform = typeof PLATFORM_OPTIONS[number]['value'];
 
 export interface UserProfile {
+  [x: string]: boolean
   verification_expires_at: boolean
   verified_since: any
   trollmonds: number

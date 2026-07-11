@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { CityAd } from '../../types/cityAds';
 import { supabase } from '../../lib/supabase';
 import { queueCityAdClick } from '../../lib/batchWrites';
+import { maitalentIntegrator } from '../../lib/maitalent';
 
 const AUTO_REDIRECT_DELAY = 3000;
 
@@ -33,6 +34,9 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
 
   // Check if URL is internal (Troll City route) vs external
   const isInternalLink = (url: string) => url.startsWith('/');
+
+  // Determine if this is a maitalent promo
+  const isMaitalent = !!ad.maitalent_platform;
 
   // Perform redirect to CTA link
   const performRedirect = () => {
@@ -100,9 +104,14 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
     }
 
     // Track click in background — batched to reduce DB writes
-    queueCityAdClick(ad.id);
+    if (isMaitalent) {
+      // Track maitalent promo event via integration
+      await maitalentIntegrator.trackEvent('click', ad.id);
+    } else {
+      queueCityAdClick(ad.id);
+    }
   };
-  
+
   const closeLightbox = () => {
     clearRedirectTimer();
     setLightboxVisible(false);
@@ -118,7 +127,7 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
     : isSidebar 
     ? 'w-full h-full min-h-[150px] max-h-[180px]' 
     : 'w-full h-full min-h-[350px] max-h-[500px]';
-
+  
   const hoverClasses = isHovered 
     ? 'transform scale-[1.02] shadow-xl shadow-purple-500/20' 
     : '';
@@ -199,26 +208,26 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
              <h3 className={`font-bold text-white mb-0.5 ${isRail ? 'text-base' : isSidebar ? 'text-sm' : 'text-xl'}`}>
                {ad.title}
              </h3>
-            {ad.subtitle && (
-              <p className="text-xs text-purple-200 mb-1">{ad.subtitle}</p>
-            )}
-            {isFeatured && ad.description && (
-              <p className="text-sm text-slate-300 mb-3 line-clamp-2">{ad.description}</p>
-            )}
-            {ad.cta_text && (
-              <button
-                className="mt-auto self-start px-3 py-1.5 rounded-lg font-semibold text-xs
-                  bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500
-                  text-white border border-purple-400/30 shadow-lg shadow-purple-900/30
-                  transition-all duration-200 hover:scale-105"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleClick();
-                }}
-              >
-                {ad.cta_text}
-              </button>
-            )}
+             {ad.subtitle && (
+               <p className="text-xs text-purple-200 mb-1">{ad.subtitle}</p>
+             )}
+             {isFeatured && ad.description && (
+               <p className="text-sm text-slate-300 mb-3 line-clamp-2">{ad.description}</p>
+             )}
+             {ad.cta_text && (
+               <button
+                 className="mt-auto self-start px-3 py-1.5 rounded-lg font-semibold text-xs
+                   bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500
+                   text-white border border-purple-400/30 shadow-lg shadow-purple-900/30
+                   transition-all duration-200 hover:scale-105"
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   handleClick();
+                 }}
+               >
+                 {ad.cta_text}
+               </button>
+             )}
           </>
         )}
 
@@ -248,38 +257,38 @@ export default function PromoAdCard({ ad, variant = 'sidebar', onClick }: PromoA
         <div className="absolute inset-0 rounded-xl border-2 border-purple-500/50 pointer-events-none" />
       )}
 
-    {/* Lightbox portal - renders directly to body, no parent reflow */}
-    {showLightbox && createPortal(
-      <div
-        className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all duration-300 ease-out ${lightboxVisible ? 'bg-black/70' : 'bg-black/0'}`}
-        onClick={closeLightbox}
-      >
+      {/* Lightbox portal - renders directly to body, no parent reflow */}
+      {showLightbox && createPortal(
         <div
-          className={`relative max-w-[95vw] max-h-[95vh] overflow-hidden rounded-xl bg-slate-900 transition-all duration-300 ease-out ${lightboxVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
-          onClick={(e) => e.stopPropagation()}
+          className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all duration-300 ease-out ${lightboxVisible ? 'bg-black/70' : 'bg-black/0'}`}
+          onClick={closeLightbox}
         >
-          <button
-            className="absolute top-2 right-2 z-20 rounded-full bg-slate-800/90 p-2 text-white hover:bg-slate-700 transition-colors duration-200"
-            onClick={closeLightbox}
-            aria-label="Close image preview"
+          <div
+            className={`relative max-w-[95vw] max-h-[95vh] overflow-hidden rounded-xl bg-slate-900 transition-all duration-300 ease-out ${lightboxVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
+            onClick={(e) => e.stopPropagation()}
           >
-            ✕
-          </button>
+            <button
+              className="absolute top-2 right-2 z-20 rounded-full bg-slate-800/90 p-2 text-white hover:bg-slate-700 transition-colors duration-200"
+              onClick={closeLightbox}
+              aria-label="Close image preview"
+            >
+              ✕
+            </button>
 
-          <img
-            src={ad.image_url}
-            alt={ad.title}
-            className="max-h-[90vh] w-auto object-contain transition-opacity duration-300"
-          />
-          {ad.title && (
-            <div className="absolute bottom-0 left-0 right-0 bg-black/70 p-3 text-white text-sm">
-              {ad.title}
-            </div>
-          )}
-        </div>
-      </div>,
-      document.body
-    )}
+            <img
+              src={ad.image_url}
+              alt={ad.title}
+              className="max-h-[90vh] w-auto object-contain transition-opacity duration-300"
+            />
+            {ad.title && (
+              <div className="absolute bottom-0 left-0 right-0 bg-black/70 p-3 text-white text-sm">
+                {ad.title}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

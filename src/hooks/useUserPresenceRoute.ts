@@ -65,7 +65,31 @@ export function useUserPresenceRoute() {
           { onConflict: "user_id" }
         );
 
-        if (error) {
+        if (error?.code === '42P10') {
+          const { error: updateError } = await supabase
+            .from("user_presence_routes")
+            .update({
+              current_path: path,
+              current_title: title || document.title || path,
+              session_id: sessionIdRef.current,
+              user_agent: navigator.userAgent?.slice(0, 200) || null,
+              last_seen_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .match({ user_id: authUserId });
+
+          if (updateError?.code === 'PGRST116') {
+            await supabase.from("user_presence_routes").insert({
+              user_id: authUserId,
+              current_path: path,
+              current_title: title || document.title || path,
+              session_id: sessionIdRef.current,
+              user_agent: navigator.userAgent?.slice(0, 200) || null,
+              last_seen_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+        } else if (error) {
           console.error("[useUserPresenceRoute] Upsert failed", {
             error,
             authUserId,

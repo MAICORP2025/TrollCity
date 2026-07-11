@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Gift, Swords, Coins } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { useGiftSystem, GiftItem } from '../../hooks/useGiftSystem';
+import { useGiftSystem, GiftItem } from '../../lib/hooks/useGiftSystem';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 

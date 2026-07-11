@@ -186,11 +186,10 @@ $$;
 -- 4. RECREATE end_battle_guarded WITH LEAGUE POINT TRACKING
 -- =============================================================================
 
-DROP FUNCTION IF EXISTS public.end_battle_guarded(UUID, UUID, INTEGER, INTEGER);
+DROP FUNCTION IF EXISTS public.end_battle_guarded(UUID, INTEGER, INTEGER);
 
 CREATE OR REPLACE FUNCTION public.end_battle_guarded(
   p_battle_id UUID,
-  p_winner_id UUID DEFAULT NULL,
   p_min_duration_seconds INTEGER DEFAULT 180,
   p_sudden_death_seconds INTEGER DEFAULT 10
 )
@@ -206,7 +205,7 @@ DECLARE
   v_winner_user_id UUID;
   v_loser_user_id UUID;
 BEGIN
-  SELECT * INTO v_battle FROM public.battles WHERE id = p_battle_id;
+  SELECT * INTO v_battle FROM public.battles WHERE id = p_battle_id FOR UPDATE;
 
   IF v_battle IS NULL THEN
     RETURN jsonb_build_object('success', false, 'message', 'Battle not found');
@@ -226,14 +225,10 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'message', 'Battle timer not elapsed');
   END IF;
 
-  IF p_winner_id IS NOT NULL THEN
-    v_winner_stream_id := p_winner_id;
-  ELSE
-    IF v_battle.score_challenger > v_battle.score_opponent THEN
-      v_winner_stream_id := v_battle.challenger_stream_id;
-    ELSIF v_battle.score_opponent > v_battle.score_challenger THEN
-      v_winner_stream_id := v_battle.opponent_stream_id;
-    END IF;
+  IF v_battle.score_challenger > v_battle.score_opponent THEN
+    v_winner_stream_id := v_battle.challenger_stream_id;
+  ELSIF v_battle.score_opponent > v_battle.score_challenger THEN
+    v_winner_stream_id := v_battle.opponent_stream_id;
   END IF;
 
   IF v_winner_stream_id IS NOT NULL THEN
@@ -261,7 +256,8 @@ BEGIN
 
   IF v_loser_user_id IS NOT NULL THEN
     UPDATE public.user_profiles
-    SET battle_losses = COALESCE(battle_losses, 0) + 1
+    SET battle_losses = COALESCE(battle_losses, 0) + 1,
+        battle_crown_streak = 0
     WHERE id = v_loser_user_id;
 
     PERFORM public.award_family_battle_points(v_loser_user_id, -10, p_battle_id, 'battle_lost');
@@ -269,9 +265,11 @@ BEGIN
   END IF;
 
   UPDATE public.streams
-  SET battle_id = NULL, is_battle = false
+  SET battle_id = NULL, is_battle = false,
+      battle_status = 'waiting', battle_mode = 'manual'
   WHERE battle_id = p_battle_id;
 
+  DELETE FROM public.battle_participants WHERE battle_id = p_battle_id;
   DELETE FROM public.battle_queue WHERE battle_id = p_battle_id;
 
   RETURN jsonb_build_object('success', true);
@@ -310,6 +308,10 @@ BEGIN
 
   IF v_battle.status = 'ended' THEN
     RETURN jsonb_build_object('success', true, 'winner_stream_id', v_battle.winner_stream_id, 'already_ended', true);
+  END IF;
+
+  IF v_battle.started_at IS NULL OR now() < v_battle.started_at + interval '90 seconds' THEN
+    RETURN jsonb_build_object('success', false, 'message', 'Battle minimum duration not elapsed');
   END IF;
 
   IF COALESCE(v_battle.score_challenger, 0) > COALESCE(v_battle.score_opponent, 0) THEN
@@ -355,6 +357,8 @@ BEGIN
   WHERE battle_id = p_battle_id
     AND battle_mode = 'random_queue';
 
+  DELETE FROM public.battle_participants WHERE battle_id = p_battle_id;
+
   IF v_winner_id IS NOT NULL THEN
     UPDATE public.user_profiles
     SET battle_crowns = COALESCE(battle_crowns, 0) + 1,
@@ -367,8 +371,18 @@ BEGIN
   END IF;
 
   IF v_loser_id IS NOT NULL THEN
+    UPDATE public.user_profiles
+    SET battle_crown_streak = 0
+    WHERE id = v_loser_id;
+
     PERFORM public.award_family_battle_points(v_loser_id, -10, p_battle_id, 'battle_lost');
     PERFORM public.award_agency_battle_points(v_loser_id, -10, p_battle_id);
+  END IF;
+
+  IF v_winner_stream_id IS NULL THEN
+    UPDATE public.user_profiles
+    SET battle_crown_streak = 0
+    WHERE id IN (SELECT user_id FROM public.streams WHERE id IN (v_battle.challenger_stream_id, v_battle.opponent_stream_id));
   END IF;
 
   RETURN jsonb_build_object(
@@ -448,9 +462,16 @@ BEGIN
       random_battle_cooldown_until = null
   WHERE id = v_forfeiter_stream_id;
 
+  DELETE FROM public.battle_participants WHERE battle_id = v_battle.id;
+
   UPDATE public.user_profiles
-  SET battle_crowns = COALESCE(battle_crowns, 0) + 2
+  SET battle_crowns = COALESCE(battle_crowns, 0) + 2,
+      battle_crown_streak = COALESCE(battle_crown_streak, 0) + 1
   WHERE id = v_winner_id;
+
+  UPDATE public.user_profiles
+  SET battle_crown_streak = 0
+  WHERE id = v_loser_id;
 
   PERFORM public.award_family_battle_points(v_winner_id, 1, v_battle.id, 'battle_won');
   PERFORM public.award_agency_battle_points(v_winner_id, 1, v_battle.id);
@@ -475,7 +496,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.award_family_battle_points(uuid, integer, uuid, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.award_agency_battle_points(uuid, integer, uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.end_battle_guarded(UUID, UUID, INTEGER, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.end_battle_guarded(UUID, INTEGER, INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.finish_random_battle(uuid, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.forfeit_random_battle(uuid, uuid) TO authenticated;
 

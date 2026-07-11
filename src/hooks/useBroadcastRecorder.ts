@@ -197,7 +197,7 @@ export function useBroadcastRecorder(options: UseBroadcastRecorderOptions = {}):
           console.log('[useBroadcastRecorder] Capturing entire screen via getDisplayMedia')
           displayStream = await navigator.mediaDevices.getDisplayMedia({
             video: { displaySurface: 'browser', frameRate: 30 } as any,
-            audio: true,
+            audio: false,
           })
           ownsSourceStreamRef.current = true
         }

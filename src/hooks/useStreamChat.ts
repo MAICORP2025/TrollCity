@@ -124,6 +124,7 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
   const processedMessageIds = useRef<Set<string>>(new Set());
   const joinedUsersRef = useRef<Set<string>>(new Set());
   const channelsRef = useRef<any[]>([]);
+  const chatSendThrottleRef = useRef<{ lastTime: number; count: number }>({ lastTime: 0, count: 0 });
 
   const cleanupChannels = useCallback(() => {
     channelsRef.current.forEach(ch => { if (ch) supabase.removeChannel(ch) })
@@ -328,6 +329,19 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
       return;
     }
     if (!content.trim()) return;
+
+    const now = Date.now()
+    const chatThrottle = chatSendThrottleRef.current
+    if (now - chatThrottle.lastTime > 1000) {
+      chatThrottle.lastTime = now
+      chatThrottle.count = 0
+    }
+    chatThrottle.count += 1
+    if (chatThrottle.count > 8) {
+      toast.error('You are sending messages too fast. Please slow down.')
+      return
+    }
+
     if (hostChatDisabledByOfficer) {
       toast.error(
         hostChatDisableRemainingMs

@@ -485,10 +485,17 @@ export default function HytroGamingViewer() {
   leaveRef.current = agora.leave
 
   // Join Agora channel — only re-join when channel or identity actually changes
+  // Protected streams require hasAccess before joining
   const joinedChannelRef = useRef<string | null>(null)
   useEffect(() => {
     if (!channelName || isHost) {
-      // Leave if we were previously joined
+      if (joinedChannelRef.current) {
+        void leaveRef.current()
+        joinedChannelRef.current = null
+      }
+      return
+    }
+    if (!hasAccess) {
       if (joinedChannelRef.current) {
         void leaveRef.current()
         joinedChannelRef.current = null
@@ -504,7 +511,7 @@ export default function HytroGamingViewer() {
       void leaveRef.current()
       joinedChannelRef.current = null
     }
-  }, [channelName, isHost])
+  }, [channelName, isHost, hasAccess])
 
   // Handlers
   const handleLike = useCallback(async () => {
@@ -1233,6 +1240,8 @@ function StreamPlayer({
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [audioBlocked, setAudioBlocked] = useState(false)
+  const audioBlockedRef = useRef(false)
 
   // Play Agora video track (screen share / main)
   useEffect(() => {
@@ -1244,7 +1253,10 @@ function StreamPlayer({
     } catch (err) {
       console.warn('[StreamPlayer] Failed to play video:', err)
     }
-    return () => { node.innerHTML = '' }
+    return () => {
+      node.innerHTML = ''
+      try { (agora.remoteVideoTrack as any)?.stop() } catch { /* ignore */ }
+    }
   }, [agora.remoteVideoTrack])
 
   // Play camera overlay track
@@ -1257,32 +1269,45 @@ function StreamPlayer({
     } catch (err) {
       console.warn('[StreamPlayer] Failed to play camera:', err)
     }
-    return () => { node.innerHTML = '' }
+    return () => {
+      node.innerHTML = ''
+      try { (agora.remoteCameraTrack as any)?.stop() } catch { /* ignore */ }
+    }
   }, [agora.remoteCameraTrack])
 
   // Play microphone audio track (Track C)
   useEffect(() => {
-    if (!agora.remoteAudioTrack) return
+    const track = agora.remoteAudioTrack
+    if (!track) return
     try {
       if (!muted) {
-        const audioTrack = agora.remoteAudioTrack as any
+        const audioTrack = track as any
         if (audioTrack.play) audioTrack.play()
+        setAudioBlocked(false)
+        audioBlockedRef.current = false
       }
     } catch (err) {
       console.warn('[StreamPlayer] Failed to play mic audio:', err)
+      setAudioBlocked(true)
+      audioBlockedRef.current = true
     }
   }, [agora.remoteAudioTrack, muted])
 
   // Play screen share / game audio track (Track D)
   useEffect(() => {
-    if (!agora.remoteScreenAudioTrack) return
+    const track = agora.remoteScreenAudioTrack
+    if (!track) return
     try {
       if (!muted) {
-        const screenAudioTrack = agora.remoteScreenAudioTrack as any
+        const screenAudioTrack = track as any
         if (screenAudioTrack.play) screenAudioTrack.play()
+        setAudioBlocked(false)
+        audioBlockedRef.current = false
       }
     } catch (err) {
       console.warn('[StreamPlayer] Failed to play screen audio:', err)
+      setAudioBlocked(true)
+      audioBlockedRef.current = true
     }
   }, [agora.remoteScreenAudioTrack, muted])
 
@@ -1380,6 +1405,26 @@ function StreamPlayer({
           >
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </button>
+          {audioBlocked && !muted && (
+            <button
+              onClick={async () => {
+                try {
+                  const audioTrack = agora.remoteAudioTrack as any
+                  const screenAudioTrack = agora.remoteScreenAudioTrack as any
+                  if (audioTrack?.play) await audioTrack.play()
+                  if (screenAudioTrack?.play) await screenAudioTrack.play()
+                  setAudioBlocked(false)
+                  audioBlockedRef.current = false
+                } catch (err) {
+                  console.warn('[StreamPlayer] Audio unlock failed:', err)
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-full bg-amber-500/90 px-3 py-1.5 text-xs font-black text-white transition hover:bg-amber-400"
+            >
+              <Volume2 className="h-4 w-4" />
+              Enable audio
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

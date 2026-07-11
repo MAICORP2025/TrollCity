@@ -2238,7 +2238,7 @@ return (
           action_type: 'release',
           reason: 'Released by staff from Arrest tab',
           details: `jail_id:${jailId}; released_at:${now}`,
-          status: 'completed',
+          status: 'revoked',
         }).then(() => undefined, () => undefined);
 
         toast.success(`Released ${username} from jail`);

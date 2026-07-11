@@ -219,33 +219,43 @@ export function useRandomBattleQueueController({
     return clearAutoQueueTimer;
   }, [canUseRandomBattles, clearAutoQueueTimer, hasActiveBattleRef, isQueueEnabled, startQueue, stream?.status]);
 
-  // Track which battle_id we've already set an activation timer for
+  // Track which battle we are currently managing activation for.
   const activatedBattleIdRef = useRef<string | null>(null);
+  const lastActivatedIdRef = useRef<string | null>(null);
+  const activationDelayRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Only proceed if this is a new battle that hasn't been activated yet
     if (!stream?.id || !stream.battle_id || !isRandomBattle || stream.battle_status !== 'starting') {
-      return;
-    }
-    // Don't reset the timer if we already set it for this battle_id
-    if (activatedBattleIdRef.current === stream.battle_id) {
-      console.log('[RandomBattleQueue] activation timer already set for battle:', stream.battle_id);
+      lastActivatedIdRef.current = null;
       return;
     }
 
-    console.log('[RandomBattleQueue] starting activation countdown for battle:', stream.battle_id, 'battle_start_time:', stream.battle_start_time);
-    activatedBattleIdRef.current = stream.battle_id;
+    const currentBattleId = stream.battle_id;
+
+    if (activatedBattleIdRef.current === currentBattleId) {
+      return;
+    }
+
+    if (lastActivatedIdRef.current !== currentBattleId && lastActivatedIdRef.current !== null) {
+      clearActivationTimer();
+    }
+
+    activatedBattleIdRef.current = currentBattleId;
+    lastActivatedIdRef.current = currentBattleId;
+    activationDelayRef.current = null;
 
     const syncCountdownAndMaybeActivate = async () => {
+      const currentBattleIdForSync = stream.battle_id;
+      if (activatedBattleIdRef.current !== currentBattleIdForSync) return;
+
       let startsAt = stream.battle_start_time ? new Date(stream.battle_start_time).getTime() : 0;
 
-      // Fallback: read authoritative battle.started_at so BOTH broadcasters share the same countdown.
       if (!startsAt || Number.isNaN(startsAt)) {
         try {
           const { data: battleRow } = await supabase
             .from('battles')
             .select('started_at, created_at')
-            .eq('id', stream.battle_id)
+            .eq('id', currentBattleIdForSync)
             .maybeSingle();
           if (battleRow?.started_at) {
             startsAt = new Date(battleRow.started_at).getTime();
@@ -262,25 +272,25 @@ export function useRandomBattleQueueController({
       }
 
       const delay = Math.max(0, startsAt - Date.now());
-      console.log('[RandomBattleQueue] activation delay:', delay, 'ms, startsAt:', new Date(startsAt).toISOString());
       setBattleStartsAt(startsAt);
+      activationDelayRef.current = delay;
 
       activationTimerRef.current = window.setTimeout(async () => {
+        activationDelayRef.current = null;
+
+        if (activatedBattleIdRef.current !== currentBattleIdForSync) return;
         if (activatingRef.current) return;
 
-        // Only broadcasters should attempt activation RPC
         if (!isBroadcaster || !userId) return;
 
-        console.log('[RandomBattleQueue] calling activate_random_battle for', stream.battle_id);
         activatingRef.current = true;
         try {
           const { data, error } = await supabase.rpc('activate_random_battle', {
-            p_battle_id: stream.battle_id,
+            p_battle_id: currentBattleIdForSync,
           });
 
-          console.log('[RandomBattleQueue] activate_random_battle result:', { success: data?.success, error: error?.message });
           if (error) throw error;
-          if (data?.success) {
+          if (data?.success && activatedBattleIdRef.current === currentBattleIdForSync) {
             onStreamUpdate?.({ battle_status: 'active' as any } as Partial<Stream>);
           }
         } catch (err) {
@@ -296,8 +306,22 @@ export function useRandomBattleQueueController({
     return () => {
       clearActivationTimer();
       activatedBattleIdRef.current = null;
+      activationDelayRef.current = null;
+      if (stream?.battle_id !== activatedBattleIdRef.current) {
+        lastActivatedIdRef.current = null;
+      }
     };
-  }, [clearActivationTimer, isBroadcaster, isRandomBattle, onStreamUpdate, stream?.battle_id, stream?.battle_start_time, stream?.battle_status, stream?.id, userId]);
+  }, [
+    clearActivationTimer,
+    isBroadcaster,
+    isRandomBattle,
+    onStreamUpdate,
+    stream?.battle_id,
+    stream?.battle_start_time,
+    stream?.battle_status,
+    stream?.id,
+    userId,
+  ]);
 
   const forfeitBattle = useCallback(async () => {
     if (!stream?.id || !userId || !isRandomBattle) return;

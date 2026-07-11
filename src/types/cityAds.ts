@@ -37,8 +37,26 @@ export interface CityAd {
   created_at: string;
   updated_at: string;
   isUserAd?: boolean;
+  // Maitalent integration fields (optional)
+  maitalent_campaign_id?: string;
+  maitalent_platform?: 'maitalent';
+  maitalent_target_audience?: {
+    platforms?: string[];
+    countries?: string[];
+    age_range?: [number, number];
+  };
 }
 
+/**
+ * Extended CityAd with creator info
+ */
+export interface CityAdWithCreator extends CityAd {
+  creator_username?: string;
+}
+
+/**
+ * Form data for creating/updating CityAds
+ */
 export interface CityAdFormData {
   title: string;
   subtitle?: string;
@@ -57,15 +75,17 @@ export interface CityAdFormData {
   background_style?: string;
 }
 
-export interface CityAdWithCreator extends CityAd {
-  creator_username?: string;
-}
-
+/**
+ * Home page promo placements
+ */
 export const HOME_PAGE_PROMO_PLACEMENTS: AdPlacement[] = [
   'home_right_upper',
   'home_right_lower',
 ];
 
+/**
+ * Ad placement configurations
+ */
 export const AD_PLACEMENTS: { value: AdPlacement; label: string; description: string }[] = [
   { value: 'left_rail', label: 'Left Ad Rail', description: 'Vertical card between sidebar and feed' },
   { value: 'right_rail', label: 'Right Ad Rail', description: 'Vertical card beside right panel' },
@@ -76,6 +96,9 @@ export const AD_PLACEMENTS: { value: AdPlacement; label: string; description: st
   { value: 'home_right_lower', label: 'Right Lower', description: 'Lower promo slot in right sidebar' },
 ];
 
+/**
+ * Campaign type options
+ */
 export const CAMPAIGN_TYPES: { value: CampaignType; label: string }[] = [
   { value: 'troll_coins', label: 'Troll Coins Special' },
   { value: 'trollmonds', label: 'Trollmonds Bundle' },
@@ -86,6 +109,9 @@ export const CAMPAIGN_TYPES: { value: CampaignType; label: string }[] = [
   { value: 'announcement', label: 'Announcement' },
 ];
 
+/**
+ * Default ad labels
+ */
 export const DEFAULT_LABELS = [
   'Troll City Promo',
   'Special Offer',

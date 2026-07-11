@@ -1,92 +1,33 @@
+export const allowedOrigins = [
+  'https://maitalent.fun',
+  'https://www.maitalent.fun',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]
 
-// For Deno/Vercel Edge Functions, we can't use process.env directly
-// The VERCEL_URL is injected by Vercel's runtime
-const getVercelUrl = (): string => {
-  try {
-    // @ts-expect-error - VERCEL_URL is injected by Vercel
-    return typeof VERCEL_URL !== 'undefined' ? `https://${VERCEL_URL}` : '';
-  } catch {
-    return '';
+export function resolveCorsOrigin(requestOrigin: string | null): string {
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    return requestOrigin
   }
-};
-
-const getVercelBranchUrl = (): string => {
-  try {
-    // @ts-expect-error - VERCEL_BRANCH_URL is injected by Vercel
-    return typeof VERCEL_BRANCH_URL !== 'undefined' ? `https://${VERCEL_BRANCH_URL}` : '';
-  } catch {
-    return '';
-  }
-};
-
-const allowedOrigins = [
-  'http://localhost:5176',
-  'http://localhost:5177',
-  'http://localhost:5178',
-  'http://localhost:5179',
-  'http://localhost:3001',
-  'http://localhost:3000',
-  'http://localhost:5180',
-  'http://localhost:5181',
-  'https://matrollcity.com',
-  'https://www.matrollcity.com',
-  'https://maitrollcity.com',
-  'https://www.maitrollcity.com',
-  'https://troll-city.vercel.app',
-  getVercelUrl(),
-  getVercelBranchUrl()
-].filter((origin): origin is string => Boolean(origin));
-
-// Default CORS headers with wildcard origin
-const defaultCorsHeaders: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-requested-with, accept, origin, content-length',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
-  'Vary': 'Origin'
-};
-
-// Dynamic CORS headers based on origin
-export function corsHeaders(origin?: string | null): Record<string, string> {
-  if (!origin) {
-    return defaultCorsHeaders;
-  }
-  
-  const isAllowed = allowedOrigins.includes(origin);
-  const validOrigin = isAllowed ? origin : '*';
-  
-  const headers: Record<string, string> = {
-    ...defaultCorsHeaders,
-    'Access-Control-Allow-Origin': validOrigin,
-  };
-
-  // If we are using a specific origin (not wildcard), we can allow credentials
-  if (isAllowed) {
-    headers['Access-Control-Allow-Credentials'] = 'true';
-  }
-
-  return headers;
+  return allowedOrigins[0]
 }
 
-export function handleCorsPreflight(req?: Request) {
-  const origin = req?.headers.get('origin');
-  return new Response("ok", {
-    status: 200,
-    headers: {
-      ...corsHeaders(origin),
-      "Content-Type": "text/plain",
-      "Cache-Control": "max-age=0, s-maxage=0, no-cache, no-store, must-revalidate",
-    },
-  });
+export function corsHeaders(requestOrigin: string | null): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': resolveCorsOrigin(requestOrigin),
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, apikey, content-type, x-api-key',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
 }
 
-export function withCors(body: unknown, status = 200, req?: Request) {
-  const origin = req?.headers.get('origin');
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...corsHeaders(origin),
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-    },
-  });
+export function unauthorizedResponse(
+  message = 'Unauthorized',
+  requestOrigin: string | null = null,
+): Response {
+  return new Response(
+    JSON.stringify({ success: false, error: message, code: 'UNAUTHORIZED' }),
+    { status: 401, headers: { ...corsHeaders(requestOrigin), 'Content-Type': 'application/json' } },
+  )
 }

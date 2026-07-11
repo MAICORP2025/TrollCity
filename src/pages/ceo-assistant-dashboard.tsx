@@ -685,7 +685,7 @@ const CEOAssistantDashboard = () => {
                       <div className="p-4 border-t border-white/10 bg-black/30">
                         {action.reason && <p className="text-sm text-slate-300 whitespace-pre-wrap mb-3">{action.reason}</p>}
                         <div className="flex gap-2 justify-end">
-                          <button onClick={(e) => { e.stopPropagation(); supabase.from('moderation_actions').update({ status: 'completed' }).eq('id', action.id).then(() => { setExpandedModAction(null); loadDashboardStats(); }); }} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded text-xs font-bold hover:bg-emerald-500/20">Complete</button>
+                          <button onClick={(e) => { e.stopPropagation(); supabase.from('moderation_actions').update({ status: 'revoked' }).eq('id', action.id).then(() => { setExpandedModAction(null); loadDashboardStats(); }); }} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded text-xs font-bold hover:bg-emerald-500/20">Complete</button>
                           <button onClick={(e) => { e.stopPropagation(); supabase.from('moderation_actions').update({ status: 'rejected' }).eq('id', action.id).then(() => { setExpandedModAction(null); loadDashboardStats(); }); }} className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded text-xs font-bold hover:bg-red-500/20">Reject</button>
                         </div>
                       </div>

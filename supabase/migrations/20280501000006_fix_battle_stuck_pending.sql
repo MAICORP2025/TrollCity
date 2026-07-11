@@ -34,6 +34,7 @@ BEGIN
     OR COALESCE(v_self.random_battle_queue_enabled, false) = false
     OR COALESCE(v_self.is_battle, false) = true
     OR v_self.battle_id IS NOT NULL
+    OR (v_self.random_battle_cooldown_until IS NOT NULL AND v_self.random_battle_cooldown_until > now())
   THEN
     RETURN jsonb_build_object('matched', false, 'message', 'Stream not eligible');
   END IF;
@@ -48,6 +49,7 @@ BEGIN
     AND COALESCE(is_battle, false) = false
     AND battle_id IS NULL
     AND user_id <> p_broadcaster_id
+    AND (random_battle_cooldown_until IS NULL OR random_battle_cooldown_until <= now())
   ORDER BY random_battle_queued_at NULLS FIRST, started_at NULLS LAST, created_at
   LIMIT 1
   FOR UPDATE SKIP LOCKED;

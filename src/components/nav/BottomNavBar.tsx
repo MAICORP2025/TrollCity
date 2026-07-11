@@ -801,8 +801,7 @@ export default function BottomNavBar() {
                  <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
                  <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
                  <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
-<NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
-                  <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} size="large" />
+                 <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
                  <NavButton
                    icon={LayoutGrid}
                    label="More"

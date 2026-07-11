@@ -8,7 +8,7 @@ interface PaidChatSettingsModalProps {
   onClose: () => void;
   streamId: string;
   isHost: boolean;
-  onSave: () => void;
+  onSave: (pricePerUser: number, pricePerChat: number) => void;
   streamCategory?: string;
 }
 
@@ -45,12 +45,13 @@ export default function PaidChatSettingsModal({
           .eq('id', streamId)
           .maybeSingle();
         if (streamData?.user_id) {
-          const { data: profileData } = await supabase
-            .from('user_profiles')
-            .select('level')
-            .eq('id', streamData.user_id)
-            .maybeSingle();
-          setStreamerLevel(profileData?.level ?? 1);
+           const { data: xpData } = await supabase
+             .from('user_stats')
+             .select('level')
+             .eq('user_id', streamData.user_id)
+             .maybeSingle();
+           setStreamerLevel(xpData?.level ?? 1);
+
 
           const { data: settingsData } = await supabase
             .from('stream_settings')

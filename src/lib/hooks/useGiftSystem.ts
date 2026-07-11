@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { processGiftXp } from '../xp'
 import { useXPStore } from '@/stores/useXPStore'
@@ -87,18 +87,39 @@ export function GiftSystemProvider({
     (window as any).GIFT_SYSTEM_PROVIDER_RENDER_COUNT = ((window as any).GIFT_SYSTEM_PROVIDER_RENDER_COUNT || 0) + 1
   }
 
-  // Guard: Do not initialize provider without streamId
+  // Guard: Do not initialize provider without streamId. This return happens before
+  // any hooks run in the outer component, so it never affects hook order.
   if (!streamId) {
     if (import.meta.env.DEV) console.debug('[GiftSystemProvider] Skipping - no streamId provided')
     return React.createElement(React.Fragment, {}, children)
   }
 
+  return React.createElement(GiftSystemProviderInner, { streamId, defaultReceiverId }, children)
+}
+
+function GiftSystemProviderInner({
+  streamId,
+  defaultReceiverId,
+  children,
+}: {
+  streamId: string
+  defaultReceiverId?: string
+    children?: React.ReactNode
+}) {
   const { user, profile } = useAuthStore()
   const { recordGiftSent, recordGiftEarned } = useTrollFamilyActivity()
   const [isSending, setIsSending] = useState(false)
 
+  const circuitRef = useRef<{ openUntil: number }>({ openUntil: 0 })
+
   const sendGift = useCallback(
     async (gift: GiftItem, options: GiftSendOptions = {}) => {
+      const now = Date.now()
+      if (circuitRef.current.openUntil > now) {
+        toast.error('Gifting is temporarily paused. Please try again shortly.')
+        return false
+      }
+
       const targetReceiverId = options.receiverId || defaultReceiverId || streamId
       const quantity = Math.max(1, Number(options.quantity) || 1)
       const battleId = options.battleId ?? null
@@ -130,14 +151,14 @@ export function GiftSystemProvider({
         gift_icon: gift.icon,
         animation_key: gift.animationKey || gift.slug || gift.name,
         animation_type: gift.animationType,
-        animation_url: gift.animationUrl || gift.animation_url || gift.videoUrl || gift.video_url || null,
-        video_url: gift.videoUrl || gift.video_url || gift.animationUrl || gift.animation_url || null,
-        animation_duration_ms: gift.animationDurationMs || gift.animation_duration_ms,
-        sound_url: gift.soundUrl || gift.sound_url || null,
-        is_fullscreen: gift.isFullscreen ?? gift.is_fullscreen,
+        animation_url: gift.animationUrl || gift.videoUrl || null,
+        video_url: gift.videoUrl || gift.animationUrl || null,
+        animation_duration_ms: gift.animationDurationMs,
+        sound_url: gift.soundUrl || null,
+        is_fullscreen: gift.isFullscreen,
         rarity: gift.rarity,
-        tray_visual_url: gift.trayVisualUrl || gift.tray_visual_url || null,
-        tray_gradient: gift.trayGradient || gift.tray_gradient || null,
+        tray_visual_url: gift.trayVisualUrl || null,
+        tray_gradient: gift.trayGradient || null,
         ...options.metadata,
       }
 
@@ -166,12 +187,12 @@ export function GiftSystemProvider({
 
         // Non-critical post-send operations — fire and forget for instant UI response
         void (async () => {
-          try { await processGiftXp(user.id, Math.floor(gift.coinCost * quantity * 1.1)) } catch (e) { /* ignore */ }
-          try { await quietRefreshGiftProfile(user.id) } catch (e) { /* ignore */ }
+          try { await processGiftXp(user.id, Math.floor(gift.coinCost * quantity * 1.1)) } catch (e) { if (import.meta.env.DEV) console.warn('[GiftSystem] processGiftXp failed:', e) }
+          try { await quietRefreshGiftProfile(user.id) } catch (e) { if (import.meta.env.DEV) console.warn('[GiftSystem] profile refresh failed:', e) }
           try {
             const xpState = useXPStore.getState()
             if (xpState.xpTotal > 0) await xpState.fetchXP(user?.id)
-          } catch (e) { /* ignore */ }
+          } catch (e) { if (import.meta.env.DEV) console.warn('[GiftSystem] fetchXP failed:', e) }
           try {
             const dedupKey = `gift_${effectiveStreamId}_${gift.id}_${user.id}_${targetReceiverId}_${Date.now()}`
             await recordGiftSent(totalCost, targetReceiverId, effectiveStreamId, gift.id)
@@ -181,13 +202,22 @@ export function GiftSystemProvider({
               p_amount: totalCost,
               p_metadata: { stream_id: effectiveStreamId, gift_id: gift.id, sender_id: user.id, dedup_key: dedupKey },
             })
-          } catch (e) { /* ignore */ }
+          } catch (e) { if (import.meta.env.DEV) console.warn('[GiftSystem] activity record failed:', e) }
         })()
 
         return { success: true, bonus: result }
       } catch (error: any) {
         console.error('[GiftDebugger] Error:', error)
-        toast.error(error?.message || 'Failed to send gift')
+        const msg = error?.message || 'Failed to send gift'
+        toast.error(msg)
+        if (
+          String(msg).toLowerCase().includes('timeout') ||
+          String(msg).toLowerCase().includes('deadlock') ||
+          String(msg).toLowerCase().includes('rate limit') ||
+          String(msg).toLowerCase().includes('could not obtain lock')
+        ) {
+          circuitRef.current.openUntil = Date.now() + 60_000
+        }
         return false
       } finally {
         setIsSending(false)

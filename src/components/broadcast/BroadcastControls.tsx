@@ -477,7 +477,7 @@ function BroadcastControls({
         onRgbToggle(enabling);
       }
       if (result.message === 'Purchased and Enabled') {
-        toast.success("RGB Unlocked! (-10 Coins)");
+        toast.success("RGB Unlocked! (-1 Coin)");
       } else {
         toast.success(enabling ? "RGB Effect Enabled" : "RGB Effect Disabled");
       }

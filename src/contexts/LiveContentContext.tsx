@@ -44,15 +44,15 @@ export interface AuctionShow {
   isTrending?: boolean
 }
 
-interface LiveContentState {
-   liveItems: LiveItem[]
-   liveAuctions: AuctionShow[]
-   totalViewers: number
-   onlineUsers: number
-   loadingLive: boolean
-   loadingOnline: boolean
-   refresh: () => void
- }
+   interface LiveContentState {
+      liveItems: LiveItem[]
+      liveAuctions: AuctionShow[]
+      totalViewers: number
+      onlineUsers: number
+      loadingLive: boolean
+      loadingOnline: boolean
+      refresh: () => void
+    }
 
 const LiveContentContext = createContext<LiveContentState | null>(null)
 

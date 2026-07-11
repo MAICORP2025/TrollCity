@@ -112,6 +112,7 @@ export default function InmatesPage() {
       const activeInmates = (jailData || [])
         .filter((inmate: any) => {
           if (inmate.bond_posted) return false
+          if (inmate.status && inmate.status !== 'jailed') return false
           if (!inmate.release_time) return true
           return new Date(inmate.release_time) > now
         })

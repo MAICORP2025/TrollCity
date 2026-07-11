@@ -501,6 +501,23 @@ export async function reportTreelzPost(userId: string, postId: string, reason: s
   })
 }
 
+export async function fetchTreelzReports(postId: string) {
+  const { data, error } = await supabase
+    .from('moderation_reports')
+    .select('id, reason, created_at, reporter:reporter_id(username)')
+    .eq('target_post_id', postId)
+    .eq('target_type', 'treelz')
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    reason: r.reason,
+    created_at: r.created_at,
+    reporter_username: r.reporter?.username || 'unknown',
+  }))
+}
+
 // ─── Saved Posts ───
 export async function fetchSavedTreelz(userId: string): Promise<TreelzPost[]> {
   const { data, error } = await supabase

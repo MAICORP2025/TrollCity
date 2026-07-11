@@ -46,7 +46,7 @@ import { getGiftVisualConfig } from '../../lib/giftVisuals'
 
 
 import { GiftSystemProvider } from '../../lib/hooks/useGiftSystem'
-import BattleView from '../../components/broadcast/BattleView'
+import BattleView from '../../pages/broadcast/BattleView'
 import { useBoxCount } from '../../hooks/useBoxCount'
 import ProfileFrame from '@/components/profile/ProfileFrame'
 import { useUserFrame } from '@/hooks/useUserFrame'
@@ -1086,8 +1086,8 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
     const hasJoinedStreamAudienceRef = useRef(false)
 
     const watchTimeIntervalRef = useRef<number | null>(null)
-  const clickTimesRef = useRef<number[]>([])
-   const blockedUntilRef = useRef<number | null>(null)
+    const clickTimesRef = useRef<number[]>([])
+    const blockedUntilRef = useRef<number | null>(null)
 
    // Paid chat state for viewers
    const [isPaidChatModalOpen, setIsPaidChatModalOpen] = useState(false)
@@ -1198,61 +1198,51 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
     // Track whether we already processed a kick for this user to avoid double-processing
     const kickProcessedRef = useRef(false)
 
-    // Listen for seat_left broadcast events from broadcaster/officer removes
-    // When the kicked user is the current viewer, run the same client-side
-    // cleanup they would get if they clicked "Leave seat" themselves
-    useEffect(() => {
-      if (!streamId) return
-      kickProcessedRef.current = false
-      const channel = supabase.channel(`stream-seat-events:${streamId}`)
-      channel
-        .on('broadcast', { event: 'seat_left' }, (payload) => {
-          if (kickProcessedRef.current) return
+     // Listen for seat_left broadcast events from broadcaster/officer removes
+     // When the kicked user is the current viewer, run the same client-side
+     // cleanup they would get if they clicked "Leave seat" themselves.
+     // Non-kick seat_left events are already handled by useStreamSeats via
+     // postgres_changes and broadcast events, so this handler only acts on
+     // the current-user-kicked case to avoid duplicate state updates.
+     useEffect(() => {
+       if (!streamId) return
+       kickProcessedRef.current = false
+       const channel = supabase.channel(`stream-seat-events-kick:${streamId}`)
+       channel
+         .on('broadcast', { event: 'seat_left' }, (payload) => {
+           if (kickProcessedRef.current) return
 
-          const payloadUserId = payload?.payload?.user_id
-          const payloadSessionId = payload?.payload?.session_id
-          const seatIndex = payload?.payload?.seat_index
+           const payloadUserId = payload?.payload?.user_id
+           const payloadSessionId = payload?.payload?.session_id
 
-          // Match by user ID or session ID - don't rely on mySeat since
-          // useStreamSeats may have already cleared it after refresh
-          const isCurrentUserKicked =
-            (payloadUserId && payloadUserId === user?.id) ||
-            (payloadSessionId && payloadSessionId === mySeat?.id) ||
-            (payloadUserId && (payloadUserId === mySeat?.user_id || payloadUserId === mySeat?.guest_id))
+           const isCurrentUserKicked =
+             (payloadUserId && payloadUserId === user?.id) ||
+             (payloadSessionId && payloadSessionId === mySeat?.id) ||
+             (payloadUserId && (payloadUserId === mySeat?.user_id || payloadUserId === mySeat?.guest_id))
 
-          if (isCurrentUserKicked) {
-             kickProcessedRef.current = true
-             void (async () => {
-               try {
-                 await unpublishLocalTracksRef.current?.()
-               } catch (err) {
-                 // ignore
-               }
-               try {
-                 await leaveLiveKitRoomRef.current?.()
-               } catch (err) {
-                 // ignore
-               }
-               hasJoinedAudienceRef.current = false
-               joiningAudienceRef.current = false
-               currentRoomKeyRef.current = null
-               navigate('/?kicked=Removed%20from%20stage', { replace: true })
-             })()
-          } else {
-            if (seatIndex !== undefined && seatIndex !== null) {
-              removeSeat(Number(seatIndex))
-            }
-            void refreshSeats()
-          }
-        })
-        .subscribe()
-      return () => {
-        if (channel) {
-          supabase.removeChannel(channel)
-        }
-        kickProcessedRef.current = false
-      }
-    }, [streamId, refreshSeats, removeSeat, user?.id, mySeat?.id, mySeat?.user_id, mySeat?.guest_id])
+           if (!isCurrentUserKicked) return
+
+            kickProcessedRef.current = true
+            void (async () => {
+              try {
+                await unpublishLocalTracksRef.current?.()
+              } catch (err) {
+                // ignore
+              }
+              hasJoinedAudienceRef.current = false
+              joiningAudienceRef.current = false
+              currentRoomKeyRef.current = null
+              navigate('/?kicked=Removed%20from%20stage', { replace: true })
+            })()
+         })
+         .subscribe()
+       return () => {
+         if (channel) {
+           supabase.removeChannel(channel)
+         }
+         kickProcessedRef.current = false
+       }
+     }, [streamId, user?.id, mySeat?.id, mySeat?.user_id, mySeat?.guest_id])
 
    const normalizeSeatStatus = (status?: string | null) => String(status || '').trim().toLowerCase()
    const isSeatActiveStatus = (status?: string | null) => {
@@ -1351,7 +1341,25 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
     await joinSeat(availableSeatIndex, availableSeatPrice)
   }, [availableSeatIndex, availableSeatPrice, joinSeat])
 
-  // Add a new seat to the stage (for staff/CEO/admin/roles)
+  const joinSeatThrottleRef = useRef<{ lastTime: number; count: number }>({ lastTime: 0, count: 0 })
+
+  const handleJoinSeatByIndex = useCallback(async (seatIndex: number) => {
+    if (typeof seatIndex !== 'number') return
+    const now = Date.now()
+    const throttle = joinSeatThrottleRef.current
+    if (now - throttle.lastTime > 1000) {
+      throttle.lastTime = now
+      throttle.count = 0
+    }
+    throttle.count += 1
+    if (throttle.count > 5) {
+      toast.error('Please slow down — you are joining seats too quickly.')
+      return
+    }
+    const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
+    await joinSeat(seatIndex, seatPrice)
+  }, [joinSeat, stream])
+
   const handleAddSeat = useCallback(async () => {
     if (!streamId || !user?.id) {
       toast.error('Not connected to a live stream')
@@ -1387,12 +1395,6 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
       toast.error(err?.message || 'Failed to add seat')
     }
   }, [streamId, user?.id, stream, effectiveBoxCount])
-
-  const handleJoinSeatByIndex = useCallback(async (seatIndex: number) => {
-    if (typeof seatIndex !== 'number') return
-    const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
-    await joinSeat(seatIndex, seatPrice)
-  }, [joinSeat, stream])
 
   // Fetch stream mods for the floating overlay badges
   useEffect(() => {
@@ -1575,7 +1577,10 @@ const isActive = isStreamActive(stream)
   // Sync broadcaster state from remoteParticipants — stable, only reacts to host changes
   // Never clears host state due to seat joins/leaves or temporary lookup failures
   useEffect(() => {
-    const exactHost = remoteParticipants.find((p: any) => participantMatchesUser(p, hostId))
+    let exactHost = remoteParticipants.find((p: any) => participantMatchesUser(p, hostId))
+    if (!exactHost && liveKitRoom?.remoteParticipants) {
+      exactHost = Array.from(liveKitRoom.remoteParticipants.values()).find((p: any) => participantMatchesUser(p, hostId))
+    }
     if (exactHost) {
       updateBroadcasterState(exactHost)
       hostParticipantRef.current = exactHost
@@ -1584,7 +1589,7 @@ const isActive = isStreamActive(stream)
       // Do NOT clear broadcasterState — host may be temporarily missing from
       // remoteParticipants during reconnect/subscribe. Only clear on stream end.
     }
-  }, [remoteParticipants, hostId, updateBroadcasterState])
+  }, [remoteParticipants, hostId, updateBroadcasterState, liveKitRoom])
 
 // Mic mute callbacks for walkie-talkie integration (for users on stage)
   const handleToggleMic = useCallback(async () => {
@@ -1987,7 +1992,60 @@ const handleLeaveSeat = useCallback(async () => {
     }
   }, [leaveSeat, unpublishLocalTracks])
 
-  const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
+   const handleToggleChat = useCallback(() => setIsChatOpen((prev) => !prev), [])
+
+   const pendingLikesRef = useRef(0);
+   const flushInProgressRef = useRef(false);
+
+   const flushLikes = useCallback(async () => {
+     if (flushInProgressRef.current) return;
+     const batch = pendingLikesRef.current;
+     if (batch <= 0 || !streamId) return;
+
+     pendingLikesRef.current = 0;
+     flushInProgressRef.current = true;
+
+     try {
+       const { data, error } = await supabase.rpc('increment_stream_likes', {
+         p_stream_id: streamId,
+         p_like_count: batch,
+       });
+
+       if (error) throw error;
+
+       if (typeof data === 'number') {
+         setStream((prev: any) => {
+           if (!prev) return prev;
+           return { ...prev, total_likes: data };
+         });
+       }
+     } catch (error) {
+       pendingLikesRef.current += batch;
+       console.error('Failed to flush likes:', error);
+     } finally {
+       flushInProgressRef.current = false;
+     }
+   }, [streamId]);
+
+   useEffect(() => {
+     const interval = window.setInterval(() => {
+       flushLikes();
+     }, 2500);
+
+     const handleVisibilityChange = () => {
+       if (document.visibilityState === 'hidden') {
+         void flushLikes();
+       }
+     };
+
+     document.addEventListener('visibilitychange', handleVisibilityChange);
+
+     return () => {
+       window.clearInterval(interval);
+       document.removeEventListener('visibilitychange', handleVisibilityChange);
+       void flushLikes();
+     };
+   }, [flushLikes]);
 
   const handleLike = useCallback(async () => {
     if (!streamId || !user?.id) {
@@ -2003,7 +2061,6 @@ const handleLeaveSeat = useCallback(async () => {
       return
     }
 
-    // record this tap and check rate
     const times = clickTimesRef.current
     times.push(now)
     const cutoff = now - 1000
@@ -2011,31 +2068,24 @@ const handleLeaveSeat = useCallback(async () => {
 
     const tapsPerSec = times.length
     if (tapsPerSec >= 20) {
-      // suspected auto-clicking: block for 1 minute
       blockedUntilRef.current = now + 60 * 1000
       clickTimesRef.current = []
       toast.error('Rate limited for 1 minute due to suspected auto-clicking')
       return
     }
 
-    const likeIncrement = 2 // allow 2 likes per tap
-
     setStream((prev: any) =>
       prev
         ? {
             ...prev,
-            total_likes: Number(prev.total_likes || 0) + likeIncrement,
+            total_likes: Number(prev.total_likes || 0) + 1,
           }
         : prev,
     )
 
-    try {
-      await supabase
-        .from('streams')
-        .update({ total_likes: Number((stream as any)?.total_likes || 0) + likeIncrement })
-        .eq('id', streamId)
-    } catch (err) {
-      console.warn('[ViewerPage] like update failed:', err)
+    pendingLikesRef.current += 1;
+    if (pendingLikesRef.current >= 25) {
+      flushLikes();
     }
   }, [streamId, user?.id, stream])
 
@@ -2465,16 +2515,19 @@ useStreamRealtime(
       }
    }, [streamId, user?.id, isUserOnStage, isPublishing, unpublishLocalTracks])
 
-   useEffect(() => {
-     if (!streamId || !user?.id) return
+    useEffect(() => {
+      if (!streamId || !user?.id) return
 
-     const previousStreamId = audienceStreamIdRef.current
-     if (previousStreamId && previousStreamId !== streamId) {
-       // Switching streams: leave previous audience
-       void leaveAudienceRef.current?.()
-       hasJoinedStreamAudienceRef.current = false
-     }
-     audienceStreamIdRef.current = streamId
+      const previousStreamId = audienceStreamIdRef.current
+      if (previousStreamId && previousStreamId !== streamId) {
+        void leaveAudienceRef.current?.()
+        hasJoinedStreamAudienceRef.current = false
+        void leaveLiveKitRoomRef.current?.().catch(() => {})
+        hasJoinedAudienceRef.current = false
+        joiningAudienceRef.current = false
+        currentRoomKeyRef.current = null
+      }
+      audienceStreamIdRef.current = streamId
 
      // Don't join audience presence if user has ghost mode enabled
      if (!profile?.is_ghost_mode && !hasJoinedStreamAudienceRef.current) {
@@ -2602,8 +2655,8 @@ const heartbeat = window.setInterval(() => {
       return
     }
 
-    // Don't start if we already joined or are joining
-    if (hasJoinedAudienceRef.current || joiningAudienceRef.current) return
+    // Don't start if we already joined or are joining, or already have a room key
+    if (hasJoinedAudienceRef.current || joiningAudienceRef.current || currentRoomKeyRef.current) return
 
     joiningAudienceRef.current = true
     audienceJoinAttemptedKeyRef.current = attemptKey
@@ -2664,7 +2717,13 @@ const heartbeat = window.setInterval(() => {
       const isLocked = Boolean((stream as any)?.are_seats_locked)
       const seatPrice = getSeatPriceForIndex(stream as Stream | null, seatIndex)
       const displayName = getDisplayName(seat?.user_profile || null, 'Viewer')
-      const canJoin = !isLocked && !isOccupied && !isMine
+      // A user already seated in any seat cannot join another seat until they leave it.
+      const amAlreadySeated = Boolean(
+        mySeat &&
+          isSeatActiveStatus(normalizeSeatStatus(mySeat.status)) &&
+          (mySeat.user_id === user?.id || mySeat.guest_id === user?.id),
+      )
+      const canJoin = !isLocked && !isOccupied && !isMine && !amAlreadySeated
 
       return {
         seatIndex,
@@ -2677,7 +2736,7 @@ const heartbeat = window.setInterval(() => {
         displayName,
       }
     })
-  }, [effectiveBoxCount, seats, stream, user?.id])
+  }, [effectiveBoxCount, seats, stream, user?.id, mySeat])
 
     // Mobile seat grid: square cards, scrollable below broadcaster
      const mobileSeatGridHeight = useMemo(() => {
@@ -3770,21 +3829,6 @@ const heartbeat = window.setInterval(() => {
                         }, CHAT_FLOAT_MS)
 
                         try {
-                          const { data: { session } } = await supabase.auth.getSession()
-                          if (session) {
-                            await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
-                              method: 'POST',
-                              headers: {
-                                Authorization: `Bearer ${session.access_token}`,
-                                'Content-Type': 'application/json',
-                              },
-                              body: JSON.stringify({
-                                type: 'chat',
-                                stream_id: streamId,
-                                data: { content: text },
-                              }),
-                            })
-                          }
                           const chatChannel = floatingChatChannelRef.current;
                           if (chatChannel) {
                             chatChannel.send({
@@ -3794,8 +3838,7 @@ const heartbeat = window.setInterval(() => {
                             }).catch(() => { })
                           }
                         } catch (err) {
-                          console.warn('[ViewerPage] send-message failed:', err)
-                          // keep local optimistic message visible
+                          console.warn('[ViewerPage] floating chat broadcast failed:', err)
                         }
                       } }
                       className="shrink-0 border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
@@ -4041,21 +4084,6 @@ const heartbeat = window.setInterval(() => {
                       }, CHAT_FLOAT_MS)
 
                       try {
-                        const { data: { session } } = await supabase.auth.getSession()
-                        if (session) {
-                          await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
-                            method: 'POST',
-                            headers: {
-                              Authorization: `Bearer ${session.access_token}`,
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                              type: 'chat',
-                              stream_id: streamId,
-                              data: { content: text },
-                            }),
-                          })
-                        }
                         const chatChannel = floatingChatChannelRef.current;
                         if (chatChannel) {
                           chatChannel.send({
@@ -4065,7 +4093,7 @@ const heartbeat = window.setInterval(() => {
                           }).catch(() => {})
                         }
                       } catch (err) {
-                        console.warn('[ViewerPage] send-message failed:', err)
+                        console.warn('[ViewerPage] floating chat broadcast failed:', err)
                       }
                     }}
                     className="mt-auto border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-md"
@@ -4240,21 +4268,6 @@ const heartbeat = window.setInterval(() => {
                 }, 20000)
 
                 try {
-                  const { data: { session } } = await supabase.auth.getSession()
-                  if (session) {
-                    await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
-                      method: 'POST',
-                      headers: {
-                        Authorization: `Bearer ${session.access_token}`,
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({
-                        type: 'chat',
-                        stream_id: streamId,
-                        data: { content: text },
-                      }),
-                    })
-                  }
                   const chatChannel = floatingChatChannelRef.current;
                   if (chatChannel) {
                     chatChannel.send({

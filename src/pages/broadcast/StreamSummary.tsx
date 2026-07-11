@@ -73,6 +73,12 @@ export default function StreamSummary() {
         const userIsBroadcaster = user?.id === broadcasterId;
         setIsBroadcaster(userIsBroadcaster);
 
+        const { data: replayData } = await supabase
+          .from('broadcast_replays')
+          .select('id, replay_url, thumbnail_url, duration_seconds, file_size_bytes')
+          .eq('stream_id', streamId)
+          .maybeSingle();
+
         if (userIsBroadcaster && user?.id && streamId && !isSaved) {
           try {
             await supabase
@@ -82,6 +88,8 @@ export default function StreamSummary() {
                 stream_id: streamId,
                 source: 'auto_stream_end',
                 storage_category: 'broadcast_recording',
+                file_size_bytes: replayData?.file_size_bytes || 0,
+                recording_duration: replayData?.duration_seconds || 0,
               }, { onConflict: 'saved_streams_user_id_stream_id_key' });
             setIsSaved(true);
           } catch (err: any) {
@@ -92,12 +100,6 @@ export default function StreamSummary() {
             }
           }
         }
-
-        const { data: replayData } = await supabase
-          .from('broadcast_replays')
-          .select('id, replay_url, thumbnail_url, duration_seconds')
-          .eq('stream_id', streamId)
-          .maybeSingle();
 
         if (replayData) {
           setReplay(replayData as ReplayInfo);

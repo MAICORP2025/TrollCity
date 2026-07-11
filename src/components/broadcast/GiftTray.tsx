@@ -7,7 +7,7 @@ import { getGiftVisualConfig } from '../../lib/giftVisuals';
 import { useAuthStore } from '../../lib/store';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
-import { quietRefreshGiftProfile } from '../../hooks/useGiftSystem';
+import { quietRefreshGiftProfile } from '../../lib/hooks/useGiftSystem';
 
 interface GiftTrayProps {
   recipientId: string;

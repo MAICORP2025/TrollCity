@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, Copy, Check, MessageCircle, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { useAuthStore } from '../../lib/store';
+import { issuePromoCard } from '../../lib/issuePromoCard';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -89,8 +91,57 @@ const SOCIAL_PLATFORMS = [
 
 export default function ShareModal({ isOpen, onClose, streamTitle, streamUrl, broadcasterName }: ShareModalProps) {
   const [copied, setCopied] = useState(false);
+  const { user } = useAuthStore();
 
   if (!isOpen) return null;
+
+  const issueSharePromo = async () => {
+    if (!user?.id) return
+    try {
+      const result = await issuePromoCard({
+        user_id: user.id,
+        source_type: 'share_link',
+        token_amount: 10,
+        metadata: {
+          streamTitle,
+          streamUrl,
+          source: 'share_link',
+        },
+      })
+
+      if (result.success && result.promo_card_id) {
+        window.dispatchEvent(
+          new CustomEvent('promo-card-issued', {
+            detail: {
+              promo_card_id: result.promo_card_id,
+              code: result.code,
+              token_amount: result.token_amount,
+              expires_at: result.expires_at,
+              source_type: 'share_link',
+            },
+          }),
+        )
+      }
+
+      if (!result.success && result.error === 'COOLDOWN_ACTIVE' && result.next_available_at) {
+        window.dispatchEvent(
+          new CustomEvent('promo-card-cooldown', {
+            detail: {
+              message: result.message || 'Cooldown active',
+              next_available_at: result.next_available_at,
+              source_type: 'share_link',
+            },
+          }),
+        )
+      }
+
+      if (!result.success && result.error && result.error !== 'COOLDOWN_ACTIVE') {
+        toast.error(`Promo card error: ${result.error}`)
+      }
+    } catch (err) {
+      console.error('[PromoCard] Share reward failed:', err)
+    }
+  }
 
   const handleShare = async (platform: typeof SOCIAL_PLATFORMS[0]) => {
     const title = `Check out this live stream by ${broadcasterName || 'someone'}!`;
@@ -100,18 +151,21 @@ export default function ShareModal({ isOpen, onClose, streamTitle, streamUrl, br
       setCopied(true);
       toast.success('Link copied to clipboard!');
       setTimeout(() => setCopied(false), 2000);
+      void issueSharePromo();
       return;
     }
 
     if (platform.id === 'discord' || platform.id === 'messenger' || platform.id === 'snapchat' || platform.id === 'instagram' || platform.id === 'tiktok') {
       await navigator.clipboard.writeText(streamUrl);
       toast.success(`${platform.name} link copied! Open ${platform.name} to share.`);
+      void issueSharePromo();
       return;
     }
 
     if (platform.shares) {
       const shareUrl = platform.shares(streamUrl, title);
       window.open(shareUrl, '_blank', 'noopener,noreferrer');
+      void issueSharePromo();
     }
   };
 
@@ -122,6 +176,7 @@ export default function ShareModal({ isOpen, onClose, streamTitle, streamUrl, br
         text: `Check out this live stream by ${broadcasterName || 'someone'}!`,
         url: streamUrl
       });
+      void issueSharePromo();
     } catch (error) {
       // User cancelled or error
     }

@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react'
 import { Gift, Send, Coins } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
-import { useGiftSystem, type GiftItem } from '@/hooks/useGiftSystem'
+import { useGiftSystem, type GiftItem } from '@/lib/hooks/useGiftSystem'
 import { GAMING_GIFTS, getGamingGiftRarityStyle } from '@/lib/gamingGiftCatalog'
 import { toast } from 'sonner'
 
@@ -29,6 +29,10 @@ export function GamingGiftPanel({
   const handleSendGift = useCallback(async () => {
     if (!user || !selectedGift) return
     if (isSending) return
+    if (!recipientId || !streamId) {
+      toast.error('Cannot send gift: missing recipient or stream.')
+      return
+    }
 
     try {
       const giftItem: GiftItem = {
@@ -41,9 +45,12 @@ export function GamingGiftPanel({
         animationType: selectedGift.animationType,
       }
 
-      const success = await sendGift(giftItem, recipientId, streamId)
+      const result = await sendGift(giftItem, {
+        receiverId: recipientId,
+        streamId: streamId,
+      })
 
-      if (success) {
+      if (result) {
         setRecentGifts((prev) => [
           { name: selectedGift.name, sender: profile?.username || 'You', icon: selectedGift.icon, time: Date.now() },
           ...prev.slice(0, 4),
@@ -84,7 +91,7 @@ export function GamingGiftPanel({
       {selectedGift && (
         <button
           onClick={handleSendGift}
-          disabled={isSending || !user}
+          disabled={isSending || !user || !recipientId || !streamId}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-400/15 px-4 py-2.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-400/25 disabled:opacity-50"
         >
           {isSending ? (

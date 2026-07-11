@@ -14,6 +14,7 @@ import {
   User,
   Upload,
   Wallet,
+  Zap,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";

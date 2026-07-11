@@ -116,6 +116,27 @@ function isLikelyImageUrl(url?: string | null) {
   )
 }
 
+function resolveOverlaySoundUrl(gift: BroadcastGift, visual: GiftVisualConfig): string | null {
+  const giftAny = gift as any
+  const visualAny = visual as any
+  const metadata = giftAny.metadata || {}
+
+  const candidates = [
+    [giftAny.sound_url, 'gift.sound_url'],
+    [giftAny.soundUrl, 'gift.soundUrl'],
+    [giftAny.audio_url, 'gift.audio_url'],
+    [giftAny.audioUrl, 'gift.audioUrl'],
+    [metadata.sound_url, 'metadata.sound_url'],
+    [metadata.soundUrl, 'metadata.soundUrl'],
+    [metadata.audio_url, 'metadata.audio_url'],
+    [metadata.audioUrl, 'metadata.audioUrl'],
+    [visualAny.soundUrl, 'visual.soundUrl'],
+    [visualAny.sound_url, 'visual.sound_url'],
+  ] as Array<[unknown, string]>
+
+  return firstUrl(candidates)?.url ?? null
+}
+
 function mediaTypeFromUrl(url: string | null): 'video' | 'image' {
   if (isLikelyImageUrl(url)) return 'image'
   return 'video'
@@ -235,9 +256,11 @@ function GiftPreview({
   onVideoEnd?: () => void
 }) {
   const resolved = useMemo(() => resolveOverlayUrl(gift, visual), [gift, visual])
+  const resolvedSoundUrl = useMemo(() => resolveOverlaySoundUrl(gift, visual), [gift, visual])
   const [videoFailed, setVideoFailed] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
   const triedPlayingRef = useRef(false)
 
   useEffect(() => {
@@ -258,6 +281,44 @@ function GiftPreview({
       })
     }
   }, [gift, resolved.url, resolved.source, resolved.type, visual])
+
+useEffect(() => {
+      if (!audioRef.current || !resolvedSoundUrl) return
+
+      const audio = audioRef.current
+      audio.volume = 0.7
+      audio.preload = 'auto'
+
+      const tryPlay = () => {
+        void audio.play().catch(() => {})
+      }
+
+      const unlockAudio = () => {
+        tryPlay()
+        // Also try to play the video if it's a video and we haven't tried to play it successfully yet
+        if (resolved.type === 'video' && videoRef.current && !triedPlayingRef.current) {
+          videoRef.current.play().catch(() => {})
+        }
+      }
+
+      // Try to play the audio and video on mount (if applicable)
+      tryPlay()
+      if (resolved.type === 'video' && videoRef.current && !triedPlayingRef.current) {
+        videoRef.current.play().catch(() => {})
+      }
+
+      document.addEventListener('pointerdown', unlockAudio, { once: true })
+      document.addEventListener('touchstart', unlockAudio, { once: true })
+      document.addEventListener('keydown', unlockAudio, { once: true })
+
+      return () => {
+        document.removeEventListener('pointerdown', unlockAudio)
+        document.removeEventListener('touchstart', unlockAudio)
+        document.removeEventListener('keydown', unlockAudio)
+        audio.pause()
+        audio.currentTime = 0
+      }
+    }, [resolvedSoundUrl, gift.id])
 
   useEffect(() => {
     if (resolved.type !== 'video' || !resolved.url || !videoRef.current) return
@@ -303,78 +364,81 @@ function GiftPreview({
 
   if (resolved.type === 'video' && !videoFailed) {
     return (
-      <video
-        key={`${gift.id}-${resolved.url}`}
-        ref={videoRef}
-        className="h-full w-full object-contain"
-        src={resolved.url}
-        autoPlay
-        muted
-        loop={false}
-        playsInline
-        preload="auto"
-        onLoadedData={() => {
-          if (import.meta.env.DEV) {
-            console.info('[GiftVideoOverlay] media loaded', {
+      <>
+        <video
+          key={`${gift.id}-${resolved.url}`}
+          ref={videoRef}
+          className="h-full w-full object-contain"
+          src={resolved.url}
+          autoPlay
+          muted={false}
+          loop={false}
+          playsInline
+          preload="auto"
+          onLoadedData={() => {
+            if (import.meta.env.DEV) {
+              console.info('[GiftVideoOverlay] media loaded', {
+                giftId: gift.id,
+                giftName: label,
+                slug: (visual as any).slug || (gift as any).slug || gift.gift_slug || null,
+                animation_url: gift.animation_url || null,
+                resolvedUrl: resolved.url,
+                resolvedSource: resolved.source,
+              })
+            }
+
+            void logGiftAnimationTest({
+              gift,
+              visual,
+              resolvedUrl: resolved.url,
+              resolvedSource: resolved.source,
+              status: 'loaded',
+            })
+          }}
+          onEnded={() => {
+            if (import.meta.env.DEV) {
+              console.info('[GiftVideoOverlay] video ended naturally', {
+                giftId: gift.id,
+                giftName: label,
+                resolvedUrl: resolved.url,
+              })
+            }
+            onVideoEnd?.()
+          }}
+          onError={(event) => {
+            const videoEl = event.currentTarget
+            const mediaError = videoEl.error
+
+            console.error('[GiftVideoOverlay] video failed to load', {
               giftId: gift.id,
               giftName: label,
               slug: (visual as any).slug || (gift as any).slug || gift.gift_slug || null,
               animation_url: gift.animation_url || null,
+              video_url: (gift as any).video_url || null,
+              icon_url: (gift as any).icon_url || null,
+              metadata: (gift as any).metadata || null,
               resolvedUrl: resolved.url,
               resolvedSource: resolved.source,
+              errorCode: mediaError?.code || null,
+              errorMessage: mediaError?.message || null,
+              event,
             })
-          }
 
-          void logGiftAnimationTest({
-            gift,
-            visual,
-            resolvedUrl: resolved.url,
-            resolvedSource: resolved.source,
-            status: 'loaded',
-          })
-        }}
-        onEnded={() => {
-          if (import.meta.env.DEV) {
-            console.info('[GiftVideoOverlay] video ended naturally', {
-              giftId: gift.id,
-              giftName: label,
+            void logGiftAnimationTest({
+              gift,
+              visual,
               resolvedUrl: resolved.url,
+              resolvedSource: resolved.source,
+              status: 'failed',
+              errorCode: mediaError?.code ? String(mediaError.code) : null,
+              errorMessage: mediaError?.message || null,
             })
-          }
-          onVideoEnd?.()
-        }}
-        onError={(event) => {
-          const videoEl = event.currentTarget
-          const mediaError = videoEl.error
 
-          console.error('[GiftVideoOverlay] video failed to load', {
-            giftId: gift.id,
-            giftName: label,
-            slug: (visual as any).slug || (gift as any).slug || gift.gift_slug || null,
-            animation_url: gift.animation_url || null,
-            video_url: (gift as any).video_url || null,
-            icon_url: (gift as any).icon_url || null,
-            metadata: (gift as any).metadata || null,
-            resolvedUrl: resolved.url,
-            resolvedSource: resolved.source,
-            errorCode: mediaError?.code || null,
-            errorMessage: mediaError?.message || null,
-            event,
-          })
-
-          void logGiftAnimationTest({
-            gift,
-            visual,
-            resolvedUrl: resolved.url,
-            resolvedSource: resolved.source,
-            status: 'failed',
-            errorCode: mediaError?.code ? String(mediaError.code) : null,
-            errorMessage: mediaError?.message || null,
-          })
-
-          setVideoFailed(true)
-        }}
-      />
+            setVideoFailed(true)
+          }}
+        />
+        {resolvedSoundUrl ? <audio ref={audioRef} src={resolvedSoundUrl} preload="auto" /> : null}
+      </>
     )
   }
 

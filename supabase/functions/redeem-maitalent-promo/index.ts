@@ -1,115 +1,177 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { withCors, handleCorsPreflight } from '../_shared/cors.ts';
-import { supabase } from '../_shared/supabaseClient.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders, unauthorizedResponse } from '../_shared/cors.ts'
 
-interface RedeemPromoRequest {
-  code: string;
-  requestor?: {
-    platform?: string;
-    accountId?: string;
-    metadata?: Record<string, unknown>;
-  };
-}
+serve(async (req) => {
+  const requestOrigin = req.headers.get('origin')
 
-const AUTH_TOKEN = Deno.env.get('TROLLCITY_PROMO_API_KEY')
-  || Deno.env.get('TROLLCITY_SERVICE_TOKEN')
-  || Deno.env.get('TROLL_CITY_PROMO_SECRET');
-
-function extractBearerToken(headerValue: string | null): string | null {
-  if (!headerValue) return null;
-  const trimmed = headerValue.trim();
-  if (trimmed.toLowerCase().startsWith('bearer ')) {
-    return trimmed.slice(7).trim();
-  }
-  return trimmed;
-}
-
-function unauthorizedResponse() {
-  return withCors({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401);
-}
-
-serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return handleCorsPreflight(req);
-  }
-
-  if (req.method !== 'POST') {
-    return withCors({ success: false, error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' }, 405, req);
-  }
-
-  if (!AUTH_TOKEN) {
-    console.error('[redeem-maitalent-promo] Missing auth token configuration');
-    return withCors({ success: false, error: 'Server not configured', code: 'SERVER_ERROR' }, 500, req);
-  }
-
-  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
-  const apiKeyHeader = req.headers.get('x-api-key');
-  const token = extractBearerToken(authHeader) || apiKeyHeader;
-
-  if (!token || token !== AUTH_TOKEN) {
-    return unauthorizedResponse();
-  }
-
-  let body: RedeemPromoRequest;
-  let rawBody = '';
-
-  try {
-    rawBody = await req.text();
-  } catch (error) {
-    return withCors({ success: false, error: 'Invalid JSON request body', code: 'INVALID_REQUEST', rawBody }, 400, req);
-  }
-
-  if (!rawBody || !rawBody.trim()) {
-    return withCors({ success: false, error: 'Invalid JSON request body', code: 'INVALID_REQUEST', rawBody }, 400, req);
+    return new Response('ok', { headers: corsHeaders(requestOrigin) })
   }
 
   try {
-    body = JSON.parse(rawBody) as RedeemPromoRequest;
+    const authHeader = req.headers.get('Authorization')
+    const apiKey = req.headers.get('x-api-key')
+    const promoSecret =
+      Deno.env.get('TROLL_CITY_PROMO_SECRET') ||
+      Deno.env.get('TROLLCITY_PROMO_API_KEY') ||
+      Deno.env.get('TROLLCITY_SERVICE_TOKEN')
+
+    const hasUserAuth = Boolean(authHeader)
+    const hasApiKeyAuth = Boolean(apiKey && promoSecret && apiKey === promoSecret)
+
+    if (!hasUserAuth && !hasApiKeyAuth) {
+      return unauthorizedResponse('Missing or invalid authorization', requestOrigin)
+    }
+
+    const supabaseUrl =
+      Deno.env.get('SB_URL') ||
+      Deno.env.get('SUPABASE_URL') ||
+      Deno.env.get('MAITALENT_SUPABASE_URL')
+    const serviceRoleKey =
+      Deno.env.get('SB_SERVICE_ROLE_KEY') ||
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+      Deno.env.get('MAITALENT_SERVICE_ROLE_KEY')
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Server configuration is incomplete', code: 'SERVER_ERROR' }),
+        { status: 500, headers: { ...corsHeaders(requestOrigin), 'Content-Type': 'application/json' } },
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      global: { headers: { Authorization: authHeader ?? '' } },
+    })
+
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body.code !== 'string' || !body.code.trim()) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Promo code is required', code: 'INVALID_REQUEST' }),
+        { status: 400, headers: { ...corsHeaders(requestOrigin), 'Content-Type': 'application/json' } },
+      )
+    }
+
+    const code = body.code.trim()
+    const requestor = {
+      platform: body.requestor?.platform || 'maitalent.fun',
+      accountId: body.requestor?.accountId,
+    }
+
+    let user
+    if (hasUserAuth) {
+      const {
+        data: { user: authUser },
+        error: userError,
+      } = await supabase.auth.getUser()
+      if (userError || !authUser) {
+        return unauthorizedResponse('Unauthorized', requestOrigin)
+      }
+      user = authUser
+    } else if (hasApiKeyAuth && requestor.accountId) {
+      const { data: profileUser, error: userError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('id', requestor.accountId)
+        .single()
+      if (userError || !profileUser) {
+        return unauthorizedResponse('Unauthorized', requestOrigin)
+      }
+      user = profileUser
+    } else {
+      return unauthorizedResponse('Unauthorized', requestOrigin)
+    }
+
+    const trollVerifyUrl =
+      Deno.env.get('TROLL_CITY_PROMO_VERIFY_URL') ||
+      Deno.env.get('TROLL_CITY_PROMO_REDEEM_URL')
+
+    if (!trollVerifyUrl || !promoSecret) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Promo provider is not configured', code: 'SERVER_ERROR' }),
+        { status: 500, headers: { ...corsHeaders(requestOrigin), 'Content-Type': 'application/json' } },
+      )
+    }
+
+    const trollResponse = await fetch(trollVerifyUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${promoSecret}`,
+        'x-api-key': promoSecret,
+        'Content-Type': 'application/json',
+        'X-Client-Platform': 'maitalent.fun',
+      },
+      body: JSON.stringify({ code, requestor }),
+    })
+
+    const trollData = await trollResponse.json().catch(() => ({}))
+
+    if (!trollResponse.ok || !trollData?.success) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: trollData?.error || 'Promo redemption failed',
+          code: trollData?.code || 'SERVER_ERROR',
+        }),
+        { status: 200, headers: { ...corsHeaders(requestOrigin), 'Content-Type': 'application/json' } },
+      )
+    }
+
+    const tokenAmount = Number(trollData.tokenAmount || 0)
+    const promoId = trollData.promoId || null
+    const redeemedAt = trollData.redeemedAt || new Date().toISOString()
+
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('tokens')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError) {
+      throw new Error(profileError.message)
+    }
+
+    const currentTokens = Number(profile?.tokens || 0)
+    const nextTokens = currentTokens + tokenAmount
+
+    const { error: updateError } = await supabase
+      .from('user_profiles')
+      .update({ tokens: nextTokens })
+      .eq('id', user.id)
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+
+    const { error: txError } = await supabase.from('token_transactions').insert({
+      user_id: user.id,
+      type: 'bonus',
+      amount: tokenAmount,
+      source: 'free',
+      reference_id: promoId,
+      created_at: redeemedAt,
+    })
+
+    if (txError) {
+      throw new Error(txError.message)
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        code,
+        tokenAmount,
+        promoId,
+        status: 'redeemed',
+        redeemedAt,
+      }),
+      { status: 200, headers: { ...corsHeaders(requestOrigin), 'Content-Type': 'application/json' } },
+    )
   } catch (error) {
-    return withCors({ success: false, error: 'Invalid JSON request body', code: 'INVALID_REQUEST', rawBody }, 400, req);
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return new Response(
+      JSON.stringify({ success: false, error: message, code: 'SERVER_ERROR' }),
+      { status: 500, headers: { ...corsHeaders(requestOrigin), 'Content-Type': 'application/json' } },
+    )
   }
-
-  if (!body?.code || typeof body.code !== 'string') {
-    return withCors({ success: false, error: 'Missing promo code', code: 'INVALID_REQUEST' }, 400, req);
-  }
-
-  const requestorPlatform = body.requestor?.platform?.trim() || null;
-  const requestorAccountId = body.requestor?.accountId?.trim() || null;
-  const requestorMetadata = body.requestor?.metadata || null;
-
-  const { data, error } = await supabase.rpc('redeem_promo_card', {
-    p_code: body.code.trim(),
-    p_requestor_platform: requestorPlatform,
-    p_requestor_account_id: requestorAccountId,
-    p_requestor_metadata: requestorMetadata ? requestorMetadata : null,
-  });
-
-  if (error) {
-    console.error('[redeem-maitalent-promo] RPC error:', error.message);
-    return withCors({ success: false, error: 'Server error', code: 'SERVER_ERROR' }, 500, req);
-  }
-
-  const result = data as Record<string, unknown> | null;
-  if (!result) {
-    return withCors({ success: false, error: 'Empty response from redemption service', code: 'SERVER_ERROR' }, 500, req);
-  }
-
-  const success = result.success === true;
-  if (!success) {
-    return withCors({
-      success: false,
-      error: String(result.error ?? 'Invalid promo code'),
-      code: String(result.code ?? 'INVALID_CODE'),
-    }, 400, req);
-  }
-
-  return withCors({
-    success: true,
-    code: String(result.code ?? body.code.trim()),
-    tokenAmount: Number(result.tokenAmount ?? 0),
-    promoId: String(result.promoId ?? ''),
-    status: String(result.status ?? 'redeemed'),
-    redeemedAt: String(result.redeemedAt ?? new Date().toISOString()),
-  }, 200, req);
-});
+})

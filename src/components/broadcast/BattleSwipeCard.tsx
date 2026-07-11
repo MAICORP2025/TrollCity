@@ -63,6 +63,8 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
   const hasJoinedRef = useRef(false);
   const clickTimesRef = useRef<number[]>([]);
   const blockedUntilRef = useRef<number | null>(null);
+  const pendingLikesRef = useRef(0);
+  const flushInProgressRef = useRef(false);
   
   // Fetch battle data
   useEffect(() => {
@@ -200,66 +202,90 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
     };
   }, [isActive]);
   
-  // Handle like
-  const handleLike = async () => {
-    if (!user) {
-      navigate('/auth?mode=signup');
-      return;
-    }
+   // Handle like
+   const handleLike = async () => {
+     if (!user) {
+       navigate('/auth?mode=signup');
+       return;
+     }
 
-    const now = Date.now();
-    if (blockedUntilRef.current && now < blockedUntilRef.current) {
-      const secondsLeft = Math.ceil((blockedUntilRef.current - now) / 1000);
-      toast.error(`You're temporarily blocked from liking (${secondsLeft}s)`);
-      return;
-    }
+     const now = Date.now();
+     if (blockedUntilRef.current && now < blockedUntilRef.current) {
+       const secondsLeft = Math.ceil((blockedUntilRef.current - now) / 1000);
+       toast.error(`You're temporarily blocked from liking (${secondsLeft}s)`);
+       return;
+     }
 
-    const times = clickTimesRef.current;
-    times.push(now);
-    const cutoff = now - 1000;
-    while (times.length && times[0] < cutoff) times.shift();
+     const times = clickTimesRef.current;
+     times.push(now);
+     const cutoff = now - 1000;
+     while (times.length && times[0] < cutoff) times.shift();
 
-    const tapsPerSec = times.length;
-    if (tapsPerSec >= 20) {
-      blockedUntilRef.current = now + 60 * 1000;
-      clickTimesRef.current = [];
-      toast.error('Rate limited for 1 minute due to suspected auto-clicking');
-      return;
-    }
+     const tapsPerSec = times.length;
+     if (tapsPerSec >= 20) {
+       blockedUntilRef.current = now + 60 * 1000;
+       clickTimesRef.current = [];
+       toast.error('Rate limited for 1 minute due to suspected auto-clicking');
+       return;
+     }
 
-    const likeIncrement = 2;
-    setLikeCount((prev) => (Number(prev || 0) + likeIncrement));
+     const likeIncrement = 2;
+     setLikeCount((prev) => Number(prev || 0) + likeIncrement);
 
-    try {
-      const edgeUrl = `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-like`;
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/auth?mode=signup');
-        return;
-      }
+     pendingLikesRef.current += 1;
+     if (pendingLikesRef.current >= 25) {
+       flushLikes();
+     }
+   };
 
-      const response = await fetch(edgeUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ stream_id: stream.id })
-      });
+   const flushLikes = useCallback(async () => {
+     if (flushInProgressRef.current) return;
+     const batch = pendingLikesRef.current;
+     if (batch <= 0 || !stream?.id) return;
 
-      if (response.ok) {
-        const result = await response.json();
-        setLikeCount(result.total_likes ?? (likeCount + 1));
-        if (result.coins_awarded > 0) {
-          toast.success(`+${result.coins_awarded} coins!`);
-        }
-      }
-    } catch (error) {
-      console.error('Error liking stream:', error);
-    }
-  };
-  
-  // Handle tap to view full stream
+     pendingLikesRef.current = 0;
+     flushInProgressRef.current = true;
+
+     try {
+       const { data, error } = await supabase.rpc('increment_stream_likes', {
+         p_stream_id: stream.id,
+         p_like_count: batch,
+       });
+
+       if (error) throw error;
+
+       if (typeof data === 'number') {
+         setLikeCount(data);
+       }
+     } catch (error) {
+       pendingLikesRef.current += batch;
+       console.error('Failed to flush likes:', error);
+     } finally {
+       flushInProgressRef.current = false;
+     }
+   }, [stream?.id]);
+
+   useEffect(() => {
+     const interval = window.setInterval(() => {
+       flushLikes();
+     }, 2500);
+
+     const handleVisibilityChange = () => {
+       if (document.visibilityState === 'hidden') {
+         void flushLikes();
+       }
+     };
+
+     document.addEventListener('visibilitychange', handleVisibilityChange);
+
+     return () => {
+       window.clearInterval(interval);
+       document.removeEventListener('visibilitychange', handleVisibilityChange);
+       void flushLikes();
+     };
+   }, [flushLikes]);
+   
+   // Handle tap to view full stream
   const handleTap = () => {
     const isGaming = stream.agora_channel || stream.category === 'gaming';
     navigate(isGaming ? `/gaming/watch/${stream.id}?from=swipe&battle=true` : `/watch/${stream.id}?from=swipe&battle=true`);

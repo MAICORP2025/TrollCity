@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 
@@ -28,7 +28,33 @@ export function useBattleManagement({ battleId, streamId, isHost }: UseBattleMan
     error: null,
   });
 
-  // Fetch current guests in battle
+  const broadcastChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const getBroadcastChannel = useCallback((streamId: string) => {
+    if (broadcastChannelRef.current) {
+      const existing = broadcastChannelRef.current;
+      if ((existing as any).topic?.includes(streamId)) {
+        return existing;
+      }
+      supabase.removeChannel(existing);
+      broadcastChannelRef.current = null;
+    }
+
+    const ch = supabase.channel(`stream:${streamId}`);
+    broadcastChannelRef.current = ch;
+    return ch;
+  }, []);
+
+   const parseMetadata = useCallback((raw: string | null | undefined): Record<string, any> => {
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch {
+      return {};
+    }
+  }, []);
+
   const fetchGuests = useCallback(async () => {
     if (!battleId || !streamId) return;
 
@@ -42,23 +68,23 @@ export function useBattleManagement({ battleId, streamId, isHost }: UseBattleMan
       if (error) throw error;
 
       const guests: BattleGuest[] = (data || [])
-        .filter((p: any) => {
-          // Only include guests from this stream
-          const metadata = p.metadata ? JSON.parse(p.metadata) : {};
-          return metadata.sourceStreamId === streamId;
+        .map((p: any) => {
+          const metadata = parseMetadata(p.metadata);
+          if (metadata.sourceStreamId !== streamId) return null;
+          return {
+            user_id: p.user_id,
+            username: p.username,
+            seat_index: p.seat_index || 0,
+            joined_at: metadata.joined_at || new Date().toISOString(),
+          };
         })
-        .map((p: any) => ({
-          user_id: p.user_id,
-          username: p.username,
-          seat_index: p.seat_index || 0,
-          joined_at: p.metadata ? JSON.parse(p.metadata).joined_at : new Date().toISOString(),
-        }));
+        .filter((g: BattleGuest | null): g is BattleGuest => g !== null);
 
       setState(prev => ({ ...prev, guests }));
     } catch (err) {
       console.error('Error fetching battle guests:', err);
     }
-  }, [battleId, streamId]);
+  }, [battleId, streamId, parseMetadata]);
 
   // Subscribe to participant changes
   useEffect(() => {
@@ -85,6 +111,10 @@ export function useBattleManagement({ battleId, streamId, isHost }: UseBattleMan
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
+      }
+      if (broadcastChannelRef.current) {
+        supabase.removeChannel(broadcastChannelRef.current);
+        broadcastChannelRef.current = null;
       }
     };
   }, [battleId, fetchGuests]);
@@ -167,8 +197,8 @@ export function useBattleManagement({ battleId, streamId, isHost }: UseBattleMan
         if (error) throw error;
 
         // Broadcast the change
-        const broadcastChannel = supabase.channel(`stream:${streamId}`);
-        await broadcastChannel.send({
+        const channel = getBroadcastChannel(streamId);
+        await channel.send({
           type: 'broadcast',
           event: 'box_count_changed',
           payload: { box_count: newBoxCount, stream_id: streamId },
@@ -214,8 +244,8 @@ export function useBattleManagement({ battleId, streamId, isHost }: UseBattleMan
           if (error) throw error;
 
           // Broadcast the change
-          const broadcastChannel = supabase.channel(`stream:${streamId}`);
-          await broadcastChannel.send({
+          const channel = getBroadcastChannel(streamId);
+          await channel.send({
             type: 'broadcast',
             event: 'box_count_changed',
             payload: {
@@ -239,6 +269,7 @@ export function useBattleManagement({ battleId, streamId, isHost }: UseBattleMan
     allowGuestJoin,
     autoAdjustBoxes,
     guestCount: state.guests.length,
+    getBroadcastChannel,
   };
 }
 

@@ -56,7 +56,22 @@ AS $$
 DECLARE
     v_card RECORD;
     v_existing_redemption RECORD;
+    v_daily_redemptions integer;
 BEGIN
+    -- Daily cap check
+    SELECT COUNT(*) INTO v_daily_redemptions
+    FROM promo_card_redemptions
+    WHERE requestor_account_id = p_requestor_account_id
+        AND redeemed_at >= NOW() - INTERVAL '24 hours';
+    
+    IF v_daily_redemptions >= 3 THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Promo redemption would exceed daily cap',
+            'code', 'DAILY_CAP_EXCEEDED'
+        );
+    END IF;
+    
     SELECT * INTO v_card
     FROM promo_cards
     WHERE code = p_code

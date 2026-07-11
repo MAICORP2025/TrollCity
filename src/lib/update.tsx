@@ -75,6 +75,7 @@ function GamingSetupPageInner() {
   const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isMountedRef = useRef(true)
   const recorder = useBroadcastRecorder()
+  const goLiveInProgressRef = useRef(false)
 
   // Heartbeat only when OBS is actually connected
   const heartbeat = useObsHeartbeat({
@@ -93,29 +94,6 @@ function GamingSetupPageInner() {
     if (health.bitrateKbps === null) return 'Connected'
     return `${Math.round(health.bitrateKbps).toLocaleString()} kbps`
   }, [health.bitrateKbps, isObsConnected, isLive])
-
-  // Stream duration timer
-  useEffect(() => {
-    if (!isLive || !streamData?.started_at) {
-      setStreamDuration('00:00:00');
-      return;
-    }
-    const start = new Date(streamData.started_at).getTime();
-    if (!Number.isFinite(start)) {
-      setStreamDuration('00:00:00');
-      return;
-    }
-    const update = () => {
-      const elapsed = Math.max(0, Math.floor((Date.now() - start) / 1000));
-      const h = Math.floor(elapsed / 3600);
-      const m = Math.floor((elapsed % 3600) / 60);
-      const s = elapsed % 60;
-      setStreamDuration([h, m, s].map((p) => String(p).padStart(2, '0')).join(':'));
-    };
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [isLive, streamData?.started_at])
 
   const streamHealthDisplay = useMemo(() => {
     if (isLive) return 'Good'
@@ -405,15 +383,17 @@ function GamingSetupPageInner() {
   const handleGoLive = useCallback(async () => {
     if (!streamData?.id || !user?.id) { toast.error('Stream not initialized'); return }
     if (!streamData.stream_key) { toast.error('Generate stream credentials first'); return }
+    if (goLiveInProgressRef.current) { toast.error('Go live already in progress'); return }
 
+    goLiveInProgressRef.current = true
     const fresh = await runHealthCheck()
     if (!fresh.connected && !fresh.ingestActive) {
       toast.error('Waiting for OBS signal. Start streaming in OBS first.')
+      goLiveInProgressRef.current = false
       return
     }
 
     try {
-      // Use agora-stream edge function to mark live
       const { data: liveData, error: liveError } = await supabase.functions.invoke('agora-stream', {
         body: { action: 'goLive', sessionId: agoraSessionId },
       })
@@ -438,8 +418,10 @@ function GamingSetupPageInner() {
     } catch (err: any) {
       console.error('[GamingSetupPage] Go live failed:', err)
       toast.error(err?.message || 'Failed to go live')
+    } finally {
+      goLiveInProgressRef.current = false
     }
-  }, [streamData, user?.id, runHealthCheck, applyStreamState])
+  }, [streamData, user?.id, runHealthCheck, applyStreamState, agoraSessionId])
 
   // ── Test Stream ──────────────────────────────────────────────────────
   const handleTestStream = useCallback(async () => {
@@ -469,7 +451,7 @@ function GamingSetupPageInner() {
       console.error('[GamingSetupPage] End stream failed:', err)
       toast.error(err?.message || 'Failed to end stream')
     }
-  }, [streamData?.id])
+  }, [streamData?.id, agoraSessionId, recorder])
 
   const handleToggleCamera = useCallback(() => { setIsCameraEnabled(p => !p); setHasCameraTrack(true) }, [])
   const handleToggleMic = useCallback(() => { setIsMicEnabled(p => !p); setHasMicTrack(true) }, [])

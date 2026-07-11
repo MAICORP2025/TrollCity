@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, MessageSquare, Users, MessageCircle, Lock, Send } from 'lucide-react';
 import { supabase } from '@/supabaseClient';
 import { toast } from 'sonner';
@@ -24,6 +24,7 @@ export default function PaidChatViewerModal({
 }: PaidChatViewerModalProps) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userBalance, setUserBalance] = useState<number>(0);
   const [hasAccess, setHasAccess] = useState(false);
@@ -73,6 +74,7 @@ export default function PaidChatViewerModal({
   const totalCost = connectionCost + (pricePerChat > 0 ? pricePerChat : 0);
 
   const handleSend = async () => {
+    if (sendingRef.current) return;
     if (!userId) {
       toast.error('You must be logged in to send paid messages.');
       return;
@@ -86,15 +88,15 @@ export default function PaidChatViewerModal({
       return;
     }
 
+    sendingRef.current = true;
     setSending(true);
     try {
       if (!hasAccess && pricePerUser > 0) {
-        // Deduct coins via try_pay_coins (same as bottom nav bar)
-        const { data: payResult, error: payError } = await supabase.rpc('try_pay_coins', {
-          p_user_id: userId,
+        // Deduct coins via try_pay_coins_secure (same as bottom nav bar)
+        const { data: payResult, error: payError } = await supabase.rpc('try_pay_coins_secure', {
           p_amount: pricePerUser,
           p_reason: 'paid_chat_access',
-          p_metadata: jsonb_build_object('stream_id', streamId, 'type', 'per_user'),
+          p_metadata: { stream_id: streamId, type: 'per_user' },
         });
         if (payError) throw payError;
         if (!payResult) throw new Error('Insufficient coins for connection fee.');
@@ -120,12 +122,11 @@ export default function PaidChatViewerModal({
       }
 
       if (pricePerChat > 0) {
-        // Deduct coins via try_pay_coins (same as bottom nav bar)
-        const { data: chatPayResult, error: chatPayError } = await supabase.rpc('try_pay_coins', {
-          p_user_id: userId,
+        // Deduct coins via try_pay_coins_secure (same as bottom nav bar)
+        const { data: chatPayResult, error: chatPayError } = await supabase.rpc('try_pay_coins_secure', {
           p_amount: pricePerChat,
           p_reason: 'paid_chat_message',
-          p_metadata: jsonb_build_object('stream_id', streamId, 'type', 'per_chat'),
+          p_metadata: { stream_id: streamId, type: 'per_chat' },
         });
         if (chatPayError) throw chatPayError;
         if (!chatPayResult) throw new Error('Insufficient coins for message fee.');
@@ -156,8 +157,10 @@ export default function PaidChatViewerModal({
       setMessage('');
       onClose();
     } catch (err: any) {
+      // Keep the typed message so the user can retry after fixing the issue.
       toast.error(err?.message || 'Failed to send message.');
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };

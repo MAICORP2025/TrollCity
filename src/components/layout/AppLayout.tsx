@@ -3,7 +3,6 @@ import BottomNavBar from '../nav/BottomNavBar'
 import Sidebar from '../Sidebar'
 import Header from '../Header'
 import { useLocation } from 'react-router-dom'
-import UserCompliancePrompt from '../UserCompliancePrompt'
 import PurchaseRequiredModal from '../PurchaseRequiredModal'
 import { useAuthStore } from '../../lib/store'
 import { useSidebarStore } from '../../stores/useSidebarStore'
@@ -106,8 +105,7 @@ export default function AppLayout({
           </div>
         )}
 
-        {/* User Compliance Prompt */}
-        {!isAuthPage && <UserCompliancePrompt />}
+       
 
         {/* Main Content Area */}
         <main className={`flex-1 w-full min-h-0 relative ${mainOverflowClass} ${mainPaddingClass}`}>

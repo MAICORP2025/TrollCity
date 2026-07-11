@@ -216,6 +216,11 @@ export function useBattleState({ streamId, localUserId, isHost, hostId }: UseBat
   const joinWindowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const battleIdRef = useRef<string | null>(null);
+  const localUserIdRef = useRef<string | null>(null);
+  const isHostRef = useRef<boolean>(false);
+  const streamIdRef = useRef<string | null>(null);
+
   const clearJoinWindowTimer = useCallback(() => {
     if (joinWindowTimerRef.current) {
       clearTimeout(joinWindowTimerRef.current);
@@ -302,6 +307,7 @@ export function useBattleState({ streamId, localUserId, isHost, hostId }: UseBat
     if (!streamId || streamId === 'undefined') return;
 
     let cancelled = false;
+    let streamBattleCh: ReturnType<typeof supabase.channel>;
 
     if (streamBattleChannelRef.current) {
       supabase.removeChannel(streamBattleChannelRef.current);
@@ -338,7 +344,26 @@ export function useBattleState({ streamId, localUserId, isHost, hostId }: UseBat
 
     fetchCurrentBattle();
 
+    const handleStreamBattleUpdate = (payload: any) => {
+      const currentStreamId = streamIdRef.current;
+      if (currentStreamId !== streamId) return;
+
+      if (payload.new?.battle_id && payload.new.battle_id !== battleIdRef.current) {
+        setBattleState((prev) => ({ ...prev, battleId: payload.new.battle_id }));
+      }
+      if (!payload.new?.battle_id && payload.old?.battle_id) {
+        setBattleState(createEmptyBattleState());
+        setSupporters(new Map());
+        setUserTeam(null);
+        setJoinWindowOpen(false);
+        clearJoinWindowTimer();
+      }
+    };
+
     const handleBattleUpdate = (payload: any) => {
+      const battleId = payload.new?.id;
+      if (!battleId) return;
+      if (battleId !== battleIdRef.current) return;
       applyBattle(payload.new);
       if (payload.new?.status === 'ended') {
         setJoinWindowOpen(false);
@@ -347,26 +372,30 @@ export function useBattleState({ streamId, localUserId, isHost, hostId }: UseBat
     };
 
     const handleBattleInsert = (payload: any) => {
+      const battleId = payload.new?.id;
+      if (!battleId) return;
+      if (battleId !== battleIdRef.current) return;
       applyBattle(payload.new);
       openJoinWindowBriefly();
     };
 
-    const streamBattleCh = supabase
+    const handleSupporterChange = (payload: any) => {
+      const newSupporter = payload.new;
+      setSupporters((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(newSupporter.user_id, { userId: newSupporter.user_id, team: newSupporter.team });
+        return newMap;
+      });
+      if (newSupporter.user_id === localUserIdRef.current) {
+        setUserTeam(newSupporter.team);
+      }
+    };
+
+    streamBattleCh = supabase
       .channel(`stream-battle:${streamId}`)
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'streams', filter: `id=eq.${streamId}`,
-      }, (payload) => {
-        if (payload.new?.battle_id && payload.new.battle_id !== battleState.battleId) {
-          setBattleState((prev) => ({ ...prev, battleId: payload.new.battle_id }));
-        }
-        if (!payload.new?.battle_id && payload.old?.battle_id) {
-          setBattleState(createEmptyBattleState());
-          setSupporters(new Map());
-          setUserTeam(null);
-          setJoinWindowOpen(false);
-          clearJoinWindowTimer();
-        }
-      })
+      }, handleStreamBattleUpdate)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'battles', filter: `team_a_stream_id=eq.${streamId}`,
       }, handleBattleInsert)
@@ -387,39 +416,16 @@ export function useBattleState({ streamId, localUserId, isHost, hostId }: UseBat
       }, handleBattleUpdate)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'battle_supporters',
-      }, (payload) => {
-        const newSupporter = payload.new;
-        setSupporters((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(newSupporter.user_id, { userId: newSupporter.user_id, team: newSupporter.team });
-          return newMap;
-        });
-        if (newSupporter.user_id === localUserId) {
-          setUserTeam(newSupporter.team);
-        }
-      })
+      }, handleSupporterChange)
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'battle_supporters',
-      }, (payload) => {
-        const updated = payload.new;
-        setSupporters((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(updated.user_id, { userId: updated.user_id, team: updated.team });
-          return newMap;
-        });
-        if (updated.user_id === localUserId) {
-          setUserTeam(updated.team);
-        }
-      })
+      }, handleSupporterChange)
       .subscribe();
 
     streamBattleChannelRef.current = streamBattleCh;
 
     return () => {
       cancelled = true;
-      if (streamBattleChannelRef.current === streamBattleCh) {
-        streamBattleChannelRef.current = null;
-      }
       supabase.removeChannel(streamBattleCh);
       clearJoinWindowTimer();
     };
@@ -430,44 +436,50 @@ export function useBattleState({ streamId, localUserId, isHost, hostId }: UseBat
     if (!battleState.battleId) return;
 
     const battleId = battleState.battleId;
+    let battleIdCh: ReturnType<typeof supabase.channel>;
 
     if (battleIdChannelRef.current) {
       supabase.removeChannel(battleIdChannelRef.current);
       battleIdChannelRef.current = null;
     }
 
-    const battleIdCh = supabase.channel(`battle-live:${battleId}`)
+    const handleBattleLiveUpdate = (payload: any) => {
+      if (battleIdRef.current !== battleId) return;
+      applyBattle(payload.new);
+    };
+
+    const handleBattleForfeited = (payload: any) => {
+      if (battleIdRef.current !== battleId) return;
+      const data = payload.payload;
+      setBattleState(createEmptyBattleState());
+      setSupporters(new Map());
+      setUserTeam(null);
+      setJoinWindowOpen(false);
+      clearJoinWindowTimer();
+
+      const currentIsHost = isHostRef.current;
+      const isWinner = (data.winner === 'A' && currentIsHost) || (data.winner === 'B' && !currentIsHost);
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('battle:ended', {
+            detail: { victory: isWinner, crowns: isWinner ? 2 : 0 },
+          })
+        );
+      }, 1500);
+    };
+
+    battleIdCh = supabase.channel(`battle-live:${battleId}`)
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'battles', filter: `id=eq.${battleId}`,
-      }, (payload) => {
-        applyBattle(payload.new);
-      })
-      .on('broadcast', { event: 'battle_forfeited' }, (payload) => {
-        const data = payload.payload;
-        setBattleState(createEmptyBattleState());
-        setSupporters(new Map());
-        setUserTeam(null);
-        setJoinWindowOpen(false);
-        clearJoinWindowTimer();
-
-        const isWinner = (data.winner === 'A' && isHost) || (data.winner === 'B' && !isHost);
-        setTimeout(() => {
-          window.dispatchEvent(
-            new CustomEvent('battle:ended', {
-              detail: { victory: isWinner, crowns: isWinner ? 2 : 0 },
-            })
-          );
-        }, 1500);
-      })
+      }, handleBattleLiveUpdate)
+      .on('broadcast', { event: 'battle_forfeited' }, handleBattleForfeited)
       .subscribe();
 
     battleIdChannelRef.current = battleIdCh;
 
     return () => {
-      if (battleIdChannelRef.current === battleIdCh) {
-        battleIdChannelRef.current = null;
-      }
       supabase.removeChannel(battleIdCh);
+      battleIdChannelRef.current = null;
     };
   }, [battleState.battleId, applyBattle, isHost, clearJoinWindowTimer]);
 
@@ -632,6 +644,24 @@ export function useBattleState({ streamId, localUserId, isHost, hostId }: UseBat
 
     return true;
   }, [battleState, localUserId]);
+
+  // Sync identity refs so realtime handlers always read current values
+  // without triggering resubscription.
+  useEffect(() => {
+    battleIdRef.current = battleState.battleId;
+  }, [battleState.battleId]);
+
+  useEffect(() => {
+    localUserIdRef.current = localUserId;
+  }, [localUserId]);
+
+  useEffect(() => {
+    isHostRef.current = isHost;
+  }, [isHost]);
+
+  useEffect(() => {
+    streamIdRef.current = streamId;
+  }, [streamId]);
 
   const getRemainingTime = useCallback(() => {
     if (!battleState.endsAt) return 0;

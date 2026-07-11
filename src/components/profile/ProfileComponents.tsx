@@ -10,7 +10,7 @@ import {
     Star, Award, Users, TrendingUp, Clock, DollarSign, Eye,
     CheckCircle, Shield, Crown, Heart, MessageCircle, UserPlus,
     Settings, Package, History, Bookmark, Send, MoreHorizontal,
-    ShoppingCart, Hammer, BookOpen, Newspaper, Scale
+    ShoppingCart, Hammer, BookOpen, Newspaper, Scale, Ticket
 } from 'lucide-react';
 
 interface UserProfile {
@@ -351,6 +351,7 @@ export const PROFILE_TABS = [
     { key: 'badges', label: 'Badges', icon: Award },
     { key: 'inventory', label: 'Inventory & Perks', icon: Package },
     { key: 'purchases', label: 'Purchase History', icon: History },
+    { key: 'promos', label: 'MaiTalent Promos', icon: Ticket },
     { key: 'settings', label: 'Settings', icon: Settings }
 ];
 

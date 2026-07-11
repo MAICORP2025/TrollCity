@@ -65,6 +65,7 @@ import { useShareAThonRestriction } from '@/hooks/useShareAThonRestriction'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { STORE_USD_PER_COIN } from '@/lib/coinMath'
 import { NIGHT_WATCH_PATROL_ROLES } from '@/lib/staff'
+import { grantNavCoins } from '@/lib/grantNavCoins'
 
 type GridGlow = 'green' | 'pink' | 'cyan' | 'red' | 'purple' | 'teal'
 
@@ -868,6 +869,7 @@ function GridItem({
       e.preventDefault()
       return
     }
+    grantNavCoins(label)
     if (onClick) onClick()
   }
 

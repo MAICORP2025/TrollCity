@@ -129,11 +129,13 @@ export function AudienceBubbleTicker({
   }, [leavingAudience])
 
   const displayAudience = useMemo(() => {
-    const visible = sortedAudience.slice(0, maxVisible)
+    const visible = sortedAudience
+      .filter((member) => !leavingAudience[member.id])
+      .slice(0, maxVisible)
     const leavingExtras = leavingAudienceArray.slice(0, 2)
 
     return [...visible, ...leavingExtras]
-  }, [sortedAudience, leavingAudienceArray, maxVisible])
+  }, [sortedAudience, leavingAudienceArray, maxVisible, leavingAudience])
 
   const overflowCount = Math.max(0, sortedAudience.length - maxVisible)
 

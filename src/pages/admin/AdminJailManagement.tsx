@@ -59,12 +59,17 @@ export default function AdminJailManagement() {
 
       const now = new Date();
       const validInmates = (jailData || []).filter((inmate: any) => {
-        const releaseTime = new Date(inmate.release_time);
-        return releaseTime > now;
-      }).map((inmate: any) => ({
-        ...inmate,
-        ...userProfiles[inmate.user_id] || {},
-      }));
+        if (inmate.status && inmate.status !== 'jailed') return false
+        if (!inmate.release_time) return true
+        return new Date(inmate.release_time) > now
+      }).map((inmate: any) => {
+        const profile = userProfiles[inmate.user_id] || {}
+        return {
+          ...inmate,
+          username: profile.username,
+          avatar_url: profile.avatar_url,
+        }
+      })
 
       setInmates(validInmates);
     } catch (err) {
@@ -77,11 +82,31 @@ export default function AdminJailManagement() {
 
   const handleRelease = async (inmate: JailInmate, refundCoins: boolean = false) => {
     try {
-      const { error } = await supabase.functions.invoke('admin-jail-actions', {
-        body: { action: 'release', inmateId: inmate.id, refundCoins },
-      });
-      if (error) throw error;
-      toast.success('Inmate released');
+      const now = new Date().toISOString();
+      const { error: jailError } = await supabase
+        .from('jail')
+        .update({ status: 'released', release_time: now })
+        .eq('id', inmate.id);
+      if (jailError) throw jailError;
+
+      await supabase
+        .from('user_profiles')
+        .update({ is_jailed: false })
+        .eq('id', inmate.user_id)
+        .then(() => undefined, () => undefined);
+
+      await supabase.from('moderation_actions').insert({
+        actor_id: (await supabase.auth.getUser()).data.user?.id,
+        officer_id: (await supabase.auth.getUser()).data.user?.id,
+        target_user_id: inmate.user_id,
+        action: 'release',
+        action_type: 'release',
+        reason: 'Released by admin from Jail Management',
+        details: `jail_id:${inmate.id}; released_at:${now}`,
+          status: 'revoked',
+      }).then(() => undefined, () => undefined);
+
+      toast.success(`Released ${inmate.username || 'Inmate'} from jail`);
       loadInmates();
     } catch (err: any) {
       toast.error(err.message || 'Failed to release inmate');

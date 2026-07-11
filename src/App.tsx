@@ -28,6 +28,7 @@ import { useBugAlertStore } from "./stores/useBugAlertStore";
 import DailyChurchNotification from "./components/church/DailyChurchNotification";
 import TeamMeetingNotification from "./components/TeamMeetingRoom/TeamMeetingNotification";
 import SurveyNotification from "./components/SurveyNotification";
+import GlobalPromoCardListener from "./components/promo/GlobalPromoCardListener";
 
 import { useGlobalApp } from "./contexts/GlobalAppContext";
 import { updateRoute } from "./utils/sessionStorage";
@@ -41,7 +42,6 @@ import TabSwitchHandler from "./components/TabSwitchHandler";
 import { initTelemetry } from "./lib/telemetry";
 import GlobalPresenceTracker from "./components/GlobalPresenceTracker";
 import ChatBubble from "./components/ChatBubble";
-import { useDoubleTap } from "./hooks/useDoubleTap";
 import { useChatStore } from "./lib/chatStore";
 import { useUserPresenceRoute } from "./hooks/useUserPresenceRoute";
 import { useIsMobile } from "./hooks/useIsMobile";
@@ -90,6 +90,7 @@ const MarketplaceReleaseRequests = lazyWithRetry(() => import("./pages/admin/Mar
 const AdminOfficerReports = lazyWithRetry(() => import("./pages/admin/AdminOfficerReports"));
 const StoreDebug = lazyWithRetry(() => import("./pages/admin/StoreDebug"));
 const Changelog = lazyWithRetry(() => import("./pages/Changelog"));
+const HelpPage = lazyWithRetry(() => import("./pages/HelpPage"));
 const AccessDenied = lazyWithRetry(() => import("./pages/AccessDenied"));
 const ReferralBonusPanel = lazyWithRetry(() => import("./pages/admin/ReferralBonusPanel"));
 const SecretaryConsole = lazyWithRetry(() => import("./pages/secretary/SecretaryConsole"));
@@ -107,6 +108,7 @@ const VerificationComplete = lazyWithRetry(() => import("./pages/VerificationCom
 const PayoutStatus = lazyWithRetry(() => import("./pages/PayoutStatus"));
 const PayoutSetupPage = lazyWithRetry(() => import("./pages/PayoutSetupPage"));
 const AdminLaunchTrial = lazyWithRetry(() => import("./pages/admin/LaunchTrial"));
+const SecurityCommandCenter = lazyWithRetry(() => import("./pages/admin/SecurityCommandCenter"));
 const PayoutRequest = lazyWithRetry(() => import("./pages/PayoutRequest"));
 const PaymentCallback = lazyWithRetry(() => import("./pages/PaymentCallback"));
 const BonusesPage = lazyWithRetry(() => import("./pages/Bonuses"));
@@ -1406,6 +1408,7 @@ const handleVisibilityChange = async () => {
       <GlobalPodBanner />
       <DailyChurchNotification />
       <SurveyNotification />
+      <GlobalPromoCardListener />
 
       {/* Global Loading Overlay */}
       <GlobalLoadingOverlay
@@ -1429,7 +1432,8 @@ const handleVisibilityChange = async () => {
         onRetry={retryLastAction}
       />
 
-<AppLayout showSidebar={!isMobileUI || isStandalone} showHeader={true} showBottomNav={true}>
+<LiveContentProvider>
+            <AppLayout showSidebar={!isMobileUI || isStandalone} showHeader={true} showBottomNav={true}>
            <GlobalPresenceTracker />
            {user && <AdminOfficerQuickMenu />}
            {user && <ChatBubble />}
@@ -1486,10 +1490,11 @@ const handleVisibilityChange = async () => {
                 <Route path="/dev/theme-preview" element={<ThemePreviewPage />} />
                 <Route path="/dev/homepage-preview" element={<HomepageBackgroundShowcase />} />
 
-                {/* Safety Page (standalone) */}
-                <Route path="/safety" element={<Safety />} />
+                 {/* Safety Page (standalone) */}
+                 <Route path="/safety" element={<Safety />} />
+                 <Route path="/help" element={<HelpPage />} />
 
-                {/* 🔒 Authenticated Support Route - must come before SEO */}
+                 {/* 🔒 Authenticated Support Route - must come before SEO */}
 
                 {/* 🔍 SEO Pages (Public, Indexable by Search Engines) */}
                 <Route path="/about" element={<SEOAboutPage />} />
@@ -1515,7 +1520,7 @@ const handleVisibilityChange = async () => {
 
                 {/* 🏠 Home - Public with limited auth for interactions */}
                 <Route path="/home" element={<Navigate to="/" replace />} />
-                <Route path="/" element={<ErrorBoundary><LiveContentProvider><AuthenticatedHome /></LiveContentProvider></ErrorBoundary>} />
+                <Route path="/" element={<ErrorBoundary><AuthenticatedHome /></ErrorBoundary>} />
 
                 {/* 🎤 Live Auctions — Public browse/watch, studio gated below */}
                 <Route path="/auctions" element={<AuctionsPage />} />
@@ -2075,14 +2080,22 @@ const handleVisibilityChange = async () => {
                      }
                    />
                    {/* 👑 Admin */}
-                  <Route
-                    path="/admin"
-                    element={
-                      <RequireRole roles={[UserRole.ADMIN]}>
-                        <AdminDashboard />
-                      </RequireRole>
-                    }
-                  />
+                   <Route
+                     path="/admin"
+                     element={
+                       <RequireRole roles={[UserRole.ADMIN]}>
+                         <AdminDashboard />
+                       </RequireRole>
+                     }
+                   />
+                   <Route
+                     path="/admin/security-command-center"
+                     element={
+                       <RequireRole roles={[UserRole.ADMIN]}>
+                         <SecurityCommandCenter />
+                       </RequireRole>
+                     }
+                   />
                   <Route
                     path="/admin/creator-approvals"
                     element={
@@ -2575,28 +2588,8 @@ const handleVisibilityChange = async () => {
                            <TestDiagnosticsPage />
                          </RequireRole>
                        }
-                     />
-
-                     {/* Share-A-Thon Weekend Routes */}
-                     <Route path="/shareathon" element={<ShareAThonLanding />} />
-                     <Route path="/shareathon/submit" element={<RequireAuth><ShareAThonSubmit /></RequireAuth>} />
-                     <Route path="/shareathon/leaderboard" element={<ShareAThonLeaderboard />} />
-                     <Route
-                       path="/admin/shareathon/dashboard"
-                       element={
-                         <RequireRole roles={[UserRole.ADMIN]}>
-                           <ShareAThonAdminDashboard />
-                         </RequireRole>
-                       }
-                     />
-                     <Route
-                       path="/admin/shareathon/verification"
-                       element={
-                         <RequireRole roles={[UserRole.ADMIN]}>
-                           <ShareAThonVerification />
-                         </RequireRole>
-                       }
-                     />
+                     />                   
+        
                     <Route
                       path="/admin/reset-maintenance"
                       element={
@@ -2659,7 +2652,8 @@ const handleVisibilityChange = async () => {
           </StaffWalkieTalkieProvider>
            <GlobalPodBanner />
            <BugAlertPopup />
-         </AppLayout>
+          </AppLayout>
+        </LiveContentProvider>
 
        {/* Mini Podcast Player - persists across navigation */}
        <MiniPodcastPlayerWrapper />
@@ -2698,18 +2692,9 @@ const handleVisibilityChange = async () => {
 function App() {
   useEffect(() => {
     initTelemetry();
-    // Initialize global time updater for account age calculations
     const cleanup = initTimeUpdater();
     return cleanup;
   }, []);
-
-  // Global double-tap / double-click to open chat bubble
-  useDoubleTap(() => {
-    const { user } = useAuthStore.getState();
-    if (!user) return;
-    // Open bubble in inbox view — user picks a conversation
-    useChatStore.getState().toggleChatBubble();
-  });
 
   return (
     <PageVisibilityProvider>
@@ -2724,7 +2709,6 @@ function App() {
                     <GhostBanner />
                   </GhostDropInProvider>
                 </TabSwitchHandler>
-                {/* TM Family Invite Handler - shows pending invites as notifications */}
                 <TMFamilyInviteHandler />
               </ProfileFrameProvider>
             </TrollProvider>

@@ -19,18 +19,18 @@ type ICameraVideoTrack = import('agora-rtc-sdk-ng').ICameraVideoTrack;
 type IMicrophoneAudioTrack = import('agora-rtc-sdk-ng').IMicrophoneAudioTrack;
 type UID = import('agora-rtc-sdk-ng').UID;
 
-/**
- * Hook for managing Agora RTC connections
- * 
- * @param config - Configuration object
- * @param config.channelName - Agora channel name
- * @param config.userId - User ID (will be converted to numeric UID)
- * @param config.userName - User name for display
- * @param config.role - 'publisher' | 'subscriber'
- * @param config.onUserJoined - Callback when user joins
- * @param config.onUserLeft - Callback when user leaves
- * @param config.onError - Error callback
- */
+const MAX_JOIN_RETRIES = 3;
+const RETRY_DELAYS_MS = [1000, 3000, 5000];
+
+function isRetryableJoinError(err: any): boolean {
+  if (!err) return false;
+  const message = String(err?.message || err || '').toLowerCase();
+  const status = err?.status ?? err?.code;
+  if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) return true;
+  if (status === 502 || status === 503 || status === 504) return true;
+  if (message.includes('internal server error')) return true;
+  return false;
+}
 
 export function useAgoraRoom({
   channelName,
@@ -65,6 +65,8 @@ export function useAgoraRoom({
   const isMountedRef = useRef(true);
   const videoTrackRef = useRef<ICameraVideoTrack | null>(null);
   const audioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
+  const retryAbortedRef = useRef(false);
+  const joinAbortRef = useRef(false);
 
   // Get Agora app ID
   const getAgoraAppId = () => import.meta.env.VITE_AGORA_APP_ID;
@@ -173,115 +175,171 @@ export function useAgoraRoom({
       hash = (hash << 5) - hash + uid.charCodeAt(i);
       hash |= 0;
     }
-    return Math.abs(hash) % 4294967295; // Use UID < 4294967295
+    return Math.abs(hash) % 4294967295;
   };
 
-  // Join channel
-  const joinChannel = useCallback(async () => {
-    if (joiningRef.current || joinedRef.current) return;
-    if (!channelName) {
-      console.error('❌ No channel name provided');
-      return;
-    }
-
-    joiningRef.current = true;
-    setIsJoining(true);
-
+  const cleanClientAfterFailure = useCallback(async () => {
     try {
-      debugAgora('📍 Joining Agora channel:', channelName);
-
-      // Initialize client if needed
-      let client = clientRef.current;
-      if (!client) {
-        debugAgora('🔧 Initializing Agora client...');
-        client = await initAgoraClient();
-      }
-
-      // Get numeric UID
-      const uid = getUserUid(userId);
-      debugAgora('👤 User UID:', uid);
-
-      // Get token
-      debugAgora('🎫 Fetching Agora token...');
-      const appId = getAgoraAppId();
-      if (!appId) {
-        throw new Error('Agora App ID not configured');
-      }
-      
-      const token = await fetchAgoraToken(channelName, uid);
-      if (!token) {
-        throw new Error('Failed to get Agora token');
-      }
-      debugAgora('✅ Token received, joining...');
-
-      // Join channel with 15 second timeout
-      const joinPromise = client.join(appId, channelName, token, uid);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Join timeout - connection took too long')), 15000)
-      );
-      
-      await Promise.race([joinPromise, timeoutPromise]);
-      debugAgora('✅ Joined Agora channel');
-
-      setIsConnected(true);
-      joinedRef.current = true;
-
-      // Publish audio/video if publisher role
-      if (role === 'publisher') {
-        debugAgora('🎬 Creating local tracks for publisher');
-
-        const Agora = await loadAgoraRTC();
-        const videoTrack = await Agora.createCameraVideoTrack();
-        const audioTrack = await Agora.createMicrophoneAudioTrack({
-          encoderConfig: 'speech_standard',
-          AEC: true,
-          ANS: true,
-          AGC: true,
-        });
-
-        await client.publish([videoTrack, audioTrack]);
-
-        // Store in both state and refs
-        videoTrackRef.current = videoTrack;
-        audioTrackRef.current = audioTrack;
-        setLocalVideoTrack(videoTrack);
-        setLocalAudioTrack(audioTrack);
-        setIsPublishing(true);
-
-        debugAgora('✅ Published local tracks');
-      }
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : 'Failed to join channel';
-      console.error('❌ Join error:', errMsg, err);
-      setError(errMsg);
-      onError?.(errMsg);
-      toast.error('Meeting connection failed: ' + errMsg);
-      joinedRef.current = false;
-    } finally {
-      joiningRef.current = false;
-      setIsJoining(false);
-    }
-  }, [channelName, userId, role, getAgoraAppId, fetchAgoraToken, initAgoraClient, getUserUid, onError]);
-
-  // Leave channel
-  const leaveChannel = useCallback(async () => {
-    if (!joinedRef.current || !clientRef.current) return;
-
-    try {
-      debugAgora('👋 Leaving Agora channel');
-
-      // Stop and close local tracks using refs
       if (videoTrackRef.current) {
         videoTrackRef.current.stop();
         videoTrackRef.current.close();
+        videoTrackRef.current = null;
       }
       if (audioTrackRef.current) {
         audioTrackRef.current.stop();
         audioTrackRef.current.close();
+        audioTrackRef.current = null;
+      }
+      if (clientRef.current) {
+        await clientRef.current.leave();
+        clientRef.current = null;
+      }
+    } catch (e) {
+      debugAgora('Cleanup after failed join:', e);
+    }
+  }, []);
+
+  // Join channel with retry only for network/5xx errors
+  const joinChannel = useCallback(async () => {
+    if (joiningRef.current || joinedRef.current) return;
+
+    joiningRef.current = true;
+    joinAbortRef.current = false;
+    setIsJoining(true);
+    setError(null);
+
+    try {
+      const appId = getAgoraAppId();
+      if (!appId) {
+        throw new Error('Agora App ID not configured');
       }
 
-      // Leave channel
-      await clientRef.current.leave();
+      const uid = getUserUid(userId);
+
+      let lastError: any = null;
+      for (let attempt = 0; attempt < MAX_JOIN_RETRIES; attempt++) {
+        if (joinAbortRef.current || retryAbortedRef.current) {
+          debugAgora('Join aborted before attempt', attempt);
+          break;
+        }
+
+        await cleanClientAfterFailure();
+
+        try {
+          debugAgora(`📍 Join attempt ${attempt + 1}/${MAX_JOIN_RETRIES}`);
+
+          const Agora = await loadAgoraRTC();
+          const client = Agora.createClient({ mode: 'rtc', codec: 'vp8' });
+
+          client.on('user-joined', (user) => {
+            debugAgora('👤 User joined:', user.uid);
+            setRemoteUsers(prev => [...prev, user]);
+            onUserJoined?.(user);
+          });
+
+          client.on('user-left', (user) => {
+            debugAgora('👤 User left:', user.uid);
+            setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+            onUserLeft?.(user);
+          });
+
+          client.on('user-published', async (user, mediaType) => {
+            debugAgora('📢 User published:', user.uid, mediaType);
+            await client.subscribe(user, mediaType);
+          });
+
+          client.on('user-unpublished', (user, mediaType) => {
+            debugAgora('🔇 User unpublished:', user.uid, mediaType);
+          });
+
+          client.on('connection-state-change', (curState, revState) => {
+            debugAgora('🔌 Connection state:', curState, '(was', revState + ')');
+          });
+
+          clientRef.current = client;
+
+          const token = await fetchAgoraToken(channelName, uid);
+          const joinPromise = client.join(appId, channelName, token, uid);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Join timeout - connection took too long')), 15000)
+          );
+
+          await Promise.race([joinPromise, timeoutPromise]);
+          joinedRef.current = true;
+
+          if (isMountedRef.current) {
+            setIsConnected(true);
+            setIsJoining(false);
+            joiningRef.current = false;
+          }
+
+          if (role === 'publisher') {
+            debugAgora('🎬 Creating local tracks for publisher');
+
+            const videoTrack = await Agora.createCameraVideoTrack({
+              encoderConfig: {
+                width: 1280,
+                height: 720,
+                frameRate: 30,
+                bitrate: 1500,
+              },
+            });
+            const audioTrack = await Agora.createMicrophoneAudioTrack({
+              encoderConfig: 'speech_standard',
+              AEC: true,
+              ANS: true,
+              AGC: true,
+            });
+
+            await client.publish([videoTrack, audioTrack]);
+
+            videoTrackRef.current = videoTrack;
+            audioTrackRef.current = audioTrack;
+            setLocalVideoTrack(videoTrack);
+            setLocalAudioTrack(audioTrack);
+            setIsPublishing(true);
+
+            debugAgora('✅ Published local tracks');
+          }
+
+          debugAgora('✅ Joined Agora channel');
+          return;
+        } catch (err) {
+          lastError = err;
+          const shouldRetry = isRetryableJoinError(err);
+          if (!shouldRetry || attempt === MAX_JOIN_RETRIES - 1 || joinAbortRef.current || retryAbortedRef.current) {
+            throw err;
+          }
+          debugAgora(`⚠️ Join attempt ${attempt + 1} failed, retrying in ${RETRY_DELAYS_MS[attempt]}ms...`, err);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+        }
+      }
+
+      throw lastError || new Error('Join aborted');
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to join channel';
+      console.error('❌ Join error:', errMsg, err);
+      await cleanClientAfterFailure();
+      joinedRef.current = false;
+      if (isMountedRef.current) {
+        setError(errMsg);
+        setIsJoining(false);
+      }
+      joiningRef.current = false;
+      onError?.(errMsg);
+      toast.error('Meeting connection failed: ' + errMsg);
+    }
+  }, [channelName, userId, role, getAgoraAppId, fetchAgoraToken, getUserUid, onError, cleanClientAfterFailure]);
+
+  // Leave channel
+  const leaveChannel = useCallback(async () => {
+    joinAbortRef.current = true;
+    retryAbortedRef.current = true;
+    joiningRef.current = false;
+
+    try {
+      debugAgora('👋 Leaving Agora channel');
+      await cleanClientAfterFailure();
 
       setIsConnected(false);
       setIsPublishing(false);
@@ -289,8 +347,6 @@ export function useAgoraRoom({
       setLocalAudioTrack(null);
       setRemoteUsers([]);
       joinedRef.current = false;
-      videoTrackRef.current = null;
-      audioTrackRef.current = null;
 
       debugAgora('✅ Left Agora channel');
     } catch (err) {
@@ -298,7 +354,7 @@ export function useAgoraRoom({
       console.error('❌ Leave error:', errMsg);
       setError(errMsg);
     }
-  }, []); // No dependencies - uses refs instead
+  }, [cleanClientAfterFailure]); // No dependencies - uses refs instead
 
   // Toggle camera
   const toggleCamera = useCallback(async () => {

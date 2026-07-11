@@ -1,0 +1,207 @@
+-- ============================================================================
+-- Remove Unused Edge Functions and Cleanup Database References
+-- Generated: 2026-07-10T12:47:53.051Z
+-- ============================================================================
+--
+-- This migration:
+-- 1. Unschedules database cron jobs that call removed edge functions
+-- 2. Documents the Supabase CLI commands to delete deployed edge functions
+--
+-- Edge functions to delete from Supabase:
+-- - admin-reset
+- adminScheduler
+- admin-stats
+- admin-stock-manager
+- agency-weekly-evaluation
+- agora-media-gateway
+- ai-detect-ghost-inactivity
+- ai-verify-user
+- apply-punishment
+- auth
+- auto-clock-out
+- award-badge
+- bank-apply
+- bank-credit
+- broadcast-seats
+- close-officer-vote-cycle
+- complete-ghost-mission
+- create-square-customer
+- credit-daily-maintenance
+- credit-loan-handler
+- credit-record-event
+- credit-small-purchase-milestone
+- cron-tasks
+- debug-push
+- delete-user-account
+- dismiss-notification
+- end-home-feature-cycle
+- evaluate-badges-for-event
+- evaluate-missions
+- expire-officer-roles
+- fulfill-paypal-purchase
+- gemini-verify-user
+- generate-obs-credentials
+- generate-pdf
+- get-training-scenario
+- go-live-mark-live
+- go-live-refund-hd-boost
+- livekit-gaming
+- livekit-webhooks
+- loan-payment
+- log-moderation-event
+- magicbell-jwt
+- mai-talent-timer-watcher
+- mai-talent-v2-orchestrator
+- manual-coin-order
+- moderation
+- officer-auto-clockout
+- officer-get-assignment
+- officer-join-stream
+- officer-leave-stream
+- officer-report-abuse
+- officer-touch-activity
+- payments-status
+- paypal-verify-transaction
+- paypal-webhook
+- ping
+- platform-fees
+- process-audio-queue
+- process-audio-safety
+- process-offline-notifications
+- process-referral-bonuses
+- report-bug
+- save-card
+- select-winner
+- send-announcement
+- send-bulk-notifications
+- send-like
+- shadow-ban-user
+- social-oauth-callback
+- square-save-card
+- square-webhook
+- start-officer-vote-cycle
+- start-podcast-recording
+- start-room-recording
+- stock-gamification
+- stock-price-engine
+- stop-podcast-recording
+- stop-room-recording
+- store-user-geolocation
+- submit-training-response
+- sync-mai-platform-user
+- track-guest
+- troll-battle
+- troll-events
+- troll-us-game
+- universal-battle
+- update-notification-preferences
+- user-agreements
+- verify-user-complete
+- vote-for-officer
+-- ============================================================================
+
+-- Unschedules cron jobs for removed edge functions
+DO $$
+BEGIN
+  PERFORM cron.unschedule('credit-small-purchase-milestone');
+  PERFORM cron.unschedule('process-offline-push-notifications-every-minute');
+EXCEPTION WHEN undefined_table THEN RAISE NOTICE 'Cron extension not available, skipping unschedule';
+END $$;
+
+-- Clean up any leftover auth hooks for removed functions
+-- (Supabase auth hooks are typically managed via the dashboard)
+-- No auth hooks were configured for these specific functions in config.toml
+
+-- ============================================================================
+-- AFTER APPLYING THIS MIGRATION, delete deployed edge functions with:
+-- ============================================================================
+-- supabase functions delete admin-reset
+-- supabase functions delete adminScheduler
+-- supabase functions delete admin-stats
+-- supabase functions delete admin-stock-manager
+-- supabase functions delete agency-weekly-evaluation
+-- supabase functions delete agora-media-gateway
+-- supabase functions delete ai-detect-ghost-inactivity
+-- supabase functions delete ai-verify-user
+-- supabase functions delete apply-punishment
+-- supabase functions delete auth
+-- supabase functions delete auto-clock-out
+-- supabase functions delete award-badge
+-- supabase functions delete bank-apply
+-- supabase functions delete bank-credit
+-- supabase functions delete broadcast-seats
+-- supabase functions delete close-officer-vote-cycle
+-- supabase functions delete complete-ghost-mission
+-- supabase functions delete create-square-customer
+-- supabase functions delete credit-daily-maintenance
+-- supabase functions delete credit-loan-handler
+-- supabase functions delete credit-record-event
+-- supabase functions delete credit-small-purchase-milestone
+-- supabase functions delete cron-tasks
+-- supabase functions delete debug-push
+-- supabase functions delete delete-user-account
+-- supabase functions delete dismiss-notification
+-- supabase functions delete end-home-feature-cycle
+-- supabase functions delete evaluate-badges-for-event
+-- supabase functions delete evaluate-missions
+-- supabase functions delete expire-officer-roles
+-- supabase functions delete fulfill-paypal-purchase
+-- supabase functions delete gemini-verify-user
+-- supabase functions delete generate-obs-credentials
+-- supabase functions delete generate-pdf
+-- supabase functions delete get-training-scenario
+-- supabase functions delete go-live-mark-live
+-- supabase functions delete go-live-refund-hd-boost
+-- supabase functions delete livekit-gaming
+-- supabase functions delete livekit-webhooks
+-- supabase functions delete loan-payment
+-- supabase functions delete log-moderation-event
+-- supabase functions delete magicbell-jwt
+-- supabase functions delete mai-talent-timer-watcher
+-- supabase functions delete mai-talent-v2-orchestrator
+-- supabase functions delete manual-coin-order
+-- supabase functions delete moderation
+-- supabase functions delete officer-auto-clockout
+-- supabase functions delete officer-get-assignment
+-- supabase functions delete officer-join-stream
+-- supabase functions delete officer-leave-stream
+-- supabase functions delete officer-report-abuse
+-- supabase functions delete officer-touch-activity
+-- supabase functions delete payments-status
+-- supabase functions delete paypal-verify-transaction
+-- supabase functions delete paypal-webhook
+-- supabase functions delete ping
+-- supabase functions delete platform-fees
+-- supabase functions delete process-audio-queue
+-- supabase functions delete process-audio-safety
+-- supabase functions delete process-offline-notifications
+-- supabase functions delete process-referral-bonuses
+-- supabase functions delete report-bug
+-- supabase functions delete save-card
+-- supabase functions delete select-winner
+-- supabase functions delete send-announcement
+-- supabase functions delete send-bulk-notifications
+-- supabase functions delete send-like
+-- supabase functions delete shadow-ban-user
+-- supabase functions delete social-oauth-callback
+-- supabase functions delete square-save-card
+-- supabase functions delete square-webhook
+-- supabase functions delete start-officer-vote-cycle
+-- supabase functions delete start-podcast-recording
+-- supabase functions delete start-room-recording
+-- supabase functions delete stock-gamification
+-- supabase functions delete stock-price-engine
+-- supabase functions delete stop-podcast-recording
+-- supabase functions delete stop-room-recording
+-- supabase functions delete store-user-geolocation
+-- supabase functions delete submit-training-response
+-- supabase functions delete sync-mai-platform-user
+-- supabase functions delete track-guest
+-- supabase functions delete troll-battle
+-- supabase functions delete troll-events
+-- supabase functions delete troll-us-game
+-- supabase functions delete universal-battle
+-- supabase functions delete update-notification-preferences
+-- supabase functions delete user-agreements
+-- supabase functions delete verify-user-complete
+-- supabase functions delete vote-for-officer

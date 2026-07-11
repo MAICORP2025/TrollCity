@@ -1,6 +1,0 @@
-{
-  "imports": {
-    "jsr:@supabase/functions-js@2": "jsr:@supabase/functions-js@2"
-  }
-}
-

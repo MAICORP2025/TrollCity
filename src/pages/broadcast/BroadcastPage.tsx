@@ -25,6 +25,7 @@ import {
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useUserLeagues } from '../../hooks/useUserLeagues'
 import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
+import { usePromoCardWatchReward } from '../../hooks/usePromoCardWatchReward'
 import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
 
 import { Stream } from '../../types/broadcast'
@@ -523,7 +524,7 @@ import { PreflightStore } from '@/lib/preflightStore'
 import { Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, Users, Pin } from 'lucide-react'
 import { toast } from 'sonner'
 import AbilityBox from '@/components/broadcast/AbilityBox'
-import BattleView from '@/components/broadcast/BattleView'
+import BattleView from '@/pages/broadcast/BattleView'
 import BroadcastAbilityEffects from '@/components/broadcast/BroadcastAbilityEffects'
 import BroadcasterStatsModal from '@/components/broadcast/BroadcasterStatsModal'
 import CoinStoreModal from '@/components/broadcast/CoinStoreModal'
@@ -642,10 +643,12 @@ export function BroadcastPage() {
    const [streamMods, setStreamMods] = useState<string[]>([]);
    // Accumulate gift amounts received while broadcasterProfile is still loading (null);
    // applied once the profile arrives via @see applyPendingGiftsEffect
-   const isHost = stream?.user_id === user?.id
-   const isBroadcaster = isHost;
+    const isHost = stream?.user_id === user?.id
+    const isBroadcaster = isHost;
 
-   const isStreamLive = stream?.status === 'live' && stream?.is_live === true;
+   usePromoCardWatchReward(streamId, isHost, user?.id)
+
+    const isStreamLive = stream?.status === 'live' && stream?.is_live === true;
    const liveTimer = useLiveTimer(stream?.started_at, isStreamLive);
 
    // CityStatusOrb for broadcaster box display
@@ -2175,7 +2178,7 @@ useEffect(() => {
       setTimeout(async () => {
         try {
           const { error } = await supabase
-            .from('broadcasts')
+            .from('streams')
             .update({
               status: 'ended',
               is_live: false,
@@ -4376,135 +4379,105 @@ const toggleMicrophone = useCallback(async () => {
     }, [user, stream, streamId, isHost, trollUsedThisBroadcast, profile?.username, supabase])
 
    const clickHistoryRef = useRef<number[]>([]);
-  const [isClickBlocked, setIsClickBlocked] = useState(false);
+   const [isClickBlocked, setIsClickBlocked] = useState(false);
+   const pendingLikesRef = useRef(0);
+   const flushInProgressRef = useRef(false);
 
-  const checkClickRate = useCallback(() => {
-    const now = Date.now();
-    clickHistoryRef.current = clickHistoryRef.current.filter(
-      timestamp => now - timestamp < 1000
-    );
-    clickHistoryRef.current.push(now);
-    // Allow 10 clicks per second for rapid spam clicking
-    if (clickHistoryRef.current.length > 10) {
-      return false;
-    }
-    return true;
-  }, []);
+   const checkClickRate = useCallback(() => {
+     const now = Date.now();
+     clickHistoryRef.current = clickHistoryRef.current.filter(
+       timestamp => now - timestamp < 1000
+     );
+     clickHistoryRef.current.push(now);
+     if (clickHistoryRef.current.length > 10) {
+       return false;
+     }
+     return true;
+   }, []);
 
-const handleLike = useCallback(async () => {
-    if (!user) {
-        navigate('/auth?mode=signup');
-        return;
-    }
-    if (isHost) {
-        toast.error("Broadcasters cannot like their own broadcast");
-        return;
-    }
+   const flushLikes = useCallback(async () => {
+     if (flushInProgressRef.current) return;
 
-    if (isClickBlocked) {
-        return; // Silent fail for rapid clicking
-    }
+     const batch = pendingLikesRef.current;
+     if (batch <= 0) return;
 
-    if (!checkClickRate()) {
-        return; // Silent fail for rapid clicking
-    }
+     pendingLikesRef.current = 0;
+     flushInProgressRef.current = true;
 
-    // Track this click for optimistic reconciliation
-    const clickTimestamp = Date.now();
-    const expectedLikes = 10;
+     try {
+       if (!stream?.id) return;
 
-    try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
+       const { data, error } = await supabase.rpc('increment_stream_likes', {
+         p_stream_id: stream.id,
+         p_like_count: batch,
+       });
 
-        }
-        if (!session) {
-            navigate('/auth?mode=signup');
-            return;
-        }
+       if (error) throw error;
 
-        if (!stream?.id) {
-            return;
-        }
+       if (typeof data === 'number') {
+         setStream((prev: any) => {
+           if (!prev) return prev;
+           return { ...prev, total_likes: data };
+         });
+       }
+     } catch (error) {
+       pendingLikesRef.current += batch;
+       console.error('Failed to flush likes:', error);
+     } finally {
+       flushInProgressRef.current = false;
+     }
+   }, [stream?.id]);
 
-        const edgeUrl = `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-like`;
-        
-        // Send 10 likes in batch
-        const response = await fetch(edgeUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                stream_id: stream.id,
-                count: 10
-            })
-        }).catch((err) => {
+   useEffect(() => {
+     const interval = window.setInterval(() => {
+       flushLikes();
+     }, 2500);
 
-            throw err;
-        });
+     const handleVisibilityChange = () => {
+       if (document.visibilityState === 'hidden') {
+         void flushLikes();
+       }
+     };
 
-        if (response.status === 404) {
-            toast.error('Like feature temporarily unavailable.');
-            return;
-        }
+     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        let result;
-        try {
-            const text = await response.text();
-            if (!text) {
-                toast.error('Failed to process like - no response.');
-                return;
-            }
-            result = JSON.parse(text);
-        } catch {
-            toast.error('Failed to process like.');
-            return;
-        }
+     return () => {
+       window.clearInterval(interval);
+       document.removeEventListener('visibilitychange', handleVisibilityChange);
+       void flushLikes();
+     };
+   }, [flushLikes]);
 
-        if (!response.ok) {
-            // If server fails, don't update UI (the 10 optimistic was never sent)
-            toast.error(result?.error || 'Failed to send like');
-            return;
-        }
+ const handleLike = useCallback(() => {
+     if (!user) {
+         navigate('/auth?mode=signup');
+         return;
+     }
+     if (isHost) {
+         toast.error("Broadcasters cannot like their own broadcast");
+         return;
+     }
 
-        // Only update UI with server response (source of truth)
-        const serverTotal = result.total_likes;
-        setStream((prev: any) => {
-            if (!prev) return prev;
-            // Use server total as source of truth
-            return { ...prev, total_likes: serverTotal };
-        });
+     if (isClickBlocked) {
+         return;
+     }
 
-        // Broadcast to other users
-        const channel = channelRef.current;
-        if (channel) {
-            await channel.send({
-                type: 'broadcast',
-                event: 'like_sent',
-                payload: {
-                    user_id: user.id,
-                    stream_id: stream.id,
-                    total_likes: serverTotal,
-                    timestamp: Date.now()
-                }
-            });
-        }
+     if (!checkClickRate()) {
+         return;
+     }
 
-        if (result.coins_awarded > 0) {
-            toast.success(
-                `?? You earned ${result.coins_awarded} Troll Coin${result.coins_awarded !== 1 ? 's' : ''}! ` +
-                `(${result.user_like_count.toLocaleString()})`,
-                { duration: 5000 }
-            );
-        }
+     pendingLikesRef.current += 1;
+     setStream((prev: any) => {
+       if (!prev) return prev;
+       return { ...prev, total_likes: (prev.total_likes || 0) + 1 };
+     });
 
-        updateStreamActivity()
-    } catch (e) {
+     if (pendingLikesRef.current >= 25) {
+       flushLikes();
+     }
 
-    }
-  }, [checkClickRate, isClickBlocked, isHost, navigate, stream?.id, user, updateStreamActivity]);
+     updateStreamActivity();
+   }, [checkClickRate, isClickBlocked, isHost, navigate, stream, user, flushLikes, updateStreamActivity]);
 
   const toggleStreamRgb = useCallback(async () => {
     if (!isHost || !stream) return;
@@ -4603,6 +4576,17 @@ const handleLike = useCallback(async () => {
             } else {
               console.log('[handleStreamEnd] Replay saved successfully:', urlData.publicUrl)
               toast.success('Replay saved!')
+
+              await supabase
+                .from('saved_streams')
+                .upsert({
+                  user_id: user.id,
+                  stream_id: stream.id,
+                  source: 'auto_stream_end',
+                  storage_category: 'broadcast_recording',
+                  file_size_bytes: recordingBlob.size,
+                  recording_duration: recorder.recordingDuration || Math.floor((Date.now() - new Date(stream.started_at || Date.now()).getTime()) / 1000),
+                }, { onConflict: 'saved_streams_user_id_stream_id_key' })
             }
           } catch (saveErr) {
             console.warn('[handleStreamEnd] Failed to save replay:', saveErr)
@@ -5335,7 +5319,24 @@ const handleLike = useCallback(async () => {
                  onLiveKitMicMute={onLiveKitMicMute}
                  onLiveKitMicUnmute={onLiveKitMicUnmute}
                  isRecording={recorder.isRecording}
-                 onToggleRecord={recorder.isRecording ? () => recorder.stopRecording() : () => recorder.startRecording(stream.id)}
+                  onToggleRecord={async () => {
+                    if (recorder.isRecording) {
+                      const blob = await recorder.stopRecording()
+                      if (blob && stream?.id && user?.id && blob.size > 0) {
+                        await supabase
+                          .from('saved_streams')
+                          .upsert({
+                            user_id: user.id,
+                            stream_id: stream.id,
+                            source: 'auto_stream_end',
+                            storage_category: 'broadcast_recording',
+                            file_size_bytes: blob.size,
+                          }, { onConflict: 'saved_streams_user_id_stream_id_key' })
+                      }
+                    } else {
+                      recorder.startRecording(stream.id)
+                    }
+                  }}
                />
              )}
 
@@ -6918,7 +6919,24 @@ const handleLike = useCallback(async () => {
                       // Toggle seats lock logic
                     }}
                     isRecording={recorder.isRecording}
-                    onToggleRecord={recorder.isRecording ? () => recorder.stopRecording() : () => recorder.startRecording(stream.id)}
+                     onToggleRecord={async () => {
+                       if (recorder.isRecording) {
+                         const blob = await recorder.stopRecording()
+                         if (blob && stream?.id && user?.id && blob.size > 0) {
+                           await supabase
+                             .from('saved_streams')
+                             .upsert({
+                               user_id: user.id,
+                               stream_id: stream.id,
+                               source: 'auto_stream_end',
+                               storage_category: 'broadcast_recording',
+                               file_size_bytes: blob.size,
+                             }, { onConflict: 'saved_streams_user_id_stream_id_key' })
+                         }
+                       } else {
+                         recorder.startRecording(stream.id)
+                       }
+                     }}
                   />
                 </div>
               </>
@@ -6945,17 +6963,17 @@ const handleLike = useCallback(async () => {
                 onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
                 isHost={isHost}
                 onInviteFollowers={handleInviteFollowers}
-                saveBroadcastButton={
+saveBroadcastButton={
                   stream?.id ? (
                     <SaveBroadcastButton
-                      isRecording={recorder.isRecording}
-                      isUploading={recorder.isUploading}
-                      recordingDuration={recorder.recordingDuration}
-                      recordingSize={recorder.recordingSize}
+                      isRecording={false}
+                      isUploading={false}
+                      recordingDuration={0}
+                      recordingSize={0}
                       streamId={stream.id}
-                      onStartRecording={recorder.startRecording}
-                      onStopRecording={recorder.stopRecording}
-                      onSaveClip={recorder.saveClip}
+                      onStartRecording={() => {}}
+                      onStopRecording={() => {}}
+                      onSaveClip={() => {}}
                     />
                   ) : undefined
                 }

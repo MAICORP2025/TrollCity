@@ -26,6 +26,7 @@ import ProfileFeed from '../components/profile/ProfileFeed';
 import ProfileReplays from '../components/profile/ProfileReplays';
 import ProfileWatchlist from '../components/profile/ProfileWatchlist';
 import UserInventory from './UserInventory';
+import ProfileMaitalentPromos from './ProfileMaitalentPromos';
 import { useProfileFrameStore } from '../stores/useProfileFrameStore';
 import type { ProfileFrame as ProfileFrameType } from '../config/profileFrames';
 
@@ -77,6 +78,7 @@ function ProfileInner() {
         return PROFILE_TABS.filter(tab => {
             if (tab.key === 'settings') return isOwnProfile;
             if (tab.key === 'purchases') return isOwnProfile;
+            if (tab.key === 'promos') return isOwnProfile;
             if (tab.key === 'subscriptions') return true;
             if (tab.key === 'broadcasts') return activeRoles.some(r => r.role_type === 'broadcaster') || isOwnProfile;
             if (tab.key === 'auctions') return activeRoles.some(r => r.role_type === 'auctioneer') || isOwnProfile;
@@ -489,6 +491,8 @@ function ProfileInner() {
                         </div>
                     </div>
                 );
+            case 'promos':
+                return <ProfileMaitalentPromos />;
             default:
                 return <ProfileFeed userId={profile.id} />;
         }

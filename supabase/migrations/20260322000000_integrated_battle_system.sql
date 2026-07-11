@@ -199,17 +199,16 @@ CREATE OR REPLACE FUNCTION public.record_battle_gift(
   p_amount INTEGER
 ) RETURNS void AS $$
 BEGIN
-  IF p_team = 'broadcaster' THEN
+  IF p_team = 'challenger' THEN
     UPDATE public.battles 
-    SET broadcaster_score = broadcaster_score + p_amount
+    SET score_challenger = COALESCE(score_challenger, 0) + p_amount
     WHERE id = p_battle_id;
-  ELSIF p_team = 'challenger' THEN
+  ELSE
     UPDATE public.battles 
-    SET challenger_score = challenger_score + p_amount
+    SET score_opponent = COALESCE(score_opponent, 0) + p_amount
     WHERE id = p_battle_id;
   END IF;
   
-  -- Check for sudden death (last 10 seconds)
   UPDATE public.battles 
   SET sudden_death = true
   WHERE id = p_battle_id 

@@ -248,60 +248,91 @@ export default function TCNNViewerPage() {
     };
   }, []);
 
-  // Scroll chat
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+   // Scroll chat
+   useEffect(() => {
+     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+   }, [messages]);
 
-  // Like handler
-  const handleLike = useCallback(async () => {
-    if (!user || !stream) return;
+   const pendingLikesRef = useRef(0);
+   const flushInProgressRef = useRef(false);
 
-    if (isClickBlocked) {
-      toast.error('Clicking too fast! Please wait.');
-      return;
-    }
+   const flushLikes = useCallback(async () => {
+     if (flushInProgressRef.current) return;
+     const batch = pendingLikesRef.current;
+     if (batch <= 0 || !streamId) return;
 
-    const now = Date.now();
-    clickHistoryRef.current = clickHistoryRef.current.filter((t) => now - t < 2000);
-    clickHistoryRef.current.push(now);
+     pendingLikesRef.current = 0;
+     flushInProgressRef.current = true;
 
-    if (clickHistoryRef.current.length > 5) {
-      setIsClickBlocked(true);
-      toast.error('Too many clicks! Blocked for 30 seconds.');
-      setTimeout(() => {
-        setIsClickBlocked(false);
-        clickHistoryRef.current = [];
-      }, 30000);
-      return;
-    }
+     try {
+       const { data, error } = await supabase.rpc('increment_stream_likes', {
+         p_stream_id: streamId,
+         p_like_count: batch,
+       });
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+       if (error) throw error;
 
-      const edgeUrl = `${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-like`;
-      const response = await fetch(edgeUrl, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stream_id: stream.id }),
-      });
+       if (typeof data === 'number') {
+         setTotalLikes(data);
+       }
+     } catch (error) {
+       pendingLikesRef.current += batch;
+       console.error('Failed to flush likes:', error);
+     } finally {
+       flushInProgressRef.current = false;
+     }
+   }, [streamId]);
 
-      const result = await response.json();
-      if (response.ok) {
-        setTotalLikes(result.total_likes);
-        if (channelRef.current) {
-          channelRef.current.send({
-            type: 'broadcast',
-            event: 'like_sent',
-            payload: { user_id: user.id, stream_id: stream.id, total_likes: result.total_likes },
-          }).catch(console.error);
-        }
-      }
-    } catch {
-      toast.error('Failed to like');
-    }
-  }, [user, stream, isClickBlocked]);
+   useEffect(() => {
+     const interval = window.setInterval(() => {
+       flushLikes();
+     }, 2500);
+
+     const handleVisibilityChange = () => {
+       if (document.visibilityState === 'hidden') {
+         void flushLikes();
+       }
+     };
+
+     document.addEventListener('visibilitychange', handleVisibilityChange);
+
+     return () => {
+       window.clearInterval(interval);
+       document.removeEventListener('visibilitychange', handleVisibilityChange);
+       void flushLikes();
+     };
+   }, [flushLikes]);
+
+   // Like handler
+   const handleLike = useCallback(async () => {
+     if (!user || !stream) return;
+
+     if (isClickBlocked) {
+       toast.error('Clicking too fast! Please wait.');
+       return;
+     }
+
+     const now = Date.now();
+     clickHistoryRef.current = clickHistoryRef.current.filter((t) => now - t < 2000);
+     clickHistoryRef.current.push(now);
+
+     if (clickHistoryRef.current.length > 5) {
+       setIsClickBlocked(true);
+       toast.error('Too many clicks! Blocked for 30 seconds.');
+       setTimeout(() => {
+         setIsClickBlocked(false);
+         clickHistoryRef.current = [];
+       }, 30000);
+       return;
+     }
+
+     setTotalLikes((prev) => Number(prev || 0) + 1);
+
+     pendingLikesRef.current += 1;
+     if (pendingLikesRef.current >= 25) {
+       flushLikes();
+     }
+   }, [user, stream, isClickBlocked, flushLikes]);
 
   // Send chat
   const sendChat = useCallback(async () => {

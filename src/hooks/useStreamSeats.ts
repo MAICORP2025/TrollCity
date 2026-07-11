@@ -39,6 +39,26 @@ const SUBSCRIBER_DISCOUNT_PERCENT = 0.10
 
 const ACTIVE_SEAT_STATUSES = new Set(['reserved', 'camera_starting', 'active', 'live'])
 
+const seatEventSendChannels = new Map<string, ReturnType<typeof supabase.channel>>()
+
+function getSeatEventSendChannel(streamId: string) {
+  if (!streamId) return null
+  const existing = seatEventSendChannels.get(streamId)
+  if (existing) return existing
+  const channel = supabase.channel(`stream-seat-events:${streamId}`)
+  channel.subscribe()
+  seatEventSendChannels.set(streamId, channel)
+  return channel
+}
+
+function cleanupSeatEventSendChannel(streamId: string) {
+  const channel = seatEventSendChannels.get(streamId)
+  if (channel) {
+    supabase.removeChannel(channel)
+    seatEventSendChannels.delete(streamId)
+  }
+}
+
 function normalizeSeatStatus(status?: string | null) {
   return String(status || '').trim().toLowerCase()
 }
@@ -156,6 +176,31 @@ export function useStreamSeats(
   const refreshTimersRef = useRef<number[]>([])
   const seatsRef = useRef<Record<number, SeatSession>>({})
   const mySeatRef = useRef<SeatSession | null>(null)
+
+  const safeSetSeats = useCallback((updater: React.SetStateAction<Record<number, SeatSession>>) => {
+    if (!mountedRef.current) return
+    setSeats(updater)
+  }, [])
+
+  const safeSetMySeat = useCallback((updater: React.SetStateAction<SeatSession | null>) => {
+    if (!mountedRef.current) return
+    setMySeat(updater)
+  }, [])
+
+  const safeSetJoiningSeatId = useCallback((updater: React.SetStateAction<number | null>) => {
+    if (!mountedRef.current) return
+    setJoiningSeatId(updater)
+  }, [])
+
+  const safeSetLeavingSeatId = useCallback((updater: React.SetStateAction<number | null>) => {
+    if (!mountedRef.current) return
+    setLeavingSeatId(updater)
+  }, [])
+
+  const safeSetSeatVersion = useCallback((updater: React.SetStateAction<number>) => {
+    if (!mountedRef.current) return
+    setSeatVersion(updater)
+  }, [])
 
   const clearRefreshTimers = useCallback(() => {
     for (const timerId of refreshTimersRef.current) {
@@ -301,7 +346,8 @@ export function useStreamSeats(
       if (!streamId) return
 
       try {
-        const channel = supabase.channel(`stream-seat-events:${streamId}`)
+        const channel = getSeatEventSendChannel(streamId)
+        if (!channel) return
 
         await channel.send({
           type: 'broadcast',
@@ -312,11 +358,6 @@ export function useStreamSeats(
             sent_at: new Date().toISOString(),
           },
         })
-
-        // Removing this send-only channel prevents leaked duplicate channels.
-        if (channel) {
-          supabase.removeChannel(channel)
-        }
       } catch (err) {
         console.warn('[useStreamSeats] seat broadcast event failed:', {
           event,
@@ -336,7 +377,19 @@ export function useStreamSeats(
         return false
       }
 
-      setJoiningSeatId(seatIndex)
+      // A user already seated in a stage seat cannot join another seat until they leave it.
+      const existing = mySeatRef.current
+      if (
+        existing &&
+        isActiveSeatStatus(existing.status) &&
+        existing.seat_index !== seatIndex &&
+        (existing.user_id === effectiveUserId || existing.guest_id === effectiveUserId)
+      ) {
+        toast.error('Leave your current seat before joining another one')
+        return false
+      }
+
+      safeSetJoiningSeatId(seatIndex)
 
       const broadcasterId = _streamData?.user_id || _broadcasterProfile?.id || _broadcasterProfile?.user_id
       let finalPrice = safeNumber(price, 0)
@@ -360,7 +413,7 @@ export function useStreamSeats(
         }
       }
 
-      // ✅ Optimistic update: show seat immediately before RPC completes
+      // Optimistic update: show seat immediately before RPC completes
       const optimisticSeat: SeatSession = {
         id: `optimistic-${Date.now()}`,
         stream_id: streamId,
@@ -391,11 +444,11 @@ export function useStreamSeats(
         },
       }
 
-      setSeats(prev => ({ ...prev, [seatIndex]: optimisticSeat }))
-      setMySeat(optimisticSeat)
+      safeSetSeats(prev => ({ ...prev, [seatIndex]: optimisticSeat }))
+      safeSetMySeat(optimisticSeat)
       seatsRef.current = { ...seatsRef.current, [seatIndex]: optimisticSeat }
       mySeatRef.current = optimisticSeat
-      setSeatVersion(v => v + 1)
+      safeSetSeatVersion(v => v + 1)
 
       try {
         const { data, error } = await supabase.rpc('join_seat_atomic', {
@@ -407,12 +460,11 @@ export function useStreamSeats(
 
         if (error) {
           console.warn('[useStreamSeats] joinSeat rpc error:', error)
-          // Rollback optimistic update on error
-          setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
-          setMySeat(null)
+          safeSetSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+          safeSetMySeat(null)
           seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
           mySeatRef.current = null
-          setSeatVersion(v => v + 1)
+          safeSetSeatVersion(v => v + 1)
           toast.error(error.message || 'Failed to join seat')
           return false
         }
@@ -420,24 +472,22 @@ export function useStreamSeats(
         const payload = data as any
 
         if (!payload?.success) {
-          // Rollback optimistic update on failure
-          setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
-          setMySeat(null)
+          safeSetSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+          safeSetMySeat(null)
           seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
           mySeatRef.current = null
-          setSeatVersion(v => v + 1)
+          safeSetSeatVersion(v => v + 1)
           toast.error(payload?.message || 'Failed to join seat')
           return false
         }
 
-        // Replace optimistic seat with real data
         const realSeat = normalizeSeatSession(payload?.seat || payload)
         if (realSeat) {
-          setSeats(prev => ({ ...prev, [seatIndex]: realSeat }))
-          setMySeat(realSeat)
+          safeSetSeats(prev => ({ ...prev, [seatIndex]: realSeat }))
+          safeSetMySeat(realSeat)
           seatsRef.current = { ...seatsRef.current, [seatIndex]: realSeat }
           mySeatRef.current = realSeat
-          setSeatVersion(v => v + 1)
+          safeSetSeatVersion(v => v + 1)
         }
 
         await sendSeatEvent('seat_joined', {
@@ -461,7 +511,7 @@ export function useStreamSeats(
         toast.error('Failed to join seat')
         return false
       } finally {
-        setJoiningSeatId(null)
+        safeSetJoiningSeatId(null)
       }
     },
     [
@@ -482,20 +532,19 @@ export function useStreamSeats(
     const seatIndex = currentSeat.seat_index
     const userId = currentSeat.user_id || currentSeat.guest_id || effectiveUserId || null
 
-    setLeavingSeatId(seatIndex)
+    safeSetLeavingSeatId(seatIndex)
 
-    // ✅ Optimistic update: remove seat immediately
     const previousSeat = { ...seatsRef.current }
     const previousMySeat = mySeatRef.current
 
-    setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+    safeSetSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
     if (mySeatRef.current?.seat_index === seatIndex) {
-      setMySeat(null)
+      safeSetMySeat(null)
       mySeatRef.current = null
     }
     seatsRef.current = { ...seatsRef.current }
     delete seatsRef.current[seatIndex]
-    setSeatVersion(v => v + 1)
+    safeSetSeatVersion(v => v + 1)
 
     try {
       const { data, error } = await supabase.rpc('leave_seat_atomic', {
@@ -504,23 +553,21 @@ export function useStreamSeats(
 
       if (error) {
         console.warn('[useStreamSeats] leaveSeat rpc error:', error)
-        // Rollback on error
-        setSeats(previousSeat)
-        setMySeat(previousMySeat)
+        safeSetSeats(previousSeat)
+        safeSetMySeat(previousMySeat)
         seatsRef.current = previousSeat
         mySeatRef.current = previousMySeat
-        setSeatVersion(v => v + 1)
+        safeSetSeatVersion(v => v + 1)
         toast.error(error.message || 'Failed to leave seat')
         return
       }
 
       if (data && (data as any).success === false) {
-        // Rollback on failure
-        setSeats(previousSeat)
-        setMySeat(previousMySeat)
+        safeSetSeats(previousSeat)
+        safeSetMySeat(previousMySeat)
         seatsRef.current = previousSeat
         mySeatRef.current = previousMySeat
-        setSeatVersion(v => v + 1)
+        safeSetSeatVersion(v => v + 1)
         toast.error((data as any).message || 'Failed to leave seat')
         return
       }
@@ -531,19 +578,17 @@ export function useStreamSeats(
         session_id: currentSeat.id,
       })
 
-      // Single debounced refresh to sync
       scheduleRefresh('leaveSeat:post-event')
     } catch (err) {
       console.warn('[useStreamSeats] leaveSeat failed:', err)
-      // Rollback on exception
-      setSeats(previousSeat)
-      setMySeat(previousMySeat)
+      safeSetSeats(previousSeat)
+      safeSetMySeat(previousMySeat)
       seatsRef.current = previousSeat
       mySeatRef.current = previousMySeat
-      setSeatVersion(v => v + 1)
+      safeSetSeatVersion(v => v + 1)
       toast.error('Failed to leave seat')
     } finally {
-      setLeavingSeatId(null)
+      safeSetLeavingSeatId(null)
     }
   }, [streamId, effectiveUserId, fetchSeats, sendSeatEvent, scheduleRefresh])
 
@@ -659,7 +704,7 @@ export function useStreamSeats(
       })
 
       if (matchedSeat) {
-        scheduleRefresh('participant-disconnected', [0, 500])
+        scheduleRefresh('participant-disconnected', 500)
       }
     },
     [scheduleRefresh],
@@ -675,7 +720,7 @@ export function useStreamSeats(
         if (error) throw error
 
         await fetchSeats('approveSeatRequest')
-        scheduleRefresh('approveSeatRequest:delayed', [300, 800])
+        scheduleRefresh('approveSeatRequest:delayed', 800)
 
         return data || null
       } catch (err) {
@@ -706,27 +751,28 @@ export function useStreamSeats(
     [fetchSeats],
   )
 
-  useEffect(() => {
-    mountedRef.current = true
+   useEffect(() => {
+     mountedRef.current = true
 
-    return () => {
-      mountedRef.current = false
-      clearRefreshTimers()
-    }
-  }, [clearRefreshTimers])
+     return () => {
+       mountedRef.current = false
+       clearRefreshTimers()
+     }
+   }, [clearRefreshTimers])
 
-  useEffect(() => {
-    if (!streamId) {
-      setSeats({})
-      setMySeat(null)
-      seatsRef.current = {}
-      mySeatRef.current = null
-      setSeatVersion((v) => v + 1)
-      return
-    }
+   useEffect(() => {
+     if (!streamId) {
+       cleanupSeatEventSendChannel(streamId)
+       setSeats({})
+       setMySeat(null)
+       seatsRef.current = {}
+       mySeatRef.current = null
+       setSeatVersion((v) => v + 1)
+       return
+     }
 
-    void fetchSeats('mount')
-  }, [streamId])
+     void fetchSeats('mount')
+   }, [streamId])
 
   useEffect(() => {
     if (!streamId) return

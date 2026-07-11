@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 interface BattleUser {
   id: string;
@@ -13,44 +13,87 @@ export function useBattleQueue(onBattleEnd?: () => Promise<void> | void) {
   const [leftUser, setLeftUser] = useState<BattleUser | null>(null);
   const [rightUser, setRightUser] = useState<BattleUser | null>(null);
 
-  // Auto-fill slots from queue
-  useEffect(() => {
-    // If we have queue items and empty slots, fill them
-    // We use a small timeout to avoid state update loops if multiple slots open at once
-    const timeout = setTimeout(() => {
-        setQueue(currentQueue => {
-            if (currentQueue.length === 0) return currentQueue;
-            
-            const newQueue = [...currentQueue];
-            let changed = false;
+  const previousLeftRef = useRef<BattleUser | null>(null);
+  const previousRightRef = useRef<BattleUser | null>(null);
+  const prevQueueLenRef = useRef(0);
+  const autoFillTimerRef = useRef<number | null>(null);
+  const isAutoFillingRef = useRef(false);
 
-            // Try to fill left
-            if (!leftUser && newQueue.length > 0) {
-                setLeftUser(newQueue[0]);
-                newQueue.shift();
-                changed = true;
-            }
+  const tryAutoFill = useCallback(() => {
+    if (isAutoFillingRef.current) return;
+    isAutoFillingRef.current = true;
 
-            // Try to fill right (from potentially modified queue)
-            if (!rightUser && newQueue.length > 0) {
-                setRightUser(newQueue[0]);
-                newQueue.shift();
-                changed = true;
-            }
+    const currentLeft = leftUser;
+    const currentRight = rightUser;
 
-            return changed ? newQueue : currentQueue;
+    setQueue(currentQueue => {
+      if (currentQueue.length === 0) return currentQueue;
+      if (currentLeft && currentRight) return currentQueue;
+
+      const newQueue = [...currentQueue];
+      const fillLeft = !currentLeft;
+      const fillRight = !currentRight;
+      const toAssign: BattleUser[] = [];
+
+      if (fillLeft && newQueue.length > 0) {
+        toAssign.push(newQueue[0]);
+        newQueue.shift();
+      }
+      if (fillRight && newQueue.length > 0) {
+        toAssign.push(newQueue[0]);
+        newQueue.shift();
+      }
+
+      if (toAssign.length > 0) {
+        Promise.resolve().then(() => {
+          if (toAssign[0]) setLeftUser(toAssign[0]);
+          if (toAssign[1]) setRightUser(toAssign[1]);
+          isAutoFillingRef.current = false;
         });
-    }, 100);
+      } else {
+        isAutoFillingRef.current = false;
+      }
 
-    return () => clearTimeout(timeout);
-  }, [queue.length, leftUser, rightUser]);
+      return toAssign.length > 0 ? newQueue : currentQueue;
+    });
+  }, [leftUser, rightUser]);
+
+  useEffect(() => {
+    if (autoFillTimerRef.current !== null) {
+      clearTimeout(autoFillTimerRef.current);
+    }
+
+    const hadBothSlots = previousLeftRef.current !== null && previousRightRef.current !== null;
+    const hasVacancy = leftUser === null || rightUser === null;
+    const queueGrew = queue.length > prevQueueLenRef.current;
+
+    if (hadBothSlots && hasVacancy) {
+      autoFillTimerRef.current = window.setTimeout(() => {
+        autoFillTimerRef.current = null;
+        tryAutoFill();
+      }, 100);
+    } else if (!hadBothSlots && queueGrew) {
+      autoFillTimerRef.current = window.setTimeout(() => {
+        autoFillTimerRef.current = null;
+        tryAutoFill();
+      }, 100);
+    }
+
+    previousLeftRef.current = leftUser;
+    previousRightRef.current = rightUser;
+    prevQueueLenRef.current = queue.length;
+
+    return () => {
+      if (autoFillTimerRef.current !== null) {
+        clearTimeout(autoFillTimerRef.current);
+        autoFillTimerRef.current = null;
+      }
+    };
+  }, [queue.length, leftUser, rightUser, tryAutoFill]);
 
   const joinQueue = useCallback((user: any) => {
     if (!user) return;
-    
-    // Check if already in battle or queue
     if (leftUser?.id === user.id || rightUser?.id === user.id) return;
-    
     setQueue(prev => {
       if (prev.find(u => u.id === user.id)) return prev;
       return [...prev, { ...user, gifts: 0 }];
@@ -59,11 +102,11 @@ export function useBattleQueue(onBattleEnd?: () => Promise<void> | void) {
 
   const removeUser = useCallback((userId: string) => {
     if (leftUser?.id === userId) {
-        setLeftUser(null);
+      setLeftUser(null);
     } else if (rightUser?.id === userId) {
-        setRightUser(null);
+      setRightUser(null);
     } else {
-        setQueue(prev => prev.filter(u => u.id !== userId));
+      setQueue(prev => prev.filter(u => u.id !== userId));
     }
   }, [leftUser, rightUser]);
 
@@ -76,14 +119,11 @@ export function useBattleQueue(onBattleEnd?: () => Promise<void> | void) {
   }, [leftUser?.id, rightUser?.id]);
 
   const rotateBattle = useCallback(async () => {
-     // Reset gifts for safety or clear users
-     // Logic: Both leave the stage, next 2 come in
-     // Or winner stays? For now, clear both to allow queue rotation
-     setLeftUser(null);
-     setRightUser(null);
-     if (onBattleEnd) {
-         await onBattleEnd();
-     }
+    setLeftUser(null);
+    setRightUser(null);
+    if (onBattleEnd) {
+      await onBattleEnd();
+    }
   }, [onBattleEnd]);
 
   return {

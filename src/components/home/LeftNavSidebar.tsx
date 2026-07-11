@@ -17,6 +17,7 @@ import { useLiveContent } from '@/contexts/LiveContentContext'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import FloatingPoster from './FloatingPoster'
 import LevelStatusCard from './LevelStatusCard'
+import { grantNavCoins } from '@/lib/grantNavCoins'
 
 type TabType = 'home' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
@@ -44,6 +45,7 @@ export default function LeftNavSidebar({
   const navigate = useNavigate()
 
   const handleTabClick = (tab: typeof tabs[0]) => {
+    grantNavCoins(tab.label)
     if (tab.isExternal) {
       navigate(tab.path!)
     } else {

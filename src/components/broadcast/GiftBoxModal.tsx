@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, Gift, Sparkles, Crown, Gem, Zap, Heart, Users, UserCircle, Radio, Coins, Glasses } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { useGiftSystem, GiftItem } from '../../hooks/useGiftSystem';
+import { useGiftSystem, GiftItem } from '../../lib/hooks/useGiftSystem';
 import { useBroadcastAbilities } from '../../hooks/useBroadcastAbilities';
 import { getAbilityById } from '../../types/broadcastAbilities';
 import CoinStoreModal from './CoinStoreModal';
@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 
 // Re-export GiftItem from useGiftSystem for external consumption
-export type { GiftItem } from '../../hooks/useGiftSystem';
+export type { GiftItem } from '../../lib/hooks/useGiftSystem';
 
 export type GiftTargetType = 'broadcaster' | 'all' | 'specific';
 
@@ -101,13 +101,7 @@ const GiftBoxModalComponent = function GiftBoxModal({
     }
   }, [isOpen, recipientId]);
   
-  const { sendGift, isSending } = useGiftSystem(
-    recipientId,
-    streamId,
-    null,
-    giftTarget.userId,
-    sharedChannel
-  );
+  const { sendGift, isSending } = useGiftSystem()
   const {
     abilities: userAbilities,
     loading: abilitiesLoading,

@@ -14,6 +14,7 @@ import UniverseModeSetup from '../../components/broadcast/UniverseModeSetup';
 import { toast } from 'sonner';
 import { useBroadcastLockdown } from '@/hooks/useBroadcastLockdown';
 import { useBroadcastViewerCap } from '@/hooks/useBroadcastViewerCap';
+import { issuePromoCard } from '@/lib/issuePromoCard';
 import { generateUUID } from '../../lib/uuid';
 import { RANDOM_BATTLE_ENABLED } from '../../config/featureFlags';
 import { US_STATES, getStateName } from '../../config/usStates';
@@ -920,15 +921,10 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       console.log('[acquireMediaStream] Getting native media stream...');
       
       const videoConstraints: MediaTrackConstraints = {
-        facingMode: videoFacingMode
+        facingMode: videoFacingMode,
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       };
-      if (isStreamAdmin) {
-        videoConstraints.width = { ideal: 1920 };
-        videoConstraints.height = { ideal: 1080 };
-      } else {
-        videoConstraints.width = { ideal: 1280 };
-        videoConstraints.height = { ideal: 720 };
-      }
 
       const constraints: MediaStreamConstraints = {
         audio: {
@@ -1309,8 +1305,8 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
           newNativeStream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: newFacingMode,
-              width: { ideal: isStreamAdmin ? 1920 : 1280 },
-              height: { ideal: isStreamAdmin ? 1080 : 720 }
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
             }
           });
         } catch (err: any) {
@@ -1397,8 +1393,8 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
         displayStream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             frameRate: { ideal: 60, max: 60 },
-            width: { ideal: 2560 },
-            height: { ideal: 1440 }
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           },
           audio: true // Capture system audio
         });
@@ -1843,6 +1839,52 @@ livekit_room_name: roomName,
 
         console.log('[SetupPage] Stream marked as live in database');
         broadcastStartLog('stream live verification', { streamId: data.id, status: 'live' });
+
+         try {
+            const result = await issuePromoCard({
+              user_id: user.id,
+              source_type: 'broadcast_start',
+              token_amount: 25,
+              metadata: {
+                streamId: data.id,
+                title: title || 'Live Stream',
+                category,
+                source: 'broadcast_start',
+              },
+            })
+
+            if (result.success && result.promo_card_id) {
+              window.dispatchEvent(
+                new CustomEvent('promo-card-issued', {
+                  detail: {
+                    promo_card_id: result.promo_card_id,
+                    code: result.code,
+                    token_amount: result.token_amount,
+                    expires_at: result.expires_at,
+                    source_type: 'broadcast_start',
+                  },
+                }),
+              )
+            }
+
+            if (!result.success && result.error === 'COOLDOWN_ACTIVE' && result.next_available_at) {
+              window.dispatchEvent(
+                new CustomEvent('promo-card-cooldown', {
+                  detail: {
+                    message: result.message || 'Cooldown active',
+                    next_available_at: result.next_available_at,
+                    source_type: 'broadcast_start',
+                  },
+                }),
+              )
+            }
+
+            if (!result.success && result.error && result.error !== 'COOLDOWN_ACTIVE') {
+              toast.error(`Promo card error: ${result.error}`)
+            }
+          } catch (err) {
+            console.error('[PromoCard] Broadcast start reward failed:', err)
+          }
 
         // Create a system wall post so the stream appears on the Troll Wall feed
         // Runs independently — if it fails, the stream is still live

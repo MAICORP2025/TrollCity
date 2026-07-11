@@ -21,6 +21,11 @@ import { useChatBlockStatus } from '../../hooks/useChatBlockStatus';
 import { useStreamRealtime } from '../../hooks/useStreamRealtime';
 import { getBroadcastChatLockRemainingMs, isBroadcastChatLockActive } from '../../lib/broadcastModeration';
 
+// Cap total messages in memory to prevent unbounded growth.
+// Used consistently by: initial history, realtime chat, gifts, system messages,
+// optimistic messages, and automatic cleanup.
+const MAX_MESSAGES = 200;
+
 interface Message {
   id: string;
   txn_id?: string;
@@ -34,6 +39,7 @@ interface Message {
   sender_name?: string;
   receiver_id?: string;
   receiver_name?: string;
+  trollmonds_transferred?: number;
   // Challenge-specific fields
   challenge_id?: string;
   challenger_id?: string;
@@ -100,6 +106,22 @@ interface BroadcastChatProps {
 
 // ── Extracted message item component for Virtuoso virtualization ──
 // Each message is memoized to prevent re-render of all items when one changes.
+
+// Parse a GIFT_EVENT: message into structured gift metadata.
+// Defined at module scope so ChatMessageItem can call it directly.
+function parseGiftMessage(content: string) {
+  if (!content.startsWith('GIFT_EVENT:')) return null;
+  const parts = content.split(':');
+  if (parts.length < 3) return null;
+  return {
+    giftName: parts[1],
+    quantity: parseInt(parts[2], 10) || 1,
+    giftValue: parseInt(parts[3], 10) || 0,
+    currencyUsed: parts[4] || 'coins',
+    coinsBack: parseInt(parts[5], 10) || 0,
+    trollmondsTransferred: parseInt(parts[6], 10) || 0,
+  };
+}
 
 interface ChatMessageItemProps {
   msg: Message;
@@ -226,7 +248,7 @@ function ChatMessageItem({ msg, isHost, isOfficer, user, showGoldenBanner, disap
             <span className="text-blue-400">
               {' '}to <button
                 type="button"
-                onClick={() => openGiftForUser(msg.receiver_id)}
+                onClick={() => { if (msg.receiver_id) openGiftForUser(msg.receiver_id); }}
                 className="font-bold text-blue-400 hover:text-blue-300 transition-colors"
                 title="Send gift"
               >
@@ -346,9 +368,6 @@ export default function BroadcastChat({
   const [disappearingMessages, setDisappearingMessages] = useState<Set<string>>(new Set());
   const [input, setInput] = useState('');
   const virtuosoRef = useRef<VirtuosoHandle>(null);
-
-  // Cap total messages in memory to prevent unbounded growth
-  const MAX_MESSAGES = 500;
 
   // Pinned messages state (frontend-only, in-memory)
   const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(new Set());
@@ -486,34 +505,23 @@ export default function BroadcastChat({
     }
 
     return {
-      ...incoming,
-      type: incoming.type || 'chat',
-      user_profiles: buildUserProfile(incoming),
-    } as Message;
+        ...incoming,
+        type: incoming.type || 'chat',
+        user_profiles: buildUserProfile(incoming),
+      } as Message;
   };
 
-  const parseGiftMessage = (content: string) => {
-    if (!content.startsWith('GIFT_EVENT:')) return null;
-    const parts = content.split(':');
-    if (parts.length < 3) return null;
-    return {
-      giftName: parts[1],
-      quantity: parseInt(parts[2], 10) || 1,
-      giftValue: parseInt(parts[3], 10) || 0,
-      currencyUsed: parts[4] || 'coins',
-      coinsBack: parseInt(parts[5], 10) || 0,
-      trollmondsTransferred: parseInt(parts[6], 10) || 0,
-    };
-  };
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  
-  const MAX_MESSAGES = 200;
   
   // Track sent message txn_ids to prevent duplicates
   const receivedTxnIdsRef = useRef<Set<string>>(new Set());
   
   // Track processed message IDs to prevent duplicates from broadcast
   const processedMessageIds = useRef<Set<string>>(new Set());
+
+  // Track which message ids already have a scheduled disappearing timer (one timer per message)
+  const disappearingTimersRef = useRef<Set<string>>(new Set());
+  const disappearingTimerIdsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   
   // Unread message tracking
   const [unreadCount, setUnreadCount] = useState(0);
@@ -539,7 +547,7 @@ export default function BroadcastChat({
   );
   const [streamEnded, setStreamEnded] = useState(false);
   const [showModActions, setShowModActions] = useState(false);
-  const [modActionTargetUser, setModActionTargetUser] = useState<{ id: string; username: string; avatar_url?: string | null; role?: string | null; troll_role?: string | null } | null>(null);
+  const [modActionTargetUser, setModActionTargetUser] = useState<{ id: string; username: string; avatar_url: string; role?: string; troll_role?: string } | null>(null);
   const [modActionTargetUserId, setModActionTargetUserId] = useState('');
 
 
@@ -584,28 +592,39 @@ export default function BroadcastChat({
     return () => clearInterval(interval);
   }, [user?.id]);
   
-  // Handle message disappearing
+  // Handle message disappearing — schedule exactly one timer per applicable message.
   useEffect(() => {
-    if (!hasDisappearingChat || messages.length === 0) return;
-    
-    const latestMsg = messages[messages.length - 1];
-    if (!latestMsg || disappearingMessages.has(latestMsg.id)) return;
-    
-    // Mark message as disappearing
-    setDisappearingMessages(prev => new Set(prev).add(latestMsg.id));
-    
-    // Hide after 10 seconds
-    const hideTimer = setTimeout(() => {
-      setMessages(prev => prev.filter(m => m.id !== latestMsg.id));
-      setDisappearingMessages(prev => {
-        const next = new Set(prev);
-        next.delete(latestMsg.id);
-        return next;
-      });
-    }, 10000);
-    
-    return () => clearTimeout(hideTimer);
-  }, [messages.length, hasDisappearingChat]);
+    if (!hasDisappearingChat) return;
+
+    for (const m of messages) {
+      if (disappearingTimersRef.current.has(m.id)) continue;
+
+      disappearingTimersRef.current.add(m.id);
+      setDisappearingMessages(prev => prev.has(m.id) ? prev : new Set(prev).add(m.id));
+
+      const hideTimer = setTimeout(() => {
+        setMessages(prev => prev.filter(x => x.id !== m.id));
+        setDisappearingMessages(prev => {
+          const next = new Set(prev);
+          next.delete(m.id);
+          return next;
+        });
+        disappearingTimersRef.current.delete(m.id);
+        disappearingTimerIdsRef.current.delete(m.id);
+      }, 10000);
+
+      disappearingTimerIdsRef.current.set(m.id, hideTimer);
+    }
+  }, [messages, hasDisappearingChat]);
+
+  // Clear any pending disappearing timers when the component unmounts.
+  useEffect(() => {
+    return () => {
+      disappearingTimerIdsRef.current.forEach(t => clearTimeout(t));
+      disappearingTimerIdsRef.current.clear();
+      disappearingTimersRef.current.clear();
+    };
+  }, []);
   
   // Slow mode state and perk check
   const [isSlowModeEnabled, setIsSlowModeEnabled] = useState(false);
@@ -801,11 +820,15 @@ export default function BroadcastChat({
 
     let mounted = true;
     const fetchHostModerationState = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
         .select('broadcast_chat_disabled, broadcast_chat_disabled_until, broadcast_chat_disabled_stream_id')
         .eq('id', hostId)
         .maybeSingle();
+
+      if (error) {
+        console.error('[BroadcastChat] Failed to fetch host moderation state:', error);
+      }
 
       if (mounted) {
         setHostChatDisabledByOfficerState(!!data?.broadcast_chat_disabled);
@@ -890,6 +913,7 @@ export default function BroadcastChat({
           return
       }
 
+      let cancelled = false
       fetchingStreamIdRef.current = streamId
 
       if (import.meta.env.DEV) console.debug('[BroadcastChat] 📥 fetch messages started for streamId:', streamId)
@@ -897,6 +921,10 @@ export default function BroadcastChat({
 const fetchMessages = async () => {
           // Thundering Herd Prevention: Jitter on initial chat load (0-400ms when lazy loading)
           await new Promise(resolve => setTimeout(resolve, Math.random() * 400))
+
+          // Do not update state if unmounted or the stream changed during the delay.
+          if (cancelled) return
+          if (fetchingStreamIdRef.current !== streamId) return
 
           const { data, error } = await supabase
               .from('stream_messages')
@@ -907,8 +935,11 @@ const fetchMessages = async () => {
 
           if (error) {
               console.error('[BroadcastChat] Failed to fetch messages:', error)
+              fetchingStreamIdRef.current = null
               return
           }
+
+          if (cancelled) return
 
           if (data) {
               const processedMessages = data.reverse().map((m: any) => {
@@ -958,15 +989,24 @@ const fetchMessages = async () => {
                   return [...newHistory, ...prev].slice(-MAX_MESSAGES)
               })
           }
+
+          // Mark as successfully fetched only after a successful query.
+          fetchedStreamIdsRef.current.add(streamId)
+          fetchingStreamIdRef.current = null
       }
 
       fetchMessages()
-        .catch(() => {})
-        .finally(() => {
-            fetchedStreamIdsRef.current.add(streamId)
+        .catch((err) => {
+            console.error('[BroadcastChat] Unexpected error fetching messages:', err)
             fetchingStreamIdRef.current = null
+        })
+        .finally(() => {
             if (import.meta.env.DEV) console.debug('[BroadcastChat] 📥 fetch messages finished for streamId:', streamId)
         })
+
+      return () => {
+          cancelled = true
+      }
   }, [streamId, isChatOpen]);
 
   // Auto-delete messages after 1 minute + enforce memory cap
@@ -1195,10 +1235,12 @@ const fetchMessages = async () => {
      // Cleanup: remove channels when component unmounts or streamId changes
       return () => {
           if (import.meta.env.DEV) console.debug('[BroadcastChat] 🧹 Cleaning up realtime channels');
-          if (broadcastChannel) {
+          // Only remove the channel this effect instance actually created, so an
+          // old cleanup can never tear down a newer channel (e.g. on stream change).
+          if (broadcastChannel && broadcastChannelRef.current === broadcastChannel) {
             supabase.removeChannel(broadcastChannel);
+            broadcastChannelRef.current = null;
           }
-          broadcastChannelRef.current = null;
       };
   }, [streamId]);
 
@@ -1260,69 +1302,104 @@ const fetchMessages = async () => {
       return;
     }
 
-    const canBypassModeration = isHost || isStaffProfile(profile);
-    if (!canBypassModeration) {
-      const { data: blocked, error: blockError } = await supabase.rpc('is_user_chat_blocked', {
-        p_user_id: user.id,
-        p_stream_id: streamId,
-      });
-
-      if (!blockError && blocked) {
-        toast.error('Your chat is disabled by moderation action.');
-        return;
-      }
-    }
-
-    if (isSlowModeEnabled) {
-        toast.error('Slow mode is active. Please wait before sending another message.');
-        return;
-    }
-
-
-
     const content = input.trim();
 
-    // Check paid chat requirement
-    const { data: streamSettings } = await supabase
-      .from('stream_settings')
-      .select('paid_chat_enabled, paid_chat_type, paid_chat_price')
-      .eq('stream_id', streamId)
-      .maybeSingle();
-    
-    if (streamSettings?.paid_chat_enabled && !isHost) {
-      const price = Number(streamSettings.paid_chat_price || 100);
-      const giftQuery = supabase
-        .from('stream_gifts')
-        .select('id, created_at')
-        .eq('stream_id', streamId)
-        .eq('sender_id', user.id)
-        .or(`receiver_id.eq.${hostId},recipient_id.eq.${hostId}`)
-        .gte('coins_amount', price)
-        .order('created_at', { ascending: false })
-        .limit(1);
+    try {
+      const canBypassModeration = isHost || isStaffProfile(profile);
+      if (!canBypassModeration) {
+        const { data: blocked, error: blockError } = await supabase.rpc('is_user_chat_blocked', {
+          p_user_id: user.id,
+          p_stream_id: streamId,
+        });
 
-      if (streamSettings.paid_chat_type === 'per_chat') {
-        const { data: lastMessage } = await supabase
-          .from('stream_messages')
-          .select('created_at')
-          .eq('stream_id', streamId)
-          .eq('user_id', user.id)
-          .eq('type', 'chat')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (lastMessage?.created_at) {
-          giftQuery.gt('created_at', lastMessage.created_at);
+        if (blockError) {
+          console.error('[BroadcastChat] is_user_chat_blocked failed:', blockError);
+        } else if (blocked) {
+          toast.error('Your chat is disabled by moderation action.');
+          return;
         }
       }
 
-      const { data: qualifyingGift } = await giftQuery.maybeSingle();
-      if (!qualifyingGift) {
-        toast.error(`Paid chat is enabled. Send the broadcaster a gift worth at least ${price} coins to chat${streamSettings.paid_chat_type === 'per_chat' ? ' again' : ''}.`);
-        setInput(content);
-        return;
+      if (isSlowModeEnabled) {
+          toast.error('Slow mode is active. Please wait before sending another message.');
+          return;
       }
+
+      // Check paid chat requirement
+      const { data: streamSettings, error: settingsError } = await supabase
+        .from('stream_settings')
+        .select('paid_chat_enabled, paid_chat_type, paid_chat_price')
+        .eq('stream_id', streamId)
+        .maybeSingle();
+
+      if (settingsError) {
+        console.error('[BroadcastChat] stream_settings fetch failed:', settingsError);
+      }
+
+      if (streamSettings?.paid_chat_enabled && !isHost) {
+        const price = Number(streamSettings.paid_chat_price || 100);
+        const { data: streamGifts, error: giftsError } = await supabase
+          .from('stream_gifts')
+          .select('id, gift_id, quantity, created_at')
+          .eq('stream_id', streamId)
+          .eq('sender_id', user.id)
+          .or(`receiver_id.eq.${hostId},recipient_id.eq.${hostId}`)
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (giftsError) {
+          console.error('[BroadcastChat] stream_gifts fetch failed:', giftsError);
+        }
+
+        let qualifyingGift: any = null;
+
+        if (streamGifts && streamGifts.length > 0) {
+          const giftIds = [...new Set(streamGifts.map(g => g.gift_id).filter(Boolean))];
+          const { data: giftCatalog } = await supabase
+            .from('gifts')
+            .select('id, cost')
+            .in('id', giftIds);
+
+          const giftCostMap = new Map((giftCatalog || []).map(g => [g.id, g.cost]));
+
+          let candidateDate: string | null = null;
+          if (streamSettings.paid_chat_type === 'per_chat') {
+            const { data: lastMessage, error: lastMsgError } = await supabase
+              .from('stream_messages')
+              .select('created_at')
+              .eq('stream_id', streamId)
+              .eq('user_id', user.id)
+              .eq('type', 'chat')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (lastMsgError) {
+              console.error('[BroadcastChat] stream_messages (last chat) fetch failed:', lastMsgError);
+            } else if (lastMessage?.created_at) {
+              candidateDate = lastMessage.created_at;
+            }
+          }
+
+          qualifyingGift = streamGifts.find(g => {
+            const cost = giftCostMap.get(g.gift_id) || 0;
+            if (cost * g.quantity < price) return false;
+            if (candidateDate && g.created_at <= candidateDate) return false;
+            return true;
+          }) || null;
+        }
+
+        if (!qualifyingGift) {
+          toast.error(`Paid chat is enabled. Send the broadcaster a gift worth at least ${price} coins to chat${streamSettings.paid_chat_type === 'per_chat' ? ' again' : ''}.`);
+          setInput(content);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('[BroadcastChat] Pre-send moderation/paid-chat check failed:', err);
+      toast.error('Could not verify chat settings. Please try again.');
+      setInput(content);
+      return;
     }
 
     if (import.meta.env.DEV) console.debug('💬 [BroadcastChat] Preparing to send:', { content, userId: user.id });
@@ -1448,9 +1525,9 @@ const fetchMessages = async () => {
     setModActionTargetUser({
       id: targetUserId,
       username,
-      avatar_url: avatarUrl,
-      role,
-      troll_role: trollRole,
+      avatar_url: avatarUrl ?? '',
+      role: role ?? undefined,
+      troll_role: trollRole ?? undefined,
     });
     setModActionTargetUserId(targetUserId);
     setShowModActions(true);

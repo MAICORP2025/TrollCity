@@ -1,0 +1,395 @@
+import React, { useMemo } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Coins, X, Swords } from "lucide-react";
+
+import { useBattleViewController } from "../../hooks/useBattleViewController";
+import type { BattleViewController } from "../../hooks/useBattleViewController";
+import { getTrackPublications, safeParseMetadata } from "../../components/broadcast/BattleArena";
+import GiftTray from "../../components/broadcast/GiftTray";
+import type { ActiveBattle } from "../../components/broadcast/battle/ActiveBattlesPanel";
+
+import MobileBattleHeader from "../../components/battle/mobile/MobileBattleHeader";
+import MobileBattleScore from "../../components/battle/mobile/MobileBattleScore";
+import MobileBattleTeamRow from "../../components/battle/mobile/MobileBattleTeamRow";
+import MobileBattleStatus from "../../components/battle/mobile/MobileBattleStatus";
+import MobileBattleFloatingChat from "../../components/battle/mobile/MobileBattleFloatingChat";
+import MobileBattleShareSheet from "../../components/battle/mobile/MobileBattleShareSheet";
+import MobileBattleFooter from "../../components/battle/mobile/MobileBattleFooter";
+import type { MobileParticipantVM } from "../../components/battle/mobile/MobileBattleParticipant";
+
+const STAFF_ROLES = new Set([
+  "admin",
+  "owner",
+  "ceo",
+  "moderator",
+  "lead_troll_officer",
+  "troll_officer",
+  "staff",
+]);
+
+function isStaffProfile(profile: any): boolean {
+  const role = String(profile?.role || profile?.account_type || "").toLowerCase();
+  return (
+    STAFF_ROLES.has(role) ||
+    profile?.is_admin === true ||
+    profile?.is_staff === true ||
+    profile?.is_moderator === true
+  );
+}
+
+function normalizeId(v: string | null | undefined) {
+  return String(v || "").replace(/-/g, "").toLowerCase();
+}
+
+/**
+ * Mobile BattleView — a SEPARATE layout from the desktop BattleView.
+ * Consumes the same shared battle controller, so resizing between mobile and
+ * desktop never re-initializes the LiveKit room, realtime subscriptions, or gifts.
+ *
+ * Scoring uses POINTS (gift coin value), never crowns.
+ */
+export default function BattleViewMobile({ battleView }: { battleView: BattleViewController }) {
+  const {
+    battle,
+    bluePoints,
+    redPoints,
+    remainingTime,
+    isSuddenDeath,
+    battleStatus,
+    viewerCount,
+    activeBattles,
+    battleParticipants,
+    participantContributions,
+    remoteUsers,
+    userIdToLiveKitIdentity,
+    effectiveUserId,
+    isBroadcaster,
+    profile,
+    challengerStream,
+    opponentStream,
+    currentStreamId,
+    giftRecipientId,
+    showMobileGiftTray,
+    setShowMobileGiftTray,
+    setGiftRecipientId,
+    setGiftStreamId,
+    handleGiftSelect,
+    handleBack,
+    handleSelectBattle,
+    handleReturnToStream,
+    followBroadcaster,
+    shareBroadcast,
+    loading,
+    error,
+    showResults,
+  } = battleView;
+
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [shareSheetOpen, setShareSheetOpen] = React.useState(false);
+
+  // Resolve LiveKit video/audio tracks for a participant user id.
+  const resolveTrack = (userId: string) => {
+    const liveKitIdentity = userIdToLiveKitIdentity?.[userId] || userId;
+    const normalizedTarget = normalizeId(liveKitIdentity);
+    const remote = remoteUsers.find((u) => {
+      const id = String(u.identity || "");
+      const n = normalizeId(id);
+      return id === liveKitIdentity || n === normalizedTarget || n.startsWith(normalizedTarget.substring(0, 8)) || normalizedTarget.startsWith(n.substring(0, 8));
+    });
+    if (!remote) return { videoTrack: undefined, hasAudio: false };
+    const videoPubs = getTrackPublications(remote, "video");
+    const audioPubs = getTrackPublications(remote, "audio");
+    const videoTrack =
+      videoPubs.find((p: any) => p.isSubscribed && p.track)?.track ||
+      videoPubs.find((p: any) => p.track)?.track;
+    const hasAudio = audioPubs.some((p: any) => p.isSubscribed && p.track) || audioPubs.some((p: any) => p.track);
+    return { videoTrack, hasAudio };
+  };
+
+  const { blueVMs, redVMs } = useMemo(() => {
+    const blue: MobileParticipantVM[] = [];
+    const red: MobileParticipantVM[] = [];
+    for (const p of battleParticipants as any[]) {
+      const team = p.team === "opponent" ? "red" : "blue";
+      const { videoTrack, hasAudio } = resolveTrack(p.user_id);
+      const vm: MobileParticipantVM = {
+        userId: p.user_id,
+        username: p.profile?.username || p.username || "User",
+        avatarUrl: p.profile?.avatar_url,
+        role: p.role,
+        team,
+        seatIndex: p.seat_index,
+        points: participantContributions?.[p.user_id] || 0,
+        videoTrack,
+        hasAudio,
+      };
+      if (team === "blue") blue.push(vm);
+      else red.push(vm);
+    }
+    return { blueVMs: blue, redVMs: red };
+  }, [battleParticipants, participantContributions, remoteUsers, userIdToLiveKitIdentity]);
+
+  const viewers = useMemo(() => {
+    return (battleParticipants as any[])
+      .map((p) => ({
+        userId: p.user_id,
+        username: p.profile?.username || p.username || "User",
+        avatarUrl: p.profile?.avatar_url,
+        coins: participantContributions?.[p.user_id] || 0,
+      }))
+      .sort((a, b) => b.coins - a.coins);
+  }, [battleParticipants, participantContributions]);
+
+  const handleTapParticipant = (vm: MobileParticipantVM) => {
+    if (isStaffProfile(profile)) {
+      const streamId =
+        vm.team === "blue" ? challengerStream?.id : opponentStream?.id;
+      window.dispatchEvent(
+        new CustomEvent("trollcity:open-user-actions", {
+          detail: {
+            userId: vm.userId,
+            username: vm.username,
+            streamId,
+            battleId: battle?.id,
+            role: vm.role,
+            team: vm.team === "blue" ? "challenger" : "opponent",
+            source: "battle_box",
+          },
+        })
+      );
+      return;
+    }
+    // Open gifting for this participant (controller enforces broadcaster/self restrictions).
+    const streamId = vm.team === "blue" ? challengerStream?.id : opponentStream?.id;
+    if (streamId) handleGiftSelect(vm.userId, streamId);
+  };
+
+  if (loading || error || !battle || !challengerStream || !opponentStream) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-black text-amber-400">
+        <span className="animate-spin text-2xl">◌</span>
+        <span className="text-sm font-bold">{error ? "Battle error" : "Entering Battle Arena…"}</span>
+      </div>
+    );
+  }
+
+  // Winner determined from authoritative point totals (never crowns).
+  let statusLabel = "";
+  let statusTone: "default" | "sudden" | "blue" | "red" | "ended" = "default";
+  if (battleStatus === "starting" || battleStatus === "ready") {
+    statusLabel = "Battle Starting";
+  } else if (isSuddenDeath && battleStatus === "active") {
+    statusLabel = remainingTime <= 10 ? "Sudden Death" : "Sudden Death In 10s";
+    statusTone = "sudden";
+  } else if (battleStatus === "ended") {
+    if (bluePoints > redPoints) {
+      statusLabel = "Team Blue Wins";
+      statusTone = "blue";
+    } else if (redPoints > bluePoints) {
+      statusLabel = "Team Red Wins";
+      statusTone = "red";
+    } else {
+      statusLabel = "Battle Ended";
+      statusTone = "ended";
+    }
+  } else if (showResults) {
+    statusLabel = "Returning To Broadcast";
+  }
+
+  return (
+    <div className="flex min-h-dvh flex-col overflow-hidden bg-black text-white">
+      <MobileBattleHeader
+        viewerCount={viewerCount}
+        viewers={viewers}
+        onBack={handleBack}
+        onOverflow={() => setDrawerOpen(true)}
+      />
+
+      <div className="flex w-full flex-none flex-col gap-3 overflow-y-auto p-2" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <MobileBattleScore
+          bluePoints={bluePoints}
+          redPoints={redPoints}
+          timeLeft={remainingTime}
+          isSuddenDeath={isSuddenDeath}
+          battleStatus={battleStatus}
+        />
+
+        {/* Team Blue (left) | Team Red (right) */}
+        <div className="flex w-full flex-none items-stretch gap-2">
+          {/* Team Blue — left */}
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-blue-300">Team Blue</span>
+              <span className="flex items-center gap-0.5 text-[11px] font-bold text-blue-400/80">
+                <Coins size={11} className="text-yellow-400" />
+                {bluePoints.toLocaleString()} Points
+              </span>
+            </div>
+            <MobileBattleTeamRow team="blue" participants={blueVMs} onTapParticipant={handleTapParticipant} />
+          </div>
+
+          {/* Team Red — right */}
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-red-300">Team Red</span>
+              <span className="flex items-center gap-0.5 text-[11px] font-bold text-red-400/80">
+                <Coins size={11} className="text-yellow-400" />
+                {redPoints.toLocaleString()} Points
+              </span>
+            </div>
+            <MobileBattleTeamRow team="red" participants={redVMs} onTapParticipant={handleTapParticipant} />
+          </div>
+        </div>
+
+        {statusLabel && <MobileBattleStatus label={statusLabel} tone={statusTone} />}
+
+        <MobileBattleFloatingChat
+          battleId={battle.id}
+          challengerStream={{ id: challengerStream.id, title: challengerStream.title, user_id: challengerStream.user_id }}
+          opponentStream={{ id: opponentStream.id, title: opponentStream.title, user_id: opponentStream.user_id }}
+          currentStreamId={currentStreamId}
+          currentUserId={effectiveUserId}
+          participantRole={battleView.participantInfo?.role}
+          broadcasterName={challengerStream.title || "Battle"}
+        />
+      </div>
+
+      <MobileBattleFooter
+        avatarUrl={profile?.avatar_url}
+        title={challengerStream.title || "Battle"}
+        viewerCount={viewerCount}
+        onFollow={followBroadcaster}
+        onShare={() => setShareSheetOpen(true)}
+      />
+
+      {/* Gift tray overlay (reuses the shared gifting flow) */}
+      <AnimatePresence>
+        {showMobileGiftTray && giftRecipientId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md"
+            onClick={() => {
+              setShowMobileGiftTray(false);
+              setGiftRecipientId(null);
+              setGiftStreamId(null);
+            }}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="absolute bottom-0 left-0 right-0 rounded-t-3xl bg-zinc-900 p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white">Send Gift</h3>
+                <button
+                  onClick={() => {
+                    setShowMobileGiftTray(false);
+                    setGiftRecipientId(null);
+                    setGiftStreamId(null);
+                  }}
+                  className="text-zinc-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <GiftTray
+                key={giftRecipientId}
+                onClose={() => {
+                  setGiftRecipientId(null);
+                  setGiftStreamId(null);
+                  setShowMobileGiftTray(false);
+                }}
+                recipientId={giftRecipientId}
+                streamId={battleView.giftStreamId || currentStreamId}
+                battleId={battle.id}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Share & Invite sheet */}
+      <AnimatePresence>
+        {shareSheetOpen && (
+          <MobileBattleShareSheet
+            streamId={challengerStream?.id}
+            title={challengerStream?.title || "Battle"}
+            currentUserId={effectiveUserId}
+            onClose={() => setShareSheetOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Active Battles drawer */}
+      <AnimatePresence>
+        {drawerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            onClick={() => setDrawerOpen(false)}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="absolute bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto rounded-t-3xl bg-zinc-900 p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-base font-bold text-white">Active Battles</h3>
+                <button onClick={() => setDrawerOpen(false)} className="text-zinc-400 hover:text-white">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {(activeBattles as ActiveBattle[]).map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      setDrawerOpen(false);
+                      handleSelectBattle(b);
+                    }}
+                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/40 p-3 text-left active:scale-[0.99]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-bold text-white">
+                        {b.challenger?.title || "Blue"} <span className="text-white/40">vs</span> {b.opponent?.title || "Red"}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-white/50">
+                        <span className="text-blue-300">{b.score_challenger ?? 0} pts</span>
+                        <span className="text-red-300">{b.score_opponent ?? 0} pts</span>
+                        <span>· {((b.challenger?.viewer_count || 0) + (b.opponent?.viewer_count || 0))} watching</span>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-red-500/80 px-2 py-1 text-[9px] font-black uppercase text-white">Live</span>
+                  </button>
+                ))}
+                {(activeBattles as ActiveBattle[]).length === 0 && (
+                  <div className="py-6 text-center text-xs text-white/40">No other battles live</div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* End-of-battle return prompt */}
+      {showResults && battleStatus === "ended" && (
+        <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4">
+          <button
+            onClick={handleReturnToStream}
+            className="rounded-full bg-amber-500 px-6 py-2 font-bold text-black shadow-lg active:scale-95"
+          >
+            Return Now
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
