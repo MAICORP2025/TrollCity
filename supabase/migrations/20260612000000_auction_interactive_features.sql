@@ -356,6 +356,7 @@ DECLARE
   v_bid_id uuid;
   v_is_anonymous boolean := false;
   v_anonymous_label text;
+  v_spend_result json;
 BEGIN
   -- Get show
   SELECT * INTO v_show_record FROM auction_shows WHERE id = p_show_id;
@@ -418,11 +419,20 @@ BEGIN
     RETURN json_build_object('accepted', false, 'reason', 'Insufficient troll coins');
   END IF;
 
-  -- Deduct coins
-  UPDATE user_profiles SET
-    troll_coins = troll_coins - p_bid_amount,
-    updated_at = now()
-  WHERE id = auth.uid();
+  -- Deduct coins via the Troll Bank (user_profiles.troll_coins is a restricted
+  -- column, so direct updates are blocked by column privileges).
+  SELECT public.troll_bank_spend_coins_secure(
+    p_user_id := auth.uid(),
+    p_amount := p_bid_amount,
+    p_bucket := 'paid',
+    p_source := 'auction_bid',
+    p_ref_id := p_lot_id::text,
+    p_metadata := jsonb_build_object('show_id', p_show_id, 'lot_id', p_lot_id, 'boost_amount', p_boost_amount)
+  )::json INTO v_spend_result;
+
+  IF (v_spend_result->>'success') IS DISTINCT FROM 'true' THEN
+    RETURN json_build_object('accepted', false, 'reason', COALESCE(v_spend_result->>'error', 'Failed to deduct coins for bid'));
+  END IF;
 
   -- Insert bid
   INSERT INTO auction_bids (lot_id, auction_show_id, bidder_id, bid_amount, is_anonymous, anonymous_label, is_boost_bid, boost_amount, created_at)

@@ -273,15 +273,26 @@ export default function TrollCourt() {
       setCourtSession(session?.id ? session : null)
     } catch {
       try {
-        const { data: session } = await supabase
-          .from('court_sessions')
-          .select('*')
-          .in('status', ['live', 'active', 'waiting'])
-          .order('created_at', { ascending: false })
+        const { data: stream } = await supabase
+          .from('streams')
+          .select('id, title, created_at, started_at')
+          .eq('category', 'court')
+          .eq('is_live', true)
+          .order('started_at', { ascending: false })
           .limit(1)
           .maybeSingle()
 
-        setCourtSession(session || null)
+        if (stream?.id) {
+          const sessionId = stream.id.startsWith('court-') ? stream.id.slice('court-'.length) : stream.id
+          setCourtSession({
+            id: sessionId,
+            status: 'live',
+            created_at: stream.created_at || stream.started_at,
+            started_at: stream.started_at || stream.created_at,
+          })
+        } else {
+          setCourtSession(null)
+        }
       } catch {
         setCourtSession(null)
       }
@@ -334,9 +345,6 @@ export default function TrollCourt() {
 
   useEffect(() => {
     loadPublicCourtState()
-
-    if (!canStartCourt && !canSummonUser) return
-
     loadCourtState()
 
     const channel = supabase
@@ -590,6 +598,7 @@ export default function TrollCourt() {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <CourtActionButton icon={<Users size={17} />} label="Enter Courtroom" onClick={() => navigate(`/court/${courtSession.id}`)} />
+                  <CourtActionButton icon={<Eye size={17} />} label="Watch Live Court" onClick={() => navigate(`/troll-court/watch/${courtSession.id}`)} tone="green" />
                   <CourtActionButton icon={<Gavel size={17} />} label="File Civil Lawsuit" onClick={() => setIsFileLawsuitModalOpen(true)} tone="red" />
                   {canSummonUser && <CourtActionButton icon={<Stamp size={17} />} label="Issue Summons" onClick={openCreateModal} tone="gold" />}
                   {canSummonUser && <CourtActionButton icon={<X size={17} />} label="Adjourn Court" onClick={handleEndCourtSession} tone="danger" />}

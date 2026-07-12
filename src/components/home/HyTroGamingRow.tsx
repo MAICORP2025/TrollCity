@@ -20,10 +20,10 @@ function GamingStreamItem({ item, onItemClick, isMobile }: { item: any; onItemCl
     <button
       key={item.id}
       onClick={() => onItemClick(item.id)}
-      className={`group relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-orange-400/30 hover:shadow-[0_0_24px_rgba(251,146,60,0.12)] ${isMobile ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}
+      className={`group relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-orange-400/30 hover:shadow-[0_0_24px_rgba(251,146,60,0.12)] ${isMobile ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`}
     >
       {/* Thumbnail */}
-      <div className={`relative w-full shrink-0 overflow-hidden ${isMobile ? 'h-[62px]' : 'h-[130px]'}`}>
+      <div className={`relative w-full shrink-0 overflow-hidden ${isMobile ? 'h-[62px]' : 'h-[100px]'}`}>
         {item.streamerAvatar ? (
           <img
             src={item.streamerAvatar}
@@ -85,7 +85,6 @@ export default function HyTroGamingRow({ onItemClick }: HyTroGamingRowProps) {
   return (
     <HorizontalScrollRow
       title="HyTro Gaming Streams"
-      subtitle={hasData ? `${gamingStreams.length} gaming now` : 'Be the first to go live!'}
       icon={<Gamepad2 className="h-3.5 w-3.5 text-orange-400" />}
     >
       {hasData ? (
@@ -95,7 +94,7 @@ export default function HyTroGamingRow({ onItemClick }: HyTroGamingRowProps) {
           ))}
         </div>
       ) : (
-        <div className={`flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.08] bg-[#080c1a]/60 p-4 text-center ${isMobileWidth ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}>
+        <div className={`flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.08] bg-[#080c1a]/60 p-4 text-center ${isMobileWidth ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`}>
           <Gamepad2 className="h-8 w-8 text-orange-400/40" />
           <p className="text-xs font-bold text-white/30">Start a HyTro Stream Now</p>
           <p className="text-[10px] text-white/15">Be the first gaming stream!</p>

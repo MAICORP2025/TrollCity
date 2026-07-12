@@ -721,6 +721,10 @@ export default function BottomNavigation() {
       )
     }
 
+    if (isOfficer || isLead || isSecretary || isAdmin || profile?.role === 'ceo_assistant' || profile?.role === 'noah_assistant' || profile?.role === 'hr_admin' || profile?.role === 'hr_manager') {
+      pages.push({ category: 'Government', label: 'Employees', icon: Briefcase, path: '/Employees' })
+    }
+
     if (isPresident || isAdmin) {
       pages.push(
         { category: 'Government', label: 'President', icon: Crown, path: '/president' },
@@ -752,6 +756,7 @@ export default function BottomNavigation() {
     if (!isAuctioneer && !isAdmin) return []
     return [
       { category: 'Auctioneer', label: 'Auction Dashboard', icon: LayoutDashboard, path: '/auctions/studio' },
+      { category: 'Auctioneer', label: 'Auction App', icon: Scan, path: '/auction-app' },
       { category: 'Auctioneer', label: 'Auction Studio', icon: Video, path: '/auctions/studio' },
       { category: 'Auctioneer', label: 'My Shows', icon: Radio, path: '/auctions/my-shows' },
       { category: 'Auctioneer', label: 'Scanner', icon: Scan, path: '/auctioneer/scanner' },

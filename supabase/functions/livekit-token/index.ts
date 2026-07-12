@@ -3,6 +3,7 @@ import { handleCorsPreflight, withCors } from "../_shared/cors.ts";
 /**
  * LiveKit Token Generator
  * Generates access tokens for LiveKit rooms
+ * Supports modes: audience, publisher, xtrollz-preview, xtrollz-viewer, xtrollz-broadcaster, ghost
  */
 
 function base64Decode(str: string): Uint8Array {
@@ -48,13 +49,15 @@ async function createLiveKitToken(params: {
   roomName: string;
   participantName: string;
   isPublisher: boolean;
+  canPublish: boolean;
+  canSubscribe: boolean;
+  exp: number;
   isGhost?: boolean;
   ghostMetadata?: { role: string; hidden: boolean };
 }): Promise<string> {
-  const { apiKey, apiSecret, roomName, participantName, isPublisher, isGhost, ghostMetadata } = params;
+  const { apiKey, apiSecret, roomName, participantName, isPublisher, canPublish, canSubscribe, exp, isGhost, ghostMetadata } = params;
 
   const now = Math.floor(Date.now() / 1000);
-  const exp = now + 3600; // 1 hour expiry
 
   const encoder = new TextEncoder();
   
@@ -79,9 +82,9 @@ async function createLiveKitToken(params: {
     video: {
       room: roomName,
       roomJoin: true,
-      canPublish: isPublisher || isGhost,
-      canSubscribe: true,
-      canPublishData: true,
+      canPublish: isPublisher || canPublish,
+      canSubscribe: canSubscribe,
+      canPublishData: isPublisher || canPublish,
     },
     metadata: metadata,
   };
@@ -115,23 +118,113 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const roomName = String(body.room || body.roomName || body.channel || '');
     const userId = String(body.userId || body.identity || body.participantIdentity || '');
+    const mode = String(body.mode || '').toLowerCase();
     
-    // Check if this is a ghost participant request
-    const isGhost = body.role === 'ghost' || body.ghost === true;
-    const ghostMetadata = isGhost ? { role: 'ghost', hidden: true } : undefined;
-    
-    // Stage Pass check — approve/live Stage Pass holders get publisher access
-    let isPublisher = body.role === 'publisher' || body.role === 'host' || body.isHost === true;
+    // Guard: Check for missing room
+    if (!roomName) {
+      console.error('[livekit-token] Missing room name');
+      return withCors({
+        success: false,
+        error: 'Missing room name',
+        stage: 'livekit-token'
+      }, 400, req);
+    }
 
-    // If not auto-approved as publisher, verify Stage Pass in database
-    if (!isPublisher && userId && roomName) {
-      try {
-        // Use Supabase client to check stream_stage_passes
-        const { createClient } = await import('npm:@supabase/supabase-js@2');
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const participantName = String(
+      body.identity || body.participantIdentity || body.userId || body.user_name || body.participantName || 'participant'
+    );
 
-        if (supabaseUrl && supabaseServiceKey) {
+    const apiKey = Deno.env.get('LIVEKIT_API_KEY');
+    const apiSecret = Deno.env.get('LIVEKIT_API_SECRET');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+    // Guard: Check for missing environment variables
+    if (!apiKey || !apiSecret) {
+      console.error('[livekit-token] LiveKit credentials NOT configured env vars:', { apiKey: !!apiKey, apiSecret: !!apiSecret });
+      return withCors({
+        success: false,
+        error: 'LiveKit credentials not configured on server',
+        stage: 'livekit-token',
+        hint: 'Set LIVEKIT_API_KEY and LIVEKIT_API_SECRET in Supabase secrets'
+      }, 500, req);
+    }
+
+    // Determine token permissions based on mode
+    let isPublisher = false;
+    let canPublish = false;
+    let canSubscribe = true;
+    let tokenExpiry = 3600; // 1 hour default
+    let participantType = 'audience';
+    let isGhost = false;
+    let ghostMetadata: { role: string; hidden: boolean } | undefined;
+
+    // XTrollz-specific modes
+    const isXtrPreview = mode === 'xtrollz-preview';
+    const isXtrViewer = mode === 'xtrollz-viewer';
+    const isXtrBroadcaster = mode === 'xtrollz-broadcaster';
+
+    if (isXtrPreview || isXtrViewer || isXtrBroadcaster) {
+      // XTrollz tokens: verify approval in database
+      let xtrollzApproved = false;
+      if (userId && supabaseUrl && supabaseServiceKey) {
+        try {
+          const { createClient } = await import('npm:@supabase/supabase-js@2');
+          const db = createClient(supabaseUrl, supabaseServiceKey);
+          const { data: profile } = await db
+            .from('user_profiles')
+            .select('xtrollz_access_status, age_verified, identity_verified, is_banned, account_state')
+            .eq('id', userId)
+            .maybeSingle();
+
+          xtrollzApproved = !!profile &&
+            profile.xtrollz_access_status === 'approved' &&
+            profile.age_verified === true &&
+            profile.identity_verified === true &&
+            profile.is_banned === false &&
+            !['banned', 'jailed'].includes(profile.account_state || '');
+        } catch (dbErr) {
+          console.warn('[livekit-token] XTrollz approval check failed:', dbErr);
+        }
+      }
+
+      if (!xtrollzApproved) {
+        return withCors({
+          success: false,
+          error: 'XTrollz access not approved',
+          stage: 'livekit-token'
+        }, 403, req);
+      }
+
+      if (isXtrPreview) {
+        canPublish = false;
+        canSubscribe = true;
+        tokenExpiry = 600; // 10 minutes for previews
+        participantType = 'preview';
+      } else if (isXtrViewer) {
+        canPublish = false;
+        canSubscribe = true;
+        tokenExpiry = 3600; // 1 hour
+        participantType = 'viewer';
+      } else if (isXtrBroadcaster) {
+        canPublish = true;
+        canSubscribe = true;
+        tokenExpiry = 7200; // 2 hours
+        participantType = 'broadcaster';
+        isPublisher = true;
+      }
+    } else {
+      // Existing logic for other modes (publisher, audience, ghost, etc.)
+      isPublisher = body.role === 'publisher' || body.role === 'host' || body.isHost === true;
+      
+      // Check if this is a ghost participant request
+      isGhost = body.role === 'ghost' || body.ghost === true;
+      ghostMetadata = isGhost ? { role: 'ghost', hidden: true } : undefined;
+
+      // If not auto-approved as publisher, verify Stage Pass in database
+      if (!isPublisher && userId && roomName && supabaseUrl && supabaseServiceKey) {
+        try {
+          const { createClient } = await import('npm:@supabase/supabase-js@2');
           const db = createClient(supabaseUrl, supabaseServiceKey);
           const { data: stagePass } = await db
             .from('stream_stage_passes')
@@ -145,41 +238,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
             isPublisher = true;
             console.log('[livekit-token] Stage Pass verified —', stagePass.status, '— publisher token granted');
           }
+        } catch (dbErr) {
+          console.warn('[livekit-token] Stage Pass DB check failed (treated as audience):', dbErr);
         }
-      } catch (dbErr) {
-        console.warn('[livekit-token] Stage Pass DB check failed (treated as audience):', dbErr);
       }
     }
 
-    const participantName = String(
-      body.identity || body.participantIdentity || body.userId || body.user_name || body.participantName || 'participant'
-    );
-
-    // Guard: Check for missing room
-    if (!roomName) {
-      console.error('[livekit-token] Missing room name');
-      return withCors({
-        success: false,
-        error: 'Missing room name',
-        stage: 'livekit-token'
-      }, 400, req);
-    }
-
-    const apiKey = Deno.env.get('LIVEKIT_API_KEY');
-    const apiSecret = Deno.env.get('LIVEKIT_API_SECRET');
-
-    // Guard: Check for missing environment variables
-    if (!apiKey || !apiSecret) {
-      console.error('[livekit-token] LiveKit credentials NOT configured env vars:', { apiKey: !!apiKey, apiSecret: !!apiSecret });
-      return withCors({
-        success: false,
-        error: 'LiveKit credentials not configured on server',
-        stage: 'livekit-token',
-        hint: 'Set LIVEKIT_API_KEY and LIVEKIT_API_SECRET in Supabase secrets'
-      }, 500, req);
-    }
-
-    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'isPublisher:', isPublisher, 'isGhost:', isGhost);
+    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'mode:', mode, 'isPublisher:', isPublisher, 'participantType:', participantType);
 
     const token = await createLiveKitToken({
       apiKey,
@@ -187,11 +252,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       roomName,
       participantName,
       isPublisher,
+      canPublish,
+      canSubscribe,
+      exp: tokenExpiry,
       isGhost,
       ghostMetadata,
     });
 
-    console.log('[livekit-token] Token generated successfully for', participantName, 'publisher:', isPublisher, 'isGhost:', isGhost, {
+    console.log('[livekit-token] Token generated successfully for', participantName, 'mode:', mode, {
       roomName,
       hasToken: !!token,
       tokenLength: token?.length,
@@ -208,8 +276,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       participantName,
       isPublisher,
       isGhost,
-      participantType: isGhost ? 'ghost' : (isPublisher ? 'publisher' : 'audience'),
+      participantType,
       ghostMetadata: isGhost ? ghostMetadata : undefined,
+      mode,
     }, 200, req);
 
   } catch (error) {

@@ -271,9 +271,7 @@ export default function LiveAuctionRoom() {
   // Display text (announcement from auctioneer)
   const [displayText, setDisplayText] = useState<string>('')
 
-  // End-auction winner popup
-  const [showWinnerPopup, setShowWinnerPopup] = useState(false)
-  const [wonLots, setWonLots] = useState<AuctionLot[]>([])
+  // End-auction redirect guard
   const [winnerPopupChecked, setWinnerPopupChecked] = useState(false)
 
   // Chat bidding
@@ -482,7 +480,13 @@ export default function LiveAuctionRoom() {
       return
     }
 
-    setLots((data || []) as AuctionLot[])
+    const fetched = (data || []) as AuctionLot[]
+    setLots(fetched)
+
+    // Keep the on-stage (live) lot visible even if the live-state RPC is unavailable.
+    // The lots list is kept fresh by realtime, so derive the current lot from it as a fallback.
+    const liveLot = fetched.find((l) => l.status === 'live')
+    if (liveLot) setCurrentLot((prev) => (prev?.id === liveLot.id ? { ...prev, ...liveLot } : liveLot))
   }, [])
 
   const cleanupAgora = useCallback(async () => {
@@ -598,12 +602,20 @@ export default function LiveAuctionRoom() {
     }
   }, [fetchLiveState, fetchLots, fetchUserProfile, navigate, showId])
 
-  // Check if current user won any lots when auction ends
-  const checkForWins = useCallback(async () => {
-    if (!user?.id || !showId || winnerPopupChecked) return
+  // When the auction ends, send every bidder/viewer to the right place:
+  //  - winners  -> the "won items" page for this show
+  //  - everyone else (incl. guests) -> the homepage
+  // The auctioneer stays in the room to run post-auction tasks.
+  const redirectOnAuctionEnd = useCallback(async () => {
+    if (isAuctioneer || winnerPopupChecked) return
     setWinnerPopupChecked(true)
 
     try {
+      if (!user?.id || !showId) {
+        navigate('/')
+        return
+      }
+
       const { data: wonData } = await supabase
         .from('auction_lots')
         .select('*')
@@ -612,20 +624,22 @@ export default function LiveAuctionRoom() {
         .eq('status', 'sold')
 
       if (wonData && wonData.length > 0) {
-        setWonLots(wonData as AuctionLot[])
-        setShowWinnerPopup(true)
+        navigate(`/auctions/won/${showId}`)
+      } else {
+        navigate('/')
       }
     } catch (err) {
       console.warn('[LiveAuctionRoom] Failed to check wins:', err)
+      navigate('/')
     }
-  }, [user?.id, showId, winnerPopupChecked])
+  }, [isAuctioneer, user?.id, showId, winnerPopupChecked, navigate])
 
-  // Also check on initial load in case user reloads after auction ended
+  // Also redirect on initial load in case user reloads after auction ended
   useEffect(() => {
-    if (show?.status === 'ended' && user?.id && !winnerPopupChecked) {
-      checkForWins()
+    if (show?.status === 'ended' && !winnerPopupChecked) {
+      void redirectOnAuctionEnd()
     }
-  }, [show?.status, user?.id, winnerPopupChecked, checkForWins])
+  }, [show?.status, winnerPopupChecked, redirectOnAuctionEnd])
 
   const markPresenceInactive = useCallback(async () => {
     if (!showId || !user?.id) return
@@ -720,7 +734,7 @@ export default function LiveAuctionRoom() {
   const connectViewerAgoraRef = useRef<null | (() => Promise<void>)>(null)
 
   const connectViewerAgora = useCallback(async () => {
-    if (!show || !user?.id || isAuctioneer) return
+    if (!showId || !user?.id || isAuctioneer) return
 
     const appId = import.meta.env.VITE_AGORA_APP_ID
     if (!appId) {
@@ -728,7 +742,7 @@ export default function LiveAuctionRoom() {
       return
     }
 
-    const channelName = getAgoraChannelName(show)
+    const channelName = show ? getAgoraChannelName(show) : `auction-${showId}`
     const uid = makeAgoraUid(user.id, 'viewer')
     const agoraKey = `${channelName}:${uid}:viewer`
 
@@ -764,7 +778,7 @@ export default function LiveAuctionRoom() {
     } finally {
       agoraConnectingRef.current = false
     }
-  }, [buildAgoraClient, cleanupAgora, getAgoraToken, isAuctioneer, scheduleViewerReconnect, show, user?.id])
+  }, [buildAgoraClient, cleanupAgora, getAgoraToken, isAuctioneer, scheduleViewerReconnect, show, showId, user?.id])
 
   useEffect(() => {
     connectViewerAgoraRef.current = connectViewerAgora
@@ -1164,9 +1178,9 @@ export default function LiveAuctionRoom() {
           if (payload.new?.display_text !== undefined) {
             setDisplayText(payload.new.display_text || '')
           }
-          // Detect when show ends
+          // Detect when show ends and route bidders/viewers accordingly
           if (payload.new?.status === 'ended' && payload.old?.status === 'live') {
-            checkForWins()
+            void redirectOnAuctionEnd()
           }
         }
       )
@@ -1199,6 +1213,20 @@ export default function LiveAuctionRoom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showId, presenceKey])
 
+  // Resilient live-state polling. Realtime change events on auction_lots can be
+  // filtered by RLS, which would leave viewers without the current lot / timer.
+  // Polling guarantees the on-stage item and countdown stay in sync for all viewers.
+  useEffect(() => {
+    if (!showId) return
+    const poll = () => {
+      fetchLiveStateRef.current()
+      fetchLotsRef.current(showId)
+    }
+    poll()
+    const id = window.setInterval(poll, 4000)
+    return () => window.clearInterval(id)
+  }, [showId])
+
   useEffect(() => {
     void trackPresence()
 
@@ -1220,7 +1248,7 @@ export default function LiveAuctionRoom() {
   const viewerAutoConnectAttemptedRef = useRef(false)
 
   useEffect(() => {
-    if (show?.id && user?.id && !isAuctioneer && !viewerAutoConnectAttemptedRef.current) {
+    if (showId && user?.id && !isAuctioneer && !viewerAutoConnectAttemptedRef.current) {
       viewerAutoConnectAttemptedRef.current = true
       void connectViewerRef.current()
     }
@@ -1230,7 +1258,7 @@ export default function LiveAuctionRoom() {
     }
     // Only depend on stable values — not the callbacks which change every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show?.id, user?.id, isAuctioneer])
+  }, [showId, user?.id, isAuctioneer])
 
   const upcomingLots = lots.filter((lot) => lot.status === 'upcoming' || lot.status === 'queued' || lot.status === 'scheduled')
   const visibleNextLots = upcomingLots.length > 0 ? upcomingLots : lots.filter((lot) => lot.id !== currentLot?.id).slice(0, 6)
@@ -2297,62 +2325,7 @@ export default function LiveAuctionRoom() {
         />
       )}
 
-      {/* Winner Popup — shown when auction ends and user won */}
-      {showWinnerPopup && wonLots.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-yellow-400/30 bg-gradient-to-br from-[#0c1a32] to-[#0a1628] shadow-[0_0_60px_rgba(250,204,21,0.2)]">
-            {/* Confetti-like top border */}
-            <div className="h-1.5 bg-gradient-to-r from-yellow-400 via-emerald-400 to-cyan-400" />
-
-            <div className="p-6 text-center">
-              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border-2 border-yellow-300/30 bg-yellow-400/10">
-                <Trophy className="h-10 w-10 text-yellow-300" />
-              </div>
-
-              <h2 className="text-2xl font-black text-white">🎉 You Won!</h2>
-              <p className="mt-2 text-sm text-slate-300">
-                Congratulations! You won {wonLots.length} item{wonLots.length > 1 ? 's' : ''} in this auction.
-              </p>
-
-              <div className="mt-4 space-y-2">
-                {wonLots.map((lot) => (
-                  <div key={lot.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-3">
-                    <div className="flex items-center gap-3">
-                      {lot.image_url ? (
-                        <img src={lot.image_url} alt={lot.title} className="h-10 w-10 rounded-lg object-cover" />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-400/10">
-                          <Package className="h-5 w-5 text-cyan-300" />
-                        </div>
-                      )}
-                      <p className="text-sm font-bold text-white">{lot.title}</p>
-                    </div>
-                    <p className="font-black text-yellow-300">{formatCoins(lot.current_highest_bid)} TC</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 flex gap-3">
-                <button
-                  onClick={() => setShowWinnerPopup(false)}
-                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-300 hover:bg-white/10"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => {
-                    setShowWinnerPopup(false)
-                    navigate('/marketplace?tab=orders&filter=auction')
-                  }}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-500 px-4 py-3 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(250,204,21,0.25)] hover:from-yellow-300 hover:to-amber-400"
-                >
-                  View Won Items →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Bidders/viewers are redirected on auction end (see redirectOnAuctionEnd) */}
     </div>
   )
 }

@@ -1,0 +1,687 @@
+Consolidate all existing Troll City  dashboards for moderation, lead hq, secretary panel/dashboard leave tromail alone do not touch that page or admin dashboard also officer pages, assistant pages, scheduling pages, and clock-in pages which inclides hr page into one unified internal employee page called:
+Employees
+Use a single route for all non-admin employees as in career approved users:
+/Employees
+This page should function as the official Troll City Employee Office.
+Do not create separate Employees dashboards after this change.
+Do not remove existing working logic. Move and integrate the existing logic into the Employees page.
+Do not touch, redesign, replace, rename, or modify:
+•	The main Admin Dashboard
+•	The CEO’s personal admin page
+•	Existing admin-only systems unless they must be linked into Employees
+•	Public user-facing pages
+Admins must still be able to access the separate Admin Dashboard.
+The Employees page is for all Troll City employees and approved Employees roles.
+Main goal
+Replace the scattered Employees experience with one central Employee Office 
+add a real application flow for all career applications like we have in careers page to this new application page so when a user clicks employees page they first can see all available applications, apply, can see applications status, when hired they instantly get access to employee page for that job, then msut be added to our new employee system for hr so they are added to our payroll system that need to be added to the employees page as well only secretary and ceo and admin can edit,update that page but all employees can view the payroll page as well as download payroll and paystubs for them, we also need to have a paystub generated as MAI CORP as the corp and Mai Troll City as the business with whihc msut use real stats for each employee location city and state for all tax purposed it needs to be a full real payroll system if any payroll logic exists in the codebase remove it this new prompt overwrites everything we currently have but remember to not touch admin dashboard at all 
+where every Employees member can:
+•	Clock in and out
+•	View their work schedule
+•	View assigned duties
+•	Communicate with other Employees
+•	Submit reports
+•	Receive reports when permitted
+•	Review announcements
+•	Request changes
+•	Use the tools assigned to their role
+•	View performance or attendance information
+•	Access role-specific work areas
+Every role uses the same Employees page, but the tabs, actions, and permissions shown must depend on the logged-in Employees member’s role.
+Admins must have access to every Employees tab and every Employees tool.
+Pages to consolidate
+Inspect the project and locate every existing Employees-related page, route, component, database query, RPC, Edge Function, permission check, and realtime subscription.
+This includes, but is not limited to:
+•	Officer Dashboard
+•	Troll Officer Dashboard
+•	Lead Officer HQ
+•	Lead Troll Officer pages
+•	Secretary pages
+•	CEO Assistant pages
+•	Noah Assistant pages
+•	Other assistant dashboards
+•	Employees Meeting page
+•	Employees communication pages
+•	Clock-in page
+•	Clock-out page
+•	Employees schedule pages
+•	Attendance pages
+•	Employees reports pages
+•	Employees task pages
+•	Hiring pages
+•	Firing or termination pages
+•	Employees announcement pages
+•	Employees change request pages
+•	Employees frontend change pages
+•	Any other role-specific employee dashboard
+Move their existing logic into the unified Employees page.
+After the migration is complete, remove the old non-admin Employees routes from navigation and redirect them to /Employees.
+Do not delete an old page until all of its working logic has been successfully moved and verified inside the Employees page.
+Employees page layout
+Create a professional Employee Office layout with:
+•	Employees header
+•	Employees member profile summary
+•	Current role
+•	Clocked-in or clocked-out status
+•	Current shift information
+•	Notifications
+•	Main role-based navigation tabs
+•	Mobile navigation
+•	Desktop sidebar or tab navigation
+•	Realtime online Employees list
+The page should match Troll City’s existing design system.
+It should feel like an internal employee workspace, not a public social page.
+Do not copy Slack, Discord, Microsoft Teams, or another platform.
+Shared tabs for all Employees
+Every approved Employees role should have access to the following tabs unless specifically restricted by management permissions.
+1. Office Home
+Display:
+•	Welcome message
+•	Employees member name
+•	Employees role
+•	Current shift
+•	Clock status
+•	Next scheduled shift
+•	Assigned tasks
+•	Unread announcements
+•	Unread messages
+•	Pending reports
+•	Recent Employees activity relevant to the employee
+•	Important reminders
+•	Attendance summary
+•	Employee handbook for each Employees role
+2. Clock In / Attendance
+Move the complete existing clock-in system into Employees.
+All Employees roles must clock in and out from the Employees page.
+Include:
+•	Clock In button
+•	Clock Out button
+•	Current shift timer
+•	Shift start time
+•	Expected shift end
+•	Break status
+•	Start break
+•	End break
+•	Total hours today
+•	Total hours this week
+•	Late status
+•	Missed shift notices
+•	Attendance history
+•	Clock notes when required
+Do not allow Employees to be clocked into multiple shifts at once.
+Do not let users manually change recorded hours unless they have authorized management permissions.
+Allow authorized management or admin roles to:
+•	Correct a clock record
+•	Approve a time correction
+•	Mark an absence excused
+•	Mark an absence unexcused
+•	Review late arrivals
+•	Review missed shifts
+•	View attendance for managed employees
+Every attendance change must be written to an audit log.
+3. Schedule
+Move all Employees scheduling logic into Employees.
+Employees should be able to:
+•	View today’s schedule
+•	View weekly schedule
+•	View monthly schedule
+•	View shift start and end times
+•	View assigned department
+•	View assigned duties
+•	View required meetings
+•	View schedule notes
+•	Request time off
+•	Request a shift change
+•	Report that they will be late
+•	Report that they cannot attend a shift
+Authorized managers and admins should be able to:
+•	Create schedules
+•	Edit schedules
+•	Assign shifts
+•	Approve or deny time-off requests
+•	Approve or deny schedule-change requests
+•	Assign coverage
+•	View schedule conflicts
+•	Publish schedules
+Employees should receive notifications when:
+•	A shift is created
+•	A shift is changed
+•	A shift is cancelled
+•	A request is approved
+•	A request is denied
+•	A shift begins soon
+•	A shift is missed
+4. Employees Chat
+Create one internal employee communication area.
+Support:
+•	General Employees chat
+•	Department channels
+•	Direct messages
+•	Role channels
+•	Replies
+•	Mentions
+•	Reactions
+•	Pinned messages
+•	Attachments
+•	Message timestamps
+•	Realtime updates
+•	Unread message badges
+Suggested channels:
+•	All Employees
+•	Troll Officers
+•	Lead Troll Officers
+•	Assistants
+•	Secretary Office
+•	Management
+•	Safety
+•	Announcements
+•	Platform Changes
+•	Scheduling
+Channel access must follow role permissions.
+Normal Employees must not be able to read management-only channels.
+5. Announcements
+All Employees can view employee announcements.
+Authorized management and admins can create announcements.
+Announcement levels:
+•	Normal
+•	Important
+•	Urgent
+Important and urgent announcements require acknowledgement.
+Store which employee acknowledged each announcement.
+6. Tasks
+All Employees can view assigned tasks.
+Include:
+•	Task title
+•	Description
+•	Assigned by
+•	Assigned to
+•	Priority
+•	Due date
+•	Status
+•	Comments
+•	Attachments
+•	Completion notes
+Statuses:
+•	Assigned
+•	In Progress
+•	Blocked
+•	Awaiting Review
+•	Completed
+•	Cancelled
+Managers and authorized Employees can assign tasks within their permitted department.
+7. Reports
+Create one role-based report system inside Employees.
+Employees members can submit reports to the correct supervisor.
+Reports can include:
+•	Report type
+•	Subject
+•	Description
+•	Related user
+•	Related Employees member
+•	Related broadcast
+•	Related incident
+•	Date and time
+•	Evidence
+•	Screenshot
+•	Attachment
+•	Priority
+•	Confidential status
+Report statuses:
+•	Submitted
+•	Received
+•	Under Review
+•	More Information Needed
+•	Action Taken
+•	Closed
+•	Escalated
+The person submitting the report should be able to see its status and authorized responses.
+8. Change Requests
+Move the existing Employees Hub change-request logic into the Employees page.
+Employees can:
+•	Submit requested platform changes
+•	Submit workflow improvements
+•	Submit Employees-tool requests
+•	Comment
+•	Vote
+•	Attach screenshots
+•	Track status
+Do not automatically approve requests based on votes.
+9. Frontend Studio
+Move the controlled frontend change system into the Employees page.
+Only authorized roles may use the Frontend Studio.
+Normal employees may submit frontend suggestions, but only approved design, developer, management, or admin roles may create editable drafts, approve, publish, or roll back frontend configuration changes.
+Do not provide unrestricted source-code editing, JavaScript execution, SQL access, terminal access, environment-variable access, or production repository access.
+Role structure and permissions
+Use the existing Employees-role system wherever possible.
+Do not guess role names or database columns.
+Inspect the current role values and map them into the unified Employees page.
+At minimum, support the following role behavior.
+Troll Officer
+Troll Officers use the same Employees page as Lead Troll Officers but have fewer permissions.
+Troll Officers can:
+•	Clock in and out
+•	View their schedule
+•	View assigned shifts
+•	View assigned duties
+•	Access Troll Officer tools
+•	Monitor users and broadcasts using existing officer logic
+•	Create incident reports
+•	Submit reports to Lead Troll Officers
+•	Respond to requests for more information
+•	View the status of their submitted reports
+•	Communicate in Troll Officer channels
+•	View announcements
+•	Complete assigned tasks
+•	Submit change requests
+•	Submit safety concerns
+•	View their own attendance and performance information
+Troll Officers cannot:
+•	Hire Employees
+•	Fire Employees
+•	Suspend employees from employment
+•	Promote employees
+•	Demote employees
+•	Change Employees roles
+•	Approve their own reports
+•	Close serious reports unless explicitly delegated
+•	Access management-only assistant communications
+•	Access confidential executive information
+•	Modify Employees permissions
+•	Edit other employees’ schedules unless explicitly authorized
+•	Change payroll or payment information
+Troll Officers must report to Lead Troll Officers.
+Their reports should automatically route to the appropriate Lead Troll Officer queue.
+Lead Troll Officer
+Lead Troll Officers use the same Employees page and share officer operational tools, but receive additional management tabs and permissions.
+Lead Troll Officers can:
+•	Perform everything a Troll Officer can perform
+•	Receive reports from Troll Officers
+•	Assign reports to themselves or another authorized Lead Troll Officer
+•	Review officer incident reports
+•	Request more information
+•	Escalate reports to admin or executive Employees
+•	Record actions taken
+•	Close reports when authorized
+•	Assign officer duties
+•	Create officer schedules when authorized
+•	Review Troll Officer attendance
+•	Review officer performance
+•	Manage officer task assignments
+•	Communicate with Troll Officers
+•	Access Lead Officer management tools
+•	View officer Employeesing needs
+•	Review officer applications
+•	Hire Troll Officers
+•	Fire Troll Officers
+•	Suspend Troll Officers from Employees duties
+•	Recommend promotions or demotions
+•	Document disciplinary action
+Lead Troll Officers may only hire, fire, suspend, or manage employees within the departments and roles they are authorized to manage.
+They must not be allowed to hire or fire:
+•	Admins
+•	CEO
+•	Executive roles
+•	Roles outside their authorized management scope
+Every hire, fire, suspension, promotion recommendation, and disciplinary action must:
+•	Require a reason
+•	Require confirmation
+•	Create an audit record
+•	Notify authorized management
+•	Notify the affected employee where appropriate
+Do not allow hard deletion of employee history.
+Termination should deactivate or change employment status while preserving records.
+Secretary
+Move the Secretary workspace into Employees.
+Secretary-specific tabs may include:
+•	Executive messages
+•	Meeting notes
+•	Employees records
+•	Scheduling
+•	Calendar coordination
+•	Announcements
+•	Documents
+•	Follow-ups
+•	Office requests
+•	Communication queue
+The Secretary can communicate with:
+•	CEO
+•	CEO Assistant
+•	Noah Assistant
+•	Authorized management
+•	Other approved Employees
+Secretary permissions must be based on existing logic and explicit role permissions.
+CEO Assistant
+Move the CEO Assistant workspace into Employees.
+CEO Assistant-specific tabs may include:
+•	CEO task queue
+•	Executive communications
+•	Follow-ups
+•	Meeting preparation
+•	Employees requests
+•	Department summaries
+•	Calendar coordination
+•	Documents
+•	Announcements
+•	Escalations
+•	Executive notes
+Do not expose the CEO’s private admin systems or personal admin page through Employees.
+Only move the existing assistant-facing logic.
+Noah Assistant
+Move the Noah Assistant workspace into Employees.
+Noah Assistant-specific tabs may include:
+•	Assigned tasks
+•	Communication
+•	Reports
+•	Follow-ups
+•	Schedule
+•	Department coordination
+•	Notes
+•	Requests
+•	Shared assistant workspace
+Secretary, CEO Assistant, and Noah Assistant should be able to communicate inside approved assistant channels and shared workspaces.
+They must not automatically receive access to every executive, admin, financial, legal, or confidential record.
+Access must follow explicit permissions.
+Other Employees roles
+Any other existing Employees role should use the same Employees page.
+Examples may include:
+•	Broadcaster management
+•	Auction Employees
+•	TCNN Employees
+•	Troll Court Employees
+•	Safety Employees
+•	Moderation Employees
+•	Support Employees
+•	Development Employees
+•	Design Employees
+•	Scheduling Employees
+•	Finance Employees
+Each role should receive tabs based on the existing role permissions and current functionality.
+Do not show empty tabs to roles that cannot use them.
+Admin access
+Admins must have access to every Employees tab, department, report queue, schedule, attendance view, communication channel, task queue, and role-specific workspace.
+Admins should be able to enter a role preview mode to verify what each Employees role can see.
+Role preview mode must not change the admin’s real role or permissions.
+Admins must continue using the separate Admin Dashboard for full administrative operations.
+Do not merge the Admin Dashboard into Employees.
+Do not touch the CEO’s personal page.
+Hiring system
+Move existing non-admin Employees hiring logic into Employees.
+Authorized hiring managers can:
+•	View applications for roles they manage
+•	Review applicant information
+•	Add internal notes
+•	Request more information
+•	Approve an application
+•	Reject an application
+•	Assign a Employees role
+•	Assign a supervisor
+•	Assign a department
+•	Set an employment start date
+•	Create an initial schedule
+•	Send onboarding tasks
+Hiring permissions must be limited by role and department.
+Troll Officers cannot hire.
+Lead Troll Officers may hire Troll Officers only when permitted.
+Admins may hire any non-protected role.
+Firing and termination system
+Move existing non-admin employee termination logic into Employees.
+Authorized managers can:
+•	Start a termination action
+•	Choose a reason
+•	Add documentation
+•	Add supporting evidence
+•	Select immediate or scheduled termination
+•	Revoke Employees access
+•	Remove future shifts
+•	Reassign open reports and tasks
+•	Record final notes
+Troll Officers cannot fire anyone.
+Lead Troll Officers may fire Troll Officers only when permitted.
+Admins retain full authorized control.
+Do not delete the user’s normal Troll City account unless a separate authorized action requires it.
+Termination from Employees should only remove or deactivate Employees employment access.
+Preserve:
+•	Attendance records
+•	Report history
+•	Disciplinary history
+•	Task history
+•	Schedule history
+•	Hiring record
+•	Termination record
+•	Audit history
+Reporting chain
+Create a clear reporting structure.
+At minimum:
+•	Troll Officers report to Lead Troll Officers
+•	Lead Troll Officers report to Ceo Assistant and Noah assistant 
+•	Secretary reports according to CEO/Admin 
+•	CEO Assistant reports to CEO 
+•	Noah Assistant reports to noah assistant
+•	All Employees can communicate with all Employees 
+Use a supervisor relationship in the existing Employees data if one exists.
+If no supervisor relationship exists, create a controlled Employees-supervisor assignment system.
+Do not hardcode one person’s user ID into frontend components.
+Role-based tabs
+The Employees page should dynamically build navigation from permissions.
+Example shared navigation:
+•	Office Home
+•	Clock In
+•	Schedule
+•	Chat
+•	Tasks
+•	Reports
+•	Announcements
+•	Change Requests
+•	Frontend Studio
+•	Department Tools
+•	Management
+•	Hiring
+•	Attendance
+•	Employees Records
+A Troll Officer may see:
+•	Office Home
+•	Clock In
+•	Schedule
+•	Troll Officer Tools
+•	My Reports
+•	Chat
+•	Tasks
+•	Announcements
+•	Change Requests
+A Lead Troll Officer may see:
+•	Office Home
+•	Clock In
+•	Schedule
+•	Officer Operations
+•	Report Queue
+•	Officer Team
+•	Hiring
+•	Attendance
+•	Perk Pay which they can set pay for each role besides ceo, admin, ceo assistant, noah assistant, secretary. Secretary is in charge of setting perk pay as well asn need to be able to change or bypass lead troll officer pay 
+•	Disciplinary Actions
+•	Chat
+•	Tasks
+•	Announcements
+•	Change Requests
+An assistant may see:
+•	Office Home
+•	Clock In
+•	Schedule
+•	Assistant Workspace
+•	Executive Messages
+•	Tasks
+•	Reports
+•	Chat
+•	Documents
+•	Announcements
+•	Change Requests
+An admin may see all tabs.
+These are examples only.
+Use the actual existing roles and permission system.
+Route migration
+Update all internal Employees navigation to point to role\ using user_profile_roles.
+Preserve bookmarked links through redirects where possible.
+Do not leave duplicate active pages after migration.
+Do not redirect the Admin Dashboard.
+Do not redirect the CEO’s personal page.
+Realtime and performance
+Inspect existing Supabase Realtime subscriptions before adding new ones.
+Reuse and consolidate channels where possible.
+Do not create a separate realtime channel for every tab or every small component.
+Use shared Employees channels grouped by purpose.
+Clean up realtime subscriptions when components unmount.
+Avoid duplicate listeners.
+Use pagination for:
+•	Messages
+•	Reports
+•	Attendance history
+•	Employees records
+•	Audit logs
+•	Tasks
+•	Announcements
+Do not load all employee records or all message history at once.
+Database and backend
+Inspect the existing Supabase schema before creating tables, columns, functions, triggers, policies, or Edge Functions.
+Reuse existing systems for:
+•	Employees roles
+•	Employees permissions
+•	Employees profiles
+•	Employment status
+•	Clock records
+•	Attendance
+•	Schedules
+•	Reports
+•	Officer reports
+•	Tasks
+•	Announcements
+•	Notifications
+•	Employees chat
+•	Hiring
+•	Applications
+•	Disciplinary actions
+•	Audit logs
+•	Presence
+•	Storage
+Do not guess table names.
+Do not duplicate working tables.
+Use existing roles and Employees names from careers page
+Security
+All permissions must be enforced through Supabase RLS, secure RPCs, backend validation, or equivalent server-side controls.
+Do not rely only on hidden buttons or frontend role checks.
+A Troll Officer must not be able to call a hiring or firing action directly through the browser console.
+A Secretary or Assistant must not be able to query confidential records outside their permissions.
+A terminated or inactive employee must immediately lose Employees page access.
+Employees access should require:
+•	Authenticated user
+•	Active Employees status
+•	Approved Employees role
+•	Required permission for the requested action
+Protect:
+•	Hiring records
+•	Termination records
+•	Disciplinary records
+•	Confidential reports
+•	Executive communications
+•	Attendance corrections
+•	Employees role changes
+•	Permission changes
+•	Sensitive attachments
+Audit logging
+Create an immutable audit trail for important Employees actions.
+Log:
+•	Clock corrections
+•	Schedule changes
+•	Report assignments
+•	Report status changes
+•	Hiring actions
+•	Firing actions
+•	Suspensions
+•	Role changes
+•	Supervisor changes
+•	Disciplinary actions
+•	Announcement publication
+•	Sensitive message access
+•	Permission changes
+•	Frontend publications
+•	Frontend rollbacks
+Each log should store:
+•	Acting Employees member
+•	Target employee or record
+•	Action
+•	Previous value
+•	New value
+•	Reason
+•	Timestamp
+•	Related department
+•	Related report or record
+Normal employees must not be able to edit or delete audit logs.
+Migration process
+Before changing files:
+1.	Find every existing Employees dashboard and role page.
+2.	Create a full list of routes and components.
+3.	Identify which logic is unique and which logic is duplicated.
+4.	Identify all role checks and permission checks.
+5.	Identify all related tables, RPCs, Edge Functions, storage buckets, and realtime channels.
+6.	Map every existing feature to a Employees tab.
+7.	Confirm which pages must remain untouched.
+8.	Build the unified Employees shell.
+9.	Move one Employees area at a time.
+10.	Verify functionality before removing or redirecting the old route.
+Do not perform a visual-only rewrite that loses backend functionality.
+Do not replace working production logic with mock data.
+Do not hardcode Employees members.
+Do not remove error handling.
+Do not remove loading states.
+Do not remove mobile support.
+Do not remove accessibility labels.
+Do not leave old duplicate navigation links.
+Files and architecture
+Use reusable components for:
+•	Employees layout
+•	Role navigation
+•	Permission gate
+•	Clock status
+•	Schedule calendar
+•	Report cards
+•	Task cards
+•	Employees messages
+•	Announcement cards
+•	Employee profile summary
+•	Management actions
+•	Audit history
+Avoid placing the entire Employee Office in one oversized component.
+Use typed role and permission definitions.
+Use a central permission helper.
+Use a central Employees route configuration.
+Use lazy loading for large role-specific tabs where appropriate.
+Final expected result
+After completion:
+•	There is one non-admin employee page called Employees.
+•	All Employees roles use /Employees.
+•	Troll Officers and Lead Troll Officers share the same page.
+•	Troll Officers report to Lead Troll Officers.
+•	Troll Officers cannot hire or fire.
+•	Lead Troll Officers can receive and manage officer reports.
+•	Authorized Lead Troll Officers can hire or fire Troll Officers.
+•	Secretary, CEO Assistant, and Noah Assistant communicate and work inside Employees.
+•	All assistant pages are consolidated into Employees.
+•	Clock-in and clock-out are inside Employees.
+•	Scheduling is inside Employees.
+•	Attendance is inside Employees.
+•	Employees communication is inside Employees.
+•	Role-specific tools are displayed through tabs and permissions.
+•	Admins can access all Employees areas.
+•	The Admin Dashboard remains separate and untouched.
+•	The CEO’s personal page remains untouched.
+•	Officer Dashboard, Lead HQ, assistant dashboards, and other duplicate role pages are removed from navigation and redirected after their logic is migrated.
+•	No existing working logic is lost.
+Create a detailed implementation plan first.
+The plan must list:
+•	Every page being consolidated
+•	Every route being redirected
+•	Every feature being moved
+•	Every affected database object
+•	Every permission being preserved or changed
+•	The order of migration
+•	Testing required for each role
+Then implement the consolidation carefully in stages.

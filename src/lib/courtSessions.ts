@@ -121,19 +121,18 @@ export async function startCourtSession(params: StartCourtSessionParams): Promis
 
     const data = response.data[0];
 
-    // Create a public stream for viewers to watch the court session
+    // Create/update a public stream for viewers to watch the court session
     try {
-      const streamId = `court-${data.id}`
+      const courtChannel = `troll-court-${data.id}`
       const { error: streamError } = await supabase.from('streams').insert({
-        id: streamId,
         user_id: userId,
-        broadcaster_id: userId, // Required for saved_streams trigger
+        broadcaster_id: userId,
         title: `Troll Court Session - ${new Date().toLocaleDateString()}`,
         category: 'court',
         status: 'live',
         is_live: true,
         started_at: now,
-        agora_channel: streamId,
+        agora_channel: courtChannel,
         box_count: maxBoxes,
         layout_mode: 'grid',
         is_protected: false,
@@ -141,12 +140,10 @@ export async function startCourtSession(params: StartCourtSessionParams): Promis
       })
 
       if (streamError) {
-        console.error('Error creating court stream:', streamError)
-        // Don't fail the court session if stream creation fails
+        console.error('Error upserting court stream:', streamError)
       }
     } catch (streamCreateError) {
       console.error('Error in court stream creation:', streamCreateError)
-      // Don't fail the court session
     }
 
     return {

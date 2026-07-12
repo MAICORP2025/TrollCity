@@ -150,34 +150,26 @@ export default function ApplicationsPanel({ isHRAdmin, currentUserId }: Applicat
 
       if (newStatus === 'approved') {
         const booleanField = ROLE_BOOLEAN_FIELD[app.position_id]
-        if (booleanField) {
-          const { error: profileError } = await supabase
-            .from('user_profiles')
-            .update({
-              role: app.position_id,
-              troll_role: app.position_id,
-              [booleanField]: true,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', app.user_id)
 
-          if (profileError) {
-            console.warn('[HR] Profile role update warning:', profileError)
-            toast.warning('Application approved, but profile role update had an issue. Check manually.')
-          }
+        // Assign the role via the SECURITY DEFINER RPC. Direct writes to the
+        // protected `role` column are blocked by the protect_sensitive_columns trigger.
+        const { error: roleError } = await supabase.rpc('set_user_role', {
+          target_user: app.user_id,
+          new_role: app.position_id,
+          reason: `Approved application ${app.id}`,
+          acting_admin_id: currentUserId ?? null,
+        })
+
+        if (roleError) {
+          console.warn('[HR] set_user_role warning:', roleError)
+          toast.warning('Application approved, but role assignment had an issue. Check manually.')
         } else {
-          const { error: profileError } = await supabase
-            .from('user_profiles')
-            .update({
-              role: app.position_id,
-              troll_role: app.position_id,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', app.user_id)
-
-          if (profileError) {
-            console.warn('[HR] Profile role update warning:', profileError)
-          }
+          // set_user_role handles the officer booleans. Apply the role-specific
+          // boolean flag and troll_role separately (these columns are not restricted).
+          const extra: Record<string, unknown> = { updated_at: new Date().toISOString() }
+          if (booleanField) extra[booleanField] = true
+          extra.troll_role = app.position_id
+          await supabase.from('user_profiles').update(extra).eq('id', app.user_id)
         }
       }
 

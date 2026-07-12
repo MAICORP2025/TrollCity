@@ -1,11 +1,11 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { processGiftXp } from '../xp'
 import { useXPStore } from '@/stores/useXPStore'
 import { toast } from 'sonner'
 import { BattleSounds } from '../battleSounds';
 import { useAuthStore } from '../../lib/store'
 import { useTrollFamilyActivity } from '@/hooks/useTrollFamilyActivity'
+import { unlockGiftAudio } from '../../components/broadcast/GiftVideoOverlay';
 
 export async function quietRefreshGiftProfile(userId: string) {
   const authStore = useAuthStore.getState();
@@ -130,6 +130,8 @@ function GiftSystemProviderInner({
         return false
       }
 
+      await unlockGiftAudio();
+
       // Note: trollmond deduction is now handled entirely by the RPC.
       // Gifts >= 100 coins deduct 100 trollmonds per gift (if sender has trollmonds).
       // No client-side coin discount is applied.
@@ -187,7 +189,6 @@ function GiftSystemProviderInner({
 
         // Non-critical post-send operations — fire and forget for instant UI response
         void (async () => {
-          try { await processGiftXp(user.id, Math.floor(gift.coinCost * quantity * 1.1)) } catch (e) { if (import.meta.env.DEV) console.warn('[GiftSystem] processGiftXp failed:', e) }
           try { await quietRefreshGiftProfile(user.id) } catch (e) { if (import.meta.env.DEV) console.warn('[GiftSystem] profile refresh failed:', e) }
           try {
             const xpState = useXPStore.getState()

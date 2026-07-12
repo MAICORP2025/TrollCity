@@ -157,11 +157,11 @@ Deno.serve(async (req) => {
         if (notes) updates.notes = notes;
 
         const { data, error } = await supabaseAdmin
-          .from('payout_requests')
-          .update(updates)
-          .eq('id', payoutId)
-          .select()
-          .single();
+            .from('payout_requests')
+            .update(updates)
+            .eq('id', payoutId)
+            .select()
+            .single();
 
         if (error) throw error;
 
@@ -175,337 +175,28 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "get_payout_requests": {
-        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
-        const { statusFilter } = params;
+      // --- ID Verification ---
+      case "verify_id": {
+        if (!isAdmin) throw new Error("Unauthorized");
+        const { targetUserId, action, reason } = params;
+        if (!targetUserId || !action) throw new Error("Missing targetUserId or action");
 
-        let query = supabaseAdmin
-            .from('payout_requests')
-            .select(`
-                *,
-                requester:user_profiles!payout_requests_user_id_fkey (
-                    username,
-                    email
-                ),
-                admin:user_profiles!payout_requests_admin_id_fkey (
-                    username
-                ),
-                processor:user_profiles!payout_requests_processed_by_fkey (
-                    username
-                )
-            `)
-            .order('created_at', { ascending: false });
-
-        if (statusFilter && statusFilter !== 'all') {
-            query = query.eq('status', statusFilter);
-        }
-
-        const { data: payouts, error } = await query;
-        if (error) throw error;
-
-        const formattedPayouts = payouts?.map((p: any) => ({
-            ...p,
-            username: p.requester?.username || 'Unknown',
-            email: p.requester?.email || 'Unknown',
-            processed_by_username: p.processor?.username || null
-        }));
-
-        result = { payouts: formattedPayouts };
-        break;
-      }
-
-      // --- Cashout Requests (Fast Pay / MAI Pay unified system) ---
-      case "approve_cashout": {
-        const { requestId } = params;
-        if (!requestId) throw new Error("Missing requestId");
-
-        const { data, error } = await supabaseAdmin.rpc('admin_process_payout', {
-          p_payout_id: requestId,
-          p_admin_id: user.id,
-          p_action: 'approve',
-        });
-
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'Failed to approve');
-        result = data;
-        break;
-      }
-
-      case "reject_cashout": {
-        const { requestId, reason } = params;
-        if (!requestId) throw new Error("Missing requestId");
-
-        const { data, error } = await supabaseAdmin.rpc('admin_process_payout', {
-          p_payout_id: requestId,
-          p_admin_id: user.id,
-          p_action: 'reject',
-          p_rejection_reason: reason || 'Request denied via Admin Panel',
-        });
-
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'Failed to reject');
-        result = data;
-        break;
-      }
-
-      case "update_cashout_status": {
-        const { requestId, status } = params;
-        if (!requestId || !status) throw new Error("Missing required fields");
-
-        // Map old status names to new actions
-        const action = status === 'approved' ? 'approve' : status === 'rejected' ? 'reject' : null;
-        if (!action) throw new Error("Invalid status. Use 'approved' or 'rejected'.");
-
-        const { data, error } = await supabaseAdmin.rpc('admin_process_payout', {
-          p_payout_id: requestId,
-          p_admin_id: user.id,
+        const { data, error } = await supabaseAdmin.rpc("admin_verify_id", {
+          p_target_user_id: targetUserId,
           p_action: action,
+          p_reason: reason || null
         });
 
         if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'Failed to update status');
-        result = data;
-        break;
-      }
-
-      // --- Marketplace Payout Release ---
-      case "approve_marketplace_release": {
-        if (!isAdmin) throw new Error("Unauthorized");
-        const { requestId, adminNotes } = params;
-        if (!requestId) throw new Error("Missing requestId");
-
-        const { data, error } = await supabaseAdmin.rpc("admin_approve_marketplace_release", {
-          p_request_id: requestId,
-          p_admin_id: user.id,
-          p_admin_notes: adminNotes || null,
-        });
-
-        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
 
         await supabaseAdmin.rpc("log_admin_action", {
-          p_action_type: "approve_marketplace_release",
-          p_target_id: requestId,
-          p_details: { admin_notes: adminNotes },
+          p_action_type: "verify_id",
+          p_target_id: targetUserId,
+          p_details: { action, reason }
         });
 
         result = data;
-        break;
-      }
-
-      case "reject_marketplace_release": {
-        if (!isAdmin) throw new Error("Unauthorized");
-        const { requestId, rejectionReason } = params;
-        if (!requestId) throw new Error("Missing requestId");
-
-        const { data, error } = await supabaseAdmin.rpc("admin_reject_marketplace_release", {
-          p_request_id: requestId,
-          p_admin_id: user.id,
-          p_rejection_reason: rejectionReason || null,
-        });
-
-        if (error) throw error;
-
-        await supabaseAdmin.rpc("log_admin_action", {
-          p_action_type: "reject_marketplace_release",
-          p_target_id: requestId,
-          p_details: { rejectionReason: rejectionReason },
-        });
-
-        result = data;
-        break;
-      }
-
-      // --- Executive Intake ---
-      case "assign_intake": {
-        const { requestId, assigneeId } = params;
-        if (!requestId) throw new Error("Missing requestId");
-        
-        const targetAssignee = assigneeId || user.id;
-
-        const { data, error } = await supabaseAdmin
-          .from('executive_intake')
-          .update({ assigned_secretary: targetAssignee })
-          .eq('id', requestId)
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case "update_intake_status": {
-        const { requestId, status } = params;
-        if (!requestId || !status) throw new Error("Missing required fields");
-
-        const { data, error } = await supabaseAdmin
-          .from('executive_intake')
-          .update({ status })
-          .eq('id', requestId)
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case "escalate_intake": {
-        const { requestId } = params;
-        if (!requestId) throw new Error("Missing requestId");
-
-        const { data, error } = await supabaseAdmin
-          .from('executive_intake')
-          .update({ status: 'escalated', escalated_to_admin: true })
-          .eq('id', requestId)
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case "update_intake_notes": {
-        const { requestId, notes } = params;
-        if (!requestId) throw new Error("Missing requestId");
-
-        const { data, error } = await supabaseAdmin
-          .from('executive_intake')
-          .update({ notes })
-          .eq('id', requestId)
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case "get_executive_intake": {
-        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
-        const { limit = 100 } = params;
-        const { data, error } = await supabaseAdmin
-          .from('executive_intake')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(limit);
-        if (error) throw error;
-        result = { intake: data };
-        break;
-      }
-
-      // --- Manual Orders ---
-      case "approve_manual_order": {
-        const { orderId, externalTxId } = params;
-        if (!orderId) throw new Error("Missing orderId");
-
-        const { data, error } = await supabaseAdmin.rpc('approve_manual_order', {
-          p_order_id: orderId,
-          p_admin_id: user.id,
-          p_external_tx_id: externalTxId || `MANUAL-${Date.now()}`
-        });
-
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case "reject_manual_order": {
-        const { orderId, reason } = params;
-        if (!orderId) throw new Error("Missing orderId");
-
-        const { data, error } = await supabaseAdmin
-          .from('manual_coin_orders')
-          .update({ 
-            status: 'rejected',
-            rejection_reason: reason,
-            processed_by: user.id,
-            processed_at: new Date().toISOString()
-          })
-          .eq('id', orderId)
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case "delete_manual_order": {
-        const { orderId } = params;
-        if (!orderId) throw new Error("Missing orderId");
-
-        const { data, error } = await supabaseAdmin
-          .from('manual_coin_orders')
-          .update({ deleted_at: new Date().toISOString() })
-          .eq('id', orderId)
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case "get_manual_orders_dashboard": {
-        if (!isAdmin && !isSecretary) throw new Error("Unauthorized");
-
-        const { data: orders, error: ordersError } = await supabaseAdmin
-          .from('manual_coin_orders')
-          .select('*')
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .limit(200);
-
-        if (ordersError) throw ordersError;
-
-        if (!orders || orders.length === 0) {
-            result = { orders: [], profiles: {}, packages: {} };
-            break;
-        }
-
-        const userIds = Array.from(new Set(orders.map((r: any) => r.user_id).filter(Boolean)));
-        const profilesMap: Record<string, any> = {};
-        if (userIds.length > 0) {
-            const { data: userData, error: userError } = await supabaseAdmin
-                .from('user_profiles')
-                .select('id, username, email, rgb_username_expires_at, role')
-                .in('id', userIds);
-            
-            if (userError) throw userError;
-            userData?.forEach((u: any) => { profilesMap[u.id] = u; });
-        }
-
-        const pkgIds = Array.from(new Set(orders.map((r: any) => r.package_id).filter(Boolean)));
-        const packagesMap: Record<string, any> = {};
-        if (pkgIds.length > 0) {
-            const { data: pkgData, error: pkgError } = await supabaseAdmin
-                .from('coin_packages')
-                .select('id, name, coins, price_usd, amount_cents')
-                .in('id', pkgIds);
-
-            if (pkgError) throw pkgError;
-            pkgData?.forEach((p: any) => { packagesMap[p.id] = p; });
-        }
-
-        result = { orders, profiles: profilesMap, packages: packagesMap };
-        break;
-      }
-
-      case "get_user_ip": {
-        if (!isAdmin) throw new Error("Unauthorized: Admin only");
-        const { userId } = params;
-        if (!userId) throw new Error("Missing userId");
-
-        const { data, error } = await supabaseAdmin
-          .from('user_profiles')
-          .select('last_known_ip')
-          .eq('id', userId)
-          .single();
-
-        if (error) throw error;
-        result = { ip: data?.last_known_ip };
         break;
       }
 
@@ -1236,7 +927,7 @@ Deno.serve(async (req) => {
         if (error) throw error;
         
         // Fetch profiles separately since FK points to auth.users, not user_profiles
-        const secretaryIds = (assignments || []).map(a => a.secretary_id);
+        const secretaryIds = (assignments || []).map((a: { secretary_id: any; }) => a.secretary_id);
         let profilesMap: Record<string, { username: string; avatar_url: string }> = {};
         
         if (secretaryIds.length > 0) {
@@ -1246,12 +937,12 @@ Deno.serve(async (req) => {
             .in('id', secretaryIds);
           
           if (profiles) {
-            profilesMap = Object.fromEntries(profiles.map(p => [p.id, { username: p.username, avatar_url: p.avatar_url }]));
+            profilesMap = Object.fromEntries(profiles.map((p: { id: any; username: any; avatar_url: any; }) => [p.id, { username: p.username, avatar_url: p.avatar_url }]));
           }
         }
         
         result = { 
-          assignments: (assignments || []).map(a => ({
+          assignments: (assignments || []).map((a: { secretary_id: string | number; }) => ({
             ...a,
             secretary: profilesMap[a.secretary_id] || { username: 'Unknown', avatar_url: '' }
           }))

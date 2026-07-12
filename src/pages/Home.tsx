@@ -11,10 +11,12 @@ import {
   MessageCircle,
   Play,
   Radio,
+  Scale,
   Shield,
   Sparkles,
   Star,
   Trophy,
+  Tv,
   Users,
   Vote,
   X,
@@ -42,6 +44,7 @@ import LeftNavSidebar from '@/components/home/LeftNavSidebar'
 import FeaturedBroadcastersRow from '@/components/home/FeaturedBroadcastersRow'
 import HyTroGamingRow from '@/components/home/HyTroGamingRow'
 import PodcastRow from '@/components/home/PodcastRow'
+import HorizontalScrollRow from '@/components/home/HorizontalScrollRow'
 import NewStreamersRow from '@/components/home/NewStreamersRow'
 import BestTrollersRow from '@/components/home/BestTrollersRow'
 import PromoSlot from '@/components/promo/PromoSlot'
@@ -81,6 +84,8 @@ const LiveGrid = React.memo(function LiveGrid({
    showLiveGrid,
    setShowLiveGrid,
    onClickItem,
+   user,
+   navigate,
  }: {
    liveItems: LiveItem[]
    loadingLive: boolean
@@ -89,6 +94,8 @@ const LiveGrid = React.memo(function LiveGrid({
    showLiveGrid: boolean | null
    setShowLiveGrid: (value: boolean | null) => void
    onClickItem: (item: LiveItem) => void
+   user: { id: string } | null
+   navigate: (path: string) => void
  }) {
   const visible = showLiveGrid ?? true
 
@@ -175,6 +182,257 @@ const LiveGrid = React.memo(function LiveGrid({
             )}
           </div>
         )}
+      </div>
+    </div>
+  )
+})
+
+const HomeAuctionGrid = React.memo(function HomeAuctionGrid({
+  auctions,
+  onClickAuction,
+}: {
+  auctions: AuctionShow[]
+  onClickAuction: (id: string) => void
+}) {
+  return (
+    <div className={`${glass} rounded-2xl p-4`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-black text-white">
+            <Gavel className="h-5 w-5 text-cyan-300" />
+            Live Auctions
+          </h2>
+          <p className="mt-1 text-xs font-bold text-slate-400">
+            {auctions.length} auction{auctions.length === 1 ? '' : 's'} live now
+          </p>
+        </div>
+        <button
+          onClick={() => onClickAuction('')}
+          className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-xs font-black text-cyan-100"
+        >
+          View All
+        </button>
+      </div>
+
+      {auctions.length === 0 ? (
+        <button
+          onClick={() => onClickAuction('')}
+          className="mt-4 w-full rounded-2xl border border-dashed border-cyan-500/30 bg-cyan-500/[0.04] py-10 text-center transition hover:border-cyan-400/50 hover:bg-cyan-500/[0.08]"
+        >
+          <Gavel className="mx-auto h-10 w-10 text-cyan-500/50" />
+          <p className="mt-3 text-sm font-bold text-cyan-300/70">No auctions live right now</p>
+        </button>
+      ) : (
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+          {auctions.map((auction) => (
+            <button
+              key={auction.id}
+              onClick={() => onClickAuction(auction.id)}
+              className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-slate-900 text-left transition hover:border-cyan-300/60"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/70 via-slate-950 to-purple-900/50" />
+              <Gavel className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 text-cyan-300/40" />
+              <div className="absolute right-2 top-2 rounded-lg bg-red-600 px-2 py-1 text-[10px] font-black text-white">
+                LIVE
+              </div>
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-3">
+                <p className="truncate text-sm font-black text-white">{auction.title}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+})
+
+/* Reusable tile sized identically to the Broadcasters / Podcasts row tiles. */
+const LiveNowTile = React.memo(function LiveNowTile({
+  title,
+  subtitle,
+  imageUrl,
+  fallbackIcon: Icon,
+  onClick,
+  isMobileWidth,
+}: {
+  title: string
+  subtitle?: string | null
+  imageUrl?: string | null
+  fallbackIcon: React.ElementType
+  onClick: () => void
+  isMobileWidth: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`group relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-cyan-300/40 ${isMobileWidth ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`}
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-slate-950 to-cyan-900/50" />
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover opacity-80 transition-transform duration-500 group-hover:scale-[1.06]"
+        />
+      ) : (
+        <Icon className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-white/20" />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#080c1a]/95" />
+      <div className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-red-600 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+        LIVE
+      </div>
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-2.5">
+        <p className="truncate text-[11px] font-black text-white">{title}</p>
+        {subtitle ? <p className="truncate text-[8px] font-bold text-slate-300">{subtitle}</p> : null}
+      </div>
+    </button>
+  )
+})
+
+/* Auctions — live auction shows from the existing auction system,
+   rendered as a row of tiles matching the Broadcasters / Podcasts row. */
+const AuctionsRow = React.memo(function AuctionsRow({
+  auctions,
+  onClickAuction,
+  isMobileWidth,
+}: {
+  auctions: AuctionShow[]
+  onClickAuction: (id: string) => void
+  isMobileWidth: boolean
+}) {
+  return (
+    <HorizontalScrollRow
+      title="Auctions"
+      icon={<Gavel className="h-3.5 w-3.5 text-cyan-300" />}
+      onViewAll={() => onClickAuction('')}
+    >
+      {auctions.length === 0 ? (
+        <div className={`flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-cyan-500/30 bg-cyan-500/[0.04] p-4 text-center ${isMobileWidth ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`}>
+          <Gavel className="h-8 w-8 text-cyan-500/50" />
+          <p className="text-xs font-bold text-cyan-300/70">No Auctions Live</p>
+          <p className="text-[10px] text-cyan-400/50">Active auctions will appear here!</p>
+        </div>
+      ) : (
+        auctions.map((auction) => (
+          <LiveNowTile
+            key={auction.id}
+            title={auction.title}
+            imageUrl={auction.thumbnail_url}
+            fallbackIcon={Gavel}
+            isMobileWidth={isMobileWidth}
+            onClick={() => onClickAuction(auction.id)}
+          />
+        ))
+      )}
+    </HorizontalScrollRow>
+  )
+})
+
+/* Troll Court & TCNN — active broadcasts from the existing stream system,
+   rendered as rows of tiles matching the Broadcasters / Podcasts row. */
+const CareerBroadcastRow = React.memo(function CareerBroadcastRow({
+  title,
+  subtitle,
+  icon: Icon,
+  items,
+  onClickItem,
+  emptyTitle,
+  emptySubtitle,
+  isMobileWidth,
+}: {
+  title: string
+  subtitle: string
+  icon: React.ElementType
+  items: LiveItem[]
+  onClickItem: (item: LiveItem) => void
+  emptyTitle: string
+  emptySubtitle: string
+  isMobileWidth: boolean
+}) {
+  return (
+    <HorizontalScrollRow
+      title={title}
+      subtitle={subtitle}
+      icon={<Icon className="h-3.5 w-3.5 text-emerald-300" />}
+    >
+      {items.length === 0 ? (
+        <div className={`flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] p-4 text-center ${isMobileWidth ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`}>
+          <Icon className="h-8 w-8 text-slate-500/50" />
+          <p className="text-xs font-bold text-slate-300">{emptyTitle}</p>
+          <p className="text-[10px] text-slate-500">{emptySubtitle}</p>
+        </div>
+      ) : (
+        items.map((item) => (
+          <LiveNowTile
+            key={item.id}
+            title={item.title}
+            subtitle={item.streamerName}
+            imageUrl={item.streamerAvatar}
+            fallbackIcon={Play}
+            isMobileWidth={isMobileWidth}
+            onClick={() => onClickItem(item)}
+          />
+        ))
+      )}
+    </HorizontalScrollRow>
+  )
+})
+
+/* Troll Court & TCNN — shown as 2 rows because only approved career
+   applications can host these experiences. */
+const CareerAppsGrid = React.memo(function CareerAppsGrid({
+  onOpen,
+}: {
+  onOpen: (path: string) => void
+}) {
+  const tiles = [
+    {
+      path: '/troll-court',
+      title: 'Troll Court',
+      desc: 'Watch court sessions and legal proceedings',
+      icon: Gavel,
+      gradient: 'from-amber-900/40 to-yellow-950/40',
+    },
+    {
+      path: '/tcnn',
+      title: 'TCNN',
+      desc: 'Live news, updates, and community broadcasts',
+      icon: Radio,
+      gradient: 'from-red-900/40 to-rose-950/40',
+    },
+  ]
+
+  return (
+    <div className={`${glass} rounded-2xl p-4`}>
+      <h2 className="flex items-center gap-2 text-xl font-black text-white">
+        <Shield className="h-5 w-5 text-emerald-300" />
+        Troll Court & TCNN
+      </h2>
+      <p className="mt-1 text-xs font-bold text-slate-400">
+        Tune in to court sessions and live news broadcasts
+      </p>
+
+      <div className="mt-4 grid grid-cols-1 gap-3">
+        {tiles.map((tile) => {
+          const Icon = tile.icon
+          return (
+            <button
+              key={tile.path}
+              onClick={() => onOpen(tile.path)}
+              className={`flex items-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-r ${tile.gradient} p-4 text-left transition hover:border-emerald-300/50`}
+            >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/30">
+                <Icon className="h-6 w-6 text-white/80" />
+              </div>
+              <div>
+                <p className="text-base font-black text-white">{tile.title}</p>
+                <p className="text-xs font-bold text-slate-300">{tile.desc}</p>
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -322,7 +580,7 @@ export default function Home() {
   const user = useAuthStore((state) => state.user)
   const isLoading = useAuthStore((state) => state.isLoading)
   const isPwa = useIsPwa()
-  const { isMobile } = useIsMobile()
+  const { isMobile, isMobileWidth } = useIsMobile()
 
   useSEO({
     title: 'Troll City | Social Streaming Platform - Livestream, Create, Connect',
@@ -392,6 +650,17 @@ export default function Home() {
 
   const allLiveItems = useMemo(() => [...liveItems, ...auctionItems], [liveItems, auctionItems])
 
+  // Active Troll Court & TCNN broadcasts already live in liveItems (realtime-fed
+  // by LiveContentContext). Reuse them rather than adding duplicate subscriptions.
+  const trollCourtItems = useMemo(
+    () => liveItems.filter((item) => item.category === 'court'),
+    [liveItems],
+  )
+  const tcnnItems = useMemo(
+    () => liveItems.filter((item) => item.category === 'tcnn'),
+    [liveItems],
+  )
+
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [])
@@ -424,6 +693,19 @@ export default function Home() {
   )
   const handleScrollItemClick = useCallback((id: string) => {
      navigate(`/watch/${id}`)
+   }, [navigate])
+
+   const handleAuctionClick = useCallback((id: string) => {
+     navigate(id ? `/auctions/${id}` : '/auctions')
+   }, [navigate])
+
+    const handleTrollCourtClick = useCallback((item: LiveItem) => {
+      const sessionId = item.id.startsWith('court-') ? item.id.slice('court-'.length) : item.id
+      navigate(`/court/${sessionId}`)
+    }, [navigate])
+
+   const handleTcnnClick = useCallback((item: LiveItem) => {
+     navigate(`/tcnn/viewer/${item.id}`)
    }, [navigate])
 
    const showPresidentTab = currentElection?.status === 'open'
@@ -526,11 +808,34 @@ export default function Home() {
                showPresidentTab={showPresidentTab}
                wallNotificationCount={wallNotificationCount}
              />
-             <div className="min-w-0 flex-1 space-y-4">
-               <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
-               <PodcastRow />
-               <HyTroGamingRow onItemClick={handleScrollItemClick} />
-             </div>
+              <div className="min-w-0 flex-1 space-y-4">
+                <FeaturedBroadcastersRow onItemClick={handleScrollItemClick} />
+                <PodcastRow />
+                <HyTroGamingRow onItemClick={handleScrollItemClick} />
+
+                <AuctionsRow auctions={liveAuctions} onClickAuction={handleAuctionClick} isMobileWidth={isMobileWidth} />
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <CareerBroadcastRow
+                    title="Troll Court"
+                    icon={Scale}
+                    items={trollCourtItems}
+                    onClickItem={handleTrollCourtClick}
+                    emptyTitle="No Court Sessions"
+                    emptySubtitle="Court sessions will appear here!"
+                    isMobileWidth={isMobileWidth}
+                  />
+                  <CareerBroadcastRow
+                    title="TCNN"
+                    icon={Tv}
+                    items={tcnnItems}
+                    onClickItem={handleTcnnClick}
+                    emptyTitle="No TCNN Broadcasts"
+                    emptySubtitle="News broadcasts will appear here!"
+                    isMobileWidth={isMobileWidth}
+                  />
+                </div>
+              </div>
              <aside className="hidden xl:flex xl:flex-col xl:gap-3 xl:w-[320px] xl:shrink-0 xl:sticky xl:top-3 xl:self-start">
                <PromoSlot placement={HOME_PAGE_PROMO_PLACEMENTS[0]} variant="featured" />
                <PromoSlot placement={HOME_PAGE_PROMO_PLACEMENTS[1]} variant="featured" />
@@ -550,11 +855,27 @@ export default function Home() {
                showPresidentTab={showPresidentTab}
                wallNotificationCount={wallNotificationCount}
              />
-              <div className="min-w-0 flex-1 space-y-4">
-                <NewStreamersRow onClickItem={handleScrollItemClick} />
-                <BestTrollersRow onClickItem={handleScrollItemClick} />
-                <HyTroGamingRow onItemClick={handleScrollItemClick} />
-              </div>
+             <div className="min-w-0 flex-1 space-y-4">
+                 <LiveGrid
+                   liveItems={liveItems.slice(0, 4)}
+                   loadingLive={loadingLive}
+                   totalViewers={totalViewers}
+                   onlineUsers={onlineUsers}
+                   showLiveGrid={showLiveGrid}
+                   setShowLiveGrid={setShowLiveGrid}
+                   onClickItem={handleScrollItemClick}
+                   user={user}
+                   navigate={navigate}
+                 />
+                 <HomeAuctionGrid
+                   auctions={liveAuctions}
+                   onClickAuction={(id) => navigate(id ? `/auctions/${id}` : '/auctions')}
+                 />
+                 <CareerAppsGrid onOpen={(path) => navigate(path)} />
+                 <NewStreamersRow onClickItem={handleScrollItemClick} />
+                 <BestTrollersRow onClickItem={handleScrollItemClick} />
+                 <HyTroGamingRow onItemClick={handleScrollItemClick} />
+               </div>
             </div>
            )}
 

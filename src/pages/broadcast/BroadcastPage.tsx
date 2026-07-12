@@ -1943,41 +1943,48 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
      const resolvedGiftAmount = resolveGiftAmount(enrichedGiftData);
      const resolvedGiftName = resolveGiftName(enrichedGiftData);
 
-     // -- Build state entry --------------------------------------------------
-     const newGift = {
-      id: giftId,
-      gift_id: enrichedGiftData.gift_id,
-      gift_name: resolvedGiftName,
-      gift_icon: enrichedGiftData.gift_icon || enrichedGiftData.metadata?.gift_icon || '??',
-      gift_slug: enrichedGiftData.gift_slug || enrichedGiftData.metadata?.gift_slug,
-      animation_key: enrichedGiftData.animation_key || enrichedGiftData.metadata?.animation_key,
-      animation_type: enrichedGiftData.animation_type || enrichedGiftData.metadata?.animation_type,
-      animation_url:
-        enrichedGiftData.animation_url ||
-        enrichedGiftData.video_url ||
-        enrichedGiftData.metadata?.animation_url ||
-        enrichedGiftData.metadata?.video_url ||
-        undefined,
-      video_url:
-        enrichedGiftData.video_url ||
-        enrichedGiftData.animation_url ||
-        enrichedGiftData.metadata?.video_url ||
-        enrichedGiftData.metadata?.animation_url ||
-        undefined,
-      animation_duration_ms: enrichedGiftData.animation_duration_ms || enrichedGiftData.metadata?.animation_duration_ms,
-      sound_url: enrichedGiftData.sound_url || enrichedGiftData.metadata?.sound_url,
-      is_fullscreen: enrichedGiftData.is_fullscreen ?? enrichedGiftData.metadata?.is_fullscreen,
-      rarity: enrichedGiftData.rarity || enrichedGiftData.metadata?.rarity,
-      tray_visual_url: enrichedGiftData.tray_visual_url || enrichedGiftData.metadata?.tray_visual_url,
-      tray_gradient: enrichedGiftData.tray_gradient || enrichedGiftData.metadata?.tray_gradient,
-      amount: resolvedGiftAmount || enrichedGiftData.quantity || 1,
-      quantity: enrichedGiftData.quantity || 1,
-      sender_id: enrichedGiftData.sender_id,
-      sender_name: enrichedGiftData.sender_name || enrichedGiftData.metadata?.sender_name || 'Someone',
-      receiver_id: receiverId,
-      receiver_name: enrichedGiftData.receiver_name || enrichedGiftData.metadata?.receiver_name,
-      created_at: enrichedGiftData.timestamp || enrichedGiftData.created_at || new Date().toISOString(),
-    } as BroadcastGift;
+      const normalizedGift = {
+        ...enrichedGiftData,
+        ...giftData,
+        gift_id: giftData.gift_id || giftData.giftId || enrichedGiftData.gift_id,
+        id: giftData.gift_id || giftData.giftId || giftData.id || enrichedGiftData.gift_id || enrichedGiftData.id || giftId,
+      }
+
+      // -- Build state entry --------------------------------------------------
+      const newGift = {
+       id: normalizedGift.id,
+       gift_id: normalizedGift.gift_id,
+       gift_name: resolvedGiftName,
+       gift_icon: normalizedGift.gift_icon || normalizedGift.metadata?.gift_icon || '??',
+       gift_slug: normalizedGift.gift_slug || normalizedGift.metadata?.gift_slug,
+       animation_key: normalizedGift.animation_key || normalizedGift.metadata?.animation_key,
+       animation_type: normalizedGift.animation_type || normalizedGift.metadata?.animation_type,
+       animation_url:
+         normalizedGift.animation_url ||
+         normalizedGift.video_url ||
+         normalizedGift.metadata?.animation_url ||
+         normalizedGift.metadata?.video_url ||
+         undefined,
+       video_url:
+         normalizedGift.video_url ||
+         normalizedGift.animation_url ||
+         normalizedGift.metadata?.video_url ||
+         normalizedGift.metadata?.animation_url ||
+         undefined,
+       animation_duration_ms: normalizedGift.animation_duration_ms || normalizedGift.metadata?.animation_duration_ms,
+       sound_url: normalizedGift.sound_url || normalizedGift.metadata?.sound_url,
+       is_fullscreen: normalizedGift.is_fullscreen ?? normalizedGift.metadata?.is_fullscreen,
+       rarity: normalizedGift.rarity || normalizedGift.metadata?.rarity,
+       tray_visual_url: normalizedGift.tray_visual_url || normalizedGift.metadata?.tray_visual_url,
+       tray_gradient: normalizedGift.tray_gradient || normalizedGift.metadata?.tray_gradient,
+       amount: resolvedGiftAmount || normalizedGift.quantity || 1,
+       quantity: normalizedGift.quantity || 1,
+       sender_id: normalizedGift.sender_id,
+       sender_name: normalizedGift.sender_name || normalizedGift.metadata?.sender_name || 'Someone',
+       receiver_id: receiverId,
+       receiver_name: normalizedGift.receiver_name || normalizedGift.metadata?.receiver_name,
+       created_at: normalizedGift.timestamp || normalizedGift.created_at || new Date().toISOString(),
+     } as BroadcastGift;
 
     // Show gift banner for ALL gifts to broadcaster
     setRecentGifts((prev) => {

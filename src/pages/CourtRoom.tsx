@@ -26,6 +26,7 @@ import { toast } from 'sonner'
 
 import { useAuthStore } from '../lib/store'
 import { supabase, UserRole } from '../lib/supabase'
+import { GiftSystemProvider } from '../lib/hooks/useGiftSystem'
 import RequireRole from '../components/RequireRole'
 import CourtChat from '../components/CourtChat'
 import CourtDocketModal from '../components/CourtDocketModal'
@@ -592,7 +593,7 @@ export default function CourtRoom() {
     if (agoraClientRef.current) return agoraClientRef.current
 
     const client = AgoraRTC.createClient({
-      mode: 'rtc',
+      mode: 'live',
       codec: 'vp8',
     })
 
@@ -725,7 +726,28 @@ export default function CourtRoom() {
   }, [courtId])
 
   useEffect(() => {
-    if (!rawCourtId) return
+    if (!rawCourtId) {
+      const loadActiveSession = async () => {
+        const { data, error } = await supabase
+          .from('court_sessions')
+          .select('id')
+          .in('status', ['active', 'live'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (error || !data) {
+          toast.error('No active court session found.')
+          navigate('/troll-court')
+          return
+        }
+
+        navigate(`/court/${data.id}`, { replace: true })
+      }
+
+      void loadActiveSession()
+      return
+    }
 
     if (!courtId) {
       toast.error('Invalid court session ID.')
@@ -1228,15 +1250,17 @@ export default function CourtRoom() {
           isJudge={canJudge(effectiveRole)}
         />
 
-        <GiftBoxModal
-          isOpen={giftOpen}
-          onClose={() => {
-            setGiftOpen(false)
-            setGiftRecipientId(null)
-          }}
-          recipientId={giftRecipientId || ''}
-          streamId=""
-        />
+        <GiftSystemProvider streamId={courtId ? `court-${courtId}` : undefined}>
+          <GiftBoxModal
+            isOpen={giftOpen}
+            onClose={() => {
+              setGiftOpen(false)
+              setGiftRecipientId(null)
+            }}
+            recipientId={giftRecipientId || ''}
+            streamId={courtId ? `court-${courtId}` : ''}
+          />
+        </GiftSystemProvider>
       </div>
     </RequireRole>
   )

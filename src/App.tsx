@@ -6,6 +6,13 @@ import { Routes, Route, Navigate, Outlet, useLocation, useNavigate, useParams } 
 import TreelzPage from "./pages/TreelzPage";
 import TreelzUploadPage from "./pages/TreelzUploadPage";
 import { useAuthStore } from "./lib/store";
+import XtrollzHome from "./pages/xtrollz/XtrollzHome";
+import XtrollzRulesPage from "./pages/xtrollz/XtrollzRulesPage";
+import XtrollzApplyPage from "./pages/xtrollz/XtrollzApplyPage";
+import XtrollzPaymentPage from "./pages/xtrollz/XtrollzPaymentPage";
+import XTrollzLiveViewer from "./pages/xtrollz/XtrollzLiveViewer";
+import XTrollzBroadcasterStudio from "./pages/xtrollz/XtrollzBroadcasterStudio";
+import XtrollzAdminDashboard from "./pages/admin/XtrollzAdminDashboard";
 import { GlobalEventProvider } from "./contexts/GlobalEventContext";
 import { BatterySaverProvider } from "./contexts/BatterySaverContext";
 import { ProfileFrameProvider } from "./contexts/ProfileFrameContext";
@@ -54,7 +61,6 @@ import { AnimationsContainer } from "./components/animations";
 // Layout
 import OfficerAlertBanner from "./components/OfficerAlertBanner";
 import AdminOfficerQuickMenu from "./components/AdminOfficerQuickMenu";
-import { RTCAdminMonitor, RealtimeDebugPanel } from "./components/admin";
 import { PageChannelProvider } from "./contexts/PageChannelContext";
 import { StaffWalkieTalkieProvider } from "./components/StaffWalkieTalkieProvider";
 
@@ -128,7 +134,6 @@ const CreatorSwitchProgram = lazyWithRetry(() => import("./pages/CreatorSwitchPr
 const JoinPage = lazyWithRetry(() => import("./pages/Join"));
 const KickFeePage = lazyWithRetry(() => import("./pages/broadcast/KickFeePage"));
 const KickFee = lazyWithRetry(() => import("./pages/KickFee"));
-const TrollCourtSession = lazyWithRetry(() => import("./pages/TrollCourtSession"));
 const CourtViewerPage = lazyWithRetry(() => import("./pages/CourtViewerPage"));
 
 const Call = lazyWithRetry(() => import("./pages/Call"));
@@ -161,6 +166,7 @@ const OfficerDashboard = lazyWithRetry(() => import("./pages/officer/OfficerDash
 const OfficerOWCDashboard = lazyWithRetry(() => import("./pages/OfficerOWCDashboard"));
 const OfficerVote = lazyWithRetry(() => import("./pages/OfficerVote"));
 const LeadOfficerDashboard = lazyWithRetry(() => import("./pages/lead-officer/LeadOfficerDashboard"));
+const EmployeesPage = lazyWithRetry(() => import("./features/employees/EmployeesPage"));
 const ReportDetailsPage = lazyWithRetry(() => import("./pages/ReportDetailsPage"));
 const PasswordReset = lazyWithRetry(() => import("./pages/PasswordReset"));
 const CreditScorePage = lazyWithRetry(() => import("./pages/CreditScorePage"));
@@ -301,6 +307,12 @@ const isPublicRoute = (pathname: string) => {
   // Podcast routes are public — anyone can listen without signing in
   if (pathname === '/podcast' || pathname.startsWith('/podcast/')) return true
 
+  // Court routes are public (Agreed access handled by /allowedPaths guard)
+  if (pathname === '/court') return true
+  if (pathname === '/troll-court') return true
+  if (pathname.startsWith('/troll-court/')) return true
+  if (pathname.startsWith('/court/')) return true
+
   // Username-based routes (e.g., /ceo_of_mai) are public profile redirects
   // Must come before broadcast check - route must look like a username (alphanumeric + underscores/hyphens)
   if (/^[a-zA-Z0-9_-]+$/.test(pathname.slice(1))) return true
@@ -323,8 +335,9 @@ const isPublicRoute = (pathname: string) => {
      const profile = useAuthStore((s) => s.profile);
      const isLoading = useAuthStore((s) => s.isLoading);
      const isRefreshing = useAuthStore((s) => s.isRefreshing);
-     const { isJailed } = useJailMode(user?.id);
-     const location = useLocation();
+      const { isJailed } = useJailMode(user?.id);
+      const xtrollzDobMismatch = useAuthStore((s) => s.xtrollzDobMismatch);
+      const location = useLocation();
      
      // Show loading overlay while auth is initializing, but keep children mounted behind it
        if (isLoading) {
@@ -380,14 +393,18 @@ const isPublicRoute = (pathname: string) => {
     
     // Do not force profile editing after login. Missing usernames are handled inside profile surfaces.
     
-if (
-      profile && // Add this check
-        profile?.application_required &&
-        !profile?.application_submitted &&
-        location.pathname !== "/apply"
-      ) {
-        return <Navigate to="/apply" replace />;
-      }
+ if (
+      profile &&
+      profile?.application_required &&
+      !profile?.application_submitted &&
+      location.pathname !== "/apply"
+    ) {
+      return <Navigate to="/apply" replace />;
+    }
+
+    if (xtrollzDobMismatch && location.pathname !== '/xtrollz/apply') {
+      return <Navigate to="/xtrollz/apply" replace />;
+    }
 
     // Neighborhood setup guard - redirect users without neighborhood_id to setup
     if (
@@ -519,6 +536,7 @@ import MyAuctionShows from "./pages/auction/MyAuctionShows.js";
 import AuctionReports from "./pages/auction/AuctionReports.js";
 import AdminAuctionApps from "./pages/auction/AdminAuctionApps.js";
 import LiveAuctionRoom from "./pages/auction/LiveAuctionRoom.js";
+import AuctionWon from "./pages/auction/AuctionWon.js";
 import AuctionBidders from "./pages/auction/AuctionBidders.js";
 import AuctionSales from "./pages/auction/AuctionSales.js";
 import AuctionAnalytics from "./pages/auction/AuctionAnalytics.js";
@@ -528,6 +546,7 @@ import AuctionOrderManagement from "./pages/auction/AuctionOrderManagement.js";
 import PackingStation from "./pages/auction/PackingStation.js";
 import DeviceManagement from "./pages/auction/DeviceManagement.js";
 import AuctioneerScanner from "./pages/auction/AuctioneerScanner.js";
+import AuctionApp from "./pages/auction/AuctionApp.js";
 import CoinStore from "./pages/CoinStore.jsx";
 import ProfileFrameStore from "./pages/ProfileFrameStore";
 import SellOnTrollCity from "./pages/SellOnTrollCity.js";
@@ -547,6 +566,7 @@ import OfficerModeration from "./pages/OfficerModeration.js";
 import HomeNotificationPrompt from "./components/HomeNotificationPrompt.js";
 import { GhostDropInProvider } from "./context/GhostDropInContext";
 import GhostBanner from "./components/home/GhostBanner";
+import RTCAdminMonitor from "./components/admin/RTCAdminMonitor.tsx";
 
 
 function AppContent() {
@@ -875,21 +895,17 @@ function AppContent() {
         return
       }
 
-      // 't' -> Troll Officer / Lead Officer Dashboard
+      // 't' -> Employees Office (officer / lead officer)
       if (event.key === 't' || event.key === 'T') {
-        if (profile?.is_lead_officer) {
-          navigate('/lead-officer', { replace: true })
-          return
-        }
-        if (profile?.is_troll_officer) {
-          navigate('/officer/dashboard', { replace: true })
+        if (profile?.is_lead_officer || profile?.is_troll_officer) {
+          navigate('/Employees', { replace: true })
           return
         }
       }
 
-      // 's' -> Secretary Dashboard
+      // 's' -> Employees Office (secretary)
       if ((event.key === 's' || event.key === 'S') && profile?.role === 'secretary') {
-        navigate('/secretary', { replace: true })
+        navigate('/Employees', { replace: true })
         return
       }
 
@@ -1271,10 +1287,13 @@ function AppContent() {
         // Supabase Realtime AbortError ("Lock broken by another request with the 'steal' option")
         // is a known non-fatal issue when multiple realtime channels compete for the same connection.
         // Supabase auto-retries, so we suppress it from Bug Center reporting.
+        // LiveKit "Tried to add a track for a participant, that's not present" is a known non-fatal
+        // race condition when a participant leaves while a track event is being processed.
         if (
           fullMessage.includes('Lock broken by another request') ||
           fullMessage.includes("'steal' option") ||
-          (firstError && firstError.name === 'AbortError')
+          (firstError && firstError.name === 'AbortError') ||
+          fullMessage.includes('Tried to add a track for a participant, that\'s not present')
         ) {
           return
         }
@@ -1439,7 +1458,7 @@ const handleVisibilityChange = async () => {
            {user && <ChatBubble />}
            <StaffWalkieTalkieProvider>
              <RTCAdminMonitor />
-             {import.meta.env.DEV && (profile?.is_admin || profile?.is_superadmin || ['admin','ceo','superadmin'].includes(profile?.role || '')) && <RealtimeDebugPanel />}
+             {import.meta.env.DEV && (profile?.is_admin || profile?.is_superadmin || ['admin','ceo','superadmin'].includes(profile?.role || '')) }
              <ErrorBoundary>
                <Suspense fallback={null}>
                  <PageChannelProvider>
@@ -1525,6 +1544,7 @@ const handleVisibilityChange = async () => {
                 {/* 🎤 Live Auctions — Public browse/watch, studio gated below */}
                 <Route path="/auctions" element={<AuctionsPage />} />
                 <Route path="/auctions/:showId" element={<LiveAuctionRoom />} />
+                <Route path="/auctions/won/:showId" element={<AuctionWon />} />
                 <Route path="/treelz" element={<TreelzPage />} />
                 <Route path="/treelz/upload" element={<TreelzUploadPage />} />
 
@@ -1590,14 +1610,18 @@ const handleVisibilityChange = async () => {
                 <Route path="/academy/teachers" element={<TeacherDirectoryPage />} />
                 <Route path="/academy/assignments" element={<AssignmentsListPage />} />
 
-                {/* 📨 UTroMail */}
-                <Route path="/utromail" element={<UtromailPage />} />
-                <Route path="/utromail/thread/:threadId" element={<UtromailPage />} />
-                <Route path="/utromail/compose" element={<UtromailPage />} />
-                <Route path="/utromail/settings" element={<UtromailPage />} />
+                 {/* 📨 UTroMail */}
+                 <Route path="/utromail" element={<UtromailPage />} />
+                 <Route path="/utromail/thread/:threadId" element={<UtromailPage />} />
+                 <Route path="/utromail/compose" element={<UtromailPage />} />
+                 <Route path="/utromail/settings" element={<UtromailPage />} />
 
-                {/* 🔐 Protected Routes */}
-                <Route element={<RequireAuth />}>
+                 {/* ⚖️ Court - public viewing */}
+                 <Route path="/troll-court" element={<TrollCourt />} />
+                 <Route path="/troll-court/watch/:sessionId" element={<CourtViewerPage />} />
+
+                 {/* 🔐 Protected Routes */}
+                 <Route element={<RequireAuth />}>
                   
                   {/* Talent Office Dashboard (Protected) */}
                   <Route path="/agency-dashboard" element={<AgencyDashboard />} />
@@ -1698,8 +1722,22 @@ const handleVisibilityChange = async () => {
                    <Route path="/auction/packing" element={<Navigate to="/auctions/packing" replace />} />
                    <Route path="/auction/devices" element={<Navigate to="/auctions/devices" replace />} />
                    <Route path="/tcnn/chief" element={<Navigate to="/tcnn/dashboard" replace />} />
-                   <Route path="/officer" element={<Navigate to="/officer/dashboard" replace />} />
-                   <Route path="/agency-hr" element={<Navigate to="/agency-hr-dashboard" replace />} />
+                    {/* 🏢 Unified Employees Office — all non-admin employee roles use one page */}
+                    <Route path="/Employees" element={<EmployeesPage />} />
+                    <Route path="/employees" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/officer" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/officer/dashboard" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/officer/scheduling" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/officer/payroll" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/officer/moderation" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/officer/lounge" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/officer/report/:id" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/lead-officer" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/secretary" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/ceo-assistant-dashboard" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/noah-assistant-dashboard" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/hr-center" element={<Navigate to="/Employees" replace />} />
+                    <Route path="/agency-hr" element={<Navigate to="/agency-hr-dashboard" replace />} />
                    <Route path="/pastor" element={<Navigate to="/church/pastor" replace />} />
 
                    <Route path="/match" element={<MatchPage />} />
@@ -1832,16 +1870,14 @@ const handleVisibilityChange = async () => {
                     }
                   />
                    {/* 📺 Live Streaming System */}
-                  <Route path="/live/command-center/:streamId" element={<LiveCommandCenter />} />
-                  <Route path="/live/overlay/:streamId" element={<LiveStreamOverlay />} />
-                  <Route path="/settings/audio" element={<AudioSettings />} />
+                   <Route path="/live/command-center/:streamId" element={<LiveCommandCenter />} />
+                   <Route path="/live/overlay/:streamId" element={<LiveStreamOverlay />} />
+                   <Route path="/settings/audio" element={<AudioSettings />} />
 
-{/* ⚖️ Court */}
-                    <Route path="/troll-court" element={<TrollCourt />} />
-                    <Route path="/troll-court/watch/:sessionId" element={<CourtViewerPage />} />
+                    <Route path="/court" element={<CourtRoom />} />
                     <Route path="/court/:courtId" element={<CourtRoom />} />
-                  
-{/* � Team Meeting Room */}
+
+                   {/* Team Meeting Room */}
                    <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
                    
                    {/* /team-meeting/:meetingId - alias for joining meetings */}
@@ -1955,6 +1991,22 @@ const handleVisibilityChange = async () => {
                       element={
                         <RequireRole roles={['auctioneer']}>
                           <AuctioneerScanner />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/auction-app"
+                      element={
+                        <RequireRole roles={['auctioneer']}>
+                          <AuctionApp />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/auction-app/:showId"
+                      element={
+                        <RequireRole roles={['auctioneer']}>
+                          <AuctionApp />
                         </RequireRole>
                       }
                     />
@@ -2411,17 +2463,25 @@ const handleVisibilityChange = async () => {
                         </RequireRole>
                       }
                     />
-                    <Route
-                      path="/admin/send-notifications"
-                      element={
-                        <RequireRole roles={[UserRole.ADMIN]}>
-                          <SendNotifications />
-                        </RequireRole>
-                      }
-                    />
+                     <Route
+                       path="/admin/send-notifications"
+                       element={
+                         <RequireRole roles={[UserRole.ADMIN]}>
+                           <SendNotifications />
+                         </RequireRole>
+                       }
+                     />
+                     <Route
+                       path="/admin/xtrollz-apps"
+                       element={
+                         <RequireRole roles={[UserRole.ADMIN]}>
+                           <XtrollzAdminDashboard />
+                         </RequireRole>
+                       }
+                     />
 
-                    <Route
-                      path="/admin/export-data"
+                     <Route
+                       path="/admin/export-data"
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <ExportData />
@@ -2641,6 +2701,13 @@ const handleVisibilityChange = async () => {
                 {/* 🎙️ Podcast Central — public, no sign-in required to listen */}
                 <Route path="/podcast" element={<PodcastCentral />} />
                 <Route path="/podcast/:id" element={<PodcastRoom />} />
+
+                 {/* 🎥 XTrollz (secure 21+ area) */}
+                 <Route path="/xtrollz" element={<XtrollzHome />} />
+                 <Route path="/xtrollz/rules" element={<XtrollzRulesPage />} />
+                 <Route path="/xtrollz/apply" element={<XtrollzApplyPage />} />
+                 <Route path="/xtrollz/payment" element={<XtrollzPaymentPage />} />
+                 <Route path="/xtrollz/live/:streamId" element={<XTrollzLiveViewer />} />
 
                 {/* 🔙 Catch-all - redirect username patterns to profile (PUBLIC ACCESS) */}
                  <Route path="/:username" element={<UsernameRedirect />} />

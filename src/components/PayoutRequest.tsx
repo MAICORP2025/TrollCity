@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
-import { DollarSign, CreditCard, Clock, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { DollarSign, CreditCard, Clock, CheckCircle, AlertTriangle, Loader2, Shield } from 'lucide-react';
 import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from '../lib/payoutWindow';
 
 interface PayoutStats {
@@ -17,6 +17,8 @@ interface PayoutRequestProps {
   onRequestComplete?: () => void;
 }
 
+const VERIFICATION_EXPIRY_DAYS = 30;
+
 const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   const { user, profile } = useAuthStore();
   const [stats, setStats] = useState<PayoutStats | null>(null);
@@ -26,6 +28,8 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   const [requestAmount, setRequestAmount] = useState<number>(0);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [_hasReducedFees, setHasReducedFees] = useState(false);
+  const [idVerificationStatus, setIdVerificationStatus] = useState<string>('not_submitted');
+  const [idVerifiedAt, setIdVerifiedAt] = useState<string | null>(null);
   const payoutWindowOpen = isPayoutWindowOpen();
 
   const checkReducedFees = React.useCallback(async () => {
@@ -37,7 +41,6 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
         .maybeSingle();
       
       if (data && data.verification_status === 'approved' && data.verified_at) {
-        // Check if within 30 days
         const verifiedAt = new Date(data.verified_at);
         const now = new Date();
         const diffTime = Math.abs(now.getTime() - verifiedAt.getTime());
@@ -51,6 +54,52 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     }
   }, [user]);
 
+  const loadIdVerification = React.useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id_verification_status, id_verified_at')
+        .eq('id', user!.id)
+        .single();
+
+      if (error) throw error;
+      setIdVerificationStatus(data?.id_verification_status || 'not_submitted');
+      setIdVerifiedAt(data?.id_verified_at || null);
+    } catch (error) {
+      console.error('Error loading ID verification:', error);
+    }
+  }, [user]);
+
+  const isIdVerified = useMemo(() => {
+    return idVerificationStatus === 'approved';
+  }, [idVerificationStatus]);
+
+  const isIdExpired = useMemo(() => {
+    if (!isIdVerified || !idVerifiedAt) return true;
+    const verifiedDate = new Date(idVerifiedAt);
+    const now = new Date();
+    const diffDays = (now.getTime() - verifiedDate.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays > VERIFICATION_EXPIRY_DAYS;
+  }, [isIdVerified, idVerifiedAt]);
+
+  const canCashOut = useMemo(() => {
+    return isIdVerified && !isIdExpired;
+  }, [isIdVerified, isIdExpired]);
+
+  const verificationStatusLabel = useMemo(() => {
+    if (isIdExpired && isIdVerified) return 'Verification expired';
+    if (isIdVerified) return 'Verified';
+    if (idVerificationStatus === 'pending' || idVerificationStatus === 'needs_review') return 'Pending review';
+    return 'Not verified';
+  }, [isIdVerified, isIdExpired, idVerificationStatus]);
+
+  const verificationStatusColor = useMemo(() => {
+    if (isIdExpired && isIdVerified) return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30';
+    if (isIdVerified) return 'text-green-400 bg-green-900/20 border-green-500/30';
+    if (idVerificationStatus === 'pending' || idVerificationStatus === 'needs_review') return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30';
+    return 'text-red-400 bg-red-900/20 border-red-500/30';
+  }, [isIdVerified, isIdExpired, idVerificationStatus]);
+
   const loadPayoutStats = React.useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_available_payout_balance', {
@@ -60,13 +109,11 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
       if (error) throw error;
       if (data && data.length > 0) {
         const s = data[0];
-        // Override available_for_payout with client-side logic
         if (profile) {
           const raw = profile.troll_coins || 0;
           const reserved = profile.reserved_troll_coins || 0;
           s.available_for_payout = Math.max(0, raw - reserved);
         }
-        // Enforce 12,000 coin minimum threshold client-side
         s.payout_threshold = 12000;
         setStats(s);
       }
@@ -97,9 +144,10 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     if (user) {
       loadPayoutStats();
       loadPaypalEmail();
+      loadIdVerification();
       checkReducedFees();
     }
-  }, [user, loadPayoutStats, loadPaypalEmail, checkReducedFees]);
+  }, [user, loadPayoutStats, loadPaypalEmail, loadIdVerification, checkReducedFees]);
 
   const savePaypalEmail = async () => {
     if (!paypalEmail || !paypalEmail.includes('@')) {
@@ -127,6 +175,11 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
       return;
     }
 
+    if (!canCashOut) {
+      toast.error('ID verification is required to request a payout');
+      return;
+    }
+
     if (!profile?.full_name) {
       toast.error('Please complete your profile (Full Name) before requesting a payout');
       return;
@@ -143,7 +196,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     }
 
     if (!paypalEmail) {
-      toast.error('Gift Card email is required');
+      toast.error('PayPal email is required');
       return;
     }
 
@@ -169,13 +222,9 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             : 'Payout request submitted for review!'
         );
 
-        // Reset form
         setRequestAmount(0);
         setShowRequestForm(false);
-
-        // Reload stats
         loadPayoutStats();
-
         onRequestComplete?.();
       } else {
         toast.error(data.error || 'Failed to submit payout request');
@@ -189,7 +238,6 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   };
 
   const formatUSD = (coins: number) => {
-    // Approximate using minimum tier rate for dashboard boxes
     const usd = coins * (25 / 12000);
     return `$${usd.toFixed(2)}`;
   };
@@ -202,18 +250,12 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     return 0;
   };
 
-  const FIXED_FEE_USD = 0;
-
   const calculateFees = (coins: number) => {
     const rate = tierRate(coins);
     const gross = coins * rate;
-    const fee = FIXED_FEE_USD;
-    const netAmount = gross; // No fees
-    return {
-      gross,
-      fee,
-      net: netAmount
-    };
+    const fee = 0;
+    const netAmount = gross;
+    return { gross, fee, net: netAmount };
   };
 
   if (loading) {
@@ -250,6 +292,30 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
           <h3 className="text-lg font-semibold text-white">Creator Payouts</h3>
           <p className="text-sm text-gray-400">Cash out your earned coins</p>
         </div>
+      </div>
+
+      {/* ID Verification Status */}
+      <div className={`rounded-lg p-4 mb-6 border ${verificationStatusColor}`}>
+        <div className="flex items-center gap-2 mb-2">
+          <Shield className="w-4 h-4" />
+          <span className="text-sm font-medium">ID Verification</span>
+        </div>
+        <p className="text-xs mb-2">
+          Status: <span className="font-semibold">{verificationStatusLabel}</span>
+        </p>
+        {idVerifiedAt && (
+          <p className="text-xs opacity-80">
+            Last verified: {new Date(idVerifiedAt).toLocaleDateString()}
+            {isIdExpired && ' (expired)'}
+          </p>
+        )}
+        {!canCashOut && (
+          <p className="text-xs mt-2 opacity-90">
+            {!isIdVerified
+              ? 'Upload your ID to enable payouts.'
+              : 'Your ID verification has expired. Please re-upload to continue cashing out.'}
+          </p>
+        )}
       </div>
 
       {/* Payout Stats */}
@@ -320,10 +386,30 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
         </div>
       )}
 
-      {/* Request Payout Button */}
+      {/* Request Payout Button / ID Gate */}
       {!showRequestForm && (
         <div className="text-center">
-          {stats.can_request_payout && payoutWindowOpen ? (
+          {!canCashOut ? (
+            <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+              <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+              <p className="text-red-300 font-medium">ID Verification Required</p>
+              <p className="text-red-400 text-sm mb-3">
+                {!isIdVerified
+                  ? 'You must upload and verify your ID before requesting a payout.'
+                  : 'Your ID verification has expired. Please re-upload to continue cashing out.'}
+              </p>
+              <button
+                onClick={() => {
+                  const el = document.getElementById('id-verify-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-all duration-200 flex items-center gap-2 mx-auto"
+              >
+                <Shield className="w-5 h-5" />
+                Upload ID to Cash Out
+              </button>
+            </div>
+          ) : stats.can_request_payout && payoutWindowOpen ? (
             <button
               onClick={() => setShowRequestForm(true)}
               className="px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 flex items-center gap-2 mx-auto"
@@ -397,7 +483,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             </button>
             <button
               onClick={submitPayoutRequest}
-              disabled={requesting || requestAmount < 12000 || requestAmount > stats.available_for_payout || !payoutWindowOpen}
+              disabled={requesting || requestAmount < 12000 || requestAmount > stats.available_for_payout || !payoutWindowOpen || !canCashOut}
               className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded transition-colors flex items-center justify-center gap-2"
               >
               {requesting ? (

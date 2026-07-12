@@ -70,6 +70,7 @@ export default function LeftNavSidebar({
     { id: 'laws-fees', label: 'City Laws', icon: FileText, activeGradient: 'from-cyan-500 to-blue-600' },
     { id: 'leagues', label: 'Leagues', icon: Trophy, activeGradient: 'from-purple-500 to-indigo-600' },
     { id: 'academy', label: 'Academy', icon: BookOpen, activeGradient: 'from-emerald-500 to-teal-600' },
+    { label: 'XTrollz', icon: Zap, activeGradient: 'from-pink-500 to-rose-600', isExternal: true, path: '/xtrollz' },
   ]
 
   return (

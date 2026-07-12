@@ -254,12 +254,14 @@ interface AuthState {
   isAdmin: boolean | null
   showLegacySidebar: boolean
   isRefreshing: boolean
+  xtrollzDobMismatch: boolean | null
 
   setAuth: (user: User | null, session: Session | null, sessionId?: string | null) => void
   setProfile: (profile: UserProfile | null, options?: { realtime?: boolean; force?: boolean }) => void
   setLoading: (loading: boolean) => void
   setAdmin: (isAdmin: boolean | null) => void
   setShowLegacySidebar: (value: boolean) => void
+  setXtrollzDobMismatch: (value: boolean | null) => void
   refreshProfile: (force?: boolean) => Promise<void>
   logout: () => Promise<void>
 }
@@ -572,6 +574,7 @@ export const useAuthStore = create<AuthState>()(
       isAdmin: null,
       showLegacySidebar: true,
       isRefreshing: false,
+      xtrollzDobMismatch: null,
 
       setAuth: (user, session, sessionId = null) => {
         clearLogoutRequested()
@@ -684,6 +687,7 @@ setProfile: (profile, options = {}) => {
       setLoading: (loading) => set({ isLoading: loading }),
       setAdmin: (isAdmin) => set({ isAdmin }),
       setShowLegacySidebar: (value) => set({ showLegacySidebar: value }),
+      setXtrollzDobMismatch: (value) => set({ xtrollzDobMismatch: value }),
 
       refreshProfile: async (force = false) => {
         const state = get()
@@ -789,6 +793,10 @@ setProfile: (profile, options = {}) => {
             }
 
             get().setProfile(finalProfile as UserProfile, { force })
+
+            if (finalProfile?.id) {
+              checkXtrollzDobMismatch(finalProfile.id, finalProfile.date_of_birth)
+            }
           } catch (error) {
             console.error('[authStore] refreshProfile failed:', error)
           } finally {
@@ -866,6 +874,7 @@ setProfile: (profile, options = {}) => {
           isLoading: false,
           isAdmin: null,
           isRefreshing: false,
+          xtrollzDobMismatch: null,
         })
 
         clearPersistedAuth()
@@ -1044,6 +1053,29 @@ export function cleanupProfileRealtime() {
   subscribedUserId = null
   lastRealtimePatchHash = null
   lastRealtimeProfileAt = 0
+}
+
+async function checkXtrollzDobMismatch(userId: string, profileDob: string | undefined) {
+  try {
+    const { data, error } = await supabase
+      .from('xtrollz_applications')
+      .select('date_of_birth')
+      .eq('user_id', userId)
+      .eq('status', 'approved')
+      .maybeSingle()
+
+    if (error || !data?.date_of_birth) {
+      useAuthStore.getState().setXtrollzDobMismatch(false)
+      return
+    }
+
+    const appDob = data.date_of_birth
+    const mismatch = profileDob && profileDob !== appDob
+
+    useAuthStore.getState().setXtrollzDobMismatch(mismatch || false)
+  } catch {
+    useAuthStore.getState().setXtrollzDobMismatch(false)
+  }
 }
 
 async function acceptSession(session: Session, options: { register?: boolean; checkConcurrentLogin?: boolean; force?: boolean } = {}) {

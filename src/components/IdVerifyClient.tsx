@@ -112,6 +112,7 @@ export default function IdVerifyClient({onComplete}:{onComplete:(r:Result)=>void
         id_document_url: idSigned.signedUrl,
         id_selfie_url: selfieSigned.signedUrl,
         id_verification_status: status,
+        id_verified_at: status === 'verified' ? new Date().toISOString() : null,
         id_verification_ocr: ocrText || null,
         id_verification_score: matchScore || null,
       })

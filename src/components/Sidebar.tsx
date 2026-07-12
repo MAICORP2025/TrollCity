@@ -600,6 +600,8 @@ export default function Sidebar() {
               <GridItem collapsed={isSidebarCollapsed} icon={Scale} label="Troll Court" to="/troll-court" active={isActive('/troll-court')} highlight={isUpdated('/troll-court')} onClick={() => markAsViewed('/troll-court')} tone="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Neighborhood" to="/neighborhood-setup" active={isActive('/neighborhood-setup')} highlight={isUpdated('/neighborhood-setup')} onClick={() => markAsViewed('/neighborhood-setup')} className="text-cyan-400" tone="cyan" />
               <GridItem collapsed={isSidebarCollapsed} icon={Gamepad2} label="HytroGaming" to="/hytrogaming" active={isHytroGamingActive} highlight={isUpdated('/hytrogaming') || location.pathname.startsWith('/gaming/watch/')} onClick={() => markAsViewed('/hytrogaming')} className="text-purple-400" tone="purple" glow="pink" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Lock} label="XTrollz" to="/xtrollz" active={isActive('/xtrollz')} highlight={isUpdated('/xtrollz')} onClick={() => markAsViewed('/xtrollz')} className="text-pink-300" tone="pink" />
+
 
               <SectionTitle title="Troll City Academy" collapsed={isSidebarCollapsed} />
               <GridItem collapsed={isSidebarCollapsed} icon={BookOpen} label="Academy" to="/academy" active={isActivePath('/academy')} highlight={isUpdated('/academy')} onClick={() => markAsViewed('/academy')} className="text-emerald-400" tone="green" />
@@ -673,6 +675,9 @@ export default function Sidebar() {
               )}
               {(canSeeSecretary || isAdmin) && (
                 <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} className="text-cyan-200" tone="cyan" />
+              )}
+              {(canSeeOfficer || isLead || canSeeSecretary || isAdmin || profile?.role === UserRole.CEO_ASSISTANT || profile?.role === UserRole.NOAH_ASSISTANT || profile?.role === UserRole.HR_ADMIN || profile?.role === UserRole.HR_MANAGER) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Employees" to="/Employees" active={location.pathname.startsWith('/Employees')} highlight={isUpdated('/Employees')} onClick={() => markAsViewed('/Employees')} className="text-fuchsia-200" tone="purple" />
               )}
               {isAdmin && (
                 <>
@@ -768,6 +773,7 @@ export default function Sidebar() {
             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Verified Users" to="/admin/verified-users" active={isActive('/admin/verified-users')} highlight={isUpdated('/admin/verified-users')} onClick={() => markAsViewed('/admin/verified-users')} tone="purple" />
             <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Verification Review" to="/admin/verification" active={isActive('/admin/verification')} highlight={isUpdated('/admin/verification')} onClick={() => markAsViewed('/admin/verification')} tone="blue" />
             <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Applications" to="/admin/applications" active={isActive('/admin/applications')} highlight={isUpdated('/admin/applications')} onClick={() => markAsViewed('/admin/applications')} tone="cyan" />
+            <GridItem collapsed={isSidebarCollapsed} icon={Shield} label="XTrollz Apps" to="/admin/xtrollz-apps" active={isActive('/admin/xtrollz-apps')} highlight={isUpdated('/admin/xtrollz-apps')} onClick={() => markAsViewed('/admin/xtrollz-apps')} tone="pink" />
             <GridItem collapsed={isSidebarCollapsed} icon={FileText} label="Policy Docs" to="/admin/docs/policies" active={isActive('/admin/docs/policies')} highlight={isUpdated('/admin/docs/policies')} onClick={() => markAsViewed('/admin/docs/policies')} tone="blue" />
             <GridItem collapsed={isSidebarCollapsed} icon={ShoppingBag} label="Store Pricing" to="/admin/store-pricing" active={isActive('/admin/store-pricing')} highlight={isUpdated('/admin/store-pricing')} onClick={() => markAsViewed('/admin/store-pricing')} tone="green" />
             <GridItem collapsed={isSidebarCollapsed} icon={Lock} label="Cashout Manager" to="/admin/cashout-manager" active={isActive('/admin/cashout-manager')} highlight={isUpdated('/admin/cashout-manager')} onClick={() => markAsViewed('/admin/cashout-manager')} tone="red" />

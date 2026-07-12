@@ -73,12 +73,11 @@ export default function FeaturedBroadcastersRow({ onItemClick }: FeaturedBroadca
   return (
     <HorizontalScrollRow
       title="Broadcasters"
-      subtitle={hasData ? `${broadcasters.length} live now` : 'No live broadcasts'}
       icon={<Radio className="h-3.5 w-3.5 text-red-400" />}
     >
       {loading ? (
         Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`shrink-0 animate-pulse rounded-2xl border border-white/[0.05] bg-white/[0.03] ${isMobileWidth ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`} />
+          <div key={i} className={`shrink-0 animate-pulse rounded-2xl border border-white/[0.05] bg-white/[0.03] ${isMobileWidth ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`} />
         ))
       ) : hasData ? (
         <div className={isMobileWidth ? 'grid w-full grid-cols-2 gap-3' : 'flex gap-3'}>
@@ -91,9 +90,9 @@ export default function FeaturedBroadcastersRow({ onItemClick }: FeaturedBroadca
               <button
                 key={item.id}
                 onClick={() => onItemClick(item.id)}
-                className={`group relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-red-400/30 hover:shadow-[0_0_24px_rgba(239,68,68,0.12)] ${isMobileWidth ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}
+                className={`group relative flex shrink-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#080c1a]/95 text-left transition-all duration-200 hover:border-red-400/30 hover:shadow-[0_0_24px_rgba(239,68,68,0.12)] ${isMobileWidth ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`}
               >
-                <div className={`relative w-full shrink-0 overflow-hidden ${isMobileWidth ? 'h-[64px]' : 'h-[130px]'}`}>
+                <div className={`relative w-full shrink-0 overflow-hidden ${isMobileWidth ? 'h-[64px]' : 'h-[100px]'}`}>
                 {item.streamerAvatar ? (
                   <img
                     src={item.streamerAvatar}
@@ -137,7 +136,7 @@ export default function FeaturedBroadcastersRow({ onItemClick }: FeaturedBroadca
           })}
         </div>
       ) : (
-        <div className={`flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.08] bg-[#080c1a]/60 p-4 text-center ${isMobileWidth ? 'h-[120px] w-full' : 'h-[220px] w-[180px]'}`}>
+        <div className={`flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/[0.08] bg-[#080c1a]/60 p-4 text-center ${isMobileWidth ? 'h-[120px] w-full' : 'h-[180px] w-[150px]'}`}>
           <Radio className="h-8 w-8 text-red-400/40" />
           <p className="text-xs font-bold text-white/30">No Broadcasters Live</p>
           <p className="text-[10px] text-white/15">Live streams will appear here!</p>

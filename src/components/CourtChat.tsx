@@ -4,6 +4,7 @@ import { useAuthStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import GiftBoxModal from './broadcast/GiftBoxModal';
+import { GiftSystemProvider } from '../lib/hooks/useGiftSystem';
 import { useNavigate } from 'react-router-dom';
 
 interface Message {
@@ -339,15 +340,17 @@ export default function CourtChat({ courtId, isLocked, className = '' }: CourtCh
         </div>
       </form>
 
-      <GiftBoxModal
-        isOpen={giftOpen}
-        onClose={() => {
-          setGiftOpen(false);
-          setGiftRecipientId(null);
-        }}
-        recipientId={giftRecipientId || ''}
-        streamId=""
-      />
+      <GiftSystemProvider streamId={courtId ? `court-${courtId}` : undefined}>
+        <GiftBoxModal
+          isOpen={giftOpen}
+          onClose={() => {
+            setGiftOpen(false);
+            setGiftRecipientId(null);
+          }}
+          recipientId={giftRecipientId || ''}
+          streamId={courtId ? `court-${courtId}` : ''}
+        />
+      </GiftSystemProvider>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   Coins,
   Gavel,
   Scale,
+  Scan,
   Map,
   Gamepad2,
   GraduationCap,
@@ -417,6 +418,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Troll Church', icon: BookOpen, path: '/church' },
           { label: 'Troll Match', icon: Heart, path: '/match' },
           { label: 'Podcast Central', icon: Mic, path: '/podcast' },
+          { label: 'XTrollz', icon: Zap, path: '/xtrollz' },
         ],
       },
        {
@@ -444,6 +446,9 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
             : []),
           ...(isLead
             ? [{ label: 'Lead HQ', icon: Star as any, path: '/lead-officer' }]
+            : []),
+          ...(isOfficer || isLead || isSecretary || isAdmin || isCEOAssistant || isNoahAssistant || isHRAdmin
+            ? [{ label: 'Employees', icon: Briefcase as any, path: '/Employees' }]
             : []),
           ...(isSecretary || isAdmin
             ? [{ label: 'Secretary Console', icon: ScrollText as any, path: '/secretary' }]
@@ -479,8 +484,11 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
             ? [{ label: 'Noah Assistant', icon: Briefcase as any, path: '/noah-assistant-dashboard' }]
             : []),
            ...(isAuctioneer || isAdmin
-             ? [{ label: 'Auctioneer', icon: Gavel as any, path: '/auctions/studio' }]
-             : []),
+              ? [
+                  { label: 'Auctioneer', icon: Gavel as any, path: '/auctions/studio' },
+                  { label: 'Auction App', icon: Scan as any, path: '/auction-app' },
+                ]
+              : []),
            ...(isHRAdmin
              ? [{ label: '', icon: Briefcase as any, path: '/hr-center' }]
              : []),

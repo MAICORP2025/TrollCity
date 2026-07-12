@@ -80,6 +80,8 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
         p_sort_by: 'visibility'
       })
 
+      let streams: LiveItem[] = []
+
       if (rpcError) {
         const { data: streamsData, error: streamsError } = await supabase
           .from('streams')
@@ -103,7 +105,7 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
         if (streamsError) throw streamsError
         if (!mountedRef.current) return
 
-        const streams: LiveItem[] = (streamsData || []).map((stream: any) => ({
+        streams = (streamsData || []).map((stream: any) => ({
           id: stream.id,
           title: stream.title || 'Untitled Stream',
           type: 'stream' as const,
@@ -117,35 +119,72 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
           battleStatus: stream.battle_status,
           category: stream.category || null,
         }))
+      } else {
+        if (!mountedRef.current) return
 
-        setLiveItems(streams)
-        setTotalViewers(streams.reduce((sum, item) => sum + item.viewerCount, 0))
-        return
+        streams = (rpcData || []).map((row: any) => ({
+          id: row.id,
+          title: row.title || 'Untitled Stream',
+          type: 'stream' as const,
+          viewerCount: row.current_viewers || 0,
+          streamerName: row.broadcaster_username || 'Unknown',
+          streamerAvatar: row.broadcaster_avatar || null,
+          broadcasterId: row.broadcaster_id || null,
+          isFeatured: row.visibility_score > 0,
+          isBattle: false,
+          category: row.category || null,
+          visibilityScore: row.visibility_score || 0,
+          hotScore: row.hot_score || 0,
+          isRising: row.is_rising || false,
+          isTrending: row.is_trending || false,
+          momentumLevel: row.momentum_level || 0,
+          velocityTrend: row.stream_momentum?.velocity_trend || 'stable',
+        }))
       }
 
       if (!mountedRef.current) return
 
-      const streams: LiveItem[] = (rpcData || []).map((row: any) => ({
-        id: row.id,
-        title: row.title || 'Untitled Stream',
-        type: 'stream' as const,
-        viewerCount: row.current_viewers || 0,
-        streamerName: row.broadcaster_username || 'Unknown',
-        streamerAvatar: row.broadcaster_avatar || null,
-        broadcasterId: row.broadcaster_id || null,
-        isFeatured: row.visibility_score > 0,
-        isBattle: false,
-        category: row.category || null,
-        visibilityScore: row.visibility_score || 0,
-        hotScore: row.hot_score || 0,
-        isRising: row.is_rising || false,
-        isTrending: row.is_trending || false,
-        momentumLevel: row.momentum_level || 0,
-        velocityTrend: row.stream_momentum?.velocity_trend || 'stable',
-      }))
+       const nonCourtStreams = streams.filter((s) => s.category !== 'court')
 
-      setLiveItems(streams)
-      setTotalViewers(streams.reduce((sum, item) => sum + item.viewerCount, 0))
+       let courtLiveItems: LiveItem[] = []
+       try {
+         const { data: activeCourts } = await supabase
+           .from('court_sessions')
+           .select('id, started_by, created_at, status')
+           .in('status', ['active', 'live'])
+
+         if (activeCourts.length > 0) {
+           const startedByIds = [...new Set(activeCourts.map((cs: any) => cs.started_by).filter(Boolean))]
+           const { data: profiles } = await supabase
+             .from('user_profiles')
+             .select('id, username, avatar_url')
+             .in('id', startedByIds)
+
+           const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]))
+
+           courtLiveItems = activeCourts.map((cs: any) => {
+             const profile = profileMap.get(cs.started_by)
+             return {
+               id: `court-${cs.id}`,
+               title: `Troll Court Session - ${new Date(cs.created_at).toLocaleDateString()}`,
+               type: 'stream' as const,
+               viewerCount: 0,
+               streamerName: profile?.username || 'Troll Court',
+               streamerAvatar: profile?.avatar_url || null,
+               broadcasterId: cs.started_by || null,
+               isFeatured: false,
+               isBattle: false,
+               category: 'court',
+             }
+           })
+         }
+       } catch (courtErr) {
+         console.warn('[LiveContentContext] Court session fallback failed:', courtErr)
+       }
+
+       const allItems = [...nonCourtStreams, ...courtLiveItems]
+      setLiveItems(allItems)
+      setTotalViewers(allItems.reduce((sum, item) => sum + item.viewerCount, 0))
     } catch (err) {
       console.error('Error fetching live content:', err)
     } finally {

@@ -975,6 +975,8 @@ DECLARE
     v_current_time TIMESTAMPTZ;
     v_countdown_remaining INT;
     v_can_bid JSONB;
+    v_spend_result JSONB;
+    v_auctioneer_user_id UUID;
     -- REMOVED: Rate limiting to support spam tapping
     -- v_seconds_between_bids CONSTANT INT := 1;
     -- v_last_bid_time TIMESTAMPTZ;
@@ -1077,14 +1079,39 @@ BEGIN
     v_new_highest_bid := p_bid_amount;
     v_new_bidder_id := v_user_id;
 
-    -- Deduct coins from bidder and credit to auctioneer
-    UPDATE public.user_profiles
-    SET troll_coins = troll_coins - p_bid_amount
-    WHERE id = v_user_id;
+    -- Deduct coins from bidder and credit to auctioneer.
+    -- Route through the Troll Bank functions because user_profiles.troll_coins
+    -- is a restricted column (direct updates are blocked by column privileges).
+    -- The bank RPCs run as postgres, so they bypass the restriction safely.
+    SELECT public.troll_bank_spend_coins_secure(
+      p_user_id := v_user_id,
+      p_amount := p_bid_amount::int,
+      p_bucket := 'paid',
+      p_source := 'auction_bid',
+      p_ref_id := p_lot_id::text,
+      p_metadata := jsonb_build_object('show_id', p_show_id, 'lot_id', p_lot_id)
+    ) INTO v_spend_result;
 
-    UPDATE public.user_profiles
-    SET troll_coins = troll_coins + p_bid_amount
-    WHERE id IN (SELECT user_id FROM auctioneer_profiles WHERE id = v_show.auctioneer_id);
+    IF (v_spend_result->>'success') IS DISTINCT FROM 'true' THEN
+      RETURN jsonb_build_object(
+        'accepted', false,
+        'reason', COALESCE(v_spend_result->>'error', 'Failed to deduct coins for bid')
+      );
+    END IF;
+
+    SELECT user_id INTO v_auctioneer_user_id
+    FROM public.auctioneer_profiles
+    WHERE id = v_show.auctioneer_id;
+
+    IF v_auctioneer_user_id IS NOT NULL THEN
+      PERFORM public.troll_bank_credit_coins(
+        p_user_id := v_auctioneer_user_id,
+        p_coins := p_bid_amount::int,
+        p_bucket := 'paid',
+        p_source := 'auction_bid',
+        p_ref_id := p_lot_id::text
+      );
+    END IF;
 
     UPDATE auction_lots
     SET current_highest_bid = v_new_highest_bid,

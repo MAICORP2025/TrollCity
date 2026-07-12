@@ -8,10 +8,10 @@ import { notifyGiftReceived } from '../lib/notifications';
 import { useMissionProgress } from './useMissionProgress';
 import useTrollFamilyActivity from './useTrollFamilyActivity';
 import { TROLLMOND_CASHBACK_ENABLED } from '../config/featureFlags';
-import { processGiftXp } from '../lib/xp';
 import { createCityActivityEvent } from '../lib/events/createCityActivityEvent';
 import { queueSideEffect } from '../lib/events/queueSideEffects';
 import { isBroadcastChatLockActive } from '../lib/broadcastModeration';
+import { unlockGiftAudio } from '../components/broadcast/GiftVideoOverlay';
 
 type GiftBroadcastChannel = ReturnType<typeof supabase.channel>;
 
@@ -240,6 +240,8 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
   const quantity = options?.quantity ?? 1;
   const finalRecipientId = targetIdOverride || recipientId;
   const effectiveBattleId = options?.battleId ?? _battleId;
+
+  await unlockGiftAudio();
 
   if (import.meta.env.DEV) {
     console.log('[GiftSystem] sendGift invoked', {
@@ -626,7 +628,6 @@ const sendGift = useCallback(async (gift: GiftItem, options?: SendGiftOptions): 
         
         if (data.transaction_id) {
           queueSideEffect('gift-xp', async () => {
-            await processGiftXp(user.id, Math.floor(totalCoins * 1.1));
             await quietRefreshGiftProfile(user.id);
           });
         } else {

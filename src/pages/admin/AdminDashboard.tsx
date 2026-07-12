@@ -123,6 +123,7 @@ type TabId =
   | 'reports'
   | 'send_notifications'
   | 'applications'
+  | 'xtrollz_apps'
 
 interface TransactionRow {
   id: string
@@ -1215,8 +1216,9 @@ export default function AdminDashboard() {
          export_data: '/admin/export-data',
          support_tickets: '/admin/support-tickets',
          customer_service: '/admin/customer-service',
-         send_notifications: '/admin/send-notifications',
-       }) as Partial<Record<TabId, string>>,
+          send_notifications: '/admin/send-notifications',
+          xtrollz_apps: '/admin/xtrollz-apps',
+        }) as Partial<Record<TabId, string>>,
      []
    )
 

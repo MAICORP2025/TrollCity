@@ -1470,7 +1470,7 @@ export default function TrollCourtSession() {
                         </MenuButton>
                       </>
                     ) : null}
-                  </RoleActionMenu>
+                    </RoleActionMenu>
                 ) : null}
 
                 {currentUser.role === "judge" && !currentBoxRole ? (
@@ -1549,31 +1549,33 @@ export default function TrollCourtSession() {
                     Join as Audience
                   </MenuButton>
 
-                  <MenuButton
-                    onClick={handleToggleMic}
-                    disabled={
-                      !currentBoxRole ||
-                      currentBoxRole === "audience" ||
-                      currentBoxRole === "judge" ||
-                      currentBoxRole === "prosecutor" ||
-                      currentBoxRole === "attorney"
-                    }
-                  >
-                    {micEnabled ? "Mute Mic" : "Unmute Mic"}
-                  </MenuButton>
+                  {currentBoxRole !== "audience" && (
+                    <>
+                      <MenuButton
+                        onClick={handleToggleMic}
+                        disabled={
+                          !currentBoxRole ||
+                          currentBoxRole === "judge" ||
+                          currentBoxRole === "prosecutor" ||
+                          currentBoxRole === "attorney"
+                        }
+                      >
+                        {micEnabled ? "Mute Mic" : "Unmute Mic"}
+                      </MenuButton>
 
-                  <MenuButton
-                    onClick={handleToggleCamera}
-                    disabled={
-                      !currentBoxRole ||
-                      currentBoxRole === "audience" ||
-                      currentBoxRole === "judge" ||
-                      currentBoxRole === "prosecutor" ||
-                      currentBoxRole === "attorney"
-                    }
-                  >
-                    {cameraEnabled ? "Turn Camera Off" : "Turn Camera On"}
-                  </MenuButton>
+                      <MenuButton
+                        onClick={handleToggleCamera}
+                        disabled={
+                          !currentBoxRole ||
+                          currentBoxRole === "judge" ||
+                          currentBoxRole === "prosecutor" ||
+                          currentBoxRole === "attorney"
+                        }
+                      >
+                        {cameraEnabled ? "Turn Camera Off" : "Turn Camera On"}
+                      </MenuButton>
+                    </>
+                  )}
                 </RoleActionMenu>
 
                 <button

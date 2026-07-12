@@ -47,7 +47,7 @@ export default function AuctionCard({ auction, className }: AuctionCardProps) {
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-amber-900/40 via-slate-900 to-orange-900/30 flex items-center justify-center">
-            <Gavel className="w-8 h-8 text-white/30" />
+            <Gavel className="w-0 h-0 text-white/30" />
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />

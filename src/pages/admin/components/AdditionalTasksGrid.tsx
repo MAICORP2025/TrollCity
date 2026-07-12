@@ -374,6 +374,14 @@ export default function AdditionalTasksGrid({
           count: counts.applications
         },
         {
+          icon: <Shield className="w-5 h-5" />,
+          label: 'XTrollz Apps',
+          description: 'Review XTrollz applications',
+          action: () => navigate('/admin/xtrollz-apps'),
+          color: 'text-pink-400',
+          bgColor: 'bg-pink-500/20'
+        },
+        {
           icon: <Award className="w-5 h-5" />,
           label: 'Referral Bonuses',
           description: 'Manage referral system',

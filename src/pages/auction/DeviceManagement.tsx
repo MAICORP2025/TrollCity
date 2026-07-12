@@ -91,6 +91,10 @@ export default function DeviceManagement() {
   const [activeAuctions, setActiveAuctions] = useState<Array<{ id: string; title: string }>>([])
   const [selectedAuctionId, setSelectedAuctionId] = useState<string>('')
 
+  // Tracks sessions that have already shown a "connected" toast so heartbeat
+  // updates (which re-fire postgres_changes) don't spam the popup repeatedly.
+  const connectedToastShownRef = useRef<Set<string>>(new Set())
+
   const [form, setForm] = useState({
     device_name: '',
     device_type: 'scanner' as DeviceType,
@@ -393,8 +397,17 @@ export default function DeviceManagement() {
             setMobileSessions((prev) =>
               prev.map((s) => (s.id === updated.id ? updated : s)),
             )
+            // Only toast on the transition into "connected". Heartbeats update
+            // last_seen_at and re-fire this event, so guard against repeats.
             if (updated.status === 'connected') {
-              toast.success(`Scanner connected: ${updated.device_name || 'Mobile Device'}`)
+              if (!connectedToastShownRef.current.has(updated.id)) {
+                connectedToastShownRef.current.add(updated.id)
+                toast.success(`Scanner connected: ${updated.device_name || 'Mobile Device'}`)
+              }
+            } else {
+              // Reset when it leaves the connected state so a genuine
+              // reconnect will notify again.
+              connectedToastShownRef.current.delete(updated.id)
             }
           },
         )
@@ -458,6 +471,7 @@ export default function DeviceManagement() {
         setShowCodeInput(false)
         setDesktopCodeInput('')
         await fetchMobileSessions()
+        connectedToastShownRef.current.add(data.id)
         toast.success(`Scanner connected: ${data.device_name || 'Mobile Device'}`)
       } else {
         const activeScannerCount = mobileSessions.filter((s) => ['connected', 'pending', 'paired'].includes(s.status)).length
@@ -488,6 +502,7 @@ export default function DeviceManagement() {
         setShowCodeInput(false)
         setDesktopCodeInput('')
         await fetchMobileSessions()
+        connectedToastShownRef.current.add(data.id)
         toast.success('Scanner connected!')
       }
     } catch (err: any) {
@@ -501,6 +516,7 @@ export default function DeviceManagement() {
         .from('auction_device_sessions')
         .delete()
         .eq('id', sessionId)
+      connectedToastShownRef.current.delete(sessionId)
       await fetchMobileSessions()
       toast.success('Scanner removed')
     } catch {

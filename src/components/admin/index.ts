@@ -26,6 +26,5 @@ export { default as UserDetailsModal } from './UserDetailsModal'
 // RTC Monitor
 export { default as RTCAdminMonitor } from './RTCAdminMonitor'
 
-// Realtime Debug Panel (dev/admin only)
-export { default as RealtimeDebugPanel } from './RealtimeDebugPanel'
+
 
