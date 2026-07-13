@@ -228,6 +228,7 @@ const ExecutiveSecretaries = lazyWithRetry(() => import("./pages/admin/Executive
 const ExecutiveReports = lazyWithRetry(() => import("./pages/admin/ExecutiveReports"));
 const AdminTrollTownDeeds = lazyWithRetry(() => import("./pages/admin/AdminTrollTownDeeds"));
 const TrollmersTournament = lazyWithRetry(() => import("./pages/admin/TrollmersTournament"));
+const SupabaseUsageDashboard = lazyWithRetry(() => import("./pages/admin/SupabaseUsageDashboard"));
 const StateRankings = lazyWithRetry(() => import("./pages/StateRankings"));
 const StateDetail = lazyWithRetry(() => import("./pages/StateDetail"));
 import VerifiedBadgePage from "./pages/VerifiedBadgePage";
@@ -359,7 +360,8 @@ const isPublicRoute = (pathname: string) => {
 
     // 🚔 Jail Guard - Exempt admins from jail redirect so they can manage the system
     const isAdminUser = profile?.role === UserRole.ADMIN || profile?.is_admin === true || (profile as any)?.role === 'superadmin';
-    if (isJailed && !isAdminUser && location.pathname !== "/jail") {
+    const onCourtSummary = location.pathname.startsWith('/court/') && location.pathname.endsWith('/summary');
+    if (isJailed && !isAdminUser && location.pathname !== "/jail" && !onCourtSummary) {
       return <Navigate to="/jail" replace />;
     }
     
@@ -473,6 +475,7 @@ import ExecutiveIntake from "./pages/admin/ExecutiveIntake.js";
 import AdminCashoutDetailPage from "./pages/admin/CashoutDetailPage.js";
 import CashoutManager from "./pages/admin/CashoutManager.js";
 import CourtRoom from "./pages/CourtRoom.js";
+import CourtSummary from "./pages/CourtSummary.js";
 import TeamMeetingRoom from "./pages/TeamMeetingRoom";
 import CoinsComplete from "./pages/CoinsComplete.js";
 
@@ -483,6 +486,7 @@ import ExitPage from "./pages/ExitPage.js";
 import FoundingOfficerTrial from "./pages/FoundingOfficerTrial.js";
 import AppLayout from "./components/layout/AppLayout.js";
 import ExploreFeed from "./pages/ExploreFeed.js";
+import ExploreSearchResults from "./pages/ExploreSearchResults.js";
 import StreamSwipePage from "./pages/StreamSwipePage.js";
 import ApplicationPage from "./pages/ApplicationPage.js";
 import SetupPage from "./pages/broadcast/SetupPage.js";
@@ -1038,7 +1042,11 @@ function AppContent() {
               const releaseTime = new Date(data.release_time);
               if (releaseTime > new Date()) {
                 toast.error(`🚔 ARRESTED: ${data.reason || 'Violation of Troll City rules'}`, { duration: 5000 });
-                navigate('/jail', { replace: true });
+                const onCourtSummary =
+                  location.pathname.startsWith('/court/') && location.pathname.endsWith('/summary');
+                if (!onCourtSummary) {
+                  navigate('/jail', { replace: true });
+                }
               }
             }
           }
@@ -1289,11 +1297,20 @@ function AppContent() {
         // Supabase auto-retries, so we suppress it from Bug Center reporting.
         // LiveKit "Tried to add a track for a participant, that's not present" is a known non-fatal
         // race condition when a participant leaves while a track event is being processed.
+        // Supabase auth errors like invalid refresh token and JWT user_not_found are transient
+        // auth issues that are handled by the auth recovery logic and should not be reported as bugs.
+        // Edge Function "Failed to send a request" errors are typically deployment/network issues
+        // and should not be reported as frontend bugs.
         if (
           fullMessage.includes('Lock broken by another request') ||
           fullMessage.includes("'steal' option") ||
+          fullMessage.includes('was released because another request stole it') ||
           (firstError && firstError.name === 'AbortError') ||
-          fullMessage.includes('Tried to add a track for a participant, that\'s not present')
+          fullMessage.includes('Tried to add a track for a participant, that\'s not present') ||
+          fullMessage.includes('Invalid Refresh Token') ||
+          fullMessage.includes('Refresh Token Not Found') ||
+          fullMessage.includes('User from sub claim in JWT does not exist') ||
+          fullMessage.includes('Failed to send a request to the Edge Function')
         ) {
           return
         }
@@ -1499,7 +1516,7 @@ const handleVisibilityChange = async () => {
                 <Route path="/legal/gambling-disclosure" element={<GamblingDisclosure />} />
                  
                 {/* 🔓 Public Discover & Watch */}
-                <Route path="/explore" element={<ExploreFeed />} />
+                <Route path="/explore" element={<ExploreSearchResults />} />
                 <Route path="/live-swipe" element={<StreamSwipePage />} />
                 <Route path="/embed/:id" element={<EmbedPage />} />
                 <Route path="/hytrogaming" element={<HytroGaming />} />
@@ -1874,8 +1891,9 @@ const handleVisibilityChange = async () => {
                    <Route path="/live/overlay/:streamId" element={<LiveStreamOverlay />} />
                    <Route path="/settings/audio" element={<AudioSettings />} />
 
-                    <Route path="/court" element={<CourtRoom />} />
-                    <Route path="/court/:courtId" element={<CourtRoom />} />
+                     <Route path="/court" element={<CourtRoom />} />
+                     <Route path="/court/:courtId/summary" element={<CourtSummary />} />
+                     <Route path="/court/:courtId" element={<CourtRoom />} />
 
                    {/* Team Meeting Room */}
                    <Route path="/meeting/:meetingId" element={<TeamMeetingRoom />} />
@@ -2566,6 +2584,14 @@ const handleVisibilityChange = async () => {
                       element={
                         <RequireRole roles={[UserRole.ADMIN]}>
                           <AdminActivity />
+                        </RequireRole>
+                      }
+                    />
+                    <Route
+                      path="/admin/supabase-usage"
+                      element={
+                        <RequireRole roles={[UserRole.ADMIN]}>
+                          <SupabaseUsageDashboard />
                         </RequireRole>
                       }
                     />

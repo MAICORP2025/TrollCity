@@ -22,6 +22,7 @@ import {
   CheckCircle, Lock, Plus, Sparkles, RefreshCw, Eye,
   Settings, LogOut, X
 } from 'lucide-react';
+import OrgModerationModal from '../components/moderation/OrgModerationModal';
 
 // Types for aggregated family data from RPC
 interface FamilyData {
@@ -528,9 +529,11 @@ export default function TrollFamilyHome() {
                 showAll={showAllMembers}
                 onToggleShowAll={() => setShowAllMembers(!showAllMembers)}
                 isLeader={isLeader}
+                familyId={family.id}
                 onKick={handleKickMember}
                 onPromote={handlePromoteMember}
                 onBan={handleBanMember}
+                onModerated={() => { if (user) familyCache.delete(user.id); fetchFamilyData(true); }}
               />
             )}
             {activeTab === 'vault' && (
@@ -897,18 +900,22 @@ function MembersTab({
   showAll, 
   onToggleShowAll,
   isLeader,
+  familyId,
   onKick,
   onPromote,
-  onBan
+  onBan,
+  onModerated
 }: { 
   members: FamilyMember[];
   totalCount: number;
   showAll: boolean;
   onToggleShowAll: () => void;
   isLeader: boolean;
+  familyId: string;
   onKick?: (userId: string) => void;
   onPromote?: (userId: string, newRole: string) => void;
   onBan?: (userId: string) => void;
+  onModerated?: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -932,9 +939,11 @@ function MembersTab({
             key={member.id} 
             member={member} 
             isLeader={isLeader}
+            familyId={familyId}
             onKick={onKick}
             onPromote={onPromote}
             onBan={onBan}
+            onModerated={onModerated}
           />
         ))}
       </div>
@@ -1156,12 +1165,14 @@ function AchievementCard({ achievement }: { achievement: FamilyAchievement }) {
 }
 
 // Member Card
-function MemberCard({ member, isLeader, onKick, onPromote, onBan }: { 
+function MemberCard({ member, isLeader, familyId, onKick, onPromote, onBan, onModerated }: { 
   member: FamilyMember; 
   isLeader: boolean;
+  familyId: string;
   onKick?: (userId: string) => void;
   onPromote?: (userId: string, newRole: string) => void;
   onBan?: (userId: string) => void;
+  onModerated?: () => void;
 }) {
   const roleColors: Record<string, string> = {
     leader: 'text-amber-400',
@@ -1174,6 +1185,7 @@ function MemberCard({ member, isLeader, onKick, onPromote, onBan }: {
 
   const [showMenu, setShowMenu] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [showModModal, setShowModModal] = useState(false);
 
   const handleApprove = async () => {
     if (!isLeader) return;
@@ -1289,6 +1301,16 @@ function MemberCard({ member, isLeader, onKick, onPromote, onBan }: {
               </button>
               <button
                 onClick={() => {
+                  setShowMenu(false);
+                  setShowModModal(true);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700 text-cyan-400 flex items-center gap-2"
+              >
+                <Shield className="w-3 h-3" />
+                Moderate…
+              </button>
+              <button
+                onClick={() => {
                   onKick?.(member.user_id);
                   setShowMenu(false);
                 }}
@@ -1310,6 +1332,17 @@ function MemberCard({ member, isLeader, onKick, onPromote, onBan }: {
             </div>
           )}
         </div>
+      )}
+      {showModModal && (
+        <OrgModerationModal
+          open={showModModal}
+          onClose={() => setShowModModal(false)}
+          orgType="family"
+          orgId={familyId}
+          targetUserId={member.user_id}
+          targetName={member.username || member.display_name || undefined}
+          onActionComplete={onModerated}
+        />
       )}
     </div>
   );

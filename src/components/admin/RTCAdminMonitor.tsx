@@ -738,14 +738,27 @@ const openAction = useCallback((user: UserListItem, action: string) => {
              }).then(() => undefined, () => undefined);
          }
 
-         if (activeAction === 'mute') {
-             const minutes = actionDuration ? parseInt(actionDuration, 10) : 60;
-             const { error } = await supabase.rpc('mute_user', {
-                 target: actionTarget.id,
-                 minutes,
-                 reason: actionReason || 'Admin mute via RTC Monitor',
-             });
-             if (error) throw error;
+          if (activeAction === 'mute') {
+              const minutes = actionDuration ? parseInt(actionDuration, 10) : 60;
+              if (!selectedStream) {
+                  toast.error('Open the stream first to mute a viewer');
+                  return;
+              }
+              const { error } = await supabase.rpc('moderator_mute_user', {
+                  p_stream_id: selectedStream.id,
+                  p_target_user_id: actionTarget.id,
+                  p_duration_minutes: minutes,
+                  p_reason: actionReason || 'Admin mute via RTC Monitor',
+              });
+              if (error) throw error;
+              // Muting also disables the user's chat so they see the
+              // "chat disabled by moderation" notice in the viewer.
+              await supabase.rpc('moderator_disable_chat', {
+                  p_stream_id: selectedStream.id,
+                  p_target_user_id: actionTarget.id,
+                  p_duration_minutes: minutes,
+                  p_reason: actionReason || 'Admin mute via RTC Monitor',
+              }).then(() => undefined, () => undefined);
              await supabase.from('moderation_actions').insert({
                actor_id: profile?.id,
                officer_id: profile?.id,
@@ -920,7 +933,7 @@ const openAction = useCallback((user: UserListItem, action: string) => {
      } finally {
          setActionLoading(false);
      }
- }, [actionAmount, actionDuration, actionReason, actionTarget, activeAction, arrestReason, arrestSeverity, arrestBailAmount, closeAction, fetchModActionLogs, isFullAdmin, profile?.id, isTargetAdmin]);
+  }, [actionAmount, actionDuration, actionReason, actionTarget, activeAction, arrestReason, arrestSeverity, arrestBailAmount, closeAction, fetchModActionLogs, isFullAdmin, profile?.id, isTargetAdmin, selectedStream]);
 
   const openStreamModal = useCallback(async (stream: StreamDetail) => {
     setSelectedStream(stream);
@@ -1012,7 +1025,6 @@ const openAction = useCallback((user: UserListItem, action: string) => {
         p_defendant_id: userId,
         p_reason: streamActionReason || 'Summoned from stream via RTC Monitor',
         p_users_involved: [],
-        p_docket_id: null,
       });
       if (error) throw error;
       toast.success(`@${username} summoned to court`);

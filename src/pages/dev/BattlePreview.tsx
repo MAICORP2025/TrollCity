@@ -68,7 +68,7 @@ const MockBattleGrid = ({ title, hostName, score }: { title: string, hostName: s
 
 export default function BattlePreview() {
   return (
-    <div className="flex flex-col h-screen bg-black overflow-hidden">
+    <div className="flex flex-col h-screen bg-black overflow-y-auto overflow-x-hidden md:overflow-hidden">
         {/* Battle Header */}
         <div className="h-20 bg-zinc-900 border-b border-amber-500/30 flex items-center justify-center relative z-20 shadow-lg shadow-amber-900/20 px-8">
             <div className="flex-1 flex items-center justify-end gap-4">

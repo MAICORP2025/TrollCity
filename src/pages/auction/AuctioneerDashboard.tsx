@@ -79,12 +79,23 @@ function getAgoraChannelName(show: AuctionShow) {
   return show.livekit_room_name || `auction-${show.id}`
 }
 
+// Generates a per-connection Agora UID. The random component guarantees the
+// uid is unique for every join, which prevents AgoraRTC UID_CONFLICT errors
+// (e.g. when the same user opens the auction room and the auctioneer dashboard
+// at once, or reconnects before the previous session is released). Role-based
+// base offsets keep viewer and auctioneer uid ranges from overlapping.
 function makeAgoraUid(userId: string, role: 'viewer' | 'auctioneer') {
-  let hash = role === 'auctioneer' ? 900000000 : 100000000
+  const base = role === 'auctioneer' ? 100000000 : 500000000
+
+  let hash = 0
   for (let i = 0; i < userId.length; i += 1) {
-    hash = (hash * 31 + userId.charCodeAt(i)) % 2147483647
+    hash = (hash * 31 + userId.charCodeAt(i)) >>> 0
   }
-  return Math.max(1, Math.abs(hash))
+
+  const random = Math.floor(Math.random() * 900000)
+  const uid = base + (hash % 100000) * 1000 + random
+
+  return Math.max(1, Math.min(uid, 2147483646))
 }
 
 export default function AuctioneerDashboard() {
@@ -572,7 +583,7 @@ export default function AuctioneerDashboard() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#02030a] text-white">
+    <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#02030a] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.18),transparent_30%),linear-gradient(135deg,rgba(2,6,23,0.98),rgba(8,13,30,0.98))]" />
 
       <div className={`relative z-10 border-b ${isLive ? 'border-red-500/30 bg-red-500/10' : 'border-cyan-400/20 bg-black/45'} backdrop-blur-xl`}>

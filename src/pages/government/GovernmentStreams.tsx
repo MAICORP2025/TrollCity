@@ -499,7 +499,7 @@ export default function GovernmentStreams() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#020617] text-white">
+    <div className="min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#020617] text-white">
       {/* BACKGROUND */}
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.10),transparent_28%),radial-gradient(circle_at_bottom,rgba(236,72,153,0.08),transparent_35%)]" />

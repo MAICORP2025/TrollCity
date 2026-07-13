@@ -37,9 +37,7 @@ import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersMo
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
 import MobileBroadcastHostSettings from '../../components/broadcast/MobileBroadcastHostSettings'
 import { Settings } from 'lucide-react'
-import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
 import { useBroadcastFrame } from '../../hooks/useBroadcastFrame'
-import { showStorageStartWarning } from '../../hooks/useStorageUsage'
 import SaveBroadcastButton from '../../components/broadcast/SaveBroadcastButton'
 import BroadcastFrame from '../../components/broadcast/BroadcastFrame'
 
@@ -312,7 +310,7 @@ function RemoteSeatSurface({
         ref={videoRef}
         autoPlay
         playsInline
-        muted={false}
+        muted
         className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover', mirror && '-scale-x-100')}
       />
       <audio ref={audioRef} autoPlay />
@@ -521,7 +519,7 @@ import { getGiftVisualConfig } from '@/lib/giftVisuals'
 
 import { GiftSystemProvider } from '@/lib/hooks/useGiftSystem'
 import { PreflightStore } from '@/lib/preflightStore'
-import { Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, Users, Pin } from 'lucide-react'
+import { Maximize2, MessageSquare, Mic, MicOff, Video, VideoOff, Crown, X, Ticket, Plus, Minus, Users, Pin, Lock, UserPlus, Wifi, BadgeCheck, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import AbilityBox from '@/components/broadcast/AbilityBox'
 import BattleView from '@/pages/broadcast/BattleView'
@@ -624,9 +622,15 @@ export function BroadcastPage() {
    const isOfficer = isStaffProfile(profile)
 
   const isMobileDevice = typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const videoPreset = isStreamAdmin ? VideoPresets.h1080 : (isMobileDevice ? VideoPresets.h540 : VideoPresets.h720)
 
     const [stream, setStream] = useState<Stream | null>(null)
+
+    const isAzgoraStream = Boolean((stream as any)?.is_azgora) || (stream as any)?.quality_cap === '720p'
+    const videoPreset = isAzgoraStream
+      ? VideoPresets.h720
+      : isStreamAdmin
+        ? VideoPresets.h1080
+        : (isMobileDevice ? VideoPresets.h540 : VideoPresets.h720)
 
     const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null);
 
@@ -786,8 +790,6 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     const videoTrack = videoTrackRef.current
     return audioTrack || videoTrack ? [audioTrack, videoTrack] : null
   }, [localTracksVersion])
-
-  const broadcastRecordingSourceUrl = useMemo(() => stream?.hls_url || stream?.hls_path || null, [stream?.hls_path, stream?.hls_url])
 
   // Host users publish through this local track state.
   const combinedLocalTracks = localTracks
@@ -1154,38 +1156,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
 const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
    const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
 
-    // Collect AUDIO tracks only (mic + seat users) for the recorder.
-    // Video is always captured via getDisplayMedia inside the recorder so the
-    // browser screen-share picker fires when recording starts.
-    const broadcastRecordingStream = useMemo(() => {
-      const tracks: MediaStreamTrack[] = []
-
-      // Local audio (microphone)
-      if (localTracks?.[0]?.mediaStreamTrack) {
-        tracks.push(localTracks[0].mediaStreamTrack.clone())
-      }
-
-      // Remote participants' audio tracks (seat users, guests, etc.)
-      remoteParticipants.forEach((participant) => {
-        participant.audioTrackPublications.forEach((pub) => {
-          const track = pub.track
-          if (track?.mediaStreamTrack) {
-            tracks.push(track.mediaStreamTrack.clone())
-          }
-        })
-      })
-
-      return tracks.length > 0 ? new MediaStream(tracks) : null
-    }, [localTracks, remoteParticipants])
-
-   // Pass LiveKit tracks to the recorder so it gets mic + seat user audio directly.
-   const recorder = useBroadcastRecorder({
-     sourceStream: broadcastRecordingStream,
-     replaySource: 'broadcast',
-     replayTitlePrefix: 'Broadcast',
-   })
-
-   // Ghost participants - separate collection for ghost mode (not merged with remoteParticipants)
+    // Ghost participants - separate collection for ghost mode (not merged with remoteParticipants)
    const [ghostParticipants, setGhostParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
    const ghostUsers = useMemo(() => Array.from(ghostParticipants.values()), [ghostParticipants])
    
@@ -2088,7 +2059,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
         }
       }));
 
-      updateStreamActivityRef.current
+      updateStreamActivityRef.current?.()
     }, [enrichGiftForOverlay, resolveGiftAmount, resolveGiftName, streamId, supabase]);
 
   const stopLocalTracks = useCallback(() => {
@@ -2126,7 +2097,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
     if (!streamId) return
     const { data, error } = await supabase
       .from('streams')
-      .select('*, total_likes')
+      .select('*, total_likes, quality_cap, is_azgora')
       .eq('id', streamId)
       .maybeSingle()
     
@@ -2230,19 +2201,7 @@ useEffect(() => {
    // Quick Coin Store
    const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false)
 
-    // F8 shortcut for instant clip save
-    useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'F8' && recorder.isRecording && !recorder.isUploading) {
-          e.preventDefault()
-          recorder.saveClip()
-        }
-      }
-      window.addEventListener('keydown', handleKeyDown)
-      return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [recorder])
-
-    const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
+   const { pinnedProducts, pinProduct } = useBroadcastPinnedProducts({
     streamId: streamId || '',
     userId: user?.id,
     isHost,
@@ -2769,20 +2728,36 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
     fetchStream()
   }, [streamId, navigate, user?.id]);
 
-  // Check if current user is broadofficer
+  // Check if current user is broadofficer (stream-scoped, realtime)
   useEffect(() => {
-    if (!stream?.user_id || !user?.id) return;
+    const sid = stream?.id;
+    if (!sid || !user?.id) return;
     if (isHost) {
         setIsCurrentUserBroadofficer(true);
         return;
     }
-    supabase.rpc('is_broadofficer', {
-        p_broadcaster_id: stream.user_id,
-        p_user_id: user.id
-    }).then(({ data }) => {
-        setIsCurrentUserBroadofficer(!!data);
-    });
-  }, [stream?.user_id, user?.id, isHost]);
+    let active = true;
+    const refresh = () => {
+        supabase
+            .from('broadcast_officers')
+            .select('officer_id')
+            .eq('stream_id', sid)
+            .then(({ data }) => {
+                if (!active) return;
+                const ids = new Set((data || []).map((r: any) => r.officer_id));
+                setIsCurrentUserBroadofficer(ids.has(user.id));
+            });
+    };
+    refresh();
+    const channel = supabase
+        .channel(`broadofficers:${sid}`)
+        .on('postgres_changes', {
+            event: '*', schema: 'public', table: 'broadcast_officers',
+            filter: `stream_id=eq.${sid}`,
+        }, refresh)
+        .subscribe();
+    return () => { active = false; void supabase.removeChannel(channel); };
+  }, [stream?.id, user?.id, isHost]);
 
   // Handle tab visibility changes - reconnect LiveKit room if needed
   useEffect(() => {
@@ -2946,9 +2921,6 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
       recordStreamStarted(streamId).catch(err => {
         console.warn('[BroadcastPage] Failed to record stream started:', err)
       })
-      showStorageStartWarning(user?.id, 'broadcast').catch(err => {
-        console.warn('[BroadcastPage] Failed to show storage warning:', err)
-      })
     }
 
     if (((!wasInBattleMode && isNowInBattleMode) || (battleIdChanged && isNowInBattleMode))) {
@@ -2970,11 +2942,27 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
     }
   }, [areStreamRealtimeUpdatesEqual, disconnectLiveKitRoom, navigate, recordStreamStarted, streamId, user?.id]);
 
-useStreamRealtime(streamId, {
+  useStreamRealtime(streamId, {
      onStream: (event) => {
-       // During live battle, only update critical properties to prevent remounts
-       if (stream?.is_battle && stream?.battle_status === 'active') {
-         const nextStream = event.new;
+       const nextStream = event.new;
+       // During an active battle, only sync critical properties to avoid remounts.
+       const isCurrentlyActiveBattle =
+         stream?.is_battle && stream?.battle_status === 'active';
+       const isEndingBattle =
+         nextStream &&
+         (!nextStream.is_battle ||
+           nextStream.battle_status === 'ended' ||
+           nextStream.battle_status === 'waiting');
+
+       // When the battle is ending, apply the FULL payload so the battle flag
+       // clears (is_battle=false, battle_id=null). Otherwise the queue controller
+       // keeps seeing an active battle and never re-queues after 30s.
+       if (isCurrentlyActiveBattle && isEndingBattle) {
+         handleStreamRealtimeUpdate(nextStream);
+         return;
+       }
+
+       if (isCurrentlyActiveBattle) {
          // Only update battle-related properties during active battle
          if (nextStream.battle_status !== stream.battle_status ||
              nextStream.battle_end_time !== stream.battle_end_time) {
@@ -4535,77 +4523,6 @@ const toggleMicrophone = useCallback(async () => {
       }
     }
 
-    // Stop recording if active and save the replay
-    if (recorder.isRecording) {
-      try {
-        const recordingBlob = await recorder.stopRecording()
-        console.log('[handleStreamEnd] Recording stopped, blob:', recordingBlob ? `${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB` : 'null')
-        
-        if (recordingBlob && stream?.id && user?.id && recordingBlob.size > 0) {
-          try {
-            const ext = recordingBlob.type.includes('webm') ? 'webm' : 'mp4'
-            const path = `recordings/${user.id}/${stream.id}/${Date.now()}.${ext}`
-            console.log('[handleStreamEnd] Uploading to:', path)
-            
-            const { error: uploadError } = await supabase.storage
-              .from('replays')
-              .upload(path, recordingBlob, {
-                contentType: recordingBlob.type || 'video/webm',
-                cacheControl: '3600',
-              })
-
-            if (uploadError) {
-              console.warn('[handleStreamEnd] Upload failed:', uploadError)
-              toast.error('Recording saved locally but upload failed')
-              return
-            }
-
-            const { data: urlData } = supabase.storage.from('replays').getPublicUrl(path)
-            console.log('[handleStreamEnd] Public URL:', urlData.publicUrl)
-
-            const { error: insertError } = await supabase
-              .from('broadcast_replays')
-              .upsert(
-                {
-                  stream_id: stream.id,
-                  user_id: user.id,
-                  replay_url: urlData.publicUrl,
-                  title: stream.title || 'Broadcast Replay',
-                  duration_seconds: recorder.recordingDuration || Math.floor((Date.now() - new Date(stream.started_at || Date.now()).getTime()) / 1000),
-                  file_size_bytes: recordingBlob.size,
-                  thumbnail_url: null,
-                },
-                { onConflict: 'stream_id' }
-              )
-
-            if (insertError) {
-              console.warn('[handleStreamEnd] DB insert failed:', insertError)
-            } else {
-              console.log('[handleStreamEnd] Replay saved successfully:', urlData.publicUrl)
-              toast.success('Replay saved!')
-
-              await supabase
-                .from('saved_streams')
-                .upsert({
-                  user_id: user.id,
-                  stream_id: stream.id,
-                  source: 'auto_stream_end',
-                  storage_category: 'broadcast_recording',
-                  file_size_bytes: recordingBlob.size,
-                  recording_duration: recorder.recordingDuration || Math.floor((Date.now() - new Date(stream.started_at || Date.now()).getTime()) / 1000),
-                }, { onConflict: 'saved_streams_user_id_stream_id_key' })
-            }
-          } catch (saveErr) {
-            console.warn('[handleStreamEnd] Failed to save replay:', saveErr)
-          }
-        } else {
-          console.log('[handleStreamEnd] No valid recording blob to save')
-        }
-      } catch (recErr) {
-        console.warn('[handleStreamEnd] Failed to stop recording:', recErr)
-      }
-    }
-
     // Stop local and published media first
     cleanupLocalMedia()
 
@@ -4703,7 +4620,7 @@ const toggleMicrophone = useCallback(async () => {
     } else {
       navigate(`/broadcast/summary/${stream?.id}`);
     }
-  }, [cleanupLocalMedia, disconnectLiveKitRoom, isStaff, navigate, recorder, stream?.id, stream?.status, stream?.is_battle, stream?.battle_id, stream?.battle_mode, stream?.started_at, stream?.title, user?.id]);
+  }, [cleanupLocalMedia, disconnectLiveKitRoom, isStaff, navigate, stream?.id, stream?.status, stream?.is_battle, stream?.battle_id, stream?.battle_mode, stream?.started_at, stream?.title, user?.id]);
 
   const handleStartBattle = useCallback(async () => {
     if (!stream || !isHost) return
@@ -5138,21 +5055,22 @@ const toggleMicrophone = useCallback(async () => {
        void doBlock()
      }
 
-     function handleMute(userId: string) {
-       const doMute = async () => {
-         try {
-           const { error } = await supabase.rpc('moderator_mute_user', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: 5, p_reason: 'Muted by moderator' })
-           if (error) {
-             toast.error('Failed to mute user')
-           } else {
-             toast.success('User muted for 5 minutes')
-           }
-         } catch (err) {
-           toast.error('Failed to mute user')
-         }
-       }
-       void doMute()
-     }
+      function handleMute(userId: string) {
+        const doMute = async () => {
+          try {
+            const { error } = await supabase.rpc('moderator_mute_user', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: 5, p_reason: 'Muted by moderator' })
+            if (error) throw error
+            // Muting also disables the user's chat so they see the
+            // "chat disabled by moderation" notice in the viewer.
+            await supabase.rpc('moderator_disable_chat', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: 5, p_reason: 'Chat disabled by moderator' })
+              .then(() => undefined, () => undefined)
+            toast.success('User muted for 5 minutes')
+          } catch (err) {
+            toast.error('Failed to mute user')
+          }
+        }
+        void doMute()
+      }
 
      function handleDisableChat(userId: string) {
        const doDisable = async () => {
@@ -5311,40 +5229,21 @@ const toggleMicrophone = useCallback(async () => {
 
             {/* --- HEADER --- */}
 {!isMobileViewer && (
-               <BroadcastNeonHeader
-                 stream={stream}
-                 broadcasterProfile={broadcasterProfile}
-                 isHost={isHost}
-                 handleLike={handleLike}
-                 onGift={handleGiftHost}
-                 onShare={handleOpenShareModal}
-                 onEndStream={handleStreamEnd}
-                 coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
-                 onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
-                 isLive={stream.status === 'live'}
-                 streamStartedAt={stream.started_at}
-                 onLiveKitMicMute={onLiveKitMicMute}
-                 onLiveKitMicUnmute={onLiveKitMicUnmute}
-                 isRecording={recorder.isRecording}
-                  onToggleRecord={async () => {
-                    if (recorder.isRecording) {
-                      const blob = await recorder.stopRecording()
-                      if (blob && stream?.id && user?.id && blob.size > 0) {
-                        await supabase
-                          .from('saved_streams')
-                          .upsert({
-                            user_id: user.id,
-                            stream_id: stream.id,
-                            source: 'auto_stream_end',
-                            storage_category: 'broadcast_recording',
-                            file_size_bytes: blob.size,
-                          }, { onConflict: 'saved_streams_user_id_stream_id_key' })
-                      }
-                    } else {
-                      recorder.startRecording(stream.id)
-                    }
-                  }}
-               />
+                <BroadcastNeonHeader
+                  stream={stream}
+                  broadcasterProfile={broadcasterProfile}
+                  isHost={isHost}
+                  handleLike={handleLike}
+                  onGift={handleGiftHost}
+                  onShare={handleOpenShareModal}
+                  onEndStream={handleStreamEnd}
+                  coinBalance={profile?.troll_coins ?? broadcasterProfile?.troll_coins ?? 0}
+                  onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
+                  isLive={stream.status === 'live'}
+                  streamStartedAt={stream.started_at}
+                  onLiveKitMicMute={onLiveKitMicMute}
+                  onLiveKitMicUnmute={onLiveKitMicUnmute}
+                />
              )}
 
              {/* Random Battle Banner � prominent notice for queue/active battle */}
@@ -5750,7 +5649,42 @@ const toggleMicrophone = useCallback(async () => {
                   </div>
                 </div>
 
-                <div className="mt-4 grid min-h-0 flex-1 grid-cols-2 auto-rows-fr gap-4">
+                {viewerSeatCards.length === 0 ? (
+                  <div className="flex flex-1 items-center justify-center">
+                    <div className="flex flex-col items-center text-center px-4 py-6">
+                      <div className="relative mb-5">
+                        <div className="absolute inset-0 rounded-full bg-cyan-500/15 blur-3xl animate-pulse" />
+                        <Users className="h-14 w-14 text-cyan-300/50 relative" />
+                      </div>
+                      <h3 className="text-base font-black text-white">No Guest Seats Enabled</h3>
+                      <p className="mt-2 text-xs text-slate-400 max-w-[220px] leading-relaxed">
+                        This broadcast is currently host-only. Add seats anytime to invite guests.
+                      </p>
+                      <div className="mt-5 flex flex-col gap-2.5">
+                        <button
+                          onClick={handleOpenSeatsModal}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-400/30 bg-cyan-500/15 px-5 py-2.5 text-sm font-black text-cyan-200 transition-all hover:bg-cyan-500/25 hover:border-cyan-400/50 hover:shadow-[0_0_20px_rgba(34,211,238,0.15)]"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add Seats
+                        </button>
+                        <button className="text-[11px] font-bold text-slate-500 transition-colors hover:text-white">
+                          Learn about guest seats
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={cn(
+                    'mt-4 grid min-h-0 flex-1 gap-3 transition-all',
+                    viewerSeatCards.length === 1 && 'grid-cols-1 justify-items-center',
+                    viewerSeatCards.length === 2 && 'grid-cols-2',
+                    viewerSeatCards.length === 3 && 'grid-cols-3',
+                    viewerSeatCards.length === 4 && 'grid-cols-2',
+                    (viewerSeatCards.length === 5 || viewerSeatCards.length === 6) && 'grid-cols-3',
+                    (viewerSeatCards.length === 7 || viewerSeatCards.length === 8) && 'grid-cols-4',
+                    viewerSeatCards.length >= 9 && 'grid-cols-4',
+                  )}>
                   {viewerSeatCards.map((seat) => {
 
                     const exactParticipant = findSeatRemoteParticipant(
@@ -5843,114 +5777,142 @@ const toggleMicrophone = useCallback(async () => {
                     <div
                       key={`seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
                       className={cn(
-                        'relative min-h-[155px] overflow-hidden rounded-2xl border bg-transparent shadow-[0_0_20px_rgba(15,23,42,0.25)] transition-all',
+                        'group relative flex flex-col overflow-hidden rounded-2xl border bg-slate-950/60 backdrop-blur-md transition-all duration-300',
                         seat.isOccupied
-                          ? 'border-emerald-400/45 shadow-[0_0_24px_rgba(16,185,129,0.16)]'
-                          : 'border-cyan-400/45 shadow-[0_0_24px_rgba(34,211,238,0.12)]',
-                        canClickSeat ? 'cursor-pointer hover:-translate-y-0.5' : ''
+                          ? 'border-emerald-400/40 shadow-[0_0_24px_rgba(16,185,129,0.12)] hover:border-emerald-300/60 hover:shadow-[0_0_32px_rgba(16,185,129,0.2)] hover:-translate-y-0.5'
+                          : 'border-cyan-400/30 shadow-[0_0_20px_rgba(15,23,42,0.25)] hover:border-cyan-300/50 hover:shadow-[0_0_28px_rgba(34,211,238,0.15)] hover:-translate-y-0.5',
+                        canClickSeat ? 'cursor-pointer' : ''
                       )}
                       {...clickProps}
                     >
-                      {matchedParticipant ? (
-                        <RemoteSeatSurface
-                          participant={matchedParticipant}
-                          fallback={
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
-                              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-transparent">
+                      {seat.isOccupied ? (
+                        <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
+                          <div className="relative">
+                            {(matchedParticipant as any)?.isSpeaking && (
+                              <span className="absolute inset-0 rounded-full border-2 border-emerald-400/60 animate-ping" />
+                            )}
+                            {matchedParticipant ? (
+                              <RemoteSeatSurface
+                                participant={matchedParticipant}
+                                fallback={
+                                  <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-transparent">
+                                    <Users className="h-6 w-6 text-purple-200/80" />
+                                  </div>
+                                }
+                              />
+                            ) : isCameraUnavailable ? (
+                              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-red-400/30 opacity-60">
+                                {seat.avatarUrl ? (
+                                  <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover" />
+                                ) : (
+                                  <VideoOff className="h-5 w-5 text-red-300/60" />
+                                )}
+                              </div>
+                            ) : isCameraConnecting ? (
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/30">
+                                {seat.avatarUrl ? (
+                                  <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]" />
+                                ) : (
+                                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-purple-300/30 bg-transparent">
                                 <Users className="h-6 w-6 text-purple-200/80" />
                               </div>
-                              <div className="mt-3 px-3 text-sm font-black text-white">{participantDisplayName}</div>
-                              <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200/70">Camera connecting...</div>
-                            </div>
-                          }
-                        />
-                      ) : isCameraUnavailable ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-transparent">
-                          {seat.avatarUrl ? (
-                            <img
-                              src={seat.avatarUrl}
-                              alt={participantDisplayName}
-                              className="h-11 w-11 rounded-full border border-red-400/30 object-cover opacity-60"
-                            />
-                          ) : (
-                            <div className="grid h-11 w-11 place-items-center rounded-full border border-red-400/25 bg-transparent">
-                              <VideoOff className="h-5 w-5 text-red-300/60" />
-                            </div>
-                          )}
-                          <div className="px-3 text-center text-xs font-black text-white">{participantDisplayName}</div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-300/80">Camera unavailable</div>
-                           <div className="mt-1 flex gap-1.5">
-                             <button
-                               onClick={(e) => { e.stopPropagation(); handleRetrySeat() }}
-                               className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-200 transition-colors hover:bg-cyan-500/20"
-                             >
-                               Retry
-                             </button>
-                           </div>
-                        </div>
-                      ) : isCameraConnecting ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
-                          {seat.avatarUrl ? (
-                            <img
-                              src={seat.avatarUrl}
-                              alt={participantDisplayName}
-                              className="h-12 w-12 rounded-full border border-emerald-300/50 object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]"
-                            />
-                          ) : (
-                            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-300/30 bg-transparent">
-                              <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
-                            </div>
-                          )}
-                          <div className="mt-3 text-sm font-black text-white">{participantDisplayName}</div>
-                          <div className="mt-1 flex items-center gap-1.5">
-                            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
-                            <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Camera connecting...</span>
+                            )}
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                            <span className="truncate text-xs font-black text-white">{participantDisplayName}</span>
+                            {(seatParticipantMetadata as any)?.is_broadcaster && (
+                              <span className="rounded-full border border-amber-400/30 bg-amber-500/15 p-0.5 text-amber-300">
+                                <Crown className="h-3 w-3" />
+                              </span>
+                            )}
+                            {(seatParticipantMetadata as any)?.level && (
+                              <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-black text-cyan-200">
+                                Lv{(seatParticipantMetadata as any).level}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className={cn(
+                            'mt-1.5 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider',
+                            matchedParticipant
+                              ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
+                              : isCameraUnavailable
+                                ? 'border-red-300/30 bg-red-500/10 text-red-200'
+                                : isCameraConnecting
+                                  ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
+                                  : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
+                          )}>
+                            {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
                           </div>
                         </div>
                       ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
-                          <Users className="h-10 w-10 text-cyan-200/35" />
+                        <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
+                          <UserPlus className="h-8 w-8 text-cyan-300/40" />
+                          <span className="mt-2 text-[11px] font-black uppercase tracking-wider text-cyan-200/70">
+                            Invite Guest
+                          </span>
                         </div>
                       )}
 
-                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-
-                      <div className="absolute left-3 top-3 z-10 rounded-full border border-cyan-300/20 bg-black/15 px-3 py-1 text-xs font-black text-white/90 backdrop-blur-sm">
-                        Seat {seat.seatIndex}
+                      <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-3 py-2">
+                        <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-0.5 text-[10px] font-black text-white/90 backdrop-blur-sm">
+                          S{seat.seatIndex}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {stream?.are_seats_locked && (
+                            <span className="rounded-full border border-amber-400/30 bg-amber-500/10 p-1 text-amber-300">
+                              <Lock className="h-3 w-3" />
+                            </span>
+                          )}
+                          {seat.isOccupied && (
+                            <>
+                              {matchedParticipant ? (
+                                <span className={cn(
+                                  'rounded-full border p-1',
+                                  getAudioTrackFromRemoteParticipant(matchedParticipant) ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300' : 'border-red-400/30 bg-red-500/15 text-red-300'
+                                )}>
+                                  {getAudioTrackFromRemoteParticipant(matchedParticipant) ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+                                </span>
+                              ) : (
+                                <span className={cn(
+                                  'rounded-full border p-1',
+                                  isCameraConnecting ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-300' : 'border-white/10 bg-white/5 text-white/40'
+                                )}>
+                                  {isCameraConnecting ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+                                </span>
+                              )}
+                              {matchedParticipant && (
+                                <span className="rounded-full border border-white/10 bg-white/5 p-1 text-white/60">
+                                  <Wifi className="h-3 w-3" />
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="absolute bottom-3 left-3 right-3 z-10">
-                        {seat.isOccupied && seat.seatUserId ? (
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+                      {seat.isOccupied && seat.seatUserId && (
+                        <div className="relative z-10 px-3 pb-3">
                           <SeatCityStatusOrb
                             userId={seat.seatUserId}
                             broadcasterId={user?.id}
                             isBroadOfficer={isOfficer}
                             onClick={() => setSelectedSeatUserId(seat.seatUserId)}
                           />
-                        ) : (
-                          <>
-                            <div className="truncate text-sm font-black text-white">
-                              {matchedParticipant ? participantDisplayName : seat.isOccupied ? participantDisplayName : 'Open Seat'}
-                            </div>
-                            <div className={cn(
-                              'mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em]',
-                              matchedParticipant
-                                ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
-                                : isCameraUnavailable
-                                  ? 'border-red-300/30 bg-red-500/10 text-red-200'
-                                  : isCameraConnecting
-                                    ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
-                                    : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
-                            )}>
-                              {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Camera connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                     )
                   })}
                 </div>
+                )}
               </aside>}
 
               {/* -- GRID MODE: Individual seat tiles rendered as direct grid children -- */}
@@ -5970,12 +5932,6 @@ const toggleMicrophone = useCallback(async () => {
                 const isCameraConnecting = seat.isOccupied && !matchedParticipant && (Date.now() - seatConnectedAt < 8000 || seatConnectedAt === 0)
                 const isCameraUnavailable = seat.isOccupied && !matchedParticipant && seatConnectedAt > 0 && (Date.now() - seatConnectedAt >= 8000)
 
-                const handleRetrySeat = async () => { await refreshSeats() }
-                const handleRemoveSeatUser = async () => {
-                  if (!seatActionInfo) return
-                  await handleGeneralKick()
-                }
-
                 const seatParticipantMetadata = matchedParticipant ? getRemoteParticipantMetadata(matchedParticipant) : {}
                 const seatActionUserId =
                   seat.seatUserId ||
@@ -5991,6 +5947,12 @@ const toggleMicrophone = useCallback(async () => {
                   canInteractWithSeats && seat.isOccupied && seatActionUserId
                     ? { userId: String(seatActionUserId), username: seatActionUsername, role: undefined, seatSessionId: seat.seatSessionId }
                     : null
+
+                const handleRetrySeat = async () => { await refreshSeats() }
+                const handleRemoveSeatUser = async () => {
+                  if (!seatActionInfo) return
+                  await handleGeneralKick()
+                }
 
                 const canClickSeat = seat.isOccupied && seat.seatUserId;
                 const clickProps = canClickSeat
@@ -6017,125 +5979,142 @@ const toggleMicrophone = useCallback(async () => {
                     }
                   : undefined
 
-                return (
-                  <div
-                    key={`grid-seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
-                    className={cn(
-                      'relative min-h-0 overflow-hidden border bg-transparent transition-all',
-                      isMobileHost ? 'rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(15,23,42,0.25)]',
-                      seat.isOccupied
-                        ? 'border-emerald-400/45'
-                        : 'border-cyan-400/45',
-                      canClickSeat ? 'cursor-pointer' : ''
-                    )}
-                    {...clickProps}
-                  >
-                    {matchedParticipant ? (
-                      <RemoteSeatSurface
-                        participant={matchedParticipant}
-                        fallback={
-                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
-                            <div className={cn(
-                              'grid place-items-center border border-purple-300/30 bg-transparent',
-                              isMobileHost ? 'h-8 w-8 rounded-lg' : 'h-12 w-12 rounded-2xl'
-                            )}>
-                              <Users className={isMobileHost ? 'h-4 w-4' : 'h-6 w-6'} />
-                            </div>
-                            <div className={cn(
-                              'px-1 font-black text-white truncate max-w-full',
-                              isMobileHost ? 'mt-1 text-[8px]' : 'mt-3 text-sm'
-                            )}>{participantDisplayName}</div>
-                          </div>
-                        }
-                      />
-                    ) : isCameraUnavailable ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-transparent">
-                        {seat.avatarUrl ? (
-                          <img src={seat.avatarUrl} alt={participantDisplayName} className={cn(
-                            'rounded-full border border-red-400/30 object-cover opacity-60',
-                            isMobileHost ? 'h-6 w-6' : 'h-11 w-11'
-                          )} />
-                        ) : (
-                          <div className="grid h-11 w-11 place-items-center rounded-full border border-red-400/25 bg-transparent">
-                            <VideoOff className="h-5 w-5 text-red-300/60" />
-                          </div>
-                        )}
-                        <div className="px-3 text-center text-xs font-black text-white">{participantDisplayName}</div>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-300/80">Camera unavailable</div>
-                        <div className="mt-1 flex gap-1.5">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleRetrySeat() }}
-                            className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-200 transition-colors hover:bg-cyan-500/20"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      </div>
-                    ) : isCameraConnecting ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
-                        {seat.avatarUrl ? (
-                          <img src={seat.avatarUrl} alt={participantDisplayName} className="h-12 w-12 rounded-full border border-emerald-300/50 object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]" />
-                        ) : (
-                          <div className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-300/30 bg-transparent">
-                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
-                          </div>
-                        )}
-                        <div className="mt-3 text-sm font-black text-white">{participantDisplayName}</div>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
-                          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Camera connecting...</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-transparent">
-                        <Users className="h-10 w-10 text-cyan-200/35" />
-                      </div>
-                    )}
+                 return (
+                   <div
+                     key={`grid-seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
+                     className={cn(
+                       'group relative flex flex-col overflow-hidden rounded-2xl border bg-slate-950/60 backdrop-blur-md transition-all duration-300',
+                       isMobileHost ? 'rounded-lg' : '',
+                       seat.isOccupied
+                         ? 'border-emerald-400/40 shadow-[0_0_24px_rgba(16,185,129,0.12)] hover:border-emerald-300/60 hover:shadow-[0_0_32px_rgba(16,185,129,0.2)] hover:-translate-y-0.5'
+                         : 'border-cyan-400/30 shadow-[0_0_20px_rgba(15,23,42,0.25)] hover:border-cyan-300/50 hover:shadow-[0_0_28px_rgba(34,211,238,0.15)] hover:-translate-y-0.5',
+                       canClickSeat ? 'cursor-pointer' : ''
+                     )}
+                     {...clickProps}
+                   >
+                     {seat.isOccupied ? (
+                       <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
+                         <div className="relative">
+                           {(matchedParticipant as any)?.isSpeaking && (
+                             <span className="absolute inset-0 rounded-full border-2 border-emerald-400/60 animate-ping" />
+                           )}
+                           {matchedParticipant ? (
+                             <RemoteSeatSurface
+                               participant={matchedParticipant}
+                               fallback={
+                                 <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-transparent">
+                                   <Users className="h-6 w-6 text-purple-200/80" />
+                                 </div>
+                               }
+                             />
+                           ) : isCameraUnavailable ? (
+                             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-red-400/30 opacity-60">
+                               {seat.avatarUrl ? (
+                                 <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover" />
+                               ) : (
+                                 <VideoOff className="h-5 w-5 text-red-300/60" />
+                               )}
+                             </div>
+                           ) : isCameraConnecting ? (
+                             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/30">
+                               {seat.avatarUrl ? (
+                                 <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]" />
+                               ) : (
+                                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
+                               )}
+                             </div>
+                           ) : (
+                             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-purple-300/30 bg-transparent">
+                               <Users className="h-6 w-6 text-purple-200/80" />
+                             </div>
+                           )}
+                         </div>
 
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
+                         <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                           <span className="truncate text-xs font-black text-white">{participantDisplayName}</span>
+                           {(seatParticipantMetadata as any)?.is_broadcaster && (
+                             <span className="rounded-full border border-amber-400/30 bg-amber-500/15 p-0.5 text-amber-300">
+                               <Crown className="h-3 w-3" />
+                             </span>
+                           )}
+                           {(seatParticipantMetadata as any)?.level && (
+                             <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-black text-cyan-200">
+                               Lv{(seatParticipantMetadata as any).level}
+                             </span>
+                           )}
+                         </div>
 
-                    <div className={cn(
-                      'absolute z-10 rounded-full border border-cyan-300/20 bg-black/15 font-black text-white/90 backdrop-blur-sm',
-                      isMobileHost ? 'left-1 top-0.5 px-1 py-0.5 text-[7px]' : 'left-3 top-3 px-3 py-1 text-xs'
-                    )}>
-                      S{seat.seatIndex}
-                    </div>
+                         <div className={cn(
+                           'mt-1.5 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider',
+                           matchedParticipant
+                             ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
+                             : isCameraUnavailable
+                               ? 'border-red-300/30 bg-red-500/10 text-red-200'
+                               : isCameraConnecting
+                                 ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
+                                 : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
+                         )}>
+                           {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                         </div>
+                       </div>
+                     ) : (
+                       <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
+                         <UserPlus className="h-8 w-8 text-cyan-300/40" />
+                         <span className="mt-2 text-[11px] font-black uppercase tracking-wider text-cyan-200/70">
+                           Invite Guest
+                         </span>
+                       </div>
+                     )}
 
-                    <div className={cn(
-                      'absolute z-10',
-                      isMobileHost ? 'bottom-1 left-1 right-1' : 'bottom-3 left-3 right-3'
-                    )}>
-                      {seat.isOccupied && seat.seatUserId ? (
-                        <SeatCityStatusOrb
-                          userId={seat.seatUserId}
-                          broadcasterId={user?.id}
-                          isBroadOfficer={isOfficer}
-                          onClick={() => setSelectedSeatUserId(seat.seatUserId)}
-                        />
-                      ) : (
-                        <>
-                          <div className={cn(
-                            'truncate font-black text-white',
-                            isMobileHost ? 'text-[8px]' : 'text-sm'
-                          )}>
-                            {matchedParticipant ? participantDisplayName : seat.isOccupied ? participantDisplayName : 'Open'}
-                          </div>
-                          <div className={cn(
-                            'inline-flex rounded-full border font-black uppercase',
-                            isMobileHost ? 'mt-0.5 px-1 py-0.5 text-[7px]' : 'mt-1 px-2.5 py-1 text-[11px] tracking-[0.16em]',
-                            matchedParticipant
-                              ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
-                              : isCameraUnavailable
-                                ? 'border-red-300/30 bg-red-500/10 text-red-200'
-                                : isCameraConnecting
-                                  ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
-                                  : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
-                          )}>
-                            {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Camera connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                     <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-3 py-2">
+                       <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-0.5 text-[10px] font-black text-white/90 backdrop-blur-sm">
+                         S{seat.seatIndex}
+                       </span>
+                       <div className="flex items-center gap-1">
+                         {stream?.are_seats_locked && (
+                           <span className="rounded-full border border-amber-400/30 bg-amber-500/10 p-1 text-amber-300">
+                             <Lock className="h-3 w-3" />
+                           </span>
+                         )}
+                         {seat.isOccupied && (
+                           <>
+                             {matchedParticipant ? (
+                               <span className={cn(
+                                 'rounded-full border p-1',
+                                 getAudioTrackFromRemoteParticipant(matchedParticipant) ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300' : 'border-red-400/30 bg-red-500/15 text-red-300'
+                               )}>
+                                 {getAudioTrackFromRemoteParticipant(matchedParticipant) ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+                               </span>
+                             ) : (
+                               <span className={cn(
+                                 'rounded-full border p-1',
+                                 isCameraConnecting ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-300' : 'border-white/10 bg-white/5 text-white/40'
+                               )}>
+                                 {isCameraConnecting ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+                               </span>
+                             )}
+                             {matchedParticipant && (
+                               <span className="rounded-full border border-white/10 bg-white/5 p-1 text-white/60">
+                                 <Wifi className="h-3 w-3" />
+                               </span>
+                             )}
+                           </>
+                         )}
+                       </div>
+                     </div>
+
+                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+                     {seat.isOccupied && seat.seatUserId && (
+                       <div className="relative z-10 px-3 pb-3">
+                         <SeatCityStatusOrb
+                           userId={seat.seatUserId}
+                           broadcasterId={user?.id}
+                           isBroadOfficer={isOfficer}
+                           onClick={() => setSelectedSeatUserId(seat.seatUserId)}
+                         />
+                       </div>
+                     )}
                   </div>
                 )
               })}
@@ -6774,56 +6753,137 @@ const toggleMicrophone = useCallback(async () => {
                             <div
                               key={`mobile-seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
                               className={cn(
-                                'relative aspect-[4/3] overflow-hidden rounded-xl border',
+                                'group relative flex flex-col aspect-[4/3] overflow-hidden rounded-2xl border bg-slate-950/60 backdrop-blur-md transition-all duration-300',
                                 seat.isOccupied
-                                  ? matchedParticipant
-                                    ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                                    : isCameraUnavailable
-                                      ? 'border-red-400/40'
-                                      : 'border-cyan-400/40'
-                                  : 'border-white/20',
-                                'bg-black/60 backdrop-blur-sm',
+                                  ? 'border-emerald-400/40 shadow-[0_0_24px_rgba(16,185,129,0.12)] hover:border-emerald-300/60 hover:shadow-[0_0_32px_rgba(16,185,129,0.2)] hover:-translate-y-0.5'
+                                  : 'border-cyan-400/30 shadow-[0_0_20px_rgba(15,23,42,0.25)] hover:border-cyan-300/50 hover:shadow-[0_0_28px_rgba(34,211,238,0.15)] hover:-translate-y-0.5',
                                 canClickSeat ? 'cursor-pointer' : ''
                               )}
                               {...clickProps}
                             >
-                              {matchedParticipant ? (
-                                <RemoteSeatSurface
-                                  participant={matchedParticipant}
-                                  fallback={
-                                    <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                                      <Users className="h-5 w-5 text-emerald-300/70" />
-                                      <div className="max-w-full truncate px-1 text-[9px] font-black text-white">{participantDisplayName}</div>
-                                    </div>
-                                  }
-                                />
-                              ) : isCameraUnavailable ? (
-                                <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                                  <VideoOff className="h-4 w-4 text-red-300/60" />
-                                  <div className="max-w-full truncate px-1 text-[9px] font-black text-white">{participantDisplayName}</div>
-                                </div>
-                              ) : isCameraConnecting ? (
-                                <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-300/40 border-t-cyan-300" />
-                                  <div className="max-w-full truncate px-1 text-[9px] font-black text-white">{participantDisplayName}</div>
+                              {seat.isOccupied ? (
+                                <div className="flex flex-1 flex-col items-center justify-center p-2 pt-8">
+                                  <div className="relative">
+                                    {(matchedParticipant as any)?.isSpeaking && (
+                                      <span className="absolute inset-0 rounded-full border-2 border-emerald-400/60 animate-ping" />
+                                    )}
+                                    {matchedParticipant ? (
+                                      <RemoteSeatSurface
+                                        participant={matchedParticipant}
+                                        fallback={
+                                          <div className="grid h-8 w-8 place-items-center rounded-lg border border-purple-300/30 bg-transparent">
+                                            <Users className="h-4 w-4 text-purple-200/80" />
+                                          </div>
+                                        }
+                                      />
+                                    ) : isCameraUnavailable ? (
+                                      <div className="flex h-8 w-8 items-center justify-center rounded-full border border-red-400/30 opacity-60">
+                                        {seat.avatarUrl ? (
+                                          <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover" />
+                                        ) : (
+                                          <VideoOff className="h-3.5 w-3.5 text-red-300/60" />
+                                        )}
+                                      </div>
+                                    ) : isCameraConnecting ? (
+                                      <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-300/30">
+                                        {seat.avatarUrl ? (
+                                          <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]" />
+                                        ) : (
+                                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-purple-300/30 bg-transparent">
+                                        <Users className="h-4 w-4 text-purple-200/80" />
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
+                                    <span className="truncate text-[10px] font-black text-white">{participantDisplayName}</span>
+                                    {(seatParticipantMetadata as any)?.is_broadcaster && (
+                                      <span className="rounded-full border border-amber-400/30 bg-amber-500/15 p-0.5 text-amber-300">
+                                        <Crown className="h-2.5 w-2.5" />
+                                      </span>
+                                    )}
+                                    {(seatParticipantMetadata as any)?.level && (
+                                      <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1 py-0.5 text-[8px] font-black text-cyan-200">
+                                        Lv{(seatParticipantMetadata as any).level}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className={cn(
+                                    'mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider',
+                                    matchedParticipant
+                                      ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
+                                      : isCameraUnavailable
+                                        ? 'border-red-300/30 bg-red-500/10 text-red-200'
+                                        : isCameraConnecting
+                                          ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
+                                          : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
+                                  )}>
+                                    {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                                  </div>
                                 </div>
                               ) : (
-                                <div className="flex h-full w-full items-center justify-center">
-                                  <Ticket className="h-5 w-5 text-white/30" />
+                                <div className="flex flex-1 flex-col items-center justify-center p-2 pt-8">
+                                  <UserPlus className="h-5 w-5 text-cyan-300/40" />
+                                  <span className="mt-1 text-[9px] font-black uppercase tracking-wider text-cyan-200/70">
+                                    Invite Guest
+                                  </span>
                                 </div>
                               )}
 
-                              {/* Seat label */}
-                              {seat.isOccupied && (
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 py-0.5">
-                                  <p className="truncate text-[8px] font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{participantDisplayName}</p>
+                              <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-2 py-1.5">
+                                <span className="rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[9px] font-black text-white/90 backdrop-blur-sm">
+                                  S{seat.seatIndex}
+                                </span>
+                                <div className="flex items-center gap-0.5">
+                                  {stream?.are_seats_locked && (
+                                    <span className="rounded-full border border-amber-400/30 bg-amber-500/10 p-0.5 text-amber-300">
+                                      <Lock className="h-2.5 w-2.5" />
+                                    </span>
+                                  )}
+                                  {seat.isOccupied && (
+                                    <>
+                                      {matchedParticipant ? (
+                                        <span className={cn(
+                                          'rounded-full border p-0.5',
+                                          getAudioTrackFromRemoteParticipant(matchedParticipant) ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300' : 'border-red-400/30 bg-red-500/15 text-red-300'
+                                        )}>
+                                          {getAudioTrackFromRemoteParticipant(matchedParticipant) ? <Mic className="h-2.5 w-2.5" /> : <MicOff className="h-2.5 w-2.5" />}
+                                        </span>
+                                      ) : (
+                                        <span className={cn(
+                                          'rounded-full border p-0.5',
+                                          isCameraConnecting ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-300' : 'border-white/10 bg-white/5 text-white/40'
+                                        )}>
+                                          {isCameraConnecting ? <Mic className="h-2.5 w-2.5" /> : <MicOff className="h-2.5 w-2.5" />}
+                                        </span>
+                                      )}
+                                      {matchedParticipant && (
+                                        <span className="rounded-full border border-white/10 bg-white/5 p-0.5 text-white/60">
+                                          <Wifi className="h-2.5 w-2.5" />
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
-                              )}
-
-                              {/* Seat number badge */}
-                              <div className="absolute left-1 top-1 rounded-full border border-white/20 bg-black/50 px-1.5 py-0.5 text-[8px] font-black text-white/80 backdrop-blur-sm">
-                                S{seat.seatIndex}
                               </div>
+
+                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+                              {seat.isOccupied && seat.seatUserId && (
+                                <div className="relative z-10 px-2 pb-2">
+                                  <SeatCityStatusOrb
+                                    userId={seat.seatUserId}
+                                    broadcasterId={user?.id}
+                                    isBroadOfficer={isOfficer}
+                                    onClick={() => setSelectedSeatUserId(seat.seatUserId)}
+                                  />
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -6922,28 +6982,6 @@ const toggleMicrophone = useCallback(async () => {
                     }}
                     onAssignOfficer={() => setIsAssignOfficerModalOpen(true)}
                     onPayOfficers={() => setIsPayBroadOfficersModalOpen(true)}
-                    onToggleSeatsLock={() => {
-                      // Toggle seats lock logic
-                    }}
-                    isRecording={recorder.isRecording}
-                     onToggleRecord={async () => {
-                       if (recorder.isRecording) {
-                         const blob = await recorder.stopRecording()
-                         if (blob && stream?.id && user?.id && blob.size > 0) {
-                           await supabase
-                             .from('saved_streams')
-                             .upsert({
-                               user_id: user.id,
-                               stream_id: stream.id,
-                               source: 'auto_stream_end',
-                               storage_category: 'broadcast_recording',
-                               file_size_bytes: blob.size,
-                             }, { onConflict: 'saved_streams_user_id_stream_id_key' })
-                         }
-                       } else {
-                         recorder.startRecording(stream.id)
-                       }
-                     }}
                   />
                 </div>
               </>
@@ -6970,20 +7008,6 @@ const toggleMicrophone = useCallback(async () => {
                 onOpenCoinStore={user?.id ? handleOpenCoinStore : undefined}
                 isHost={isHost}
                 onInviteFollowers={handleInviteFollowers}
-saveBroadcastButton={
-                  stream?.id ? (
-                    <SaveBroadcastButton
-                      isRecording={false}
-                      isUploading={false}
-                      recordingDuration={0}
-                      recordingSize={0}
-                      streamId={stream.id}
-                      onStartRecording={() => {}}
-                      onStopRecording={() => {}}
-                      onSaveClip={() => {}}
-                    />
-                  ) : undefined
-                }
               />}
 
           

@@ -633,7 +633,7 @@ export default function TCNNBroadcasterPage() {
   ];
 
   return (
-    <div className="h-screen w-full bg-[#060a14] text-white flex overflow-hidden select-none">
+    <div className="h-screen w-full bg-[#060a14] text-white flex overflow-y-auto overflow-x-hidden md:overflow-hidden select-none">
       <aside className="w-[260px] flex-shrink-0 bg-[#0a0f1e]/95 border-r border-white/[0.06] flex flex-col backdrop-blur-xl">
         <div className="p-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">

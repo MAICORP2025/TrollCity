@@ -43,15 +43,6 @@ export const COIN_PACKAGES: CoinPackage[] = [
 // Exchange rate: 100 coins per $1 (all packages)
 export const COINS_PER_USD = 100;
 
-// Cash value for subscriptions: 300 coins = $100 USD
-// 1/3 (33.33%) goes to admin pool, 2/3 (66.67%) goes to creator
-export const CASH_VALUE_PER_300_COINS = 100;
-export const ADMIN_POOL_PERCENT = 33.33;
-export const CREATOR_POOL_PERCENT = 66.67;
-
-// New user bonus: 5% extra coins on all coin package purchases
-export const NEW_USER_BONUS_PERCENT = 5;
-
 // ============================================================================
 // CASHOUT TIERS (Single Source of Truth)
 // ============================================================================
@@ -137,23 +128,6 @@ export function requiresManualReview(coinAmount: number): boolean {
  */
 export function getCoinPackages(): CoinPackage[] {
   return COIN_PACKAGES;
-}
-
-/**
- * Calculate coins with new user bonus applied
- * @param baseCoins - The base coin amount
- * @param includeBonus - Whether to include the 5% bonus
- */
-export function calculateCoinsWithBonus(baseCoins: number, includeBonus: boolean = true): number {
-  if (!includeBonus) return baseCoins;
-  return Math.floor(baseCoins * (1 + NEW_USER_BONUS_PERCENT / 100));
-}
-
-/**
- * Get the bonus coins amount for a purchase
- */
-export function getBonusCoins(baseCoins: number): number {
-  return Math.floor(baseCoins * (NEW_USER_BONUS_PERCENT / 100));
 }
 
 /**

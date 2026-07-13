@@ -48,7 +48,7 @@ import {
   YARD_DECORATIONS,
 } from '../lib/neighborhoodAssets'
 
-type OnboardingScene = 'street' | 'car' | 'driverTest' | 'insurance' | 'license' | 'complete'
+type OnboardingScene = 'choice' | 'street' | 'car' | 'driverTest' | 'insurance' | 'license' | 'complete'
 
 export default function NeighborhoodOnboarding() {
   const navigate = useNavigate()
@@ -58,7 +58,7 @@ export default function NeighborhoodOnboarding() {
   const setProfile = useAuthStore((s) => s.setProfile)
   const refreshProfile = useAuthStore((s) => s.refreshProfile)
 
-  const { createNeighborhood, checkInvites, acceptInvite } = useNeighborhood()
+  const { createNeighborhood, checkInvites, acceptInvite, joinNeighborhoodByLeaderId } = useNeighborhood()
   const {
     activeVehicle,
     purchaseVehicle,
@@ -106,6 +106,8 @@ export default function NeighborhoodOnboarding() {
   const [showSceneCelebration, setShowSceneCelebration] = useState(false)
   const [celebrationMessage, setCelebrationMessage] = useState('')
   const [showSetupReminder, setShowSetupReminder] = useState(false)
+  const [followedNeighbors, setFollowedNeighbors] = useState<Array<{ id: string; username: string }>>([])
+  const [joiningNeighborhood, setJoiningNeighborhood] = useState(false)
 
   const isMountedRef = useRef(true)
   const profileRef = useRef(profile)
@@ -409,7 +411,37 @@ export default function NeighborhoodOnboarding() {
             nextMessage = 'Welcome to your family neighborhood! Enter the streets of Troll City!'
           }
         } else if (!hasNeighborhood || !hasHouse) {
-          nextScene = 'street'
+          const { data: followedUsers, error: followsError } = await supabase
+            .from('user_follows')
+            .select('following_id')
+            .eq('follower_id', user.id)
+
+          if (!followsError && followedUsers && followedUsers.length > 0) {
+            const followingIds = followedUsers.map((f) => f.following_id).filter(Boolean)
+            const { data: neighborLeaders } = await supabase
+              .from('neighborhoods')
+              .select('leader_user_id, id, name')
+              .in('leader_user_id', followingIds)
+
+            if (neighborLeaders && neighborLeaders.length > 0) {
+              const { data: profiles } = await supabase
+                .from('user_profiles')
+                .select('id, username')
+                .in('id', neighborLeaders.map((n) => n.leader_user_id))
+
+              const profileMap = new Map((profiles || []).map((p) => [p.id, p.username]))
+              const neighborsWithProfiles = neighborLeaders.map((n) => ({
+                id: n.leader_user_id,
+                username: profileMap.get(n.leader_user_id) || 'Unknown',
+              }))
+              setFollowedNeighbors(neighborsWithProfiles)
+              nextScene = 'choice'
+            } else {
+              nextScene = 'street'
+            }
+          } else {
+            nextScene = 'street'
+          }
         } else if (!hasVehicle) {
           nextScene = 'car'
         } else if (!hasLicense && !hasRestorableLicense) {
@@ -957,6 +989,45 @@ export default function NeighborhoodOnboarding() {
     }
   }
 
+  const handleJoinNeighborhood = async (leaderUserId: string, username: string) => {
+    if (!user?.id) {
+      toast.error('Not authenticated')
+      return
+    }
+
+    setJoiningNeighborhood(true)
+
+    try {
+      const { success, error } = await joinNeighborhoodByLeaderId(leaderUserId)
+
+      if (!success) {
+        toast.error(error || 'Failed to join neighborhood')
+        return
+      }
+
+      await refreshProfile(true)
+      toast.success(`Joined ${username}'s neighborhood!`)
+
+      const profileAny = profile as any
+      const hasVehicle = !!profileAny?.vehicle_id
+      const carInsuranceValid = profileAny?.car_insurance_expiry
+        ? new Date(profileAny.car_insurance_expiry) > new Date()
+        : false
+
+      if (!hasVehicle) {
+        transitionToScene('car', '🚗 Welcome to the neighborhood! Now pick your starter car.')
+      } else if (!carInsuranceValid) {
+        transitionToScene('insurance', '🚗 Welcome to the neighborhood! Now get insured.')
+      } else {
+        transitionToScene('complete', '🏆 Welcome to the neighborhood!')
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to join neighborhood')
+    } finally {
+      setJoiningNeighborhood(false)
+    }
+  }
+
   if (loading || vehicleLoading || licenseLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950">
@@ -967,21 +1038,6 @@ export default function NeighborhoodOnboarding() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-[#0d1222] to-[#1c1334] px-4 py-6 text-white">
-      {/* Debug: Show profile setup status */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-          <div className="text-sm font-semibold text-amber-200">Debug: Neighborhood Setup Status</div>
-          <div className="mt-2 text-xs text-slate-300">
-            <p>neighborhood_id: {profile?.neighborhood_id || 'NOT SET'}</p>
-            <p>house_id: {profile?.house_id || 'NOT SET'}</p>
-            <p>vehicle_id: {profile?.vehicle_id || 'NOT SET'}</p>
-            <p>license_plate: {profile?.license_plate || 'NOT SET'}</p>
-            <p>license_status: {profile?.license_status || 'none'}</p>
-            <p>car_insurance_expiry: {profile?.car_insurance_expiry || 'NOT SET'}</p>
-            <p>Current scene: {currentScene}</p>
-          </div>
-        </div>
-      )}
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -1019,6 +1075,7 @@ export default function NeighborhoodOnboarding() {
         <Card className="overflow-hidden border-slate-700 bg-slate-900/80 shadow-2xl shadow-black/20">
           <CardHeader className="border-b border-slate-700 bg-slate-950/90 px-6 py-5">
             <CardTitle className="text-xl text-white">
+              {currentScene === 'choice' && 'Choose Your Path'}
               {currentScene === 'street' && 'Scene 1: Create Your First Home'}
               {currentScene === 'car' && 'Scene 2: Choose Your Starter Car'}
               {currentScene === 'driverTest' && 'Scene 3: Get License'}
@@ -1030,6 +1087,53 @@ export default function NeighborhoodOnboarding() {
 
           <CardContent className="grid gap-8 p-6 lg:grid-cols-[1fr_420px]">
             <div className="space-y-6">
+              {currentScene === 'choice' && (
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <h2 className="text-2xl font-semibold text-white">
+                      Join a Neighborhood or Start Your Own
+                    </h2>
+                    <p className="text-slate-400">
+                      Someone you follow has open properties in their neighborhood. You can join them or build your own street.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4">
+                    {followedNeighbors.map((neighbor) => (
+                      <div
+                        key={neighbor.id}
+                        className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-950/80 p-5"
+                      >
+                        <div>
+                          <p className="font-semibold text-white">{neighbor.username}</p>
+                          <p className="text-sm text-slate-400">Has a neighborhood with open properties</p>
+                        </div>
+                        <Button
+                          onClick={() => handleJoinNeighborhood(neighbor.id, neighbor.username)}
+                          disabled={joiningNeighborhood}
+                          className="bg-gradient-to-r from-cyan-500 to-blue-600"
+                        >
+                          {joiningNeighborhood ? 'Joining...' : `Join ${neighbor.username}'s Neighborhood`}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="h-px flex-1 bg-slate-700" />
+                    <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">or</span>
+                    <div className="h-px flex-1 bg-slate-700" />
+                  </div>
+
+                  <Button
+                    onClick={() => setCurrentScene('street')}
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    Create Your Own Neighborhood
+                  </Button>
+                </div>
+              )}
               {currentScene === 'street' && (
                 <div className="space-y-6">
                   <div className="space-y-3">

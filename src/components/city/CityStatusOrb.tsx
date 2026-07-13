@@ -236,6 +236,19 @@ export default function CityStatusOrb({
             </div>
           </div>
         )}
+
+        {/* Car Insurance */}
+        {data.vehicle_id && (permissions.canCheckLicense || permissions.isSelf) && (
+          <div className="rounded-xl bg-slate-800/80 p-2.5 flex items-center gap-2">
+            <Car className={`w-4 h-4 shrink-0 ${getInsuranceStatusDisplay(data.car_insurance_expiry).color}`} />
+            <div className="min-w-0">
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider">Car Insurance</div>
+              <div className={`text-sm font-bold truncate ${getInsuranceStatusDisplay(data.car_insurance_expiry).color}`}>
+                {getInsuranceStatusDisplay(data.car_insurance_expiry).label}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Coins to Next League */}

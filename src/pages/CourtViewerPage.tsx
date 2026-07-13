@@ -436,7 +436,7 @@ export default function CourtViewerPage() {
   if (!courtSession) return null;
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-black text-white">
+    <div className="relative h-screen w-full overflow-y-auto overflow-x-hidden md:overflow-hidden bg-black text-white">
       {/* Courtroom Background */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"

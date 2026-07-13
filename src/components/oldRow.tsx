@@ -1123,7 +1123,7 @@ export default function Home() {
   }
 
   return (
-    <div className="relative min-h-full w-full overflow-hidden text-white">
+    <div className="relative min-h-full w-full overflow-y-auto overflow-x-hidden md:overflow-hidden text-white">
       {isPrideMonth() ? <PrideBackground /> : <OriginalBackground />}
 
       {isLoading && (

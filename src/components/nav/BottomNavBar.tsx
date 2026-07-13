@@ -427,7 +427,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
            { label: 'Troll Court', icon: Scale, path: '/troll-court' },
            { label: 'Inmates', icon: Lock, path: '/inmates' },
            { label: 'City Laws & Fees', icon: FileText_M, path: '/home?tab=laws-fees' },
-           { label: 'President Candidates', icon: Vote, path: '/home?tab=president' },
+           { label: 'President Candidates', icon: Vote, path: '/president' },
            { label: 'Elections', icon: ClipboardList, path: '/government' },
           ...(isOfficer || isSecretary || isAdmin
             ? [{ label: 'City Government', icon: Landmark as any, path: '/government' }]

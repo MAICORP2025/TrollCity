@@ -1,6 +1,7 @@
 import React from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 interface AgencyAgencyCardProps {
   agency: {
@@ -29,6 +30,7 @@ export default function AgencyAgencyCard({
   onStatusChange, 
   onRemoveCreator 
 }: AgencyAgencyCardProps) {
+  const navigate = useNavigate();
   const statusColors: Record<string, string> = {
     pending: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
     approved: 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30',
@@ -91,8 +93,7 @@ export default function AgencyAgencyCard({
               size="sm"
               className="px-3 py-1 bg-transparent border border-cyan-500/30 hover:bg-cyan-500/10 text-sm"
               onClick={() => {
-                // In a real app, this would navigate to agency edit page
-                alert('Edit agency functionality coming soon');
+                navigate(`/agency/${agency.slug || agency.id}`);
               }}
             >
               Edit
@@ -102,8 +103,7 @@ export default function AgencyAgencyCard({
               size="sm"
               className="px-3 py-1 bg-transparent border border-cyan-500/30 hover:bg-cyan-500/10 text-sm"
               onClick={() => {
-                // In a real app, this would navigate to agency detail page
-                alert('View agency functionality coming soon');
+                navigate(`/agency/${agency.slug || agency.id}`);
               }}
             >
               View

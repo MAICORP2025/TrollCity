@@ -693,7 +693,7 @@ export default function Home() {
   }
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden text-white bg-[#050715]">
+    <div className="relative min-h-screen w-full overflow-y-auto overflow-x-hidden md:overflow-hidden text-white bg-[#050715]">
       {isPrideMonth() ? <PrideBackground /> : <OriginalBackground />}
 
       {isLoading && (

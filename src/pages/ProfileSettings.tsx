@@ -202,7 +202,7 @@ export default function ProfileSettings() {
 
   return (
     <div
-      className={`min-h-screen ${trollCityTheme.backgrounds.primary} p-4 text-white sm:p-6`}
+      className={`min-h-screen ${trollCityTheme.backgrounds.primary} p-4 text-white sm:p-6 overflow-y-auto`}
     >
       <main className="mx-auto max-w-6xl space-y-6">
         <header className="flex items-center gap-3">

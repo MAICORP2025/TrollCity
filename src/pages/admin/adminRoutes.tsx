@@ -33,6 +33,7 @@ const LoadLab = lazy(() => import('../../components/admin/LoadLab'))
 const AdminCrownRedemptions = lazy(() => import('./AdminCrownRedemptions'))
 const SellerManagement = lazy(() => import('./SellerManagement'))
 const ExecutiveSecretaries = lazy(() => import('./ExecutiveSecretaries'))
+const SupabaseUsageDashboard = lazy(() => import('./SupabaseUsageDashboard'))
 
 export interface AdminRoute {
   id: string
@@ -100,6 +101,19 @@ export const systemManagementRoutes: AdminRoute[] = [
     tileColor: 'text-green-200',
     tileBgColor: 'bg-emerald-500/10',
     tileBorderColor: 'border-emerald-500/30',
+    category: 'system'
+  },
+  {
+    id: 'supabase-usage-dashboard',
+    title: 'Supabase Usage',
+    path: '/admin/supabase-usage',
+    component: SupabaseUsageDashboard,
+    roles: [UserRole.ADMIN],
+    description: 'Review server-only Supabase usage metrics and estimated monthly cost',
+    icon: <TrendingUp className="w-5 h-5 text-cyan-200" />,
+    tileColor: 'text-cyan-200',
+    tileBgColor: 'bg-cyan-500/10',
+    tileBorderColor: 'border-cyan-500/30',
     category: 'system'
   },
   {

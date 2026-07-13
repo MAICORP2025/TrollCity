@@ -21,8 +21,9 @@ import ManagementTab from './tabs/ManagementTab'
 import HiringTab from './tabs/HiringTab'
 import AttendanceTab from './tabs/AttendanceTab'
 import RecordsTab from './tabs/RecordsTab'
+import EmploymentVerificationTab from './tabs/EmploymentVerificationTab'
 
-const TAB_COMPONENTS: Record<EmployeeTabId, React.ComponentType> = {
+const TAB_COMPONENTS: Record<EmployeeTabId, React.ComponentType<any>> = {
   home: HomeTab,
   clock: ClockTab,
   schedule: ScheduleTab,
@@ -37,6 +38,7 @@ const TAB_COMPONENTS: Record<EmployeeTabId, React.ComponentType> = {
   hiring: HiringTab,
   attendance: AttendanceTab,
   records: RecordsTab,
+  employment_verification: EmploymentVerificationTab,
 }
 
 function useClockStatus(userId?: string | null) {

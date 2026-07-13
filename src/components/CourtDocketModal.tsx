@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
-import { X, Calendar, Gavel, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { X, Calendar, Gavel, AlertTriangle, ShieldCheck, UserPlus } from 'lucide-react'
 import { format } from 'date-fns'
+import { UserSearchInput } from './UserSearchDropdown'
 
 interface CourtDocketModalProps {
   isOpen: boolean
@@ -19,6 +21,14 @@ export default function CourtDocketModal({ isOpen, onClose, onSelectCase, isJudg
   const [loading, setLoading] = useState(false)
   const [extendingCase, setExtendingCase] = useState<string | null>(null)
   const [newDate, setNewDate] = useState('')
+  const [showAddCase, setShowAddCase] = useState(false)
+  const [addUsername, setAddUsername] = useState('')
+  const [defendantQuery, setDefendantQuery] = useState('')
+  const [addDefendantId, setAddDefendantId] = useState<string | null>(null)
+  const [addReason, setAddReason] = useState('')
+  const [addingCase, setAddingCase] = useState(false)
+
+  const { user } = useAuthStore()
 
   const fetchDockets = useCallback(async () => {
     setLoading(true)
@@ -121,6 +131,49 @@ export default function CourtDocketModal({ isOpen, onClose, onSelectCase, isJudg
     }
   }
 
+  const handleAddCase = async () => {
+    if (!addDefendantId) {
+      toast.error('Select a defendant from the list')
+      return
+    }
+    if (!addReason.trim()) {
+      toast.error('Enter a reason for the case')
+      return
+    }
+
+    setAddingCase(true)
+    try {
+      const { data, error } = await supabase.rpc('create_court_case', {
+        p_defendant_id: addDefendantId,
+        p_reason: addReason.trim(),
+        p_plaintiff_id: user?.id || null,
+      })
+
+      if (error) throw error
+
+      if (data && data.success === false) {
+        toast.error(data?.error || 'Failed to create case')
+        return
+      }
+
+      toast.success(`Case opened against @${addUsername || 'defendant'}. Call them to stand to issue a ruling.`)
+      setShowAddCase(false)
+      setAddUsername('')
+      setDefendantQuery('')
+      setAddDefendantId(null)
+      setAddReason('')
+      fetchDockets()
+      if (data?.docket_id) {
+        setSelectedDocketId(data.docket_id)
+        fetchCases(data.docket_id)
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error creating case')
+    } finally {
+      setAddingCase(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -142,10 +195,88 @@ export default function CourtDocketModal({ isOpen, onClose, onSelectCase, isJudg
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           
           {/* Sidebar: Dockets List */}
-          <div className="w-full md:w-64 border-r border-white/10 bg-[#0A0814] overflow-y-auto p-4">
-            <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Available Dockets</h3>
-            <div className="space-y-2">
-              {dockets.map((docket) => (
+           <div className="w-full md:w-64 border-r border-white/10 bg-[#0A0814] overflow-y-auto p-4">
+             <h3 className="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Available Dockets</h3>
+
+             {isJudge && (
+               <div className="mb-3">
+                 {showAddCase ? (
+                   <div className="space-y-2 rounded-lg border border-purple-500/30 bg-black/30 p-3">
+                     {addDefendantId ? (
+                       <div className="flex items-center justify-between rounded bg-purple-600/20 border border-purple-500/30 px-2 py-1.5 text-xs text-white">
+                         <span>Defendant: @{addUsername}</span>
+                         <button
+                           type="button"
+                           onClick={() => {
+                             setAddDefendantId(null)
+                             setAddUsername('')
+                             setDefendantQuery('')
+                           }}
+                           className="text-purple-200 hover:text-white"
+                         >
+                           <X size={14} />
+                         </button>
+                       </div>
+                     ) : (
+                       <div className="rounded bg-black/50 border border-white/10 px-2 py-1.5 space-y-2">
+                         <input
+                           type="text"
+                           value={defendantQuery}
+                           onChange={(e) => setDefendantQuery(e.target.value)}
+                           placeholder="Search defendant username..."
+                           className="w-full rounded bg-black/60 border border-white/10 px-2 py-1.5 text-xs text-white outline-none focus:border-purple-500"
+                         />
+                         <UserSearchInput
+                           query={defendantQuery}
+                           disableNavigation
+                           onSelect={(userId, username) => {
+                             setAddDefendantId(userId)
+                             setAddUsername(username)
+                             setDefendantQuery('')
+                           }}
+                         />
+                       </div>
+                     )}
+                     <textarea
+                       value={addReason}
+                       onChange={(e) => setAddReason(e.target.value)}
+                       placeholder="Reason for the case"
+                       rows={2}
+                       className="w-full rounded bg-black/50 border border-white/10 px-2 py-1.5 text-xs text-white outline-none focus:border-purple-500"
+                     />
+                     <div className="flex gap-1">
+                       <button
+                         onClick={handleAddCase}
+                         disabled={addingCase}
+                         className="flex-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold py-1.5 disabled:opacity-50"
+                       >
+                         {addingCase ? 'Opening...' : 'Open Case'}
+                       </button>
+                       <button
+                         onClick={() => setShowAddCase(false)}
+                         className="flex-1 rounded bg-gray-700 hover:bg-gray-600 text-white text-[11px] py-1.5"
+                       >
+                         Cancel
+                       </button>
+                     </div>
+                   </div>
+                 ) : (
+                   <button
+                     onClick={() => setShowAddCase(true)}
+                     className="w-full flex items-center justify-center gap-2 rounded-lg border border-purple-500/30 bg-purple-600/20 px-3 py-2 text-xs font-bold text-purple-200 hover:bg-purple-600/30 transition-colors"
+                   >
+                     <UserPlus size={14} />
+                     Add Defendant
+                   </button>
+                 )}
+                 <p className="mt-2 text-[10px] text-gray-500">
+                   Open a case without a docket so you can issue a ruling immediately.
+                 </p>
+               </div>
+             )}
+
+             <div className="space-y-2">
+               {dockets.map((docket) => (
                 <button
                   key={docket.id}
                   onClick={() => setSelectedDocketId(docket.id)}

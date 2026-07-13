@@ -648,7 +648,7 @@ export default function JailPage() {
 
   if (!isJailed) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black p-4 text-white">
+      <div className="relative flex min-h-screen items-center justify-center overflow-y-auto overflow-x-hidden md:overflow-hidden bg-black p-4 text-white">
         <JailBackdrop />
         <div className={`${cellPanel} relative z-10 w-full max-w-md p-8 text-center`}>
           <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-950/40">
@@ -668,7 +668,7 @@ export default function JailPage() {
   );
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-black text-white">
+    <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-black text-white">
       <JailBackdrop />
 
       <div className="relative z-10 flex min-h-screen flex-col">

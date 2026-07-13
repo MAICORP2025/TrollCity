@@ -24,7 +24,7 @@ export default function ExitPage() {
   }, [countdown, navigate]);
 
   return (
-    <div className={`min-h-screen w-screen ${trollCityTheme.backgrounds.app} flex items-center justify-center overflow-hidden relative`}>
+    <div className={`min-h-screen w-screen ${trollCityTheme.backgrounds.app} flex items-center justify-center overflow-y-auto overflow-x-hidden md:overflow-hidden relative`}>
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(147,51,234,0.15),transparent)]" />

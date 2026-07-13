@@ -356,7 +356,7 @@ export default function TrollopolyCityDevTest({
 
   // Show 3D scene with video planes integrated into the corners
   return (
-    <div className="relative w-full h-screen bg-slate-900 overflow-hidden">
+    <div className="relative w-full h-screen bg-slate-900 overflow-y-auto overflow-x-hidden md:overflow-hidden">
       {/* 3D Scene Container */}
       <div id="trollopoly-3d-mount" className="absolute inset-0" />
 

@@ -2066,7 +2066,7 @@ export function useBattleViewController({
 
   const followBroadcaster = useCallback(() => {
     if (challengerStream?.user_id) {
-      navigate(`/profile/${challengerStream.user_id}`);
+      navigate(`/profile/id/${challengerStream.user_id}`);
     }
   }, [challengerStream?.user_id, navigate]);
 

@@ -376,6 +376,91 @@ export function useNeighborhood() {
     }
   }
 
+  const joinNeighborhoodByLeaderId = useCallback(async (leaderUserId: string) => {
+    if (!user?.id) return { success: false, error: 'Not authenticated' }
+
+    try {
+      const { data: neighborhoodData, error: neighborhoodError } = await supabase
+        .from('neighborhoods')
+        .select('id')
+        .eq('leader_user_id', leaderUserId)
+        .single()
+
+      if (neighborhoodError || !neighborhoodData) {
+        return { success: false, error: 'Neighborhood not found' }
+      }
+
+      const { error: memberError } = await supabase
+        .from('neighborhood_members')
+        .insert({
+          neighborhood_id: neighborhoodData.id,
+          user_id: user.id,
+          role: 'follower'
+        })
+
+      if (memberError) throw memberError
+
+      const { data: emptyHouse, error: emptyHouseError } = await supabase
+        .from('houses')
+        .select('id')
+        .eq('neighborhood_id', neighborhoodData.id)
+        .is('owner_user_id', null)
+        .limit(1)
+        .maybeSingle()
+
+      if (emptyHouseError) {
+        throw emptyHouseError
+      }
+
+      let house = emptyHouse
+
+      if (emptyHouse) {
+        const { error: updateHouseError } = await supabase
+          .from('houses')
+          .update({ owner_user_id: user.id })
+          .eq('id', emptyHouse.id)
+
+        if (updateHouseError) throw updateHouseError
+      } else {
+        const { data: newHouse, error: houseError } = await supabase
+          .from('houses')
+          .insert({
+            neighborhood_id: neighborhoodData.id,
+            owner_user_id: user.id,
+            upgrade_level: 1,
+            condition: 100,
+            is_reposessed: false,
+            electric_on: false,
+            water_on: false,
+            internet_on: false
+          })
+          .select()
+          .single()
+
+        if (houseError) throw houseError
+        house = newHouse
+      }
+
+      if (!house) {
+        throw new Error('Failed to assign a house slot')
+      }
+
+      await supabase
+        .from('user_profiles')
+        .update({
+          neighborhood_id: neighborhoodData.id,
+          house_id: house.id
+        })
+        .eq('id', user.id)
+
+      await fetchNeighborhood()
+      return { success: true }
+    } catch (error: any) {
+      console.error('Error joining neighborhood:', error)
+      return { success: false, error: error.message }
+    }
+  }, [user?.id])
+
   const checkInvites = useCallback(async () => {
     if (!user?.id) return { hasPendingInvites: false, hasAcceptedInvites: false }
 
@@ -406,6 +491,7 @@ export function useNeighborhood() {
     createNeighborhood,
     inviteFollower,
     acceptInvite,
+    joinNeighborhoodByLeaderId,
     checkInvites,
     getHouseFees,
     payHouseFees

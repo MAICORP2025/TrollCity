@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { useAuthStore } from '../../lib/store';
-import { supabase } from '../../lib/supabase';
-import { getUserAffiliation, UserAffiliation } from '../../lib/userAffiliations';
+import { useAuthStore } from './store';
+import { supabase } from './supabase';
+import { getUserAffiliation, UserAffiliation } from './userAffiliations';
 import { useNavigate } from 'react-router-dom';
 import { 
   User, MessageCircle, Gift, Flag, Camera, 
   Crown, Check, X, Heart, Users, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import SubscribeButton from './SubscribeButton';
+import SubscribeButton from '../components/user/SubscribeButton';
+import ProfileFrame from '@/components/profile/ProfileFrame';
+import { useUserFrame } from '@/hooks/useUserFrame';
 
 interface UserMiniProfileProps {
   userId: string;
@@ -35,7 +37,10 @@ const UserMiniProfile: React.FC<UserMiniProfileProps> = ({
   const [subscription, setSubscription] = useState<any>(null);
   const [affiliation, setAffiliation] = useState<UserAffiliation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [following, setFollowing] = useState(false); // placeholder for future follow system
+  const [following, setFollowing] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const isOwnProfile = user?.id === userId;
 
@@ -114,18 +119,93 @@ const UserMiniProfile: React.FC<UserMiniProfileProps> = ({
   };
 
   const handleReport = () => {
-    // TODO: Open report modal
-    toast.info('Report feature coming soon');
+    setShowReportModal(true);
   };
+
+  const submitReport = async () => {
+    if (!reportReason || !user) return;
+    setReportSubmitting(true);
+    try {
+      const { error } = await supabase.from('user_reports').insert({
+        reporter_id: user.id,
+        reported_user_id: userId,
+        reason: reportReason,
+        status: 'pending',
+      });
+      if (error) throw error;
+      toast.success('Report submitted successfully');
+      setShowReportModal(false);
+      setReportReason('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to submit report');
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
+  const reportReasons = [
+    { id: 'spam', label: 'Spam / Advertising' },
+    { id: 'harassment', label: 'Harassment / Bullying' },
+    { id: 'inappropriate', label: 'Inappropriate Content' },
+    { id: 'impersonation', label: 'Impersonation' },
+    { id: 'violence', label: 'Violence / Threats' },
+    { id: 'scam', label: 'Scam / Fraud' },
+    { id: 'other', label: 'Other' },
+  ];
 
   const handleViewProfile = () => {
     navigate(`/profile/${username}`);
     onClose();
   };
 
-  const handleFollow = () => {
-    // Placeholder for follow system
-    toast.info('Follow feature coming soon');
+  const [following, setFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  const checkFollowing = async () => {
+    if (!user || !userId || isOwnProfile) return;
+    try {
+      const { data } = await supabase
+        .from('user_follows')
+        .select('id')
+        .eq('follower_id', user.id)
+        .eq('following_id', userId)
+        .maybeSingle();
+      setFollowing(!!data);
+    } catch (err) {
+      console.error('Error checking follow status:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading) {
+      checkFollowing();
+    }
+  }, [loading, user?.id, userId]);
+
+  const handleFollow = async () => {
+    if (!user || !userId || isOwnProfile) return;
+    setFollowLoading(true);
+    try {
+      if (following) {
+        await supabase
+          .from('user_follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', userId);
+        setFollowing(false);
+        toast.success('Unfollowed');
+      } else {
+        await supabase
+          .from('user_follows')
+          .insert({ follower_id: user.id, following_id: userId });
+        setFollowing(true);
+        toast.success('Now following');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Follow action failed');
+    } finally {
+      setFollowLoading(false);
+    }
   };
 
   if (loading) {
@@ -230,10 +310,19 @@ const UserMiniProfile: React.FC<UserMiniProfileProps> = ({
                 />
                 <button
                   onClick={handleFollow}
-                  className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm"
+                  disabled={followLoading}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    following
+                      ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      : 'bg-slate-800 hover:bg-slate-700 text-white'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  <Users className="w-4 h-4" />
-                  Follow
+                  {followLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Users className="w-4 h-4" />
+                  )}
+                  {following ? 'Following' : 'Follow'}
                 </button>
                 <button
                   onClick={handleMessage}
@@ -332,10 +421,75 @@ const UserMiniProfile: React.FC<UserMiniProfileProps> = ({
               </span>
             </div>
           )}
+
+          {/* Report Modal */}
+          {showReportModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowReportModal(false)}>
+              <div className="bg-zinc-900 border border-red-500/30 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="p-4 border-b border-white/10 flex items-center justify-between bg-red-900/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                      <Flag className="w-4 h-4 text-red-500" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-sm">Report User</h3>
+                      <p className="text-xs text-zinc-400">Reporting @{username}</p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setShowReportModal(false)} className="text-zinc-400 hover:text-white transition-colors">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="p-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">Reason for reporting</label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {reportReasons.map((reason) => (
+                        <label
+                          key={reason.id}
+                          className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${
+                            reportReason === reason.id
+                              ? 'bg-red-500/20 border-red-500/50'
+                              : 'bg-zinc-800 border-transparent hover:border-white/10'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="reportReason"
+                            value={reason.id}
+                            checked={reportReason === reason.id}
+                            onChange={(e) => setReportReason(e.target.value)}
+                          />
+                          <span className="text-sm text-white">{reason.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => setShowReportModal(false)}
+                      className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-lg transition-colors text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={submitReport}
+                      disabled={!reportReason || reportSubmitting}
+                      className="flex-1 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors text-sm"
+                    >
+                      {reportSubmitting ? 'Submitting...' : 'Submit Report'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
-  );
+   );
 };
 
 export default UserMiniProfile;

@@ -94,6 +94,7 @@ export function useFiveVFiveBattle({ streamId, isHost, category }: UseFiveVFiveB
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const matchingRef = useRef(false);
   const stateRef = useRef(state);
 
   useEffect(() => {
@@ -132,10 +133,11 @@ export function useFiveVFiveBattle({ streamId, isHost, category }: UseFiveVFiveB
       toast.error('Battle only available in General Chat category');
       return;
     }
-    if (state.phase !== 'idle') {
+    if (state.phase !== 'idle' || matchingRef.current) {
       toast.error('Battle already in progress');
       return;
     }
+    matchingRef.current = true;
 
     const teamA = customTeamA?.trim() || 'Team A';
     const teamB = customTeamB?.trim() || 'Team B';
@@ -187,6 +189,7 @@ export function useFiveVFiveBattle({ streamId, isHost, category }: UseFiveVFiveB
       if (!opponent || !opponent.id) {
         toast.dismiss('battle-matchmaking');
         toast.error('No opponents found. Try again later!');
+        matchingRef.current = false;
         setState(prev => ({ ...prev, phase: 'idle' }));
         return;
       }
@@ -363,6 +366,7 @@ export function useFiveVFiveBattle({ streamId, isHost, category }: UseFiveVFiveB
       console.error('[FiveVFive] Matchmaking error:', err);
       toast.dismiss('battle-matchmaking');
       toast.error(err.message || 'Failed to find match');
+      matchingRef.current = false;
       setState(prev => ({ ...prev, phase: 'idle' }));
     }
   }, [user, streamId, isGeneralChat, state.phase, broadcastState]);
@@ -563,6 +567,7 @@ export function useFiveVFiveBattle({ streamId, isHost, category }: UseFiveVFiveB
   // ─── RESET ───
   const resetBattle = useCallback(() => {
     cleanup();
+    matchingRef.current = false;
     setState(INITIAL_STATE);
   }, [cleanup]);
 

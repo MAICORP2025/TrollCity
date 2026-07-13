@@ -154,7 +154,7 @@ function ActiveElectionsSection() {
             <p className="text-slate-400 text-sm">{election.candidates} candidates • {election.votes} votes cast</p>
           </div>
           <Link
-            to="/government/elections"
+            to="/president"
             className={`px-4 py-2 rounded-lg text-sm font-medium ${
               election.status === 'active' || election.status === 'Active'
                 ? 'bg-green-600/20 text-green-400'

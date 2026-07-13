@@ -35,7 +35,7 @@ import {
   TMTab,
 } from '../types/trollMatch';
 
-const pageShell = 'min-h-screen bg-slate-950 text-white relative overflow-hidden';
+const pageShell = 'min-h-screen bg-slate-950 text-white relative overflow-y-auto overflow-x-hidden md:overflow-hidden';
 const glassPanel =
   'rounded-[2rem] border border-cyan-400/15 bg-slate-950/75 backdrop-blur-2xl shadow-[0_0_38px_rgba(45,212,191,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]';
 const primaryButton =

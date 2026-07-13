@@ -91,7 +91,7 @@ const CATEGORIES = [
 const CONDITIONS = ['New', 'Like New', 'Excellent', 'Good', 'Fair', 'Used', 'For Parts']
 
 const shell =
-  'relative min-h-screen overflow-hidden bg-[#07101f] px-3 pb-8 pt-20 text-white sm:px-4 md:px-6'
+  'relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#07101f] px-3 pb-8 pt-20 text-white sm:px-4 md:px-6'
 const panel =
   'rounded-[1.65rem] border border-cyan-300/15 bg-[#0b1628]/85 shadow-[0_0_45px_rgba(34,211,238,0.12)] backdrop-blur-2xl'
 const panelSoft =

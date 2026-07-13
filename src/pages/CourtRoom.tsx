@@ -11,12 +11,10 @@ import AgoraRTC, {
 import {
   Crown,
   FileText,
-  Gavel,
   LogOut,
   Mic,
   MicOff,
   Scale,
-  Shield,
   User,
   Users,
   Video,
@@ -26,12 +24,11 @@ import { toast } from 'sonner'
 
 import { useAuthStore } from '../lib/store'
 import { supabase, UserRole } from '../lib/supabase'
-import { GiftSystemProvider } from '../lib/hooks/useGiftSystem'
 import RequireRole from '../components/RequireRole'
 import CourtChat from '../components/CourtChat'
 import CourtDocketModal from '../components/CourtDocketModal'
-import GiftBoxModal from '../components/broadcast/GiftBoxModal'
 import { Button } from '../components/ui/button'
+
 
 type CourtRole =
   | 'admin'
@@ -278,27 +275,21 @@ function CourtStudioTile({
   spot,
   userTrack,
   isLocal,
-  localUserId,
   canEnterSpot,
   isJoiningSpot,
   onEnterSpot,
-  onGiftUser,
 }: {
   spot: CourtStudioSpot
   userTrack?: AgoraCourtTrack
   isLocal?: boolean
-  localUserId: string
   canEnterSpot?: boolean
   isJoiningSpot?: boolean
   onEnterSpot?: () => void
-  onGiftUser?: (userId: string) => void
 }) {
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const videoTrack = userTrack?.videoTrack || null
   const audioTrack = userTrack?.audioTrack || null
-  const uid = String(userTrack?.uid || '')
   const username = userTrack?.username || spotLabel(spot)
-  const canGift = Boolean(userTrack && isValidUuid(uid) && uid !== localUserId)
   const canClickEnter = !userTrack && Boolean(canEnterSpot && onEnterSpot)
 
   useEffect(() => {
@@ -372,15 +363,13 @@ function CourtStudioTile({
         'absolute z-20 overflow-hidden rounded-full border-2 bg-black/40 backdrop-blur-sm transition',
         spotPosition(spot),
         spotTone(spot),
-        canGift || canClickEnter ? 'cursor-pointer hover:scale-[1.03]' : 'cursor-default',
+        canClickEnter ? 'cursor-pointer hover:scale-[1.03]' : 'cursor-default',
       ].join(' ')}
       onClick={() => {
         if (canClickEnter && onEnterSpot) {
           onEnterSpot()
           return
         }
-
-        if (canGift && onGiftUser) onGiftUser(uid)
       }}
     >
       {videoTrack ? (
@@ -515,22 +504,25 @@ export default function CourtRoom() {
   const [activeSpot, setActiveSpot] = useState<CourtStudioSpot | null>(null)
   const [isJoining, setIsJoining] = useState(false)
   const [showDocketModal, setShowDocketModal] = useState(false)
-  const [giftRecipientId, setGiftRecipientId] = useState<string | null>(null)
-  const [giftOpen, setGiftOpen] = useState(false)
   const [showChat, setShowChat] = useState(false)
 
-  const [agoraClient, setAgoraClient] = useState<IAgoraRTCClient | null>(null)
-  const [agoraJoined, setAgoraJoined] = useState(false)
-  const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([])
-  const [localAudioTrack, setLocalAudioTrack] = useState<IMicrophoneAudioTrack | null>(null)
-  const [localVideoTrack, setLocalVideoTrack] = useState<ICameraVideoTrack | null>(null)
-  const [micOn, setMicOn] = useState(false)
-  const [cameraOn, setCameraOn] = useState(false)
+   const [agoraJoined, setAgoraJoined] = useState(false)
+   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([])
+   const [localAudioTrack, setLocalAudioTrack] = useState<IMicrophoneAudioTrack | null>(null)
+   const [localVideoTrack, setLocalVideoTrack] = useState<ICameraVideoTrack | null>(null)
+   const [micOn, setMicOn] = useState(false)
+   const [cameraOn, setCameraOn] = useState(false)
 
-  const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null)
-  const localVideoRef = useRef<ICameraVideoTrack | null>(null)
-  const agoraClientRef = useRef<IAgoraRTCClient | null>(null)
-  const joinedRef = useRef(false)
+   const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null)
+   const localVideoRef = useRef<ICameraVideoTrack | null>(null)
+   const agoraClientRef = useRef<IAgoraRTCClient | null>(null)
+   const joinedRef = useRef(false)
+    const autoEnterRef = useRef(false)
+    const enterCourtroomRef = useRef<((forcedSpot?: CourtStudioSpot) => void) | null>(null)
+
+    useEffect(() => {
+      enterCourtroomRef.current = enterCourtroom
+    })
 
   const effectiveRole = useMemo(() => normalizeCourtRole(profile), [profile])
   const autoSpot = useMemo(() => getAutoStudioSpot(effectiveRole), [effectiveRole])
@@ -628,7 +620,6 @@ export default function CourtRoom() {
     })
 
     agoraClientRef.current = client
-    setAgoraClient(client)
 
     return client
   }, [])
@@ -779,7 +770,7 @@ export default function CourtRoom() {
 
           if (next.status && !['active', 'live', 'waiting'].includes(next.status)) {
             toast.info('Court session ended.')
-            navigate('/troll-court')
+            navigate(`/court/${courtId}/summary`)
           }
         },
       )
@@ -807,13 +798,23 @@ export default function CourtRoom() {
     }
   }, [courtId, fetchCourtParticipants, fetchCourtSession, navigate])
 
-  useEffect(() => {
-    return () => {
-      leaveAgora()
-    }
-  }, [leaveAgora])
+   useEffect(() => {
+     return () => {
+       leaveAgora()
+     }
+   }, [leaveAgora])
 
-  const upsertParticipantRole = async (spot: CourtStudioSpot) => {
+    useEffect(() => {
+      if (!courtId || !user?.id || activeSpot || isJoining) return
+      if (autoSpot !== 'audience') return
+      if (autoEnterRef.current) return
+
+      autoEnterRef.current = true
+
+      void enterCourtroomRef.current('audience')
+    }, [courtId, user?.id, activeSpot, isJoining, autoSpot])
+
+   const upsertParticipantRole = async (spot: CourtStudioSpot) => {
     if (!courtId || !user?.id) return
 
     const { data, error } = await supabase.rpc('join_court_session', {
@@ -962,7 +963,7 @@ export default function CourtRoom() {
       await leaveAgora()
       setActiveSpot(null)
       toast.success('Court session ended.')
-      navigate('/troll-court')
+      navigate(`/court/${courtId}/summary`)
     } catch (error: any) {
       toast.error(error?.message || 'Failed to end court.')
     }
@@ -1070,6 +1071,7 @@ export default function CourtRoom() {
             }
           : undefined,
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     courtParticipants,
     courtSession,
@@ -1080,21 +1082,6 @@ export default function CourtRoom() {
     activeSpot,
     profile?.username,
   ])
-
-  const handleGiftTarget = (targetUserId: string) => {
-    if (!user) {
-      navigate('/auth?mode=signup')
-      return
-    }
-
-    if (targetUserId === user.id) {
-      toast.error('You cannot gift yourself')
-      return
-    }
-
-    setGiftRecipientId(targetUserId)
-    setGiftOpen(true)
-  }
 
   const canEnterSpecificSpot = (spot: CourtStudioSpot) => {
     if (activeSpot || isJoining) return false
@@ -1142,62 +1129,51 @@ export default function CourtRoom() {
           spot="judge"
           userTrack={spotUsers.judge}
           isLocal={String(spotUsers.judge?.uid || '') === user?.id}
-          localUserId={user?.id || ''}
           canEnterSpot={canEnterSpecificSpot('judge')}
           isJoiningSpot={isJoining && autoSpot === 'judge'}
           onEnterSpot={() => enterCourtroom('judge')}
-          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
           spot="prosecutor"
           userTrack={spotUsers.prosecutor}
           isLocal={String(spotUsers.prosecutor?.uid || '') === user?.id}
-          localUserId={user?.id || ''}
           canEnterSpot={canEnterSpecificSpot('prosecutor')}
           isJoiningSpot={isJoining && autoSpot === 'prosecutor'}
           onEnterSpot={() => enterCourtroom('prosecutor')}
-          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
           spot="attorney"
           userTrack={spotUsers.attorney}
           isLocal={String(spotUsers.attorney?.uid || '') === user?.id}
-          localUserId={user?.id || ''}
           canEnterSpot={canEnterSpecificSpot('attorney')}
           isJoiningSpot={isJoining && autoSpot === 'attorney'}
           onEnterSpot={() => enterCourtroom('attorney')}
-          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
           spot="witness"
           userTrack={spotUsers.witness}
           isLocal={String(spotUsers.witness?.uid || '') === user?.id}
-          localUserId={user?.id || ''}
           canEnterSpot={canEnterSpecificSpot('witness')}
           isJoiningSpot={isJoining && autoSpot === 'witness'}
           onEnterSpot={() => enterCourtroom('witness')}
-          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
           spot="defendant"
           userTrack={spotUsers.defendant}
           isLocal={String(spotUsers.defendant?.uid || '') === user?.id}
-          localUserId={user?.id || ''}
           canEnterSpot={canEnterSpecificSpot('defendant')}
           isJoiningSpot={isJoining && autoSpot === 'defendant'}
           onEnterSpot={() => enterCourtroom('defendant')}
-          onGiftUser={handleGiftTarget}
         />
 
         <CourtStudioTile
           spot="audience"
           userTrack={spotUsers.audience}
           isLocal={activeSpot === 'audience'}
-          localUserId={user?.id || ''}
           canEnterSpot={canEnterSpecificSpot('audience')}
           isJoiningSpot={isJoining && autoSpot === 'audience'}
           onEnterSpot={() => enterCourtroom('audience')}
@@ -1249,18 +1225,6 @@ export default function CourtRoom() {
           courtId={courtId || ''}
           isJudge={canJudge(effectiveRole)}
         />
-
-        <GiftSystemProvider streamId={courtId ? `court-${courtId}` : undefined}>
-          <GiftBoxModal
-            isOpen={giftOpen}
-            onClose={() => {
-              setGiftOpen(false)
-              setGiftRecipientId(null)
-            }}
-            recipientId={giftRecipientId || ''}
-            streamId={courtId ? `court-${courtId}` : ''}
-          />
-        </GiftSystemProvider>
       </div>
     </RequireRole>
   )

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import BugCenterPanel from '../components/admin/BugCenterPanel';
 import StaffWalkieTalkieButton from '@/components/StaffWalkieTalkieButton';
+import NotaryDashboard from './NotaryDashboard';
 
 interface LiveStream {
   id: string;
@@ -961,7 +962,6 @@ const openAction = useCallback((user: UserListItem, action: string) => {
         p_defendant_id: userId,
         p_reason: streamActionReason || 'Summoned from stream via RTC Monitor',
         p_users_involved: [],
-        p_docket_id: null,
       });
       if (error) throw error;
       toast.success(`@${username} summoned to court`);
@@ -2050,5 +2050,5 @@ function WalkieTalkieTab() {
 }
 
 function renderNotaryTab() {
-  throw new Error('Function not implemented.');
+  return <NotaryDashboard />;
 }

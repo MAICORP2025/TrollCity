@@ -85,7 +85,7 @@ interface EarningTimelineEvent {
 }
 
 const pageShell =
-  'min-h-screen overflow-hidden bg-slate-950 text-white relative'
+  'min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-slate-950 text-white relative'
 
 const cityPanel =
   'rounded-[2rem] border border-cyan-400/20 bg-slate-950/70 shadow-[0_0_48px_rgba(45,212,191,0.12),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl'

@@ -90,18 +90,8 @@ export function getCoinPackages(): typeof COIN_PACKAGES {
 }
 
 /**
- * Calculate coins with new user bonus applied
- * @param baseCoins - The base coin amount
- * @param includeBonus - Whether to include the 5% bonus
+ * Validate coin amount against available tiers
  */
-export function calculateCoinsWithBonus(baseCoins: number, includeBonus: boolean = true): number {
-  if (!includeBonus) return baseCoins;
-  return Math.floor(baseCoins * 1.05);
-}
-
-/**
- * Get the bonus coins amount for a purchase
- */
-export function getBonusCoins(baseCoins: number): number {
-  return Math.floor(baseCoins * 0.05);
+export function isValidCashoutAmount(coinAmount: number): boolean {
+  return CASHOUT_TIERS.some(t => t.coins === coinAmount);
 }

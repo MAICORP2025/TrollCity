@@ -1,20 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, ShoppingCart, Coins } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { useProfileFrameStore } from '@/stores/useProfileFrameStore';
 import type { ProfileFrame } from '@/config/profileFrames';
 import PayPalPaymentModal from './PayPalPaymentModal'
 
-interface CoinPackage {
-  id: string;
-  coins: number;
-  baseCoins?: number;
-  bonusCoins?: number;
-  price: string;
-  popular?: boolean;
-}
+  interface CoinPackage {
+    id: string;
+    coins: number;
+    price: string;
+    popular?: boolean;
+  }
 
 interface CoinStoreModalProps {
   isOpen: boolean;
@@ -29,7 +26,7 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
   const [selectedPack, setSelectedPack] = useState<CoinPackage | null>(null);
   const [packages, setPackages] = useState<CoinPackage[]>([]);
   const [loading, setLoading] = useState(true);
-  
+   
   // Profile frame store
   const {
     catalog: profileFrames,
@@ -46,78 +43,25 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
   const isFrameEquipped = (frameId: string) => equippedFrameId === frameId;
   const [purchasingFrameId, setPurchasingFrameId] = useState<string | null>(null);
   
-  // New user state - check if user has made any previous coin purchases
-  const [isNewUser, setIsNewUser] = useState(true);
-  const [checkingNewUser, setCheckingNewUser] = useState(true);
-  const NEW_USER_COIN_DISCOUNT = 0.05; // 5% off for new users
-  const MINIMUM_TAX_RATE = 0.03; // 3% minimum tax on all coin packs
-
   const [showPayPalPayment, setShowPayPalPayment] = useState(false);
   const [showCardPayment, setShowCardPayment] = useState(false);
   const paymentInProgressRef = useRef(false);
 
-  // Check if user is a new user (less than 1 week on platform)
-  const checkNewUserStatus = useCallback(async () => {
-    if (!user?.id) {
-      setCheckingNewUser(false);
-      return;
-    }
-    
-    try {
-      // Check user's account creation date
-      const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('created_at')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (profileError) throw profileError;
-      
-      if (profileData?.created_at) {
-        const createdAt = new Date(profileData.created_at);
-        const now = new Date();
-        const daysSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
-        
-        // User is "new" if less than 7 days since account creation
-        setIsNewUser(daysSinceCreation < 7);
-      } else {
-        setIsNewUser(false);
-      }
-    } catch (err) {
-      console.error('Error checking new user status:', err);
-      // Default to false on error to avoid giving discount incorrectly
-      setIsNewUser(false);
-    } finally {
-      setCheckingNewUser(false);
-    }
-  }, [user?.id]);
-
    const fetchCoinPacks = async () => {
      setLoading(true);
      
-// Standard coin packs for broadcast quick store
-      const basePacks = [
-        { id: '1', coins: 100, price: '$1.00' },
-        { id: '2', coins: 300, price: '$3.00' },
-        { id: '3', coins: 500, price: '$5.00' },
-        { id: '4', coins: 1000, price: '$10.00', popular: true },
-        { id: '5', coins: 2500, price: '$25.00' },
-        { id: '6', coins: 5000, price: '$50.00' },
-        { id: '7', coins: 10000, price: '$100.00' },
-        { id: '8', coins: 75000, price: '$750.00' },
-        { id: '9', coins: 100000, price: '$1000.00' },
-      ];
-    const standardPacks: CoinPackage[] = basePacks.map((pkg) => {
-      const bonusCoins = Math.floor(pkg.coins * 0.10);
-      return {
-        ...pkg,
-        baseCoins: pkg.coins,
-        bonusCoins,
-        coins: pkg.coins + bonusCoins,
-      };
-    });
-    
-    setPackages(standardPacks);
+    const basePacks = [
+      { id: '1', coins: 100, price: '$1.00' },
+      { id: '2', coins: 300, price: '$3.00' },
+      { id: '3', coins: 500, price: '$5.00' },
+      { id: '4', coins: 1000, price: '$10.00', popular: true },
+      { id: '5', coins: 2500, price: '$25.00' },
+      { id: '6', coins: 5000, price: '$50.00' },
+      { id: '7', coins: 10000, price: '$100.00' },
+      { id: '8', coins: 75000, price: '$750.00' },
+      { id: '9', coins: 100000, price: '$1000.00' },
+    ];
+    setPackages(basePacks);
     setLoading(false);
   };
 
@@ -130,76 +74,58 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
 
     if (isOpen) {
       fetchCoinPacks();
-      checkNewUserStatus();
       loadCatalog();
       loadUserFrames(user?.id);
       // Reset state when opening
       setSelectedPack(null);
       setShowPayPalPayment(false);
     }
-  }, [isOpen, checkNewUserStatus, onClose, user?.id, loadCatalog, loadUserFrames]);
+  }, [isOpen, onClose, user?.id, loadCatalog, loadUserFrames]);
 
-  const handlePackageSelect = (pkg: CoinPackage) => {
-    if (!user?.id) {
-      toast.error('Sign in to use the coin store.')
-      return
-    }
+    const handlePackageSelect = (pkg: CoinPackage) => {
+      if (!user?.id) {
+        toast.error('Sign in to use the coin store.')
+        return
+      }
 
-    const finalPrice = getFinalPrice(pkg.price);
-    const pkgWithTax = {
-      ...pkg,
-      price: finalPrice.toFixed(2),
-      purchaseType: 'coins',
-      metadata: { source: 'broadcast_quick_store', baseCoins: pkg.baseCoins, bonusCoins: pkg.bonusCoins },
+      const pkgWithTax = {
+        ...pkg,
+        price: pkg.price,
+        purchaseType: 'coins',
+        metadata: { source: 'broadcast_quick_store' },
+      };
+      setSelectedPack(pkgWithTax);
+      paymentInProgressRef.current = true;
+      setShowPayPalPayment(true);
     };
-    setSelectedPack(pkgWithTax);
-    paymentInProgressRef.current = true;
-    setShowPayPalPayment(true);
-  };
 
-  const handleCardCheckout = (pkg: CoinPackage) => {
-    if (!allowCardPayment) {
-      return;
-    }
+    const handleCardCheckout = (pkg: CoinPackage) => {
+      if (!allowCardPayment) {
+        return;
+      }
 
-    if (!user?.id) {
-      toast.error('Sign in to use the coin store.')
-      return
-    }
+      if (!user?.id) {
+        toast.error('Sign in to use the coin store.')
+        return
+      }
 
-    const finalPrice = getFinalPrice(pkg.price);
-    const pkgWithTax: any = {
-      ...pkg,
-      price: finalPrice.toFixed(2),
-      purchaseType: 'coins',
-      metadata: { source: 'broadcast_quick_store', baseCoins: pkg.baseCoins, bonusCoins: pkg.bonusCoins },
-      forceCard: true,
+      const pkgWithTax: any = {
+        ...pkg,
+        price: pkg.price,
+        purchaseType: 'coins',
+        metadata: { source: 'broadcast_quick_store' },
+        forceCard: true,
+      };
+      setSelectedPack(pkgWithTax);
+      setShowCardPayment(true);
     };
-    setSelectedPack(pkgWithTax);
-    setShowCardPayment(true);
-  };
 
-  // Helper to calculate final price with minimum tax
-  const getFinalPrice = (price: string) => {
-    const numPrice = parseFloat(price.replace('$', ''));
-    if (isNaN(numPrice)) return 0;
-    const tax = numPrice * MINIMUM_TAX_RATE;
-    return numPrice + tax;
-  };
-
-  const getTaxAmount = (price: string) => {
-    const numPrice = parseFloat(price.replace('$', ''));
-    if (isNaN(numPrice)) return 0;
-    return numPrice * MINIMUM_TAX_RATE;
-  };
-
-  const getDisplayPrice = (price: string) => {
-    const numPrice = parseFloat(price.replace('$', ''));
-    if (isNaN(numPrice)) return price;
-    const discounted = numPrice * (1 - NEW_USER_COIN_DISCOUNT);
-    const withTax = discounted + (discounted * MINIMUM_TAX_RATE);
-    return `$${withTax.toFixed(2)}`;
-  };
+    // Helper to calculate final price
+    const getFinalPrice = (price: string) => {
+      const numPrice = parseFloat(price.replace('$', ''));
+      if (isNaN(numPrice)) return 0;
+      return numPrice;
+    };
   
   const handlePaymentSuccess = (data: any) => {
     paymentInProgressRef.current = false;
@@ -299,18 +225,7 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
              </button>
            </div>
 
-          {/* New User Discount Banner */}
-          {isNewUser && !checkingNewUser && (
-            <div className="mx-4 mt-4 p-3 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/40 rounded-lg animate-in slide-in-from-top-2 duration-300">
-              <div className="flex items-center justify-center gap-2 text-green-400">
-                <span className="text-lg">🎉</span>
-                <span className="font-bold">New User Special: 5% OFF + 3% Tax Included!</span>
-                <span className="text-lg">🎉</span>
-              </div>
-            </div>
-          )}
-
-{/* Content */}
+          {/* Content */}
            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
              {activeTab === 'coins' ? (
                <>
@@ -334,12 +249,6 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
                              BEST VALUE
                            </div>
                          )}
-                         {/* 5% OFF badge for new users */}
-                         {isNewUser && !checkingNewUser && (
-                           <div className="absolute -top-2 -right-1 bg-green-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg animate-pulse">
-                             5% OFF
-                           </div>
-                         )}
                          
                          <div className="flex items-center gap-3">
                            <div className={`p-2 rounded-full ${selectedPack?.id === pkg.id ? 'bg-yellow-500/20' : 'bg-zinc-700'}`}>
@@ -347,18 +256,14 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
                            </div>
                            <div className="text-left">
                              <div className="font-bold text-white text-lg">{pkg.coins.toLocaleString()} Coins</div>
-                             <div className="text-xs text-emerald-300">Includes {pkg.bonusCoins?.toLocaleString()} bonus coins</div>
                            </div>
                          </div>
 
                          <div className="flex flex-col items-end gap-1">
-                           <span className={`font-bold bg-zinc-950 px-3 py-1 rounded-md border border-zinc-800 ${isNewUser ? 'text-green-400' : 'text-white'}`}>
-                             {isNewUser ? getDisplayPrice(pkg.price) : getFinalPrice(pkg.price)}
+                           <span className="font-bold bg-zinc-950 px-3 py-1 rounded-md border border-zinc-800 text-white">
+                             {getFinalPrice(pkg.price)}
                            </span>
-                           <span className="text-[9px] text-zinc-500">
-                             +${(isNewUser ? getTaxAmount(pkg.price) : getTaxAmount(pkg.price)).toFixed(2)} tax
-                           </span>
-                                          <div className="mt-2 flex gap-2">
+                                           <div className="mt-2 flex gap-2">
                            <button
                              onClick={(e) => { e.stopPropagation(); handlePackageSelect(pkg); }}
                              className="px-3 py-1 bg-cyan-600 text-black font-bold rounded-md text-sm"

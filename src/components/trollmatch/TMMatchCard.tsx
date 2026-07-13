@@ -1,16 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MessageCircle, Video, UserPlus, Star, Heart, Eye } from 'lucide-react';
+import { MessageCircle, Video, UserPlus, Star, Heart, Eye, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TMMatch } from '../../types/trollMatch';
 import { useAuthStore } from '../../lib/store';
 import { useTMMessagePricing, useTMRecordView, useTMFamilyInvites } from '../../hooks/useTrollMatch';
 import { toast } from 'sonner';
+import { supabase } from '../../lib/supabase';
 
 interface TMMatchCardProps {
   match: TMMatch;
   type: 'friends' | 'dating';
   onMessage?: (userId: string, price: number) => void;
+}
+
+interface FamilyOption {
+  id: string;
+  name: string;
+  role: string | null;
 }
 
 export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
@@ -19,10 +26,14 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
   const { pricing, loading: pricingLoading } = useTMMessagePricing(match.user_id);
   const { recordView } = useTMRecordView();
   const { createInvite } = useTMFamilyInvites();
-  
+
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
+  const [showFamilyModal, setShowFamilyModal] = useState(false);
+  const [families, setFamilies] = useState<FamilyOption[]>([]);
+  const [loadingFamilies, setLoadingFamilies] = useState(false);
+  const [invitingFamilyId, setInvitingFamilyId] = useState<string | null>(null);
 
   const handleViewProfile = async () => {
     // Record the view
@@ -70,9 +81,51 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
   };
 
   const handleInviteToFamily = async () => {
-    // For now, just show a toast - in real implementation, would open family selector
-    toast.info('Opening family selector...');
-    // TODO: Open family selector modal
+    if (!user) {
+      toast.error('Please log in to invite to family');
+      return;
+    }
+
+    setLoadingFamilies(true);
+    try {
+      const { data, error } = await supabase
+        .from('troll_families')
+        .select('id, name')
+        .eq('leader_id', user.id);
+
+      if (error) throw error;
+
+      const userFamilies = (data || []).map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        role: 'leader' as const,
+      }));
+
+      if (userFamilies.length === 0) {
+        toast.error('You need to lead a family to invite members');
+        return;
+      }
+
+      setFamilies(userFamilies);
+      setShowFamilyModal(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load families');
+    } finally {
+      setLoadingFamilies(false);
+    }
+  };
+
+  const handleSelectFamily = async (familyId: string) => {
+    setInvitingFamilyId(familyId);
+    try {
+      await createInvite(match.user_id, familyId);
+      toast.success(`Invited @${match.username} to your family!`);
+      setShowFamilyModal(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send invite');
+    } finally {
+      setInvitingFamilyId(null);
+    }
   };
 
   const handleFollow = () => {
@@ -272,6 +325,59 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
                   {sending ? 'Sending...' : `Send - ${price} Coins`}
                 </button>
               </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Family Selector Modal */}
+      {showFamilyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md bg-slate-800 rounded-2xl border border-purple-500/20 overflow-hidden"
+          >
+            <div className="p-6 bg-gradient-to-r from-purple-600 to-pink-600">
+              <h3 className="text-xl font-bold text-white">Invite to Family</h3>
+              <p className="text-purple-100 text-sm mt-1">
+                Select a family to invite @{match.username}
+              </p>
+            </div>
+
+            <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+              {loadingFamilies ? (
+                <div className="text-center text-slate-400 py-4">Loading families...</div>
+              ) : families.length === 0 ? (
+                <div className="text-center text-slate-400 py-4">No families found</div>
+              ) : (
+                families.map((family) => (
+                  <button
+                    key={family.id}
+                    onClick={() => handleSelectFamily(family.id)}
+                    disabled={invitingFamilyId === family.id}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-700/50 hover:bg-slate-700 transition-colors text-left disabled:opacity-50"
+                  >
+                    <Users className="w-5 h-5 text-purple-400" />
+                    <div>
+                      <div className="font-bold text-white">{family.name}</div>
+                      <div className="text-xs text-slate-400 capitalize">{family.role}</div>
+                    </div>
+                    {invitingFamilyId === family.id && (
+                      <div className="ml-auto text-xs text-slate-400">Inviting...</div>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-700">
+              <button
+                onClick={() => setShowFamilyModal(false)}
+                className="w-full px-4 py-2 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </motion.div>
         </div>

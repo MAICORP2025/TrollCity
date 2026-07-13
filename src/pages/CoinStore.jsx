@@ -7,7 +7,7 @@ import { useBank as useBankHook } from '../lib/hooks/useBank';
 import { useAllCreditScores } from '../lib/hooks/useAllCreditScores';
 import { useStockMarket } from '../lib/hooks/useStockMarket';
 // import { toast } from 'sonner';
-import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, AlertTriangle, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, BarChart3, Wallet, Briefcase, Crown, Flame, RefreshCw, HardDrive, Sparkles } from 'lucide-react';
+import { Coins, ShoppingCart, CreditCard, Landmark, History, CheckCircle, AlertCircle, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Zap, BarChart3, Wallet, Briefcase, Crown, Flame, RefreshCw, Sparkles } from 'lucide-react';
 import { formatCoins, COIN_PACKAGES } from '../lib/coinMath';
 import { getBroadcastTheme } from '../lib/broadcastThemes';
 import { deductCoins } from '@/lib/coinTransactions';
@@ -791,11 +791,6 @@ const [selectedPostId, setSelectedPostId] = useState(null);
     checkNewUserStatus();
   }, [checkNewUserStatus]);
 
-  const NEW_USER_COIN_DISCOUNT = 0.05; // 5% off for new users
-
-  const EMPLOYEE_CALL_DISCOUNT = 0.5;
-  const EMPLOYEE_COIN_DISCOUNT = 0.015;
-
   const showLiveSnacks = Boolean(activeStreamId && liveStreamIsLive);
   const callPackages = {
     audio: [
@@ -1453,10 +1448,9 @@ useEffect(() => {
                   {showStoreDropdown && (
                       <div className="absolute top-full right-0 mt-2 w-48 bg-zinc-900 border border-purple-500/30 rounded-lg shadow-xl z-50 overflow-hidden flex flex-col">
                                <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='perks' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('perks'); setShowStoreDropdown(false); }}>Perks</button>
-                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
-                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='insurance' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('insurance'); setShowStoreDropdown(false); }}>Insurance</button>
-                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='storage' ? 'text-cyan-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('storage'); setShowStoreDropdown(false); }}>Storage</button>
-                           <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='frames' ? 'text-pink-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('frames'); setShowStoreDropdown(false); }}>✨ Profile Frames</button>
+                            <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='calls' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('calls'); setShowStoreDropdown(false); }}>Call Minutes</button>
+                            <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='insurance' ? 'text-purple-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('insurance'); setShowStoreDropdown(false); }}>Insurance</button>
+                            <button className={`text-left px-4 py-3 hover:bg-white/10 ${tab==='frames' ? 'text-pink-400 font-bold' : 'text-gray-300'}`} onClick={() => { setTab('frames'); setShowStoreDropdown(false); }}>✨ Profile Frames</button>
                       </div>
                   )}
                </div>
@@ -1869,55 +1863,19 @@ useEffect(() => {
                 <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center gap-3">
                   <span className="text-2xl">🎁</span>
                   <div>
-                    <div className="font-bold text-blue-400">Welcome! New User Discount</div>
-                    <div className="text-sm text-gray-300">Get <span className="font-bold text-blue-400">5% OFF</span> all coin packs as a new member!</div>
+                    <div className="font-bold text-blue-400">Welcome! New User</div>
+                    <div className="text-sm text-gray-300">Thanks for joining Troll City!</div>
                   </div>
                 </div>
               )}
-
-              {isEmployee && (
-                <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-3">
-                  <span className="text-2xl">🎉</span>
-                  <div>
-                    <div className="font-bold text-green-400">Employee Discount Applied</div>
-                    <div className="text-sm text-gray-300">Secretaries, Lead Troll Officers, and Troll Officers get <span className="font-bold text-green-400">1.5% OFF</span> all coin packs!</div>
-                  </div>
-                </div>
-              )}
-
 
 
               {selectedPackage && (manualPaymentModalOpen || paypalPaymentModalOpen) ? null : (
                 <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {coinPackages.map((pkg) => {
-                    const priceMatch = pkg.price?.match(/\$(\d+\.?\d*)/);
-                    const originalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
-                    // Apply new user discount (4%) or employee discount (1.5%)
-                    let discountedPrice = originalPrice;
-                    let appliedDiscount = 0;
-                    if (isEmployee) {
-                      discountedPrice = originalPrice * (1 - EMPLOYEE_COIN_DISCOUNT);
-                      appliedDiscount = EMPLOYEE_COIN_DISCOUNT;
-                    } else if (!checkingNewUser && isNewUser) {
-                      discountedPrice = originalPrice * (1 - NEW_USER_COIN_DISCOUNT);
-                      appliedDiscount = NEW_USER_COIN_DISCOUNT;
-                    }
-                    
-                    const showNewUserBadge = !checkingNewUser && isNewUser && !isEmployee;
-                    
+                    {coinPackages.map((pkg) => {
                     return (
-                      <div key={pkg.id} className={`bg-black/40 p-3 rounded-lg border ${pkg.promo ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : (pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20')} relative overflow-hidden group ${isEmployee ? 'border-green-500/30' : (showNewUserBadge ? 'border-blue-500/30' : '')}`}>
-                        {isEmployee && (
-                          <div className="absolute top-3 left-3 bg-green-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                            1.5% OFF
-                          </div>
-                        )}
-                        {showNewUserBadge && (
-                          <div className="absolute top-3 left-3 bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                            5% OFF
-                          </div>
-                        )}
-                        {(pkg.popular || pkg.bestValue || pkg.promo) && !isEmployee && !showNewUserBadge && (
+                      <div key={pkg.id} className={`bg-black/40 p-3 rounded-lg border ${pkg.promo ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : (pkg.popular || pkg.bestValue ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-purple-500/20')} relative overflow-hidden group`}>
+                        {(pkg.popular || pkg.bestValue || pkg.promo) && (
                           <div className={`absolute top-3 right-3 ${pkg.promo ? 'bg-green-500' : 'bg-yellow-500'} text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider`}>
                             {pkg.promo ? 'Limited Offer' : (pkg.popular ? 'Popular' : 'Best Value')}
                           </div>
@@ -1925,20 +1883,12 @@ useEffect(() => {
                         <div className="flex flex-col items-center text-center p-1">
                           <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
                           <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
-                          {(isEmployee || showNewUserBadge) ? (
-                            <div className="mb-1">
-                              <span className="text-lg font-semibold text-gray-400 line-through">{pkg.price}</span>
-                              <span className="text-lg font-semibold text-green-400 ml-2">${discountedPrice.toFixed(2)}</span>
-                            </div>
-                          ) : (
-                            <div className="text-lg font-semibold text-green-400 mb-1">{pkg.price}</div>
-                          )}
+                          <div className="text-lg font-semibold text-green-400 mb-1">{pkg.price}</div>
                           <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
-                          
+
                           <button
                             onClick={() => {
-                              const purchasePkg = (isEmployee || showNewUserBadge) ? { ...pkg, price: `${discountedPrice.toFixed(2)}` } : pkg;
-                              handlePayPalPurchase(purchasePkg);
+                              handlePayPalPurchase(pkg);
                             }}
                             className={`w-full py-2 rounded font-bold text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500`}
                           >
@@ -2339,50 +2289,6 @@ useEffect(() => {
             </>
           )}
 
-          {/* Storage Tab */}
-{tab === 'storage' && (
-              <StorageTab
-                userId={user?.id}
-                trollCoins={troll_coins}
-                useCredit={useCredit}
-                creditInfo={creditInfo}
-                onPurchase={async (tierIndex, fee) => {
-                  try {
-                    const tier = STORAGE_TIERS[tierIndex];
-                    if (useCredit) {
-                      // Use credit card via deductCoins
-                      const { success, error: deductError } = await deductCoins({
-                        userId: user.id,
-                        amount: fee,
-                        type: 'storage_purchase',
-                        description: `Purchased Storage Plan: ${tier.label}`,
-                        metadata: { tier_label: tier.label, tier_index: tierIndex, bytes_granted: tier.storageBytes },
-                        useCredit: true,
-                        supabaseClient: supabase,
-                      });
-                      if (!success) throw new Error(deductError || 'Credit payment failed');
-                    } else {
-                      const { data, error } = await supabase.rpc('purchase_storage_upgrade', {
-                        p_user_id: user.id,
-                        p_tier_index: tierIndex,
-                        p_tier_label: tier.label,
-                        p_monthly_fee: fee,
-                        p_bytes_granted: tier.storageBytes,
-                      });
-                      if (error) throw error;
-                      if (!data?.success) throw new Error(data?.error || 'Purchase failed');
-                    }
-                    toast.success(`Storage upgraded to ${tier.label}!`);
-                    showPurchaseCompleteOverlay();
-                    await refreshCoins();
-                  } catch (err) {
-                    console.error('Storage purchase error:', err);
-                    toast.error(err?.message || 'Failed to purchase storage');
-                  }
-                }}
-              />
-            )}
-
           {/* Call Minutes Tab */}
           {tab === 'calls' && (
             <>
@@ -2390,36 +2296,23 @@ useEffect(() => {
                 <ShoppingCart className="w-5 h-5 text-purple-400" />
                 Call Minutes
               </h2>
-              {isEmployee && (
-                <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-3">
-                  <span className="text-2xl">🎉</span>
-                  <div>
-                    <div className="font-bold text-green-400">Employee Discount Applied</div>
-                    <div className="text-sm text-gray-300">Secretaries, Lead Troll Officers, and Troll Officers get <span className="font-bold text-green-400">50% OFF</span> all call minutes!</div>
-                  </div>
-                </div>
-              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                  <div>
                    <h3 className="text-lg font-semibold mb-3 text-blue-300">Audio Calls</h3>
                    <div className="space-y-3">
                      {callPackages.audio.map(pkg => {
-                       const discountedPrice = isEmployee ? Math.round(pkg.totalCost * (1 - EMPLOYEE_CALL_DISCOUNT)) : pkg.totalCost;
                        return (
-                         <div key={pkg.id} className={`flex justify-between items-center bg-black/30 p-3 rounded border ${isEmployee ? 'border-green-500/30' : 'border-white/10'}`}>
+                         <div key={pkg.id} className={`flex justify-between items-center bg-black/30 p-3 rounded border border-white/10`}>
                            <div>
                              <div className="font-medium">{pkg.name}</div>
                              <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
-                             {isEmployee && (
-                               <div className="text-xs text-green-400 font-medium">Employee: {formatCoins(discountedPrice)}</div>
-                             )}
                            </div>
                            <button
-                             onClick={() => buyCallMinutes({...pkg, type: 'audio', totalCost: discountedPrice})}
+                             onClick={() => buyCallMinutes({...pkg, type: 'audio', totalCost: pkg.totalCost})}
                              disabled={loadingPackage === pkg.id}
-                             className={`px-3 py-1 rounded text-xs flex items-center gap-2 ${isEmployee ? 'bg-green-600 hover:bg-green-500' : 'bg-zinc-700 hover:bg-zinc-600'}`}
+                             className={`px-3 py-1 rounded text-xs flex items-center gap-2 bg-zinc-700 hover:bg-zinc-600`}
                            >
-                             <span className={isEmployee ? 'text-white' : 'text-yellow-400'}>{formatCoins(isEmployee ? discountedPrice : pkg.totalCost)}</span>
+                             <span className='text-yellow-400'>{formatCoins(pkg.totalCost)}</span>
                              {loadingPackage === pkg.id ? '...' : 'Buy'}
                            </button>
                          </div>
@@ -2432,22 +2325,18 @@ useEffect(() => {
                    <h3 className="text-lg font-semibold mb-3 text-pink-300">Video Calls</h3>
                    <div className="space-y-3">
                      {callPackages.video.map(pkg => {
-                       const discountedPrice = isEmployee ? Math.round(pkg.totalCost * (1 - EMPLOYEE_CALL_DISCOUNT)) : pkg.totalCost;
                        return (
-                         <div key={pkg.id} className={`flex justify-between items-center bg-black/30 p-3 rounded border ${isEmployee ? 'border-green-500/30' : 'border-white/10'}`}>
+                         <div key={pkg.id} className={`flex justify-between items-center bg-black/30 p-3 rounded border border-white/10`}>
                            <div>
                              <div className="font-medium">{pkg.name}</div>
                              <div className="text-xs text-gray-400">{pkg.minutes} minutes</div>
-                             {isEmployee && (
-                               <div className="text-xs text-green-400 font-medium">Employee: {formatCoins(discountedPrice)}</div>
-                             )}
                            </div>
                            <button
-                             onClick={() => buyCallMinutes({...pkg, type: 'video', totalCost: discountedPrice})}
+                             onClick={() => buyCallMinutes({...pkg, type: 'video', totalCost: pkg.totalCost})}
                              disabled={loadingPackage === pkg.id}
-                             className={`px-3 py-1 rounded text-xs flex items-center gap-2 ${isEmployee ? 'bg-green-600 hover:bg-green-500' : 'bg-zinc-700 hover:bg-zinc-600'}`}
+                             className={`px-3 py-1 rounded text-xs flex items-center gap-2 bg-zinc-700 hover:bg-zinc-600`}
                            >
-                             <span className={isEmployee ? 'text-white' : 'text-yellow-400'}>{formatCoins(isEmployee ? discountedPrice : pkg.totalCost)}</span>
+                              <span className='text-yellow-400'>{formatCoins(pkg.totalCost)}</span>
                              {loadingPackage === pkg.id ? '...' : 'Buy'}
                            </button>
                          </div>
@@ -2537,444 +2426,6 @@ useEffect(() => {
   );
 }
 
-const STORAGE_TIERS = [
-  { index: 0, id: 'free',         label: '5 GB',    shortLabel: 'Free',      storageBytes: 5 * 1024 * 1024 * 1024,  monthlyFee: 0,    egressIncludedBytes: 5 * 1024 * 1024 * 1024,  egressPerGbCost: 0,  description: 'Get started free — creator storage + viewer playback included',    features: ['5 GB total storage (creator + viewer)','~16 hours of recordings','30-day auto-delete','Free forever'], highlight: false },
-  { index: 1, id: 'starter',     label: '25 GB',   shortLabel: 'Starter',   storageBytes: 25 * 1024 * 1024 * 1024,  monthlyFee: 900,  egressIncludedBytes: 50 * 1024 * 1024 * 1024,  egressPerGbCost: 15,  description: 'For casual streamers — save a few broadcasts',                 features: ['25 GB recording storage','~80 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
-  { index: 2, id: 'basic',       label: '50 GB',   shortLabel: 'Basic',     storageBytes: 50 * 1024 * 1024 * 1024,  monthlyFee: 1500, egressIncludedBytes: 100 * 1024 * 1024 * 1024, egressPerGbCost: 12, description: 'For regular streamers — save weekly broadcasts',              features: ['50 GB recording storage','~160 hours of recordings','30-day auto-delete','Manual save to profile'], highlight: false },
-  { index: 3, id: 'standard',    label: '100 GB',  shortLabel: 'Standard',  storageBytes: 100 * 1024 * 1024 * 1024, monthlyFee: 3000, egressIncludedBytes: 200 * 1024 * 1024 * 1024, egressPerGbCost: 10, description: 'For daily streamers — keep a full month of content',          features: ['100 GB recording storage','~320 hours of recordings','30-day auto-delete','Manual save to profile','Priority support'], highlight: true },
-  { index: 4, id: 'pro',         label: '200 GB',  shortLabel: 'Pro',       storageBytes: 200 * 1024 * 1024 * 1024, monthlyFee: 6500, egressIncludedBytes: 400 * 1024 * 1024 * 1024, egressPerGbCost: 8,  description: 'For power users — broadcasts + gaming clips',                features: ['200 GB recording storage','~640 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included'], highlight: false },
-  { index: 5, id: 'premium',     label: '500 GB',  shortLabel: 'Premium',   storageBytes: 500 * 1024 * 1024 * 1024, monthlyFee: 9000, egressIncludedBytes: 1000 * 1024 * 1024 * 1024, egressPerGbCost: 6, description: 'For heavy creators — full archive access',                    features: ['500 GB recording storage','~1,600 hours of recordings','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history'], highlight: false },
-  { index: 6, id: 'unlimited',   label: '1 TB',    shortLabel: 'Unlimited', storageBytes: 1024 * 1024 * 1024 * 1024, monthlyFee: 18000, egressIncludedBytes: 2000 * 1024 * 1024 * 1024, egressPerGbCost: 5, description: 'Maximum storage — no hard cap on your archives',             features: ['1 TB+ recording storage','No recording limit','30-day auto-delete','Manual save to profile','Priority support','Gaming clip storage included','Extended replay history','Early access to new features'], highlight: false },
-];
 
-const STORAGE_TOP_UPS = [
-  { id: 'small',    label: 'Small',    gb: 10,  coins: 300,  description: '+10 GB' },
-  { id: 'medium',   label: 'Medium',   gb: 25,  coins: 600,  description: '+25 GB' },
-  { id: 'large',    label: 'Large',    gb: 50,  coins: 1000, description: '+50 GB' },
-  { id: 'xl',       label: 'XL',       gb: 100, coins: 1800, description: '+100 GB' },
-  { id: 'ultimate', label: 'Ultimate', gb: 500, coins: 8000, description: '+500 GB' },
-];
-
-function StorageTab({ userId, trollCoins, onPurchase, useCredit, creditInfo }) {
-  const [purchasing, setPurchasing] = useState(null);
-  const [topUpPurchasing, setTopUpPurchasing] = useState(null);
-  const [replayPurchasing, setReplayPurchasing] = useState(false);
-  const [replayAmount, setReplayAmount] = useState(100);
-  const [storageStatus, setStorageStatus] = useState(null);
-  const [loadingStatus, setLoadingStatus] = useState(true);
-
-  const fetchStatus = useCallback(async () => {
-    if (!userId) return;
-    setLoadingStatus(true);
-    try {
-      const { data, error } = await supabase.rpc('get_user_storage_replay_status', { p_user_id: userId });
-      if (!error && data) setStorageStatus(data);
-    } catch (err) {
-      console.error('[StorageTab] Failed to fetch status:', err);
-    } finally {
-      setLoadingStatus(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
-  }, [fetchStatus]);
-
-  const handleBuyPlan = async (tierIndex) => {
-    const tier = STORAGE_TIERS[tierIndex];
-    if (!useCredit && tier.monthlyFee > 0 && trollCoins < tier.monthlyFee) {
-      toast.error(`Not enough Troll Coins. Need ${tier.monthlyFee.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
-      return;
-    }
-    if (useCredit && (creditInfo?.available || 0) < tier.monthlyFee) {
-      toast.error(`Not enough Credit. Need ${tier.monthlyFee.toLocaleString()}, available ${creditInfo?.available?.toLocaleString()}`);
-      return;
-    }
-    setPurchasing(tierIndex);
-    try {
-      await onPurchase(tierIndex, tier.monthlyFee);
-      await fetchStatus();
-    } finally {
-      setPurchasing(null);
-    }
-  };
-
-  const handleBuyTopUp = async (topUp) => {
-    if (!useCredit && trollCoins < topUp.coins) {
-      toast.error(`Not enough Troll Coins. Need ${topUp.coins.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
-      return;
-    }
-    if (useCredit && (creditInfo?.available || 0) < topUp.coins) {
-      toast.error(`Not enough Credit. Need ${topUp.coins.toLocaleString()}, available ${creditInfo?.available?.toLocaleString()}`);
-      return;
-    }
-    if (!storageStatus?.has_plan) {
-      toast.error('You need an active storage plan before purchasing top-ups.');
-      return;
-    }
-    setTopUpPurchasing(topUp.id);
-    try {
-      if (useCredit) {
-        // Pay via credit card
-        const { success, error: deductError } = await deductCoins({
-          userId,
-          amount: topUp.coins,
-          type: 'storage_purchase',
-          description: `Storage Top-Up: ${topUp.description}`,
-          metadata: { gb_amount: topUp.gb, top_up_id: topUp.id },
-          useCredit: true,
-          supabaseClient: supabase,
-        });
-        if (!success) throw new Error(deductError || 'Credit payment failed');
-        // Grant storage directly (bypass RPC since it requires troll_coins)
-        const { data: planData } = await supabase
-          .from('user_storage_purchases')
-          .select('id, top_up_bytes')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-          .order('purchased_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (planData?.id) {
-          const bytesToAdd = topUp.gb * 1024 * 1024 * 1024;
-          await supabase
-            .from('user_storage_purchases')
-            .update({ top_up_bytes: (planData.top_up_bytes || 0) + bytesToAdd })
-            .eq('id', planData.id);
-          await supabase.from('storage_top_ups').insert({
-            user_id: userId,
-            gb_added: topUp.gb,
-            coins_charged: topUp.coins,
-          });
-        }
-      } else {
-        const { data, error } = await supabase.rpc('purchase_storage_top_up', {
-          p_user_id: userId,
-          p_gb_amount: topUp.gb,
-          p_coins_cost: topUp.coins,
-        });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'Purchase failed');
-      }
-      toast.success(`Added ${topUp.description} to your storage!`);
-      await fetchStatus();
-    } catch (err) {
-      toast.error(err?.message || 'Purchase failed');
-    } finally {
-      setTopUpPurchasing(null);
-    }
-  };
-
-  const handleBuyReplay = async () => {
-    if (replayAmount < 50) {
-      toast.error('Minimum purchase is 50 coins.');
-      return;
-    }
-    if (!useCredit && trollCoins < replayAmount) {
-      toast.error(`Not enough Troll Coins. Need ${replayAmount.toLocaleString()}, have ${trollCoins.toLocaleString()}`);
-      return;
-    }
-    if (useCredit && (creditInfo?.available || 0) < replayAmount) {
-      toast.error(`Not enough Credit. Need ${replayAmount.toLocaleString()}, available ${creditInfo?.available?.toLocaleString()}`);
-      return;
-    }
-    setReplayPurchasing(true);
-    try {
-      if (useCredit) {
-        // Pay via credit card
-        const { success, error: deductError } = await deductCoins({
-          userId,
-          amount: replayAmount,
-          type: 'replay_purchase',
-          description: `Replay balance purchase: ${replayAmount} coins`,
-          metadata: { coins: replayAmount },
-          useCredit: true,
-          supabaseClient: supabase,
-        });
-        if (!success) throw new Error(deductError || 'Credit payment failed');
-        // Grant replay balance directly (bypass RPC since it requires troll_coins)
-        // Use read-then-upsert pattern for atomic increment
-        const { data: existingReplay } = await supabase
-          .from('replay_balances')
-          .select('balance, status')
-          .eq('user_id', userId)
-          .maybeSingle();
-        const newBalance = (existingReplay?.balance || 0) + replayAmount;
-        const newStatus = existingReplay?.status === 'restricted' && newBalance > 0 ? 'active' : (existingReplay?.status || 'active');
-        await supabase.from('replay_balances').upsert({
-          user_id: userId,
-          balance: newBalance,
-          status: newStatus,
-          last_updated: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
-      } else {
-        const { data, error } = await supabase.rpc('add_replay_balance', {
-          p_user_id: userId,
-          p_coins_amount: replayAmount,
-        });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'Purchase failed');
-      }
-      toast.success(`Added ${replayAmount.toLocaleString()} coins to replay balance!`);
-      await fetchStatus();
-    } catch (err) {
-      toast.error(err?.message || 'Purchase failed');
-    } finally {
-      setReplayPurchasing(false);
-    }
-  };
-
-  const formatGB = (bytes) => {
-    if (!bytes) return '0 GB';
-    const gb = bytes / (1024 * 1024 * 1024);
-    return `${gb.toFixed(1)} GB`;
-  };
-
-  const currentPlanIndex = storageStatus?.has_plan ? STORAGE_TIERS.findIndex(t => t.label === storageStatus.plan_label) : -1;
-  const isRestricted = storageStatus?.replay_status === 'restricted';
-  const isStorageFull = storageStatus?.storage_percentage >= 100;
-
-  return (
-    <div className="animate-fadeIn">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-500/10 border border-cyan-400/30">
-          <HardDrive className="h-6 w-6 text-cyan-400" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-white">Storage & Replay</h2>
-          <p className="text-sm text-slate-400">Manage your recording storage and replay balance</p>
-        </div>
-      </div>
-
-      {/* Status Dashboard */}
-      {!loadingStatus && storageStatus && (
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Storage Status */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-black text-white flex items-center gap-2">
-                <HardDrive className="h-4 w-4 text-cyan-400" />
-                Storage
-              </h3>
-              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isStorageFull ? 'bg-red-500/20 text-red-300' : 'bg-cyan-500/20 text-cyan-300'}`}>
-                {storageStatus.has_plan ? storageStatus.plan_label : 'No Plan'}
-              </span>
-            </div>
-            {storageStatus.has_plan ? (
-              <>
-                <div className="flex items-baseline gap-1 mb-2">
-                  <span className="text-2xl font-black text-white">{formatGB(storageStatus.total_used_bytes)}</span>
-                  <span className="text-sm text-slate-400">/ {formatGB(storageStatus.total_limit_bytes)}</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden mb-2">
-                  <div className={`h-full transition-all ${storageStatus.storage_percentage >= 80 ? 'bg-amber-400' : 'bg-cyan-400'}`} style={{ width: `${Math.min(100, storageStatus.storage_percentage)}%` }} />
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span>{storageStatus.storage_percentage}% used</span>
-                  <span>{formatGB(storageStatus.total_available_bytes)} available</span>
-                </div>
-                {storageStatus.renewal_date && (
-                  <div className="mt-2 text-[10px] text-slate-500">Renews: {new Date(storageStatus.renewal_date).toLocaleDateString()}</div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-sm text-slate-400 mb-2">No active storage plan</p>
-                <p className="text-[10px] text-slate-500">Purchase a plan below to start recording</p>
-              </div>
-            )}
-          </div>
-
-          {/* Replay Status */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-black text-white flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-400" />
-                Replay Balance
-              </h3>
-              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isRestricted ? 'bg-red-500/20 text-red-300' : 'bg-purple-500/20 text-purple-300'}`}>
-                {isRestricted ? 'RESTRICTED' : 'Active'}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-1 mb-2">
-              <span className="text-2xl font-black text-white">{storageStatus.replay_balance?.toLocaleString() || 0}</span>
-              <span className="text-sm text-slate-400">coins</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-3">
-              <div className="rounded-lg bg-white/5 p-2">
-                <div className="text-[10px] text-slate-500">Minutes Today</div>
-                <div className="text-sm font-bold text-white">{storageStatus.replay_minutes_today || 0}</div>
-              </div>
-              <div className="rounded-lg bg-white/5 p-2">
-                <div className="text-[10px] text-slate-500">Minutes This Month</div>
-                <div className="text-sm font-bold text-white">{storageStatus.replay_minutes_month || 0}</div>
-              </div>
-              <div className="rounded-lg bg-white/5 p-2">
-                <div className="text-[10px] text-slate-500">Charged Today</div>
-                <div className="text-sm font-bold text-white">{storageStatus.replay_coins_today?.toLocaleString() || 0}</div>
-              </div>
-              <div className="rounded-lg bg-white/5 p-2">
-                <div className="text-[10px] text-slate-500">Charged This Month</div>
-                <div className="text-sm font-bold text-white">{storageStatus.replay_coins_month?.toLocaleString() || 0}</div>
-              </div>
-            </div>
-            <div className="mt-2 text-[10px] text-slate-500 text-center">5 coins per minute watched</div>
-          </div>
-        </div>
-      )}
-
-      {/* Restricted Warning */}
-      {isRestricted && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-400/20 rounded-xl">
-          <div className="flex items-start gap-2 text-sm text-red-300">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>Your replay balance is exhausted. Replay playback is disabled. Purchase more replay balance to re-enable.</span>
-          </div>
-        </div>
-      )}
-
-      {/* Storage Plans */}
-      <div className="mb-8">
-        <h3 className="text-lg font-black text-white mb-4">Storage Plans</h3>
-        <p className="text-xs text-slate-400 mb-4">Storage plans provide capacity to save your recordings. Replay billing is separate.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {STORAGE_TIERS.map((tier, idx) => {
-            const isCurrent = currentPlanIndex === idx;
-            const canAfford = trollCoins >= tier.monthlyFee;
-            const isPurchasingThis = purchasing === idx;
-
-            return (
-              <div
-                key={tier.id}
-                className={`relative rounded-2xl border p-5 transition-all ${
-                  tier.highlight
-                    ? 'border-purple-400/50 bg-purple-500/5 ring-1 ring-purple-400/20'
-                    : isCurrent
-                      ? 'border-cyan-400/40 bg-cyan-500/5'
-                      : 'border-white/10 bg-white/[0.02] hover:border-cyan-400/20'
-                }`}
-              >
-                {tier.highlight && (
-                  <div className="absolute -top-3 left-4 rounded-full bg-purple-500 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">Recommended</div>
-                )}
-                {isCurrent && !tier.highlight && (
-                  <div className="absolute -top-3 left-4 rounded-full bg-cyan-500 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">Current</div>
-                )}
-                <div className="mb-3">
-                  <div className="text-lg font-black text-white">{tier.label}</div>
-                  <div className="text-xs text-slate-400 mt-1">{tier.description}</div>
-                </div>
-                <div className="flex items-baseline gap-1 mb-3">
-                  <span className="text-3xl font-black text-cyan-300">{tier.monthlyFee.toLocaleString()}</span>
-                  <span className="text-xs font-bold text-slate-400">coins/mo</span>
-                </div>
-                <ul className="space-y-1.5 mb-4">
-                  {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-1.5 text-[11px] text-slate-300">
-                      <span className="text-cyan-400 mt-0.5">✓</span>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => handleBuyPlan(idx)}
-                  disabled={!canAfford || isPurchasingThis || isCurrent}
-                  className={`w-full rounded-xl py-2.5 text-sm font-black transition ${
-                    isCurrent ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 cursor-default'
-                    : tier.highlight ? 'bg-purple-500 hover:bg-purple-400 text-white'
-                    : canAfford ? 'bg-cyan-500 hover:bg-cyan-400 text-white'
-                    : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/10'
-                  }`}
-                >
-                  {isPurchasingThis ? 'Processing...' : isCurrent ? 'Active Plan' : tier.monthlyFee === 0 ? 'Activate Free Plan' : canAfford ? 'Select Plan' : `Need ${(tier.monthlyFee - trollCoins).toLocaleString()} more`}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Storage Top-Ups */}
-      {storageStatus?.has_plan && (
-        <div className="mb-8">
-          <h3 className="text-lg font-black text-white mb-4">Storage Top-Ups</h3>
-          <p className="text-xs text-slate-400 mb-4">Need more storage? Add extra capacity to your current plan.</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {STORAGE_TOP_UPS.map((topUp) => {
-              const canAfford = trollCoins >= topUp.coins;
-              const isPurchasingThis = topUpPurchasing === topUp.id;
-              return (
-                <div key={topUp.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-center">
-                  <div className="text-sm font-black text-white mb-1">{topUp.label}</div>
-                  <div className="text-xs text-slate-400 mb-2">{topUp.description}</div>
-                  <div className="text-lg font-black text-cyan-300 mb-3">{topUp.coins.toLocaleString()}</div>
-                  <button
-                    onClick={() => handleBuyTopUp(topUp)}
-                    disabled={!canAfford || isPurchasingThis}
-                    className={`w-full rounded-lg py-2 text-xs font-black transition ${
-                      canAfford ? 'bg-cyan-500 hover:bg-cyan-400 text-white' : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/10'
-                    }`}
-                  >
-                    {isPurchasingThis ? 'Processing...' : canAfford ? 'Add' : `Need ${topUp.coins - trollCoins}`}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Replay Balance Purchase */}
-      <div className="mb-8">
-        <h3 className="text-lg font-black text-white mb-4">Replay Balance</h3>
-        <p className="text-xs text-slate-400 mb-4">When viewers watch your saved recordings, 5 coins per minute is deducted from your replay balance. Purchase replay balance to keep your content available.</p>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-            <div className="flex-1">
-              <div className="text-sm font-bold text-white mb-1">Current Balance: <span className="text-purple-300">{storageStatus?.replay_balance?.toLocaleString() || 0} coins</span></div>
-              <div className="text-xs text-slate-400">Rate: 5 coins per minute watched by viewers</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={replayAmount}
-                onChange={(e) => setReplayAmount(Math.max(50, parseInt(e.target.value) || 0))}
-                min={50}
-                step={50}
-                className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white text-center"
-              />
-              <span className="text-xs text-slate-400">coins</span>
-              <button
-                onClick={handleBuyReplay}
-                disabled={replayPurchasing || trollCoins < replayAmount}
-                className={`rounded-lg px-4 py-2 text-sm font-black transition ${
-                  trollCoins >= replayAmount ? 'bg-purple-500 hover:bg-purple-400 text-white' : 'bg-white/5 text-slate-500 cursor-not-allowed'
-                }`}
-              >
-                {replayPurchasing ? 'Processing...' : 'Purchase'}
-              </button>
-            </div>
-          </div>
-          <div className="mt-3 flex gap-2">
-            {[100, 500, 1000, 5000].map((amount) => (
-              <button
-                key={amount}
-                onClick={() => setReplayAmount(amount)}
-                className={`rounded-lg px-3 py-1 text-[10px] font-bold transition ${
-                  replayAmount === amount ? 'bg-purple-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                }`}
-              >
-                {amount.toLocaleString()}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 

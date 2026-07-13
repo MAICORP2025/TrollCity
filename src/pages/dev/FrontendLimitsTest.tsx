@@ -133,7 +133,7 @@ export default function FrontendLimitsTest() {
 
   // --- Render ---
   return (
-    <div className="flex h-screen bg-black text-white font-sans overflow-hidden">
+    <div className="flex h-screen bg-black text-white font-sans overflow-y-auto overflow-x-hidden md:overflow-hidden">
       
       {/* Sidebar Controls */}
       <div className="w-80 bg-zinc-900 border-r border-white/10 flex flex-col z-10">

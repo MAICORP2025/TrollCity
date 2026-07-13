@@ -47,6 +47,7 @@ dotenv.config({ path: findConfig('.env.local') || findConfig('.env') });
 // Telemetry handler - safe to load early (no Supabase client at module level)
 const telemetryHandler = require('./api/telemetryHandler');
 const { normalizeEmail, syncVerifiedMaiTalentActivity, buildSourceEventId, resolveMaiTalentConfig, normalizeMaiTalentLinkResponse, buildMaiTalentLinkPayload } = require('./lib/maitalentSync');
+const { enforceRateLimit, verifyAdmin, getSummary, getBreakdown, getHistorical, refreshSnapshot } = require('./api/adminSupabaseUsage');
 
 /* ============================================================================
  * 🛡️  CRITICAL STREAMING INFRASTRUCTURE - PROTECTED
@@ -162,6 +163,11 @@ app.post('/api/admin/backup/trigger', (req, res) => {
   console.log('Backup trigger requested');
   res.status(200).json({ success: true, message: 'Backup process started', jobId: Date.now() });
 });
+
+app.get('/api/admin/supabase-usage/summary', enforceRateLimit, verifyAdmin, getSummary);
+app.get('/api/admin/supabase-usage/breakdown', enforceRateLimit, verifyAdmin, getBreakdown);
+app.get('/api/admin/supabase-usage/historical', enforceRateLimit, verifyAdmin, getHistorical);
+app.post('/api/admin/supabase-usage/refresh', enforceRateLimit, verifyAdmin, refreshSnapshot);
 
 // MaiTalent account link proxy
 app.post('/api/maitalent/sync-activity', async (req, res) => {

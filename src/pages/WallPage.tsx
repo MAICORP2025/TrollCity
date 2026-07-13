@@ -455,7 +455,7 @@ export default function WallPage() {
   }
 
   return (
-    <div className="relative min-h-full w-full overflow-hidden text-white">
+    <div className="relative min-h-full w-full overflow-y-auto overflow-x-hidden md:overflow-hidden text-white">
       {/* Background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[#050715]" />

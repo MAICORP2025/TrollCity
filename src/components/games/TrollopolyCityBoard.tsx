@@ -1397,7 +1397,7 @@ export const TrollopolyCityBoard: React.FC<TrollopolyCityBoardProps> = ({
   }, [currentProperty?.id, isRolling, isMoving, pendingTileAction]);
 
   return (
-    <div className="relative w-full h-screen bg-slate-900 overflow-hidden">
+    <div className="relative w-full h-screen bg-slate-900 overflow-y-auto overflow-x-hidden md:overflow-hidden">
       <div ref={mountRef} className="absolute inset-0" style={{ cursor: 'grab' }} />
 
       {/* Top HUD */}

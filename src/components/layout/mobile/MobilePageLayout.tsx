@@ -41,7 +41,7 @@ export default function MobilePageLayout({
 
   return (
     <div className={`tc-page-surface min-h-screen w-full text-white ${className}`}>
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col overflow-hidden border-x border-white/5 bg-slate-950/30 backdrop-blur-sm">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col overflow-y-auto overflow-x-hidden md:overflow-hidden border-x border-white/5 bg-slate-950/30 backdrop-blur-sm">
         {header ? (
           <header className={`shrink-0 border-b border-white/10 bg-slate-950/50 px-4 pb-3 pt-3 ${headerClassName}`}>
             {header}

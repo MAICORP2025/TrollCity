@@ -14,8 +14,7 @@ export default function MuteHandler({ streamId }: { streamId: string }) {
         if (!streamId || !streamId.trim()) return;
         if (!localAudioTrack) return;
 
-        // TODO: Get the actual user ID. Assuming a placeholder for now.
-        const currentUserId = userId; // Replace with actual user ID
+        const currentUserId = userId;
 
         // Check initial mute
         const checkMute = async () => {

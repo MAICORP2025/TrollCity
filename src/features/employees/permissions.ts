@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import {
   LayoutDashboard, Clock, Calendar, MessagesSquare, ListTodo, FileText,
   Megaphone, Lightbulb, Palette, Wrench, Shield, UserPlus, ClipboardCheck,
-  Users,
+  Users, BadgeCheck,
 } from 'lucide-react'
 
 export type EmployeeAction =
@@ -22,6 +22,7 @@ export type EmployeeTabId =
   | 'home' | 'clock' | 'schedule' | 'chat' | 'tasks' | 'reports'
   | 'announcements' | 'change_requests' | 'frontend_studio'
   | 'department_tools' | 'management' | 'hiring' | 'attendance' | 'records'
+  | 'employment_verification'
 
 export interface EmployeeTab {
   id: EmployeeTabId
@@ -154,6 +155,10 @@ export const EMPLOYEE_TABS: EmployeeTab[] = [
   {
     id: 'records', label: 'Employee Records', icon: Users,
     show: (p) => canEmployee(p, 'view_records'),
+  },
+  {
+    id: 'employment_verification', label: 'Employment Verification', icon: BadgeCheck,
+    show: all,
   },
 ]
 

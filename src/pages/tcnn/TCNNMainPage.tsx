@@ -194,7 +194,7 @@ export default function TCNNMainPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen overflow-hidden bg-[#020617] text-white">
+      <main className="min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#020617] text-white">
         <BackgroundFX />
 
         <section className="relative z-10 mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-8">
@@ -220,7 +220,7 @@ export default function TCNNMainPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen overflow-hidden bg-[#020617] text-white">
+      <main className="min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#020617] text-white">
         <BackgroundFX />
 
         <section className="relative z-10 mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-8 text-center">
@@ -235,7 +235,7 @@ export default function TCNNMainPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#020617] text-white">
+    <main className="min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#020617] text-white">
       <BackgroundFX />
 
       <header className="sticky top-0 z-40 border-b border-cyan-400/10 bg-slate-950/80 backdrop-blur-xl">

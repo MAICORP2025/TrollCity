@@ -11,10 +11,16 @@ import { formatCompactNumber } from '../lib/utils';
 import type { VehicleCatalogItem } from '../types/vehicleAssets';
 import { TIER_COLORS, TIER_BG_COLORS } from '../types/vehicleAssets';
 
+function isValidFutureDate(value: string | null | undefined) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date > new Date();
+}
+
 export default function CarDealership() {
   const navigate = useNavigate();
   const { troll_coins: balance, refreshCoins } = useCoins();
-  const { user, refreshProfile } = useAuthStore();
+  const { user, profile, refreshProfile } = useAuthStore();
   const { catalog, purchaseVehicle, isPurchasing } = useVehicleAssets();
 
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleCatalogItem | null>(null);
@@ -24,6 +30,13 @@ export default function CarDealership() {
 
     if ((balance || 0) < selectedVehicle.base_price) {
       toast.error(`Insufficient funds. You need ${formatCompactNumber(selectedVehicle.base_price)} coins.`);
+      return;
+    }
+
+    const hasCarInsurance = isValidFutureDate(profile?.car_insurance_expiry);
+    if (!hasCarInsurance) {
+      toast.error('You must purchase car insurance before buying a vehicle.');
+      navigate('/insurance');
       return;
     }
 
@@ -165,7 +178,7 @@ export default function CarDealership() {
       {/* Purchase Modal */}
       {selectedVehicle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col md:flex-row">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh] flex flex-col md:flex-row">
 
             {/* Left: Vehicle Preview */}
             <div className="w-full md:w-2/5 bg-gradient-to-br from-gray-800 to-black p-6 flex flex-col items-center justify-center relative">

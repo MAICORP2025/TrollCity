@@ -29,20 +29,33 @@ export function useBattleManagement({ battleId, streamId, isHost }: UseBattleMan
   });
 
   const broadcastChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const broadcastStreamIdRef = useRef<string | null>(null);
 
   const getBroadcastChannel = useCallback((streamId: string) => {
+    if (broadcastChannelRef.current && broadcastStreamIdRef.current === streamId) {
+      return broadcastChannelRef.current;
+    }
+
     if (broadcastChannelRef.current) {
-      const existing = broadcastChannelRef.current;
-      if ((existing as any).topic?.includes(streamId)) {
-        return existing;
-      }
-      supabase.removeChannel(existing);
+      supabase.removeChannel(broadcastChannelRef.current);
       broadcastChannelRef.current = null;
+      broadcastStreamIdRef.current = null;
     }
 
     const ch = supabase.channel(`stream:${streamId}`);
     broadcastChannelRef.current = ch;
+    broadcastStreamIdRef.current = streamId;
     return ch;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (broadcastChannelRef.current) {
+        supabase.removeChannel(broadcastChannelRef.current);
+        broadcastChannelRef.current = null;
+        broadcastStreamIdRef.current = null;
+      }
+    };
   }, []);
 
    const parseMetadata = useCallback((raw: string | null | undefined): Record<string, any> => {

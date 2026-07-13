@@ -377,7 +377,7 @@ export default function TCNNViewerPage() {
   if (!stream) return null;
 
   return (
-    <div className="h-screen w-full bg-[#060a14] text-white overflow-hidden relative">
+    <div className="h-screen w-full bg-[#060a14] text-white overflow-y-auto overflow-x-hidden md:overflow-hidden relative">
       {/* ============ FULL SCREEN VIDEO ============ */}
       <div className="absolute inset-0 z-0">
         {remoteParticipants.length > 0 ? (

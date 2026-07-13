@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Coins, Gift, Loader2, Send, Sparkles, Trophy } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
-import UserNameWithAge from '../components/UserNameWithAge'
 
 type LeaderboardWindow = '30m' | 'hour' | 'day' | 'week' | 'month'
 type LeaderboardDirection = 'received' | 'sent'
@@ -238,6 +237,12 @@ function LeaderboardRow({
           ? 'from-orange-300 to-orange-700'
           : 'from-cyan-400/20 to-cyan-400/5'
 
+  const age = useMemo(() => {
+    if (!row.created_at) return 0
+    const created = new Date(row.created_at)
+    return Math.max(0, Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24)))
+  }, [row.created_at])
+
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 py-4 transition hover:bg-cyan-400/5">
       <div
@@ -247,18 +252,14 @@ function LeaderboardRow({
       </div>
 
       <div className="min-w-0">
-        <UserNameWithAge
-          user={{
-            username: row.username || 'Unknown',
-            id: row.user_id,
-            avatar_url: row.avatar_url || undefined,
-            rgb_username_expires_at: row.rgb_username_expires_at,
-            glowing_username_color: row.glowing_username_color,
-            created_at: row.created_at,
-          }}
-          className="truncate text-base font-black text-white"
-        />
-
+        <div className="flex items-center gap-1">
+          <span className="truncate text-base font-black text-white" title={row.username || 'Unknown'}>
+            {row.username || 'Unknown'}
+          </span>
+          <span className="text-gray-500 text-xs select-none font-mono shrink-0" title={`Account Age: ${age} days`}>
+            • {age}d
+          </span>
+        </div>
         <p className="mt-1 text-xs font-bold text-slate-500">
           {Number(row.gift_count || 0).toLocaleString()} gifts
         </p>

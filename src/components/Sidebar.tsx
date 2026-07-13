@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import UserPresenceCounter from '@/components/sidebar/UserPresenceCounter'
 import { SafeLink } from '@/hooks/useSafeNavigate'
 import {
    AlertTriangle,
@@ -189,6 +190,9 @@ export default function Sidebar() {
     role === String(UserRole.AGENCY_HR_MANAGER) ||
     profile?.is_admin ||
     role === 'superadmin' ||
+    role === 'owner' ||
+    role === 'ceo' ||
+    trollRole === 'owner' ||
     trollRole === 'ceo' ||
     !!(profile as { is_superadmin?: boolean })?.is_superadmin
 
@@ -441,7 +445,7 @@ export default function Sidebar() {
   return (
     <aside
       className={cx(
-        'fixed left-0 top-0 z-50 flex h-screen max-h-screen flex-col overflow-hidden border-r border-pink-300/25 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.55),0_0_30px_rgba(236,72,153,0.14),0_0_34px_rgba(34,211,238,0.10),inset_0_0_34px_rgba(168,85,247,0.10)] backdrop-blur-2xl transition-all duration-300',
+        'fixed left-0 top-0 z-50 flex h-screen max-h-screen flex-col overflow-y-auto overflow-x-hidden md:overflow-hidden border-r border-pink-300/25 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.55),0_0_30px_rgba(236,72,153,0.14),0_0_34px_rgba(34,211,238,0.10),inset_0_0_34px_rgba(168,85,247,0.10)] backdrop-blur-2xl transition-all duration-300',
         isSidebarCollapsed ? 'w-20' : 'w-72'
       )}
     >
@@ -838,6 +842,11 @@ export default function Sidebar() {
       </div>
 
       <div className="relative z-10 shrink-0 border-t border-pink-300/15 bg-slate-950/55 p-3">
+        {!isSidebarCollapsed && (
+          <div className="mb-2">
+            <UserPresenceCounter />
+          </div>
+        )}
         <SafeLink
           to="/stats"
           className={cx(

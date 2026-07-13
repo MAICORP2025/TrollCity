@@ -309,6 +309,19 @@ button:focus-visible {
     scrollbar-width: none;
 }
 
+/* Hide scrollbars on mobile for the app's own scroll containers (page roots) */
+@media (max-width: 767px) {
+  .app-viewport .overflow-y-auto {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .app-viewport .overflow-y-auto::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
 /* RGB Scrollbar */
 @keyframes hue-cycle {
   0% { filter: hue-rotate(0deg); }
@@ -1669,5 +1682,34 @@ button:focus-visible {
 @supports (-webkit-overflow-scrolling: touch) {
   .discovery-scroll {
     -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Employment verification print styles */
+@media print {
+  body {
+    background: white !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #employment-verification-letter,
+  #employment-verification-letter * {
+    visibility: visible;
+  }
+
+  #employment-verification-letter {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+  }
+
+  @page {
+    size: letter;
+    margin: 0.65in;
   }
 }

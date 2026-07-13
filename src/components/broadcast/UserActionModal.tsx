@@ -33,6 +33,9 @@ interface UserActionModalProps {
   isHost: boolean;
   isModerator: boolean;
   isOfficer?: boolean; // Whether current user is an officer on duty
+  /** Staff-only extras available even when the staff member is NOT clocked in. */
+  canArrestStaff?: boolean;
+  canSummon?: boolean;
   onClose: () => void;
   onGift: () => void;
   onGiftAll?: () => void;
@@ -49,6 +52,8 @@ export default function UserActionModal({
   isHost, 
   isModerator, 
   isOfficer = false,
+  canArrestStaff = false,
+  canSummon = false,
   onClose,
   onGift,
   onGiftAll,
@@ -521,41 +526,83 @@ export default function UserActionModal({
 
     const handlePromote = async () => {
      if (!confirm("Promote this user to Broadofficer? They will have moderation powers.")) return;
-     const { error } = await supabase.rpc('assign_broadofficer', { p_stream_id: streamId, p_officer_id: userId });
-     if (error) toast.error("Failed to promote user");
-     else {
-         const promotedName = displayName || username || 'this viewer';
-         const content = `Broadcaster has made ${promotedName} a broadofficer`;
-         const systemMessage = {
-             id: `broadofficer-${streamId}-${userId}-${Date.now()}`,
-             user_id: currentUser?.id || userId,
-             content,
-             created_at: new Date().toISOString(),
-             type: 'system',
-             user_profiles: { username: 'System', avatar_url: '' }
-         };
+     const { data, error } = await supabase.rpc('assign_broadofficer', { p_stream_id: streamId, p_officer_id: userId });
+     if (error) { toast.error(error.message || "Failed to promote user"); return; }
+     const result = Array.isArray(data) ? data[0] : data;
+     if (result && result.success === false) { toast.error(result.error || 'Failed to promote user'); return; }
+     const promotedName = displayName || username || 'this viewer';
+     // Only post the system message + notification on a NEW assignment (prevent duplicates)
+     if (!result?.already_assigned) {
+          const content = `${promotedName} has been assigned as a Broadofficer.`;
+          const systemMessage = {
+              id: `broadofficer-${streamId}-${userId}-${Date.now()}`,
+              user_id: currentUser?.id || userId,
+              content,
+              created_at: new Date().toISOString(),
+              type: 'system',
+              user_profiles: { username: 'System', avatar_url: '' }
+          };
 
-         void supabase.from('stream_messages').insert({
-             stream_id: streamId,
-             user_id: currentUser?.id || userId,
-             content,
-             type: 'system'
-         });
+          void supabase.from('stream_messages').insert({
+              stream_id: streamId,
+              user_id: currentUser?.id || userId,
+              content,
+              type: 'system'
+          });
 
-         const channel = supabase.channel(`stream-chat:${streamId}-${Date.now()}`);
-         channel.subscribe((status) => {
-             if (status === 'SUBSCRIBED') {
-                  void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage });
-                  setTimeout(() => { supabase.removeChannel(channel) }, 3000);
-             }
-         });
+          const channel = supabase.channel(`stream-chat:${streamId}-${Date.now()}`);
+          channel.subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                   void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage });
+                   setTimeout(() => { supabase.removeChannel(channel) }, 3000);
+              }
+          });
 
-         const broadcasterName = currentUser?.username || currentUser?.display_name || 'Broadcaster';
-         void notifyBroadofficerAssigned(userId, broadcasterName, streamId);
-         toast.success("User promoted to Broadofficer");
-         onClose();
+          const broadcasterName = (currentUser as any)?.username || (currentUser as any)?.display_name || 'Broadcaster';
+          void notifyBroadofficerAssigned(userId, broadcasterName, streamId);
+          toast.success("User promoted to Broadofficer");
+     } else {
+          toast.info(`${promotedName} is already a Broadofficer.`);
      }
+     onClose();
    };
+
+  const handleStaffArrest = async () => {
+    const reason = window.prompt('Reason for arrest?');
+    if (!reason) return;
+    try {
+      const { data, error } = await supabase.rpc('mod_arrest_user', {
+        p_target_user_id: userId,
+        p_stream_id: streamId,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.success === false) { toast.error(res.error || res.message || 'Failed to arrest'); return; }
+      toast.success(`${displayName} has been arrested`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to arrest user');
+    }
+  };
+
+  const handleSummonToCourt = async () => {
+    const reason = window.prompt('Reason for summons to Troll Court?');
+    if (!reason) return;
+    try {
+      const { data, error } = await supabase.rpc('summon_user_to_court', {
+        p_defendant_id: userId,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.success === false) { toast.error(res.error || res.message || 'Failed to summon'); return; }
+      toast.success(`${displayName} has been summoned to Troll Court`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to summon user');
+    }
+  };
 
   const handleFollow = async () => {
     if (!currentUser) {
@@ -773,6 +820,20 @@ const handleViewProfile = () => {
                      <Wand2 size={16} />
                      <span>Cast Troll Spell 🎭</span>
                   </button>
+
+                  {/* Staff-only: Arrest + Summon (available even when not clocked in) */}
+                  {canArrestStaff && !isTargetStaff && (
+                    <button onClick={handleStaffArrest} className="w-full flex items-center justify-center gap-2 p-2 bg-orange-900/20 hover:bg-orange-900/40 text-orange-400 rounded-lg transition-colors border border-orange-500/20 mt-2">
+                       <Lock size={16} />
+                       <span>Arrest</span>
+                    </button>
+                  )}
+                  {canSummon && !isTargetStaff && (
+                    <button onClick={handleSummonToCourt} className="w-full flex items-center justify-center gap-2 p-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors border border-red-500/20 mt-2">
+                       <AlertTriangle size={16} />
+                       <span>Summon to Court</span>
+                    </button>
+                  )}
             </div>
           ) : null}
         </div>

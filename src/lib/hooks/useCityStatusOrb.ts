@@ -30,6 +30,7 @@ export interface CityStatusOrbData {
   license_status: string | null;
   drivers_license_expiry: string | null;
   homeowners_insurance_expiry: string | null;
+  car_insurance_expiry: string | null;
   house_id: string | null;
   vehicle_id: string | null;
   role: string | null;
@@ -106,6 +107,7 @@ export function useCityStatusOrb(options: CityStatusOrbOptions) {
           license_status,
           drivers_license_expiry,
           homeowners_insurance_expiry,
+          car_insurance_expiry,
           house_id,
           vehicle_id,
           role,
@@ -150,6 +152,7 @@ export function useCityStatusOrb(options: CityStatusOrbOptions) {
         license_status: profileData?.license_status || null,
         drivers_license_expiry: profileData?.drivers_license_expiry || null,
         homeowners_insurance_expiry: profileData?.homeowners_insurance_expiry || null,
+        car_insurance_expiry: profileData?.car_insurance_expiry || null,
         house_id: profileData?.house_id || null,
         vehicle_id: profileData?.vehicle_id || null,
         role: profileData?.role || null,

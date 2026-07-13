@@ -370,7 +370,7 @@ export default function PodcastRoom() {
   if (!podcast) return null
 
   return (
-    <div className="relative min-h-full w-full overflow-hidden bg-slate-950">
+    <div className="relative min-h-full w-full overflow-y-auto overflow-x-hidden md:overflow-hidden bg-slate-950">
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
         <div className="absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.20),transparent_42%)]" />

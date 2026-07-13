@@ -64,29 +64,42 @@ export default function PayBroadOfficersModal({
 
     setLoading(true);
     try {
-      // TODO: Replace with pay_stream_broadofficers_v1 RPC when deployed.
-      // For now, use individual coin transactions via existing RPCs.
-      // This is NOT atomic — if one fails, previous payments still go through.
-      // The RPC should be used for production to ensure atomicity.
+      let successCount = 0;
+      let failCount = 0;
 
-      const { data, error } = await supabase.rpc('pay_stream_broadofficers_v1', {
-        p_stream_id: streamId,
-        p_amount_per_officer: amountNum,
-      });
+      for (const officer of officers) {
+        const { data, error } = await supabase.rpc('pay_broadofficer_individual', {
+          p_stream_id: streamId,
+          p_officer_id: officer.user_id,
+          p_amount: amountNum,
+        });
 
-      if (error) throw error;
+        if (error || !data?.success) {
+          console.error(`Failed to pay officer ${officer.username}:`, error || data?.error);
+          failCount++;
+        } else {
+          successCount++;
+        }
+      }
 
-      toast.success(
-        `Paid ${officerCount} officer${officerCount !== 1 ? 's' : ''} ${amountNum} coins each (${totalCost} total)`
-      );
-      onClose();
+      if (successCount > 0 && failCount === 0) {
+        toast.success(
+          `Paid ${successCount} officer${successCount !== 1 ? 's' : ''} ${amountNum} coins each (${totalCost} total)`
+        );
+        onClose();
+      } else if (successCount > 0) {
+        toast.success(`Paid ${successCount} officer${successCount !== 1 ? 's' : ''}, ${failCount} failed`);
+        onClose();
+      } else {
+        toast.error('Failed to pay any officers');
+      }
     } catch (err: any) {
       console.error('Pay broadofficers error:', err);
       toast.error(err.message || 'Failed to pay officers');
     } finally {
       setLoading(false);
     }
-  }, [isValid, loading, streamId, amountNum, officerCount, totalCost, onClose]);
+  }, [isValid, loading, streamId, amountNum, officers, totalCost, onClose]);
 
   if (!isOpen) return null;
 

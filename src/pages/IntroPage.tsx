@@ -42,7 +42,7 @@ export default function IntroPage() {
   }
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden">
+    <div className="relative w-full h-screen bg-black overflow-y-auto overflow-x-hidden md:overflow-hidden">
       {/* Video Container */}
       <video
         autoPlay

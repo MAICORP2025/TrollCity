@@ -125,7 +125,7 @@ export default function CustomerServiceDashboard() {
   const bannedCount = users.filter((u) => u.account_status === "banned").length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white relative overflow-y-auto overflow-x-hidden md:overflow-hidden">
       <CityBackground />
 
       <div className="relative z-10 mx-auto max-w-[1600px] p-4 md:p-6">

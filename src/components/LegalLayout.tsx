@@ -55,7 +55,7 @@ export default function LegalLayout({ children }: LegalLayoutProps) {
   const backLabel = user ? 'Back to App' : 'Back to Login'
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#030712] text-white">
+    <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#030712] text-white">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-[-12rem] top-[-10rem] h-[28rem] w-[28rem] rounded-full bg-cyan-500/20 blur-[120px]" />
         <div className="absolute right-[-10rem] top-[12rem] h-[26rem] w-[26rem] rounded-full bg-fuchsia-500/15 blur-[120px]" />

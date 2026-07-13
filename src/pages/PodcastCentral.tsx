@@ -599,7 +599,7 @@ export default function PodcastCentral() {
   }
 
   return (
-    <div className="relative min-h-full w-full overflow-hidden bg-slate-950">
+    <div className="relative min-h-full w-full overflow-y-auto overflow-x-hidden md:overflow-hidden bg-slate-950">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
         <div className="absolute inset-0 bg-[radial-gradient(120%_120%_at_18%_12%,rgba(147,51,234,0.22),transparent_42%)]" />

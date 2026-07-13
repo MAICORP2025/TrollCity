@@ -200,14 +200,21 @@ BEGIN
   FROM public.troll_battle_participants
   WHERE stream_id = p_stream_id AND team = p_team;
 
-  -- Count unique gifters (would need gift tracking in separate table)
-  -- For now, just check total coins
-  v_unique_gifters := 0; -- TODO: Implement when gift tracking added
+  -- Count unique gifters for this team in this battle stream
+  SELECT COUNT(DISTINCT sender_id)
+  INTO v_unique_gifters
+  FROM public.stream_gifts
+  WHERE stream_id = p_stream_id
+    AND sender_id IN (
+      SELECT user_id
+      FROM public.troll_battle_participants
+      WHERE stream_id = p_stream_id AND team = p_team
+    );
 
   -- Eligible if:
   -- - Total coins >= 1000 OR
   -- - Unique gifters >= 3
-  RETURN v_team_total_coins >= 1000;
+  RETURN v_team_total_coins >= 1000 OR v_unique_gifters >= 3;
 END;
 $$;
 

@@ -1810,7 +1810,7 @@ return (
           <div className={cn(
             'flex-none w-full flex flex-col gap-1 overflow-hidden rounded-3xl p-1',
             challengerGlowClass
-          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+          )} style={{ height: 'calc((100% - 4.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2)' }}>
             <div className="grid gap-1 grid-cols-1 w-full h-full">
               {challengerSlots.map((slot, idx) => (
                 <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
@@ -1910,7 +1910,7 @@ return (
           <div className={cn(
             'flex-none w-full flex flex-col gap-1 overflow-hidden rounded-3xl p-1',
             opponentGlowClass
-          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+          )} style={{ height: 'calc((100% - 4.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2)' }}>
             <div className="grid gap-1 grid-cols-1 w-full h-full">
               {opponentSlots.map((slot, idx) => (
                 <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">
@@ -1983,7 +1983,7 @@ return (
           <div className={cn(
             'flex-none rounded-3xl border-2 p-1',
             challengerGlowClass
-          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+          )} style={{ height: 'calc((100% - 4.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2)' }}>
             <div className="grid gap-1 grid-cols-1 h-full">
               {challengerSlots.map((slot, idx) => (
                 <div key={`challenger-slot-${idx}`} className="min-h-0 h-full">
@@ -2079,7 +2079,7 @@ return (
           <div className={cn(
             'flex-none rounded-3xl border-2 p-1',
             opponentGlowClass
-          )} style={{ height: 'calc((100% - 4.5rem) / 2)' }}>
+          )} style={{ height: 'calc((100% - 4.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2)' }}>
             <div className="grid gap-1 grid-cols-1 h-full">
               {opponentSlots.map((slot, idx) => (
                 <div key={`opponent-slot-${idx}`} className="min-h-0 h-full">

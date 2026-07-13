@@ -296,7 +296,7 @@ function CourtBox({
           </div>
         )}
 
-        {isJoined && audioTrack ? <audio ref={audioRef} autoPlay playsInline /> : null}
+        {isJoined && audioTrack ? <audio ref={audioRef} autoPlay /> : null}
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 bg-gray-950/85 px-3 py-2 backdrop-blur">
@@ -1363,7 +1363,7 @@ export default function TrollCourtSession() {
     ["live", "active", "in_session"].includes(liveCourtSession.status);
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950 p-3 text-white">
+    <div className="h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950 p-3 text-white">
       <div className="mx-auto flex h-full max-w-7xl flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-400/30 bg-gray-950/80 px-4 py-3 shadow-[0_0_26px_rgba(168,85,247,0.25)]">
           <div className="flex items-center gap-3">
@@ -1527,7 +1527,7 @@ export default function TrollCourtSession() {
                   </MenuButton>
                 </RoleActionMenu>
 
-                <RoleActionMenu label="Witness / Audience Options" icon={<Users size={16} />}>
+                <RoleActionMenu label="Witness / Defendant Options" icon={<Users size={16} />}>
                   <MenuButton
                     onClick={() => joinCourtBox("witness")}
                     disabled={isJoiningBox || !courtIsStarted}
@@ -1540,13 +1540,6 @@ export default function TrollCourtSession() {
                     disabled={isJoiningBox || !courtIsStarted}
                   >
                     Join Defendant Box
-                  </MenuButton>
-
-                  <MenuButton
-                    onClick={() => joinCourtBox("audience")}
-                    disabled={isJoiningBox || !courtIsStarted}
-                  >
-                    Join as Audience
                   </MenuButton>
 
                   {currentBoxRole !== "audience" && (

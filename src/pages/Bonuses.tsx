@@ -1,12 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
-import { NEW_USER_BONUS_PERCENT, COINS_PER_USD, calculateFeeCoins } from '../config/coinConfig'
+import { COINS_PER_USD, calculateFeeCoins } from '../config/coinConfig'
 
 export default function BonusesPage() {
   const { profile } = useAuthStore()
-  const examplePurchase = 1000
-  const bonusCoins = Math.floor(examplePurchase * (NEW_USER_BONUS_PERCENT / 100))
-  const totalWithBonus = examplePurchase + bonusCoins
   const cashoutExample = 10000
   const cashoutFee = calculateFeeCoins(cashoutExample)
 
@@ -22,22 +19,12 @@ export default function BonusesPage() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <section className="rounded-3xl border border-slate-700/80 bg-slate-900/80 p-6 shadow-lg">
-            <h2 className="text-2xl font-semibold text-cyan-200">New User Bonus</h2>
-            <p className="mt-4 text-slate-300">
-              All new users receive a <span className="font-semibold text-white">{NEW_USER_BONUS_PERCENT}%</span> bonus on coin purchases.
-            </p>
-            <p className="mt-2 text-slate-400">
-              Example: buy {examplePurchase.toLocaleString()} coins and get <span className="font-semibold text-white">+{bonusCoins.toLocaleString()}</span> bonus coins, for a total of <span className="font-semibold text-white">{totalWithBonus.toLocaleString()}</span> coins.
-            </p>
-          </section>
-
-          <section className="rounded-3xl border border-slate-700/80 bg-slate-900/80 p-6 shadow-lg">
             <h2 className="text-2xl font-semibold text-cyan-200">Coin Value</h2>
             <p className="mt-4 text-slate-300">
               Coins are valued at <span className="font-semibold text-white">{COINS_PER_USD} coins = $1.00</span> across the platform.
             </p>
             <p className="mt-2 text-slate-400">
-              That means every dollar spent gives you a larger coin balance and the bonus coins are added on top.
+              Every dollar spent gives you {COINS_PER_USD} coins, applied at checkout at the standard platform rate.
             </p>
           </section>
 
@@ -63,9 +50,6 @@ export default function BonusesPage() {
             </li>
             <li>
               <span className="font-semibold text-white">Cashout requests:</span> subject to the 5% coin fee plus any review hold time.
-            </li>
-            <li>
-              <span className="font-semibold text-white">New user purchases:</span> bonus coins are added automatically at checkout for eligible accounts.
             </li>
           </ul>
           <p className="mt-4 text-slate-400">

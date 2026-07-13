@@ -638,6 +638,7 @@ export default function BottomNavigation() {
 
       { category: 'City Center', label: 'Appeals', icon: Scale, path: '/city-registry' },
       { category: 'City Center', label: 'Coin Store', icon: Coins, path: '/store' },
+      { category: 'City Center', label: 'Insurance', icon: Shield, path: '/insurance' },
       { category: 'City Center', label: 'Credit Scores', icon: TrendingUp, path: '/credit-scores' },
       { category: 'City Center', label: 'Home', icon: Home, path: '/home' },
       { category: 'City Center', label: 'Leaderboard', icon: Trophy, path: '/leaderboard' },

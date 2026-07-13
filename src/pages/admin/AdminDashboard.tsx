@@ -173,7 +173,7 @@ interface CoinPurchaseRow {
 }
 
 const pageShell =
-  'min-h-screen bg-slate-950 text-white relative overflow-hidden'
+  'min-h-screen bg-slate-950 text-white relative overflow-y-auto overflow-x-hidden md:overflow-hidden'
 
 const glassPanel =
   'rounded-[2rem] border border-cyan-400/15 bg-slate-950/75 backdrop-blur-2xl shadow-[0_0_48px_rgba(45,212,191,0.12),inset_0_1px_0_rgba(255,255,255,0.04)]'
@@ -1302,9 +1302,9 @@ export default function AdminDashboard() {
           onSendNotifications={handleSendNotifications}
           onSystemMaintenance={handleSystemMaintenance}
           onViewAnalytics={handleViewAnalytics}
-          onManualOrders={handleOpenManualOrders} onExportData={function (): void {
-            throw new Error('Function not implemented.')
-          } }        />
+  onManualOrders={handleOpenManualOrders}
+  onExportData={handleExportData}
+/>
 
         <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
           <CoinSalesPanel purchases={coinPurchases} loading={coinPurchasesLoading} onRefresh={loadCoinPurchases} />
@@ -1374,8 +1374,4 @@ export default function AdminDashboard() {
       </div>
     </div>
   )
-}
-
-function setSelectedTx(arg0: null) {
-  throw new Error('Function not implemented.')
 }

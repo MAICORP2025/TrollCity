@@ -338,7 +338,7 @@ export default function AttorneyDashboard() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#020617] text-white">
+    <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#020617] text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.22),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.16),transparent_30%),linear-gradient(135deg,#020617_0%,#07111f_45%,#020617_100%)]" />
       <div className="absolute inset-0 opacity-[0.13] bg-[linear-gradient(rgba(34,211,238,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.18)_1px,transparent_1px)] bg-[size:42px_42px]" />
       <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-amber-950/25 to-transparent" />

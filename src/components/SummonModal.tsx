@@ -117,8 +117,8 @@ export default function SummonModal(props: SummonModalProps) {
       const { data, error } = await supabase.rpc('summon_user_to_court', {
         p_defendant_id: userIdToSummon,
         p_reason: reasonText,
-        p_users_involved: normalizeTextArray([docketDescription]),
-        p_docket_id: null
+        p_users_involved: [],
+        p_staff_id: null
       })
 
       if (error) {

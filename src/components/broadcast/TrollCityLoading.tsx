@@ -88,7 +88,7 @@ const TrollCityLoading: React.FC<TrollCityLoadingProps> = ({
   const displayMessage = message || ROTATING_MESSAGES[messageIndex];
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-b from-slate-900 via-purple-950 to-slate-900 overflow-hidden relative">
+    <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-b from-slate-900 via-purple-950 to-slate-900 overflow-y-auto overflow-x-hidden md:overflow-hidden relative">
       {/* Parallax Background City */}
       <div className="absolute inset-0 pointer-events-none">
         <svg viewBox="0 0 400 200" className="w-full h-full" preserveAspectRatio="none">

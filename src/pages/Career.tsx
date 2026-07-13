@@ -447,7 +447,7 @@ const handleApply = async (position: JobPosition) => {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#050507] text-white">
+    <div className="min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#050507] text-white">
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.22),transparent_38%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_35%)]" />

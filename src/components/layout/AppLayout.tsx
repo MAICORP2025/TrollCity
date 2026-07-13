@@ -84,7 +84,7 @@ export default function AppLayout({
    const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isTreelzPage && !isHytroGamingSetupLivePage;
    const effectiveShowBottomNav = false;
    const mainOverflowClass = isLivePage || isHytroGamingSetupLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
-   const mainPaddingClass = showNewBottomNavBar && !isLivePage && !isHytroGamingSetupLivePage ? 'pb-[calc(var(--bottom-nav-height,128px)+env(safe-area-inset-bottom,0px))]' : '';
+   const mainPaddingClass = showNewBottomNavBar && !isLivePage && !isHytroGamingSetupLivePage ? 'pb-[calc(64px+env(safe-area-inset-bottom,0px))]' : '';
   const appThemeClass = isThemeExemptPage ? 'tc-theme-exempt' : 'tc-app-shell';
 
   return (
@@ -134,7 +134,7 @@ export default function AppLayout({
               ) : null}
 
               {mobileFloatingActionButton ? (
-                <div className="pointer-events-none fixed bottom-[calc(var(--bottom-nav-height,64px)+1rem+env(safe-area-inset-bottom,0px))] right-4 z-20">
+                <div className="pointer-events-none fixed bottom-[calc(64px+1rem+env(safe-area-inset-bottom,0px))] right-4 z-20">
                   <div className="pointer-events-auto">
                     {mobileFloatingActionButton}
                   </div>

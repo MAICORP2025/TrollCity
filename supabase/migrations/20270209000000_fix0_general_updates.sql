@@ -208,15 +208,17 @@ BEGIN
     -- Let's create a simple lookup function or table in this migration if needed.
     -- Assuming `coin_store_items` table doesn't exist, let's create it or use a fixed list.
     
-    -- Mock lookup for safety in this RPC
-    CASE p_item_id
-        WHEN 'pizza' THEN v_cost := 50; v_item_name := 'Pizza';
-        WHEN 'drink' THEN v_cost := 20; v_item_name := 'Drink';
-        WHEN 'vip_badge' THEN v_cost := 1000; v_item_name := 'VIP Badge';
-        ELSE 
-            -- Try to find in badges?
-            RETURN jsonb_build_object('success', false, 'error', 'Invalid item');
-    END CASE;
+    -- Look up item cost and name from shop_items table
+    SELECT price_coins, name
+    INTO v_cost, v_item_name
+    FROM public.shop_items
+    WHERE id = p_item_id
+       OR name = p_item_id
+    LIMIT 1;
+
+    IF v_cost IS NULL THEN
+      RETURN jsonb_build_object('success', false, 'error', 'Invalid item');
+    END IF;
 
     -- Check balance
     SELECT troll_coins INTO v_balance FROM public.user_profiles WHERE id = v_user_id;

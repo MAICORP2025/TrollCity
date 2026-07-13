@@ -48,7 +48,7 @@ const tabIcons: Record<OrgTab, React.ReactNode> = {
 }
 
 const pageShell =
-  'relative min-h-screen overflow-hidden bg-[#050714] px-4 pb-8 pt-24 text-white md:px-6'
+  'relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#050714] px-4 pb-8 pt-24 text-white md:px-6'
 const glassPanel =
   'rounded-[2rem] border border-cyan-300/15 bg-slate-950/70 shadow-[0_0_45px_rgba(34,211,238,0.12)] backdrop-blur-2xl'
 const innerPanel =

@@ -244,7 +244,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'mode:', mode, 'isPublisher:', isPublisher, 'participantType:', participantType);
+    // Resolve a server-authoritative quality cap (e.g. Azgora streams are
+    // locked to 720p even for admins). Client presets must honor this.
+    let qualityCap: '720p' | '1080p' = '1080p';
+    if (roomName && supabaseUrl && supabaseServiceKey) {
+      try {
+        const { createClient } = await import('npm:@supabase/supabase-js@2');
+        const db = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+        const { data: streamRow } = await db
+          .from('streams')
+          .select('is_azgora, quality_cap')
+          .eq('id', roomName)
+          .maybeSingle();
+        if (streamRow?.is_azgora === true || streamRow?.quality_cap === '720p') {
+          qualityCap = '720p';
+        }
+      } catch (dbErr) {
+        console.warn('[livekit-token] quality cap lookup failed (default 1080p):', dbErr);
+      }
+    }
+
+    console.log('[livekit-token] Generating token for room:', roomName, 'participant:', participantName, 'mode:', mode, 'isPublisher:', isPublisher, 'participantType:', participantType, 'qualityCap:', qualityCap);
 
     const token = await createLiveKitToken({
       apiKey,
@@ -279,6 +299,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       participantType,
       ghostMetadata: isGhost ? ghostMetadata : undefined,
       mode,
+      qualityCap,
     }, 200, req);
 
   } catch (error) {

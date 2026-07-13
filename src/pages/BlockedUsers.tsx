@@ -104,7 +104,7 @@ export default function BlockedUsers() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-20 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white pb-20 relative overflow-y-auto overflow-x-hidden md:overflow-hidden">
       {/* Background */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.15),transparent_42%)]" />

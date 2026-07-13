@@ -257,7 +257,7 @@ export default function CourtDocketsManager() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#f59e0b22,transparent_34%),linear-gradient(135deg,#080604,#15100a_45%,#241607)] px-4 pb-10 pt-24 text-amber-50 md:px-6">
+    <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[radial-gradient(circle_at_top,#f59e0b22,transparent_34%),linear-gradient(135deg,#080604,#15100a_45%,#241607)] px-4 pb-10 pt-24 text-amber-50 md:px-6">
       <div className="pointer-events-none fixed inset-0 opacity-15">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(245,158,11,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(245,158,11,0.08)_1px,transparent_1px)] bg-[size:44px_44px]" />
       </div>

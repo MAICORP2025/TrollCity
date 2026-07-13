@@ -306,7 +306,7 @@ export default function AdvertisePage() {
 
   if (isAdmin) {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-[#020617] text-white">
+      <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#020617] text-white">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.22),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_30%),linear-gradient(135deg,#020617_0%,#07111f_48%,#020617_100%)]" />
         <div className="absolute inset-0 opacity-[0.14] bg-[linear-gradient(rgba(34,211,238,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.2)_1px,transparent_1px)] bg-[size:44px_44px]" />
 
@@ -501,7 +501,7 @@ export default function AdvertisePage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#020617] text-white">
+    <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#020617] text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.22),transparent_32%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.18),transparent_30%),linear-gradient(135deg,#020617_0%,#07111f_48%,#020617_100%)]" />
       <div className="absolute inset-0 opacity-[0.14] bg-[linear-gradient(rgba(34,211,238,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.2)_1px,transparent_1px)] bg-[size:44px_44px]" />
 

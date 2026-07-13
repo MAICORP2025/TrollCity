@@ -6,6 +6,7 @@ import UserNameWithAge from '../UserNameWithAge';
 import { useAuthStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
 import { Virtuoso } from 'react-virtuoso';
+import { notifyBroadofficerAssigned } from '../../lib/notifications';
 
 interface BannedUser {
     user_id: string;
@@ -223,14 +224,22 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
         if (!confirm(`Promote ${username} to Broad Officer? They will have moderation powers.`)) return;
 
         try {
-            const { error } = await supabase.rpc('assign_broadofficer', {
+            const { data, error } = await supabase.rpc('assign_broadofficer', {
                 p_stream_id: streamId,
                 p_officer_id: userId
             });
 
             if (error) throw error;
+            const result = Array.isArray(data) ? data[0] : data;
+            if (result && result.success === false) { toast.error(result.error || 'Failed to promote user'); return; }
 
-            const content = `Broadcaster has made ${username} a broadofficer`;
+            if (result?.already_assigned) {
+                toast.info(`${username} is already a Broad Officer`);
+                fetchAllData();
+                return;
+            }
+
+            const content = `${username} has been assigned as a Broadofficer.`;
             const systemMessage = {
                 id: `broadofficer-${streamId}-${userId}-${Date.now()}`,
                 user_id: user?.id || userId,
@@ -256,6 +265,7 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
                 }
             });
 
+            void notifyBroadofficerAssigned(userId, (user as any)?.username || 'Broadcaster', streamId);
             toast.success(`${username} promoted to Broad Officer`);
             fetchAllData();
         } catch (err) {

@@ -248,7 +248,7 @@ export default function Following() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#050816] text-white relative">
+    <div className="min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#050816] text-white relative">
       {/* Background */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(0,212,255,0.14),transparent_45%)]" />

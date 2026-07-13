@@ -100,7 +100,7 @@ export default function PresidentialCampaignGrid() {
       {/* Vote Modal */}
       {isVoteModalOpen && selectedCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[calc(100vh-8rem)] overflow-y-auto">
             <h3 className="text-2xl font-bold text-white mb-4">Support {selectedCandidate.username}</h3>
             <p className="text-slate-400 mb-6">How many coins would you like to contribute? Each coin counts as one vote.</p>
             

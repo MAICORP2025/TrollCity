@@ -440,7 +440,7 @@ export default function Sidebar() {
   return (
     <aside
       className={cx(
-        'fixed left-0 top-0 z-50 flex h-screen max-h-screen flex-col overflow-hidden border-r border-pink-300/25 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.55),0_0_30px_rgba(236,72,153,0.14),0_0_34px_rgba(34,211,238,0.10),inset_0_0_34px_rgba(168,85,247,0.10)] backdrop-blur-2xl transition-all duration-300',
+        'fixed left-0 top-0 z-50 flex h-screen max-h-screen flex-col overflow-y-auto overflow-x-hidden md:overflow-hidden border-r border-pink-300/25 bg-slate-950 text-white shadow-[12px_0_48px_rgba(0,0,0,0.55),0_0_30px_rgba(236,72,153,0.14),0_0_34px_rgba(34,211,238,0.10),inset_0_0_34px_rgba(168,85,247,0.10)] backdrop-blur-2xl transition-all duration-300',
         isSidebarCollapsed ? 'w-20' : 'w-72'
       )}
     >

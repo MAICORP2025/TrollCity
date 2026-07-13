@@ -56,9 +56,22 @@ export class MatchController {
     } else {
         // This case should ideally not happen if create_game_match RPC initializes it properly
         console.warn('game_state not found in DB, initializing from engine.');
+
+        let player1Username = 'Player 1';
+        let player2Username = 'Player 2';
+
+        if (data.player1_id) {
+            const { data: p1 } = await supabase.from('user_profiles').select('username').eq('id', data.player1_id).maybeSingle();
+            if (p1?.username) player1Username = p1.username;
+        }
+        if (data.player2_id) {
+            const { data: p2 } = await supabase.from('user_profiles').select('username').eq('id', data.player2_id).maybeSingle();
+            if (p2?.username) player2Username = p2.username;
+        }
+
         const players = [
-            { id: data.player1_id, username: 'Player 1' }, // TODO: Fetch actual usernames
-            ...(data.player2_id ? [{ id: data.player2_id, username: 'Player 2' }] : [])
+            { id: data.player1_id, username: player1Username },
+            ...(data.player2_id ? [{ id: data.player2_id, username: player2Username }] : [])
         ];
         this._gameState = this.gameEngine.initializeGame(players);
         this._gameState.matchId = this.matchId; // Ensure matchId is set

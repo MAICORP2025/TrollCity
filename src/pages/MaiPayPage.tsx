@@ -420,7 +420,7 @@ export default function MaiPayPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0814] text-white">
+    <div className="min-h-screen bg-[#0A0814] text-white overflow-y-auto">
       {/* Header */}
       <div className="sticky top-0 z-30 bg-[#0A0814]/95 backdrop-blur-xl border-b border-purple-500/20">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-4">
@@ -1035,20 +1035,19 @@ export default function MaiPayPage() {
           <div className="bg-[#0E0A1A] rounded-xl border border-purple-500/20 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">Transaction History</h3>
-              <div className="flex gap-2">
-                {(['all', 'gift_received', 'gift_sent', 'purchase', 'cashout'] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setTxFilter(f)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      txFilter === f
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-black/20 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    {f === 'all' ? 'All' : f === 'gift_received' ? 'Received' : f === 'gift_sent' ? 'Sent' : f === 'purchase' ? 'Purchase' : 'Cashout'}
-                  </button>
-                ))}
+              <div className="relative">
+                <select
+                  value={txFilter}
+                  onChange={(e) => setTxFilter(e.target.value)}
+                  className="appearance-none bg-black/20 border border-purple-500/20 text-white text-xs font-semibold rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:border-purple-500/50 cursor-pointer"
+                >
+                  <option value="all" className="bg-slate-950">All</option>
+                  <option value="gift_received" className="bg-slate-950">Received</option>
+                  <option value="gift_sent" className="bg-slate-950">Sent</option>
+                  <option value="purchase" className="bg-slate-950">Purchase</option>
+                  <option value="cashout" className="bg-slate-950">Cashout</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
               </div>
             </div>
 

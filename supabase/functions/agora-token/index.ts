@@ -1,5 +1,26 @@
 import { handleCorsPreflight, withCors } from "../_shared/cors.ts";
 import { RtcTokenBuilder, RtcRole } from "npm:agora-token@^2.0.5";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const authSupabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+/** Reject unauthenticated callers. Returns the authenticated user or a 401 Response. */
+async function requireAuth(req: Request): Promise<{ user: { id: string } | null; error: Response | null }> {
+  const authHeader = req.headers.get("authorization") || "";
+  const token = authHeader.replace("Bearer ", "").trim();
+  if (!token) {
+    return { user: null, error: withCors({ error: "Missing authorization token" }, 401, req) };
+  }
+  const { data: { user }, error: authError } = await authSupabase.auth.getUser(token);
+  if (authError || !user) {
+    return { user: null, error: withCors({ error: "Unauthorized" }, 401, req) };
+  }
+  return { user: { id: user.id }, error: null };
+}
 
 /**
  * Agora Token Generator
@@ -10,7 +31,7 @@ function generateAgoraToken(params: {
   appId: string;
   appCertificate: string;
   channelName: string;
-  uid: number;
+  uid: string | number;
   role?: 'publisher' | 'subscriber';
   expiration?: number;
 }): string {
@@ -24,7 +45,6 @@ function generateAgoraToken(params: {
   } = params;
 
   try {
-    // Use official Agora RTC Token Builder - supports both publisher and subscriber
     const agoraRole = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER
     const token = RtcTokenBuilder.buildTokenWithUid(
       appId,
@@ -45,12 +65,15 @@ function generateAgoraToken(params: {
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return handleCorsPreflight(req);
 
+  const { error: authError } = await requireAuth(req);
+  if (authError) return authError;
+
   try {
     const body = await req.json();
 
     const channelName = body.channelName || body.channel || 'staff_meeting';
-    const userIdStr = body.userId || body.user_id || body.uid || '0';
-    const uid = parseInt(userIdStr as string, 10);
+    const userIdStr = String(body.userId || body.user_id || body.uid || '0');
+    const uid = userIdStr;
     const role = body.role || 'subscriber';
     const podcastId = body.podcastId || null;
 

@@ -160,7 +160,7 @@ export function GamingSetup({
   }, [isConnecting, isLive, isPreviewing])
 
   return (
-    <div className={cn('min-h-screen overflow-hidden bg-[#05080f] text-white', 'bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.14),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,0.12),transparent_30%),linear-gradient(180deg,#05080f,#02040a)]', className)}>
+    <div className={cn('min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#05080f] text-white', 'bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.14),transparent_28%),radial-gradient(circle_at_80%_10%,rgba(168,85,247,0.12),transparent_30%),linear-gradient(180deg,#05080f,#02040a)]', className)}>
       <header className="border-b border-cyan-400/15 bg-black/35 px-4 py-3 backdrop-blur-2xl sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-5">

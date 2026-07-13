@@ -452,6 +452,7 @@ export default function TrollCourt() {
 
       setCourtSession(null)
       toast.success('Court session adjourned')
+      navigate(`/court/${courtSession.id}/summary`)
       loadCourtState()
     } catch (err: any) {
       toast.error(`Failed to adjourn court session: ${err?.message || err}`)
@@ -598,7 +599,6 @@ export default function TrollCourt() {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <CourtActionButton icon={<Users size={17} />} label="Enter Courtroom" onClick={() => navigate(`/court/${courtSession.id}`)} />
-                  <CourtActionButton icon={<Eye size={17} />} label="Watch Live Court" onClick={() => navigate(`/troll-court/watch/${courtSession.id}`)} tone="green" />
                   <CourtActionButton icon={<Gavel size={17} />} label="File Civil Lawsuit" onClick={() => setIsFileLawsuitModalOpen(true)} tone="red" />
                   {canSummonUser && <CourtActionButton icon={<Stamp size={17} />} label="Issue Summons" onClick={openCreateModal} tone="gold" />}
                   {canSummonUser && <CourtActionButton icon={<X size={17} />} label="Adjourn Court" onClick={handleEndCourtSession} tone="danger" />}
@@ -796,13 +796,13 @@ export default function TrollCourt() {
 
             <div className="space-y-4 p-5">
               <div>
-                <label className="mb-2 block text-sm font-bold text-amber-100/70">Case Reason</label>
+                <label className="mb-2 block text-sm font-bold text-amber-100/70">Case Reason <span className="text-amber-100/40">(optional)</span></label>
                 <select
                   value={selectedCaseType}
                   onChange={(e) => setSelectedCaseType(e.target.value)}
                   className="w-full rounded-xl border border-amber-300/15 bg-black/35 px-4 py-3 text-white outline-none focus:border-amber-300/50"
                 >
-                  <option value="">-- Select Case Reason --</option>
+                  <option value="">-- No Case Reason (Open Court) --</option>
                   {CASE_TYPES.map((type) => (
                     <option key={type} value={type}>
                       {type}
@@ -812,7 +812,7 @@ export default function TrollCourt() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-bold text-amber-100/70">Defendant</label>
+                <label className="mb-2 block text-sm font-bold text-amber-100/70">Defendant <span className="text-amber-100/40">(optional)</span></label>
                 <div className="relative">
                   <Search className="absolute left-3 top-3.5 h-5 w-5 text-amber-100/40" />
                   <input
@@ -849,6 +849,11 @@ export default function TrollCourt() {
                 </div>
               )}
 
+              <p className="text-xs text-amber-100/50">
+                You can open court without choosing a defendant. Add defendants later from the Docket so the
+                judge can issue rulings even when there is no pre-existing case.
+              </p>
+
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setIsCreateModalOpen(false)}
@@ -861,7 +866,15 @@ export default function TrollCourt() {
                   disabled={isStartingSession}
                   className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-red-700 py-3 font-black text-white shadow-[0_0_30px_rgba(245,158,11,0.16)] disabled:opacity-50"
                 >
-                  {isStartingSession ? 'Processing...' : courtSession ? 'Issue Summons' : 'Open Court'}
+                  {isStartingSession
+                    ? 'Processing...'
+                    : selectedUser
+                      ? courtSession
+                        ? 'Issue Summons'
+                        : 'Open Court & Summon'
+                      : courtSession
+                        ? 'Add Defendant'
+                        : 'Open Court Session'}
                 </button>
               </div>
             </div>

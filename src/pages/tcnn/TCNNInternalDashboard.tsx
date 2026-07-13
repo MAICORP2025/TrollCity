@@ -32,7 +32,7 @@ interface DashboardStats {
 type TabId = 'articles' | 'approvals' | 'ticker' | 'live' | 'roles' | 'analytics'
 
 const page =
-  'relative min-h-screen overflow-hidden bg-[#07090f] px-4 pb-8 pt-24 text-white md:px-6'
+  'relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#07090f] px-4 pb-8 pt-24 text-white md:px-6'
 
 const panel =
   'rounded-[2rem] border border-slate-700/70 bg-slate-950/80 shadow-[0_0_45px_rgba(15,23,42,0.55)] backdrop-blur-2xl'

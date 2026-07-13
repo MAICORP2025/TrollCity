@@ -130,7 +130,7 @@ export default function MobileTreelzPage() {
   }
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-black">
+    <div className="relative h-screen w-full overflow-y-auto overflow-x-hidden md:overflow-hidden bg-black">
       {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-4 pt-3">
         <Link to="/" className="flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm">

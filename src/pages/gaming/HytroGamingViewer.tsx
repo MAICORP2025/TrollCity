@@ -128,12 +128,12 @@ const TIP_ITEMS: TipItem[] = [
 ]
 
 const COIN_PACKS = [
-  { id: '1', coins: 110, price: 1 },
-  { id: '2', coins: 330, price: 3 },
-  { id: '3', coins: 550, price: 5 },
-  { id: '4', coins: 1100, price: 10, popular: true },
-  { id: '5', coins: 2750, price: 25 },
-  { id: '6', coins: 5500, price: 50 },
+  { id: '1', coins: 100, price: 1 },
+  { id: '2', coins: 300, price: 3 },
+  { id: '3', coins: 500, price: 5 },
+  { id: '4', coins: 1000, price: 10, popular: true },
+  { id: '5', coins: 2500, price: 25 },
+  { id: '6', coins: 5000, price: 50 },
 ]
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
@@ -752,7 +752,7 @@ export default function HytroGamingViewer() {
   // ─── Desktop Layout ──────────────────────────────────────────────────────
   if (!isMobile) {
     return (
-      <div className="flex h-screen overflow-hidden bg-[#02040a] text-white">
+      <div className="flex h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#02040a] text-white">
         {/* Tip Banner — shows when gifts are sent */}
         <TipBanner streamId={streamId || ''} />
 

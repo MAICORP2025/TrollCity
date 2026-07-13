@@ -1,5 +1,26 @@
 import { handleCorsPreflight, withCors } from "../_shared/cors.ts";
 import { RtcTokenBuilder, RtcRole } from "npm:agora-token@^2.0.5";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const authSupabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+/** Reject unauthenticated callers. Returns the authenticated user or a 401 Response. */
+async function requireAuth(req: Request): Promise<{ user: { id: string } | null; error: Response | null }> {
+  const authHeader = req.headers.get("authorization") || "";
+  const token = authHeader.replace("Bearer ", "").trim();
+  if (!token) {
+    return { user: null, error: withCors({ error: "Missing authorization token" }, 401, req) };
+  }
+  const { data: { user }, error: authError } = await authSupabase.auth.getUser(token);
+  if (authError || !user) {
+    return { user: null, error: withCors({ error: "Unauthorized" }, 401, req) };
+  }
+  return { user: { id: user.id }, error: null };
+}
 
 /**
  * Agora Walkie-Talkie Token Generator
@@ -115,41 +136,44 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return withCors({ error: "Method not allowed" }, 405, req);
   }
 
+  const { user, error: authError } = await requireAuth(req);
+  if (authError || !user) {
+    return authError ?? withCors({ error: "Unauthorized" }, 401, req);
+  }
+
   try {
     const body = (await req.json().catch(() => ({}))) as TokenRequestBody;
 
-    const rawChannelName = String(body.channelName || "staff-walkie-talkie").trim();
-    const pageSuffix = pageNum > 0 ? `-page${pageNum}` : '';
-    const channelName = `${rawChannelName}${pageSuffix}`;
+    // Verify the caller's role from the database, never trust client-supplied role.
+    const { data: profile } = await authSupabase
+      .from("user_profiles")
+      .select("role, is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    const rawUserId =
-      body.userId ||
-      body.user_id ||
-      body.uid ||
-      body.username ||
-      crypto.randomUUID();
-
-    const uid = stableNumericUid(rawUserId);
-
-    const role = String(body.role || body.metadata?.role || "")
+    const dbRole = String(profile?.role || (profile?.is_admin ? "admin" : ""))
       .trim()
       .toLowerCase();
 
-    const pageNum = Number(body.walkieTalkiePage || body.walkie_talkie_page || 0) || 0;
-    const pageSuffix = pageNum > 0 ? `-page${pageNum}` : '';
-    const channelName = `${String(body.channelName || "staff-walkie-talkie").trim()}${pageSuffix}`;
-
-    if (role && !ALLOWED_ROLES.has(role)) {
+    if (dbRole && !ALLOWED_ROLES.has(dbRole)) {
       return withCors(
         {
           error: "Your role cannot access Staff Walkie Talkie.",
           code: "ROLE_DENIED",
-          role,
+          role: dbRole,
         },
         403,
         req,
       );
     }
+
+    const channelName = String(body.channelName || "staff-walkie-talkie").trim();
+    const pageNum = Number(body.walkieTalkiePage || body.walkie_talkie_page || 0) || 0;
+    const pageSuffix = pageNum > 0 ? `-page${pageNum}` : "";
+    const fullChannelName = `${channelName}${pageSuffix}`;
+
+    // Tie the token to the authenticated user so it cannot be reused by others.
+    const uid = stableNumericUid(user.id);
 
     const appId =
       Deno.env.get("AGORA_APP_ID") ||
@@ -179,19 +203,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const privilegeExpiredTs = Math.floor(Date.now() / 1000) + expireSeconds;
     const expiresAt = new Date(privilegeExpiredTs * 1000).toISOString();
 
-      console.log("[agora-walkie-token] Generating token", {
-        channelName,
-        uid,
-        role: role || "unverified",
-        page: pageNum || "default",
-        privilegeExpiredTs,
-        expiresAt,
-      });
+    console.log("[agora-walkie-token] Generating token", {
+      channelName: fullChannelName,
+      uid,
+      role: dbRole || "unverified",
+      page: pageNum || "default",
+      privilegeExpiredTs,
+      expiresAt,
+    });
 
     const token = generateAgoraToken({
       appId,
       appCertificate,
-      channelName,
+      channelName: fullChannelName,
       uid,
       role: "publisher",
       privilegeExpiredTs,
@@ -203,7 +227,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       {
         token,
         appId,
-        channelName,
+        channelName: fullChannelName,
         uid,
         expiresAt,
         privilegeExpiredTs,

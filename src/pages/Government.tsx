@@ -41,7 +41,7 @@ import EmergencyTab from '@/components/government/EmergencyTab'
 import OfficerDashboardTab from '@/components/government/OfficerDashboardTab'
 
 const pageShell =
-  'relative min-h-screen overflow-hidden bg-[#050714] px-4 pb-8 pt-24 text-white md:px-6'
+  'relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#050714] px-4 pb-8 pt-24 text-white md:px-6'
 const glassPanel =
   'rounded-[2rem] border border-cyan-300/15 bg-slate-950/70 shadow-[0_0_45px_rgba(34,211,238,0.12)] backdrop-blur-2xl'
 const innerPanel =
@@ -303,6 +303,9 @@ const currentTab = searchParams.get('tab') || 'laws'
               <button
                 onClick={() => setSidebarOpen((value) => !value)}
                 className={cn(secondaryButton, 'px-3 lg:hidden')}
+                aria-label={sidebarOpen ? 'Close government menu' : 'Open government menu'}
+                aria-expanded={sidebarOpen}
+                aria-controls="government-sidebar"
               >
                 {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
@@ -343,9 +346,11 @@ const currentTab = searchParams.get('tab') || 'laws'
 
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[330px_1fr]">
           <aside
+            id="government-sidebar"
+            aria-label="Government departments"
             className={cn(
               glassPanel,
-              'fixed inset-y-0 left-0 z-50 w-[330px] translate-x-[-110%] overflow-hidden p-3 transition-transform duration-200 lg:static lg:w-auto lg:translate-x-0',
+              'fixed inset-y-0 left-0 z-50 w-[330px] translate-x-[-110%] overflow-hidden p-3 pb-20 transition-transform duration-200 lg:static lg:w-auto lg:translate-x-0 lg:pb-3',
               sidebarOpen && 'translate-x-0'
             )}
           >

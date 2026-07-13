@@ -42,6 +42,7 @@ import ErrorBoundary from '../../components/ErrorBoundary'
 import GiftBoxModal from '../../components/broadcast/GiftBoxModal'
 import GiftVideoOverlay from '../../components/broadcast/GiftVideoOverlay'
 import UserActionModal from '../../components/broadcast/UserActionModal'
+import ModActionsPopup from '../../components/broadcast/ModActionsPopup'
 import { getGiftVisualConfig } from '../../lib/giftVisuals'
 
 
@@ -79,7 +80,6 @@ import { useCityStatusOrb } from '../../lib/hooks/useCityStatusOrb'
 import SeatCityStatusOrb from '../../components/broadcast/SeatCityStatusOrb'
 import { useGhostMode } from '../../hooks/useGhostMode'
 import { useChatBlockStatus } from '../../hooks/useChatBlockStatus'
-import { useBroadcastRecorder } from '../../hooks/useBroadcastRecorder'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -755,6 +755,21 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
     const [blockedUsernames, setBlockedUsernames] = useState<Set<string>>(new Set())
     const { userChatDisabled, chatDisabledRemainingMinutes } = useChatBlockStatus(user?.id, streamId);
 
+    // Proactively tell the current user their chat was disabled by moderation.
+    // Previously this only surfaced when they tried to send a message; now it
+    // shows the moment the chat_blocks row lands for them.
+    const prevChatDisabledRef = useRef(false)
+    useEffect(() => {
+      if (userChatDisabled && !prevChatDisabledRef.current) {
+        toast.error(
+          chatDisabledRemainingMinutes
+            ? `Your chat is disabled by moderation action. Try again in ${chatDisabledRemainingMinutes} minute(s).`
+            : 'Your chat is disabled by moderation action.',
+        )
+      }
+      prevChatDisabledRef.current = userChatDisabled
+    }, [userChatDisabled, chatDisabledRemainingMinutes])
+
     const hostChatDisabledByOfficer = useMemo(
       () => isBroadcastChatLockActive({
         disabled: hostChatDisabledByOfficerState,
@@ -765,14 +780,7 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
       [hostChatDisabledByOfficerState, hostChatDisabledUntil, hostChatDisabledStreamId, streamId],
     )
 
-    // Use the same recorder as BroadcastPage — captures HLS playback if available, otherwise entire screen
-    const recorder = useBroadcastRecorder({
-      sourceUrl: stream?.hls_url || stream?.hls_path || null,
-      replaySource: 'broadcast',
-      replayTitlePrefix: 'Broadcast',
-    })
-
-    // Load blocked usernames for chat filtering
+     // Load blocked usernames for chat filtering
     useEffect(() => {
       if (!user?.id) {
         setBlockedUsernames(new Set())
@@ -860,7 +868,61 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
   } | null>(null)
   const [selectedSeatUserId, setSelectedSeatUserId] = useState<string | null>(null)
   const [viewerError, setViewerError] = useState<string | null>(null)
+  // Stream-scoped broadofficer status (authoritative for current stream, realtime)
+  const [isStreamBroadofficer, setIsStreamBroadofficer] = useState(false)
+  // Server-authoritative moderation context (staff role + clock-in), realtime
+  const [modContext, setModContext] = useState<any>(null)
   const { topGifters, isLoading: isTopFansLoading } = useStreamTopGifters({ streamId: streamId || null, limit: 10 })
+
+  // Realtime broadofficer status for THIS stream. Powers appear/disappear
+  // immediately without refresh when the broadcaster assigns/removes.
+  useEffect(() => {
+    const sid = streamId
+    if (!sid || !user?.id) { setIsStreamBroadofficer(false); return }
+    let active = true
+    const refresh = () => {
+      supabase
+        .from('broadcast_officers')
+        .select('officer_id')
+        .eq('stream_id', sid)
+        .then(({ data }) => {
+          if (!active) return
+          const ids = new Set((data || []).map((r: any) => r.officer_id))
+          setIsStreamBroadofficer(ids.has(user.id))
+        })
+    }
+    refresh()
+    const channel = supabase
+      .channel(`broadofficers-viewer:${sid}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'broadcast_officers',
+        filter: `stream_id=eq.${sid}`,
+      }, refresh)
+      .subscribe()
+    return () => { active = false; void supabase.removeChannel(channel) }
+  }, [streamId, user?.id])
+
+  // Authoritative staff moderation context. Clock-in changes propagate via
+  // realtime so available actions update immediately (no stale local state).
+  useEffect(() => {
+    const sid = streamId
+    if (!sid || !user?.id) { setModContext(null); return }
+    let active = true
+    const refresh = () => {
+      supabase.rpc('get_viewer_mod_context', { p_stream_id: sid }).then(({ data }) => {
+        if (active) setModContext(data)
+      })
+    }
+    refresh()
+    const channel = supabase
+      .channel(`work-sessions:${user.id}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'officer_work_sessions',
+        filter: `officer_id=eq.${user.id}`,
+      }, refresh)
+      .subscribe()
+    return () => { active = false; void supabase.removeChannel(channel) }
+  }, [streamId, user?.id])
 
   const resolveGiftAmount = useCallback((giftData: any): number => {
     const metadata = giftData?.metadata || {}
@@ -1191,9 +1253,10 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
      leaveAudienceRef.current = leaveAudience
    }, [leaveAudience])
 
-    // Refs to hold LiveKit functions populated after useLiveKitRoom hook runs
-    const unpublishLocalTracksRef = useRef<(() => Promise<void>) | null>(null)
-    const leaveLiveKitRoomRef = useRef<(() => Promise<void>) | null>(null)
+     // Refs to hold LiveKit functions populated after useLiveKitRoom hook runs
+     const unpublishLocalTracksRef = useRef<(() => Promise<void>) | null>(null)
+     const leaveLiveKitRoomRef = useRef<(() => Promise<void>) | null>(null)
+     const localAudioTrackRef = useRef<any>(null)
 
     // Track whether we already processed a kick for this user to avoid double-processing
     const kickProcessedRef = useRef(false)
@@ -1264,6 +1327,10 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
 
   const [seatMicOn, setSeatMicOn] = useState(true)
   const [seatCamOn, setSeatCamOn] = useState(true)
+
+  // Tracks whether the current user was muted by a moderator so they cannot
+  // unmute themselves while the moderator mute is active.
+  const isModeratorMutedRef = useRef(false)
 
   const handleStartSeatBattle = useCallback(async () => {
     if (!stream?.id || !user?.id || !isUserOnStage) return
@@ -1503,8 +1570,9 @@ const isActive = isStreamActive(stream)
     })
 
     // Populate refs so the seat_left handler (defined before this hook) can call them
-    unpublishLocalTracksRef.current = unpublishLocalTracks
-    leaveLiveKitRoomRef.current = leaveLiveKitRoom
+     unpublishLocalTracksRef.current = unpublishLocalTracks
+     leaveLiveKitRoomRef.current = leaveLiveKitRoom
+     localAudioTrackRef.current = localAudioTrack
 
   // Expose dev-only join debug overlay for mobile PWA troubleshooting
     const [showJoinDebug, setShowJoinDebug] = useState(true);
@@ -1591,10 +1659,14 @@ const isActive = isStreamActive(stream)
     }
   }, [remoteParticipants, hostId, updateBroadcasterState, liveKitRoom])
 
-// Mic mute callbacks for walkie-talkie integration (for users on stage)
+  // Mic mute callbacks for walkie-talkie integration (for users on stage)
   const handleToggleMic = useCallback(async () => {
     if (!isUserOnStage) return
     const nextMicOn = !seatMicOn
+    if (nextMicOn && isModeratorMutedRef.current) {
+      toast.error('You have been muted by a moderator.')
+      return
+    }
     const ok = await setMicEnabled(nextMicOn)
     if (ok) setSeatMicOn(nextMicOn)
     console.log('[ViewerPage] seat mic toggled', nextMicOn)
@@ -1778,7 +1850,8 @@ const isActive = isStreamActive(stream)
        profile?.role === 'moderator' ||
        profile?.troll_role === 'moderator' ||
        profile?.role === 'admin' ||
-       profile?.troll_role === 'admin'
+       profile?.troll_role === 'admin' ||
+       isStreamBroadofficer
    )
 
    const isModOrHigher = Boolean(isOfficer || isModerator || isCEO || isStaffProfile(profile))
@@ -2444,76 +2517,98 @@ useStreamRealtime(
      }
    }, [])
 
-   // Mute/chat detection: subscribe to stream_mutes for current user
-   useEffect(() => {
-     if (!streamId || !user?.id) return
+    // Mute detection: subscribe to stream_mutes for current user.
+    // The subscription must stay stable — re-subscribing would re-run the
+    // initial query and flood the network, and would also remount tracks.
+    // Live values (mic state, publishing) are read from refs instead of deps.
 
-     const checkMuteState = async () => {
-       try {
-         const { data } = await supabase
-           .from('stream_mutes')
-           .select('id, expires_at')
-           .eq('stream_id', streamId)
-           .eq('user_id', user.id)
-           .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
-           .maybeSingle()
+    // Actually mute/unmute the local mic track WITHOUT tearing down/remounting
+    // the published track. This is what stops the user's mic from still working
+    // after a moderator mute.
+    const applyModeratorMute = useCallback(async () => {
+      isModeratorMutedRef.current = true
+      try { await localAudioTrackRef.current?.mute() } catch {}
+      setSeatMicOn(false)
+    }, [])
 
-         if (data) {
-           toast.error('You have been muted by a moderator.')
-           if (isUserOnStage && isPublishing) {
-             try { await unpublishLocalTracks() } catch {}
-           }
-         }
-       } catch {}
-     }
+    const clearModeratorMute = useCallback(async () => {
+      isModeratorMutedRef.current = false
+      try { await localAudioTrackRef.current?.unmute() } catch {}
+      setSeatMicOn(true)
+    }, [])
 
-     void checkMuteState()
+    // Always-current snapshot of on-stage / publishing state for the handlers
+    const liveMuteStateRef = useRef({ isUserOnStage, isPublishing })
+    liveMuteStateRef.current = { isUserOnStage, isPublishing }
 
-     const muteChannel = supabase
-       .channel(`viewer-mute:${streamId}:${user.id}`)
-       .on(
-         'postgres_changes',
-         {
-           event: 'INSERT',
-           schema: 'public',
-           table: 'stream_mutes',
-           filter: `stream_id=eq.${streamId}`,
-         },
-         (payload) => {
-           const newMute = payload.new as any
-           if (newMute?.user_id === user.id) {
-             toast.error('You have been muted by a moderator.')
-             if (isUserOnStage && isPublishing) {
-               void (async () => {
-                 try { await unpublishLocalTracks() } catch {}
-               })()
-             }
-           }
-         },
-       )
-       .on(
-         'postgres_changes',
-         {
-           event: 'DELETE',
-           schema: 'public',
-           table: 'stream_mutes',
-           filter: `stream_id=eq.${streamId}`,
-         },
-         (payload) => {
-           const oldMute = payload.old as any
-           if (oldMute?.user_id === user.id) {
-             toast.success('You have been unmuted.')
-           }
-         },
-       )
-       .subscribe()
+    useEffect(() => {
+      if (!streamId || !user?.id) return
 
-      return () => {
-        if (muteChannel) {
-          supabase.removeChannel(muteChannel)
-        }
+      const checkMuteState = async () => {
+        try {
+          const { data } = await supabase
+            .from('stream_mutes')
+            .select('id, expires_at')
+            .eq('stream_id', streamId)
+            .eq('user_id', user.id)
+            .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
+            .maybeSingle()
+
+          if (data) {
+            toast.error('You have been muted by a moderator.')
+            if (liveMuteStateRef.current.isUserOnStage && liveMuteStateRef.current.isPublishing) {
+              await applyModeratorMute()
+            }
+          }
+        } catch {}
       }
-   }, [streamId, user?.id, isUserOnStage, isPublishing, unpublishLocalTracks])
+
+      void checkMuteState()
+
+      const muteChannel = supabase
+        .channel(`viewer-mute:${streamId}:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'stream_mutes',
+            filter: `stream_id=eq.${streamId}`,
+          },
+          (payload) => {
+            const newMute = payload.new as any
+            if (newMute?.user_id === user.id) {
+              toast.error('You have been muted by a moderator.')
+              if (liveMuteStateRef.current.isUserOnStage && liveMuteStateRef.current.isPublishing) {
+                void applyModeratorMute()
+              }
+            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'stream_mutes',
+            filter: `stream_id=eq.${streamId}`,
+          },
+          (payload) => {
+            const oldMute = payload.old as any
+            if (oldMute?.user_id === user.id) {
+              toast.success('You have been unmuted.')
+              void clearModeratorMute()
+            }
+          },
+        )
+        .subscribe()
+
+       return () => {
+         if (muteChannel) {
+           supabase.removeChannel(muteChannel)
+         }
+       }
+    }, [streamId, user?.id, applyModeratorMute, clearModeratorMute])
 
     useEffect(() => {
       if (!streamId || !user?.id) return
@@ -2836,11 +2931,15 @@ const heartbeat = window.setInterval(() => {
   }
 
   function onLiveKitMicMute(): void {
-    throw new Error('Function not implemented.')
+    if (localAudioTrack) {
+      localAudioTrack.mute().catch(() => {});
+    }
   }
 
   function onLiveKitMicUnmute(): void {
-    throw new Error('Function not implemented.')
+    if (localAudioTrack) {
+      localAudioTrack.unmute().catch(() => {});
+    }
   }
 
   // Broadofficer appointment popup (realtime)
@@ -4512,49 +4611,9 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
                      {seatCamOn ? <Video className="h-10 w-10" /> : <VideoOff className="h-10 w-10" />}
                    </button>
                  </>
-               )}
-              <button
-                onClick={async () => {
-                  if (recorder.isRecording) {
-                    void recorder.stopRecording()
-                  } else if (streamId) {
-                    if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') {
-                      toast.error('Screen recording not supported on mobile.', { duration: 5000 })
-                      return
-                    }
-                    try {
-                      await recorder.startRecording(streamId)
-                    } catch (err: any) {
-                      if (err?.message?.includes('getDisplayMedia') || err?.name === 'NotSupportedError' || err?.message?.includes('not a function')) {
-                        toast.error('Screen recording not supported on this device.', { duration: 5000 })
-                      } else if (err?.name === 'NotAllowedError' || err?.message?.includes('cancelled')) {
-                        toast.error('Screen recording was cancelled.')
-                      } else {
-                        toast.error(`Recording failed: ${err?.message || 'Unknown error'}`)
-                      }
-                    }
-                  }
-                }}
-                disabled={recorder.isUploading}
-                className={cn(
-                  'inline-flex h-12 w-12 items-center justify-center rounded-lg text-sm font-bold transition',
-                  recorder.isRecording
-                    ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
-                    : recorder.isUploading
-                      ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
-                      : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
                 )}
-              >
-                {recorder.isUploading ? (
-                  <Loader2 className="h-10 w-10 animate-spin" />
-                ) : recorder.isRecording ? (
-                  <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span>
-                ) : (
-                  <MonitorPlay className="h-10 w-10" />
-                )}
-              </button>
            </div>
-         )}
+          )}
 
          {/* ── DESKTOP: Bottom control bar ── */}
          {!isMobileViewer && (
@@ -4614,45 +4673,9 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
             </button>
           </>
         )}
-        <button
-          onClick={async () => {
-            if (recorder.isRecording) {
-              void recorder.stopRecording()
-            } else if (streamId) {
-              try {
-                await recorder.startRecording(streamId)
-              } catch (err: any) {
-                if (err?.message?.includes('getDisplayMedia') || err?.name === 'NotSupportedError' || err?.message?.includes('not a function')) {
-                  toast.error('Screen recording is not supported on this device. Please use the desktop site.', { duration: 5000 })
-                } else if (err?.name === 'NotAllowedError' || err?.message?.includes('cancelled')) {
-                  toast.error('Screen recording was cancelled.')
-                } else {
-                  toast.error(`Recording failed: ${err?.message || 'Unknown error'}`)
-                }
-              }
-            }
-          }}
-          disabled={recorder.isUploading}
-          className={cn(
-            'inline-flex h-12 w-20 items-center justify-center rounded-xl text-sm font-bold transition',
-            recorder.isRecording
-              ? 'border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25'
-              : recorder.isUploading
-                ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200'
-                : 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+      </div>
+    </div>
           )}
-        >
-         {recorder.isUploading ? (
-           <Loader2 className="h-5 w-5 animate-spin" />
-         ) : recorder.isRecording ? (
-           <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span>
-         ) : (
-           <MonitorPlay className="h-5 w-5" />
-         )}
-       </button>
-     </div>
-   </div>
-         )}
 
         <div className="pointer-events-none absolute inset-0 z-30">
           <div className="pointer-events-auto">
@@ -4669,18 +4692,38 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
               userProfiles={userProfiles} />
 
 {userActionTarget && (
-              <UserActionModal
-                onClose={() => setUserActionTarget(null)}
-                userId={userActionTarget.userId}
-                streamId={streamId || ''}
-                username={userActionTarget.username}
-                role={userActionTarget.role}
-                createdAt={userActionTarget.createdAt}
-                isHost={false}
-                isModerator={isModerator}
-                isOfficer={isOfficer}
-                onGift={() => onGift(userActionTarget.userId)}
-              />
+              modContext?.has_full_staff_tools ? (
+                <ModActionsPopup
+                  isOpen={true}
+                  onClose={() => setUserActionTarget(null)}
+                  targetUser={{
+                    id: userActionTarget.userId,
+                    username: userActionTarget.username || '',
+                    avatar_url: userProfiles?.[userActionTarget.userId]?.avatar_url || '',
+                    role: userActionTarget.role,
+                  } as any}
+                  targetUsername={userActionTarget.username || ''}
+                  targetUserId={userActionTarget.userId}
+                  streamId={streamId || ''}
+                  hostId={hostId}
+                  currentUserId={user?.id}
+                />
+              ) : (
+                <UserActionModal
+                  onClose={() => setUserActionTarget(null)}
+                  userId={userActionTarget.userId}
+                  streamId={streamId || ''}
+                  username={userActionTarget.username}
+                  role={userActionTarget.role}
+                  createdAt={userActionTarget.createdAt}
+                  isHost={false}
+                  isModerator={isModerator}
+                  isOfficer={isOfficer}
+                  canArrestStaff={Boolean(modContext?.can_arrest)}
+                  canSummon={Boolean(modContext?.can_summon)}
+                  onGift={() => onGift(userActionTarget.userId)}
+                />
+              )
             )}
 
             {/* CityStatusPanel for clicking on broadcaster orb or seats */}
@@ -4689,7 +4732,7 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
                 userId={selectedSeatUserId}
                 onClose={() => setSelectedSeatUserId(null)}
                 isBroadcaster={false}
-                isBroadOfficer={isOfficer}
+                isBroadOfficer={isOfficer || isStreamBroadofficer}
                 broadcasterId={hostId}
                 isSeatHolder={false}
               />

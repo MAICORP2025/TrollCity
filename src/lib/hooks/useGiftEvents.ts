@@ -65,17 +65,6 @@ export function useGiftEvents(streamId?: string | null) {
         
         const senderId = gift.from_user_id || gift.sender_id || gift.senderId
 
-        // ONLY fetch if strictly necessary and not from broadcast (and maybe limit this?)
-        // actually, we will DISABLE fetching entirely for DB events to guarantee scalability.
-        // If the client wants to see the name, they rely on the Broadcast event.
-        
-        /* 
-        // DISABLED TO PREVENT DDOS
-        if (senderId && sourceType !== 'broadcast' && !gift.sender_username) {
-             // ... fetching logic removed ...
-        }
-        */
-        
         const amount = sourceType === 'broadcast' 
           ? Number(gift.amount || 0)
           : Number((gift.coins_amount ?? gift.coins_spent ?? 0))

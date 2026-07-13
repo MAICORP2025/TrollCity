@@ -52,6 +52,8 @@ function ProfileInner() {
     const [loading, setLoading] = useState(true);
     const [isProfileLive, setIsProfileLive] = useState(false);
     const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'social');
+    const [badges, setBadges] = useState<any[]>([]);
+    const [badgesLoading, setBadgesLoading] = useState(false);
     const [activeRoles, setActiveRoles] = useState<ActiveRole[]>([]);
     const [roleStats, setRoleStats] = useState<RoleStats>({});
     const [isFollowing, setIsFollowing] = useState(false);
@@ -112,7 +114,7 @@ function ProfileInner() {
                 subscribeToXP(currentUserId);
             }
 
-            const PROFILE_COLS = 'id,username,display_name,avatar_url,cover_url,banner_url,troll_coins,role,is_admin,level,xp,xp_to_next_level,created_at,updated_at,bio,city,country,website,pronouns,is_verified,is_broadcaster';
+            const PROFILE_COLS = 'id,username,display_name,avatar_url,cover_url,banner_url,troll_coins,role,is_admin,level,xp,xp_to_next_level,created_at,updated_at,bio,city,country,website,pronouns,is_verified,is_broadcaster,is_minor';
             let query = supabase.from('user_profiles').select(PROFILE_COLS);
             if (userId) query = query.eq('id', userId);
             else if (username) query = query.eq('username', username);
@@ -196,6 +198,25 @@ function ProfileInner() {
             isMounted = false;
         };
     }, [currentUser?.id, fetchXP, subscribeToXP, userId, username]);
+
+    // Fetch featured badges when the Badges tab is active
+    useEffect(() => {
+        if (activeTab !== 'badges' || !profile?.id) return;
+        let isMounted = true;
+        setBadgesLoading(true);
+        supabase
+            .rpc('get_user_featured_badges', { p_user_id: profile.id, p_limit: 12 })
+            .then(({ data }: any) => {
+                if (isMounted) setBadges(data || []);
+            })
+            .catch((err) => console.error('Failed to load badges', err))
+            .finally(() => {
+                if (isMounted) setBadgesLoading(false);
+            });
+        return () => {
+            isMounted = false;
+        };
+    }, [activeTab, profile?.id]);
 
     const prevProfileIdRef = useRef<string | null>(null);
 
@@ -386,7 +407,7 @@ function ProfileInner() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-slate-950 text-white pb-20 relative overflow-hidden">
+        <div className="min-h-screen bg-slate-950 text-white pb-20 relative overflow-visible">
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
                 <div className="relative flex min-h-screen items-center justify-center">
                     <div className="rounded-[2rem] border border-cyan-400/20 bg-slate-950/70 px-8 py-6 text-center backdrop-blur-2xl">
@@ -477,7 +498,27 @@ function ProfileInner() {
                 return (
                     <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-6">
                         <h3 className="text-lg font-bold text-white mb-4">Achievement Badges</h3>
-                        <p className="text-white/50">Badges will appear here as you achieve milestones.</p>
+                        {badgesLoading ? (
+                            <p className="text-white/50">Loading badges…</p>
+                        ) : badges.length === 0 ? (
+                            <p className="text-white/50">Badges will appear here as you achieve milestones.</p>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                                {badges.map((badge: any, i: number) => (
+                                    <div key={badge?.id || i} className="flex flex-col items-center rounded-2xl border border-white/10 bg-black/40 p-3 text-center">
+                                        {badge?.icon_url ? (
+                                            <img src={badge.icon_url} alt={badge?.name || 'Badge'} className="h-12 w-12 rounded-full object-cover" />
+                                        ) : (
+                                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-500/15 text-2xl">🏅</div>
+                                        )}
+                                        <p className="mt-2 text-xs font-semibold text-white">{badge?.name || 'Badge'}</p>
+                                        {badge?.description && (
+                                            <p className="mt-0.5 text-[10px] text-white/50">{badge.description}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 );
             case 'settings':
@@ -499,13 +540,17 @@ function ProfileInner() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white pb-20 relative overflow-hidden">
+        <div className="min-h-screen bg-slate-950 text-white pb-20 relative overflow-y-auto">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(147,51,234,0.22),transparent_32%),radial-gradient(circle_at_85%_10%,rgba(45,212,191,0.16),transparent_32%),linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,0.85))]" />
 
             <main className="relative mx-auto max-w-7xl px-3 py-5 sm:px-6 lg:px-8">
                 {/* Profile Header */}
                 <ProfileHeader
-                    profile={{ ...profile, followers_count: followersCount, following_count: followingCount, posts_count: postsCount }}
+                    profile={
+                        isOwnProfile
+                            ? { ...(currentUserProfile || profile), followers_count: followersCount, following_count: followingCount, posts_count: postsCount }
+                            : { ...profile, followers_count: followersCount, following_count: followingCount, posts_count: postsCount }
+                    }
                     isOwnProfile={isOwnProfile}
                     isFollowing={isFollowing}
                     onFollow={handleFollow}

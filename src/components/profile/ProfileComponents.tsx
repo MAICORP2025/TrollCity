@@ -19,6 +19,7 @@ interface UserProfile {
     display_name: string;
     avatar_url: string | null;
     cover_url: string | null;
+    banner_url: string | null;
     bio: string | null;
     level: number;
     xp: number;
@@ -68,8 +69,8 @@ export function ProfileHeader({
         <section className="rounded-[2rem] border border-white/10 bg-slate-950/70 shadow-[0_0_60px_rgba(147,51,234,0.16)] backdrop-blur-2xl overflow-hidden">
             {/* Banner */}
             <div className="relative h-56 md:h-72 overflow-hidden">
-                {profile.cover_url ? (
-                    <img src={profile.cover_url} alt="Cover" className="w-full h-full object-cover" />
+                {(profile.cover_url || profile.banner_url) ? (
+                    <img src={profile.cover_url || profile.banner_url} alt="Cover" className="w-full h-full object-cover" />
                 ) : (
                     <div className="w-full h-full" style={{ background: `linear-gradient(135deg, ${themeColor}60 0%, ${accentColor}40 50%, ${themeColor}30 100%)` }} />
                 )}
@@ -99,6 +100,11 @@ export function ProfileHeader({
                                 {profile.is_verified && (
                                     <span className="flex items-center gap-1 rounded-full border border-blue-400/30 bg-blue-400/10 px-3 py-1 text-xs font-bold text-blue-300">
                                         <CheckCircle className="w-3 h-3" /> Verified
+                                    </span>
+                                )}
+                                {profile.is_minor && (
+                                    <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-bold text-amber-300">
+                                        Minor Account
                                     </span>
                                 )}
                                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-white/70">
@@ -149,15 +155,15 @@ export function ProfileHeader({
                 </div>
 
                 {/* Stats */}
-                <div className="mt-6 grid grid-cols-3 gap-3 md:max-w-xl">
+                <div className="mt-6 grid grid-cols-3 gap-2 md:max-w-xl md:gap-3">
                     {[
                         { label: 'Followers', value: profile.followers_count },
                         { label: 'Following', value: profile.following_count },
                         { label: 'Posts', value: profile.posts_count }
                     ].map(stat => (
-                        <div key={stat.label} className="rounded-3xl border border-white/10 bg-black/40 p-4 text-center transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/5">
-                            <div className="text-2xl font-black text-white">{stat.value.toLocaleString()}</div>
-                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/50">{stat.label}</div>
+                        <div key={stat.label} className="rounded-2xl border border-white/10 bg-black/40 p-3 text-center transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/5">
+                            <div className="text-sm font-black text-white sm:text-2xl">{stat.value.toLocaleString()}</div>
+                            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50 sm:text-xs sm:tracking-[0.25em]">{stat.label}</div>
                         </div>
                     ))}
                 </div>

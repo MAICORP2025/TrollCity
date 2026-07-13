@@ -466,11 +466,11 @@ export default function MaiClass() {
 
   return (
     <ErrorBoundary>
-      <div className="relative min-h-screen overflow-hidden bg-[#07050d] text-white">
+      <div className="relative min-h-screen overflow-y-auto overflow-x-hidden md:overflow-hidden bg-[#07050d] text-white">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(147,51,234,0.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(255,213,74,0.12),transparent_24%),radial-gradient(circle_at_70%_90%,rgba(124,58,237,0.20),transparent_30%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,5,13,0.15),rgba(7,5,13,0.94))]" />
 
-        <main className="relative z-10 mx-auto grid h-screen max-w-[1780px] grid-cols-1 gap-4 overflow-hidden p-3 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-5">
+        <main className="relative z-10 mx-auto grid h-screen max-w-[1780px] grid-cols-1 gap-4 overflow-y-auto overflow-x-hidden md:overflow-hidden p-3 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-5">
           <section className="flex min-w-0 flex-col gap-4 overflow-hidden">
             <GlassCard className="relative overflow-hidden p-4 md:p-5">
               <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(147,51,234,0.15),rgba(0,0,0,0.05),rgba(255,213,74,0.08))]" />

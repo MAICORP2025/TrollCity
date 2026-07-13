@@ -4,7 +4,7 @@ export default function CarOnPath({ pathId, color = '#ff6b6b', offset = 0, speed
   const gRef = useRef<SVGGElement | null>(null);
 
   useEffect(() => {
-    const el = document.getElementById(pathId) as SVGPathElement | null;
+    const el = document.getElementById(pathId) as unknown as SVGPathElement | null;
     const g = gRef.current;
     if (!el || !g) return;
 

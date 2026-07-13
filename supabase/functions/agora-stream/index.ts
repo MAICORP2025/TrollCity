@@ -449,8 +449,29 @@ serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({}));
     const action = body?.action;
-    console.log(`[agora-stream] REQUEST: action=${action}, streamId=${body?.streamId}, sessionId=${body?.sessionId}, userId=${body?.userId}, channel=${body?.channel}`);
+
+    const authHeader = req.headers.get("authorization") || "";
+    const token = authHeader.replace("Bearer ", "").trim();
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = getSupabase();
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.log("[agora-stream] AUTH FAILED:", authError?.message);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[agora-stream] REQUEST: action=${action}, streamId=${body?.streamId}, sessionId=${body?.sessionId}, userId=${body?.userId}, channel=${body?.channel}, authUserId=${user.id}`);
 
     let result;
 

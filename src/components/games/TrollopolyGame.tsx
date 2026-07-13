@@ -651,7 +651,7 @@ export const TrollopolyGame: React.FC<TrollopolyGameProps> = ({
   };
 
   return (
-    <div className="relative w-full h-screen bg-slate-900 overflow-hidden">
+    <div className="relative w-full h-screen bg-slate-900 overflow-y-auto overflow-x-hidden md:overflow-hidden">
       {/* 3D Board Canvas */}
       <div 
         ref={mountRef} 

@@ -46,41 +46,63 @@ export default function SubAnalytics() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Fetch overall platform stats
-      const { data: platformStatsData } = await supabase.rpc('get_platform_subscription_stats');
-      if (platformStatsData) {
-        setStats(platformStatsData);
+      const now = new Date();
+      let startDate: string;
+      switch (dateRange) {
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case '90d':
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        default:
+          startDate = new Date(0).toISOString();
       }
-      
-      // Fetch top broadcasters by revenue
-      const { data: topBroadcasterData } = await supabase
-        .from('user_profiles')
-        .select(`
-          username,
-          monthly_subscriber_count,
-          total_subscriber_revenue_coins
-        `)
-        .gt('monthly_subscriber_count', 0)
-        .order('total_subscriber_revenue_coins', { ascending: false })
-        .limit(10);
 
-      setTopBroadcasters(topBroadcasterData || []);
+      const [platformStatsData, topBroadcasterData, recentSubsData, tierData] = await Promise.all([
+        supabase.rpc('get_platform_subscription_stats'),
+        supabase
+          .from('user_profiles')
+          .select(`
+            username,
+            monthly_subscriber_count,
+            total_subscriber_revenue_coins
+          `)
+          .gt('monthly_subscriber_count', 0)
+          .order('total_subscriber_revenue_coins', { ascending: false })
+          .limit(10),
+        supabase
+          .from('user_subscriptions')
+          .select(`
+            id,
+            started_at,
+            is_active,
+            tier: subscription_tiers(name, price_coins, color_hex),
+            subscriber: subscriber_id(username),
+            broadcaster: broadcaster_id(username)
+          `)
+          .gte('started_at', startDate)
+          .order('started_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('user_subscriptions')
+          .select(`
+            tier: subscription_tiers(name, color_hex, icon_name)
+          `)
+          .eq('is_active', true)
+          .gte('started_at', startDate)
+      ])
 
-      // Fetch recent subscription activity
-      const { data: recentSubsData } = await supabase
-        .from('user_subscriptions')
-        .select(`
-          id,
-          started_at,
-          is_active,
-          tier: subscription_tiers(name, price_coins, color_hex),
-          subscriber: subscriber_id(username),
-          broadcaster: broadcaster_id(username)
-        `)
-        .order('started_at', { ascending: false })
-        .limit(20);
+      if (platformStatsData.data) {
+        setStats(platformStatsData.data);
+      }
 
-      const formattedRecent = (recentSubsData || []).map((sub: any) => ({
+      setTopBroadcasters(topBroadcasterData.data || []);
+
+      const formattedRecent = (recentSubsData.data || []).map((sub: any) => ({
         id: sub.id,
         subscriber_username: sub.subscriber?.username || 'Unknown',
         tier_name: sub.tier?.name || 'Unknown',
@@ -91,21 +113,15 @@ export default function SubAnalytics() {
 
       setRecentSubscriptions(formattedRecent);
 
-      // Fetch tier breakdown
-      const { data: tierData } = await supabase
-        .from('user_subscriptions')
-        .select(`
-          tier: subscription_tiers(name, color_hex, icon_name),
-          COUNT(*) as count
-        `)
-        .eq('is_active', true)
-        .group('tier.name', 'tier.color_hex', 'tier.icon_name')
-        .order('count', { ascending: false });
-
-      setTierBreakdown(tierData || []);
-
-      // TODO: Implement date range filtering with actual query parameters
-      // For now, using fixed 30-day stats from RPC
+      const tierMap: Record<string, any> = {};
+      (tierData.data || []).forEach((sub: any) => {
+        const name = sub.tier?.name || 'Unknown';
+        if (!tierMap[name]) {
+          tierMap[name] = { name, color_hex: sub.tier?.color_hex, icon_name: sub.tier?.icon_name, count: 0 };
+        }
+        tierMap[name].count++;
+      });
+      setTierBreakdown(Object.values(tierMap).sort((a: any, b: any) => b.count - a.count));
     } catch (error) {
       console.error('Error fetching analytics:', error);
       toast.error('Failed to load analytics');

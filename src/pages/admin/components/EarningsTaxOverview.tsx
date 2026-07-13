@@ -104,14 +104,48 @@ export default function EarningsTaxOverview() {
     }
   }, [selectedYear])
 
+  const loadMonthlyEarnings = React.useCallback(async () => {
+    try {
+      const startDate = new Date(selectedYear, 0, 1).toISOString()
+      const endDate = new Date(selectedYear, 11, 31, 23, 59, 59).toISOString()
+
+      const { data, error } = await supabase
+        .from('monthly_earnings_breakdown')
+        .select('month, coins_earned_from_gifts')
+        .gte('month', startDate)
+        .lte('month', endDate)
+
+      if (error) throw error
+
+      const monthlyMap: Record<string, number> = {}
+      data?.forEach((item) => {
+        const monthKey = new Date(item.month).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        monthlyMap[monthKey] = (monthlyMap[monthKey] || 0) + (Number(item.coins_earned_from_gifts) || 0)
+      })
+
+      const monthlyArray = Object.entries(monthlyMap).map(([month, total]) => ({
+        month,
+        total_usd: total,
+        creator_count: 0
+      }))
+
+      _setMonthlyData(monthlyArray)
+    } catch (error) {
+      console.error('Error loading monthly earnings:', error)
+    }
+  }, [selectedYear])
+
+  const loadCreatorsList = React.useCallback(async () => {
+    await loadDashboardCards()
+  }, [loadDashboardCards])
+
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
-      // Load dashboard cards data
       await Promise.all([
         loadDashboardCards(),
-        // loadMonthlyEarnings(), // TODO: Implement loadMonthlyEarnings
-        // loadCreatorsList() // TODO: check if needed, logic seems to be in loadDashboardCards
+        loadMonthlyEarnings(),
+        loadCreatorsList()
       ])
     } catch (error) {
       console.error('Error loading earnings data:', error)
@@ -119,7 +153,7 @@ export default function EarningsTaxOverview() {
     } finally {
       setLoading(false)
     }
-  }, [loadDashboardCards])
+  }, [loadDashboardCards, loadMonthlyEarnings, loadCreatorsList])
 
   useEffect(() => {
     loadData()

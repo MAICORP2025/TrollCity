@@ -13,6 +13,7 @@ import GiftBoxModal from './GiftBoxModal';
 import BackgroundCheckView from './BackgroundCheckView';
 import { getActiveInsurance, hasProtection, ProtectionType } from '../../lib/insuranceSystem';
 import { isStaffProfile } from '../../lib/staff';
+import { notifyBroadofficerRemoved } from '../../lib/notifications';
 
 interface UserProfile {
   id: string;
@@ -264,6 +265,15 @@ const ModActionsPopup = memo(function ModActionsPopup({
 
         if (error) throw error;
         if (!data?.success) throw new Error(data?.message || 'Failed to mute');
+
+        // Muting also disables the user's chat so they see the
+        // "chat disabled by moderation" notice in the viewer.
+        await supabase.rpc('moderator_disable_chat', {
+          p_stream_id: effectiveStreamId,
+          p_target_user_id: targetUserId,
+          p_duration_minutes: muteDuration,
+          p_reason: `Chat disabled for ${muteDuration} minutes`,
+        }).then(() => undefined, () => undefined);
       } else {
         const mutedUntil = new Date(Date.now() + muteDuration * 60 * 1000).toISOString();
         const { error } = await supabase
@@ -276,6 +286,22 @@ const ModActionsPopup = memo(function ModActionsPopup({
           .eq('id', targetUserId);
 
         if (error) throw error;
+
+        // Global mute also disables chat globally (stream_id IS NULL).
+        // Best-effort: a chat-block failure must not block the mute itself.
+        await supabase
+          .from('chat_blocks')
+          .upsert(
+            {
+              user_id: targetUserId,
+              stream_id: null,
+              blocked_by: currentActorId,
+              expires_at: mutedUntil,
+              reason: `Chat disabled for ${muteDuration} minutes`,
+            },
+            { onConflict: 'stream_id,user_id' },
+          )
+          .then(() => undefined, () => undefined);
       }
       
       await logModerationAction('mute', `Muted for ${muteDuration} minutes`, effectiveStreamId ? `stream:${effectiveStreamId}` : 'global');
@@ -706,44 +732,65 @@ const ModActionsPopup = memo(function ModActionsPopup({
 
   const handleRemoveOfficer = async () => {
     if (!targetUserId || !currentActorId) return;
-    
-    // Check if user is actually an officer
-    const { data: targetProfile } = await supabase
-      .from('user_profiles')
-      .select('is_troll_officer, is_lead_officer')
-      .eq('id', targetUserId)
-      .maybeSingle();
-    
-    if (!targetProfile?.is_troll_officer && !targetProfile?.is_lead_officer) {
-      toast.error('User is not a broadofficer');
+
+    const sid = effectiveStreamId || streamId;
+    if (!sid) {
+      toast.error('No active stream context for this action');
       return;
     }
-    
+
     try {
-      const { error } = await supabase.rpc('remove_broadofficer', { p_user_id: targetUserId });
+      const { data, error } = await supabase.rpc('remove_stream_broadofficer', {
+        p_stream_id: sid,
+        p_officer_id: targetUserId,
+      });
 
-      if (error) {
-        const { error: updateError } = await supabase
-          .from('user_profiles')
-          .update({
-            is_troll_officer: false,
-            is_lead_officer: false,
-            is_staff: false,
-            troll_role: null,
-            role: 'user',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', targetUserId);
-
-        if (updateError) throw updateError;
+      if (error) throw error;
+      const result = Array.isArray(data) ? data[0] : data;
+      if (result && result.success === false) {
+        toast.error(result.error || 'Failed to remove Broadofficer');
+        return;
       }
-      
-      await logModerationAction('remove_officer', 'Officer status removed');
-      toast.success(`${targetUsername} removed from broadofficer - all mod access revoked`);
+
+      if (result?.removed === false) {
+        toast.info(`${targetUsername} is not a Broadofficer on this stream`);
+        onClose();
+        return;
+      }
+
+      // System chat message
+      const content = `${targetUsername} is no longer a Broadofficer.`;
+      const systemMessage = {
+        id: `broadofficer-removed-${sid}-${targetUserId}-${Date.now()}`,
+        user_id: currentActorId,
+        content,
+        created_at: new Date().toISOString(),
+        type: 'system',
+        user_profiles: { username: 'System', avatar_url: '' },
+      };
+      void supabase.from('stream_messages').insert({
+        stream_id: sid,
+        user_id: currentActorId,
+        content,
+        type: 'system',
+      });
+      const channel = supabase.channel(`stream-chat:${sid}-${Date.now()}`);
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage });
+          setTimeout(() => { supabase.removeChannel(channel); }, 3000);
+        }
+      });
+
+      // Notify the removed user
+      void notifyBroadofficerRemoved(targetUserId, sid, profile?.username || undefined);
+
+      await logModerationAction('remove_officer', 'Broadofficer status removed', `stream:${sid}`);
+      toast.success(`${targetUsername} is no longer a Broadofficer`);
       onClose();
     } catch (error) {
       console.error('[ModActions] Error removing officer:', error);
-      toast.error('Failed to remove officer status');
+      toast.error('Failed to remove Broadofficer');
     }
   };
 

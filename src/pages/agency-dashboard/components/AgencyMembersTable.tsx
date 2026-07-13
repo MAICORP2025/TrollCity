@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { Loader } from '../../../components/ui/loader';
+import OrgModerationModal from '../../../components/moderation/OrgModerationModal';
 
 type AgencyMembersTableProps = {
   agencyId?: string;
@@ -41,6 +42,7 @@ const AgencyMembersTable: React.FC<AgencyMembersTableProps> = ({
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [modTarget, setModTarget] = useState<AgencyMemberRow | null>(null);
 
   const activeCount = useMemo(
     () => members.filter((member) => member.status === 'active').length,
@@ -163,6 +165,13 @@ const AgencyMembersTable: React.FC<AgencyMembersTableProps> = ({
 
                   {canAct ? (
                     <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        className="border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/10"
+                        onClick={() => setModTarget(member)}
+                      >
+                        Moderate
+                      </Button>
                       {member.status === 'active' ? (
                         <>
                           <Button
@@ -200,6 +209,20 @@ const AgencyMembersTable: React.FC<AgencyMembersTableProps> = ({
           })}
         </div>
       )}
+
+      {modTarget && agencyId ? (
+        <OrgModerationModal
+          open={!!modTarget}
+          onClose={() => setModTarget(null)}
+          orgType="agency"
+          orgId={agencyId}
+          targetUserId={modTarget.user_id}
+          targetName={modTarget.user_profiles?.username || undefined}
+          onActionComplete={() => {
+            void fetchMembers();
+          }}
+        />
+      ) : null}
     </div>
   );
 };
