@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import UserNameWithAge from '../../../components/UserNameWithAge'
 import BroadcastLockdownControl from '../../../components/admin/BroadcastLockdownControl'
+import HytroGamingLockdownControl from '../../../components/admin/HytroGamingLockdownControl'
+import PodcastLockdownControl from '../../../components/admin/PodcastLockdownControl'
 import BroadcastRestrictionControl from '../../../components/admin/BroadcastRestrictionControl'
 import ShareAThonControl from '../../../components/admin/ShareAThonControl'
 
@@ -284,6 +286,12 @@ export default function AdminControlPanel() {
 
       {/* Broadcast Lockdown Control - Top Priority */}
       <BroadcastLockdownControl />
+
+      {/* HytroGaming Lockdown Control */}
+      <HytroGamingLockdownControl />
+
+      {/* Podcast Lockdown Control */}
+      <PodcastLockdownControl />
 
       {/* Broadcast Restriction Controls - Viewer Cap, Start Cap, Remove All */}
       <BroadcastRestrictionControl />

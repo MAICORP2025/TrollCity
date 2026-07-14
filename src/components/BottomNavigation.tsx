@@ -61,6 +61,7 @@ import {
   Sparkles,
   Zap,
   Smartphone,
+  Wrench,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -637,6 +638,7 @@ export default function BottomNavigation() {
       { category: 'Careers + Work', label: 'Shop', icon: Store, path: '/shop' },
 
       { category: 'City Center', label: 'Appeals', icon: Scale, path: '/city-registry' },
+      { category: 'City Center', label: 'City Laws & Fees', icon: FileText, path: '/city-laws-fees' },
       { category: 'City Center', label: 'Coin Store', icon: Coins, path: '/store' },
       { category: 'City Center', label: 'Insurance', icon: Shield, path: '/insurance' },
       { category: 'City Center', label: 'Credit Scores', icon: TrendingUp, path: '/credit-scores' },
@@ -691,10 +693,7 @@ export default function BottomNavigation() {
 
     if (isOfficer) {
       pages.push(
-        { category: 'Government', label: 'Moderation', icon: Eye, path: '/officer/moderation' },
-        { category: 'Government', label: 'Officer Dashboard', icon: LayoutDashboard, path: '/officer/dashboard' },
-        { category: 'Government', label: 'Officer Lounge', icon: Users, path: '/officer/lounge' },
-        { category: 'Government', label: 'Weekly Role Perks', icon: DollarSign, path: '/officer/payroll' },
+        { category: 'Government', label: 'Department Tools', icon: Wrench, path: '/department-tools' },
         { category: 'Government', label: 'Officer Scheduling', icon: Calendar, path: '/officer/scheduling' },
         { category: 'Government', label: 'OWC Dashboard', icon: LayoutDashboard, path: '/officer/owc' },
       )
@@ -709,7 +708,7 @@ export default function BottomNavigation() {
     if (isLead) {
       pages.push(
         { category: 'Government', label: 'Creator Approvals', icon: ClipboardList, path: '/admin/creator-approvals' },
-        { category: 'Government', label: 'Lead HQ', icon: Star, path: '/lead-officer' },
+        { category: 'Government', label: 'Lead HQ', icon: Star, path: '/department-tools' },
         { category: 'Government', label: 'Weekly Reports', icon: BarChart3, path: '/admin/reports/weekly' },
       )
     }

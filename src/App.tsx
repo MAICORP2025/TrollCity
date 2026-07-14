@@ -69,6 +69,7 @@ import ProfileSetupModal from "./components/ProfileSetupModal";
 import RequireRole from "./components/RequireRole";
 import { RequireLeadOrOwner } from "./components/auth/RequireLeadOrOwner";
 import ErrorBoundary from "./components/ErrorBoundary";
+import GrandCityEntrance from "./components/entrance/GrandCityEntrance";
 import UnderConstructionPage from "./components/UnderConstructionPage";
 
 // Agency Pages (lazy-loaded)
@@ -83,6 +84,7 @@ const AgencyHRDashboard = lazyWithRetry(() => import("./pages/agency-hr-dashboar
 const AttorneyDashboard = lazyWithRetry(() => import("./pages/attorney/AttorneyDashboard"));
 const ProsecutorDashboard = lazyWithRetry(() => import("./pages/prosecutor/ProsecutorDashboard"));
 const Support = lazyWithRetry(() => import("./pages/Support"));
+const BetaFeedback = lazyWithRetry(() => import("./pages/BetaFeedback"));
 const SurveyPage = lazyWithRetry(() => import("./pages/SurveyPage"));
 const JailPage = lazyWithRetry(() => import("./pages/JailPage"));
 const Safety = lazyWithRetry(() => import("./pages/Safety"));
@@ -142,6 +144,7 @@ const HytroGaming = lazyWithRetry(() => import("./pages/gaming/HytroGaming"));
 const HytroGamingViewer = lazyWithRetry(() => import("./pages/gaming/HytroGamingViewer"));
 const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
 const Trollifieds = lazyWithRetry(() => import("./pages/Trollifieds"));
+const HowToVideosPage = lazyWithRetry(() => import("./pages/HowToVideosPage"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
 const PolicyCenter = lazyWithRetry(() => import("./pages/PolicyCenter"));
 const UniverseEventPage = lazyWithRetry(() => import("./pages/UniverseEventPage"));
@@ -170,6 +173,8 @@ const EmployeesPage = lazyWithRetry(() => import("./features/employees/Employees
 const ReportDetailsPage = lazyWithRetry(() => import("./pages/ReportDetailsPage"));
 const PasswordReset = lazyWithRetry(() => import("./pages/PasswordReset"));
 const CreditScorePage = lazyWithRetry(() => import("./pages/CreditScorePage"));
+const DepartmentToolsPage = lazyWithRetry(() => import("./pages/department-tools/DepartmentToolsPage"));
+const CityLawsFeesPage = lazyWithRetry(() => import("./pages/CityLawsFeesPage"));
 
 
 
@@ -301,6 +306,9 @@ const isPublicRoute = (pathname: string) => {
 
   // Legal pages are public
   if (pathname.startsWith('/legal/')) return true
+
+  // How-To Videos library is public — published tutorials viewable by anyone
+  if (pathname === '/how-to-videos') return true
 
   // Profile pages are public - usernames and user IDs
   if (pathname.startsWith('/profile/')) return true
@@ -1519,6 +1527,7 @@ const handleVisibilityChange = async () => {
                 <Route path="/explore" element={<ExploreSearchResults />} />
                 <Route path="/live-swipe" element={<StreamSwipePage />} />
                 <Route path="/embed/:id" element={<EmbedPage />} />
+                <Route path="/how-to-videos" element={<HowToVideosPage />} />
                 <Route path="/hytrogaming" element={<HytroGaming />} />
                 <Route path="/hytrogaming/apply" element={<HytroGamingApply />} />
                 <Route path="/hytrogaming/contract/:id" element={<HytroGamingContract />} />
@@ -1738,30 +1747,36 @@ const handleVisibilityChange = async () => {
                    <Route path="/auction/orders" element={<Navigate to="/auctions/orders" replace />} />
                    <Route path="/auction/packing" element={<Navigate to="/auctions/packing" replace />} />
                    <Route path="/auction/devices" element={<Navigate to="/auctions/devices" replace />} />
-                   <Route path="/tcnn/chief" element={<Navigate to="/tcnn/dashboard" replace />} />
-                    {/* 🏢 Unified Employees Office — all non-admin employee roles use one page */}
-                    <Route path="/Employees" element={<EmployeesPage />} />
-                    <Route path="/employees" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/officer" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/officer/dashboard" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/officer/scheduling" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/officer/payroll" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/officer/moderation" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/officer/lounge" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/officer/report/:id" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/lead-officer" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/secretary" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/ceo-assistant-dashboard" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/noah-assistant-dashboard" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/hr-center" element={<Navigate to="/Employees" replace />} />
-                    <Route path="/agency-hr" element={<Navigate to="/agency-hr-dashboard" replace />} />
-                   <Route path="/pastor" element={<Navigate to="/church/pastor" replace />} />
+                    <Route path="/tcnn/chief" element={<Navigate to="/tcnn/dashboard" replace />} />
+                     {/* 🏢 Unified Employees Office — all non-admin employee roles use one page */}
+                     <Route path="/Employees" element={<EmployeesPage />} />
+                     <Route path="/employees" element={<Navigate to="/Employees" replace />} />
+                     <Route path="/department-tools" element={<DepartmentToolsPage />} />
+                     <Route path="/officer" element={<Navigate to="/department-tools" replace />} />
+                     <Route path="/officer/dashboard" element={<Navigate to="/department-tools?role=troll_officer" replace />} />
+                     <Route path="/officer/scheduling" element={<Navigate to="/department-tools?role=troll_officer" replace />} />
+                     <Route path="/officer/payroll" element={<Navigate to="/department-tools?role=troll_officer" replace />} />
+                     <Route path="/officer/moderation" element={<Navigate to="/department-tools?role=troll_officer" replace />} />
+                     <Route path="/officer/lounge" element={<Navigate to="/department-tools?role=troll_officer" replace />} />
+                     <Route path="/officer/report/:id" element={<Navigate to="/Employees" replace />} />
+                     <Route path="/lead-officer" element={<Navigate to="/department-tools?role=lead_troll_officer" replace />} />
+                     <Route path="/secretary" element={<Navigate to="/department-tools?role=secretary" replace />} />
+                     <Route path="/ceo-assistant-dashboard" element={<Navigate to="/department-tools?role=ceo_assistant" replace />} />
+                     <Route path="/noah-assistant-dashboard" element={<Navigate to="/department-tools?role=noah_assistant" replace />} />
+                     <Route path="/hr-center" element={<Navigate to="/department-tools" replace />} />
+                     <Route path="/agency-hr" element={<Navigate to="/agency-hr-dashboard" replace />} />
+                    <Route path="/pastor" element={<Navigate to="/department-tools?role=pastor" replace />} />
+                    <Route path="/church/pastor" element={<Navigate to="/department-tools?role=pastor" replace />} />
+                    <Route path="/attorney" element={<Navigate to="/department-tools?role=attorney" replace />} />
+                    <Route path="/prosecutor" element={<Navigate to="/department-tools?role=prosecutor" replace />} />
+                    <Route path="/notary" element={<Navigate to="/department-tools?role=notary" replace />} />
 
-                   <Route path="/match" element={<MatchPage />} />
-          <Route path="/city-hall" element={<Navigate to="/home" replace />} />
-                  <Route path="/city-registry" element={<CityRegistry />} />
-                  <Route path="/appeals" element={<Navigate to="/city-registry" replace />} />
-                  <Route path="/city-registry/advertise" element={<AdvertisePage />} />
+                    <Route path="/match" element={<MatchPage />} />
+                    <Route path="/city-laws-fees" element={<CityLawsFeesPage />} />
+           <Route path="/city-hall" element={<Navigate to="/home" replace />} />
+                   <Route path="/city-registry" element={<CityRegistry />} />
+                   <Route path="/appeals" element={<Navigate to="/city-registry" replace />} />
+                   <Route path="/city-registry/advertise" element={<AdvertisePage />} />
                 <Route path="/universe-event" element={<UniverseEventPage />} />
                 <Route path="/events/universe" element={<Navigate to="/universe-event" replace />} />
                 
@@ -1828,6 +1843,7 @@ const handleVisibilityChange = async () => {
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/credit-scores" element={<CreditScorePage />} />
                   <Route path="/support" element={<Support />} />
+            <Route path="/beta-feedback" element={<BetaFeedback />} />
                   <Route path="/survey/:surveyId" element={<SurveyPage />} />
                   <Route path="/under-construction" element={<UnderConstructionPage />} />
                   <Route path="/jail" element={<JailPage />} />
@@ -2088,68 +2104,11 @@ const handleVisibilityChange = async () => {
 
                    
 
-                  {/* Government */}
-                   <Route path="/government" element={<Government />} />
-                   <Route path="/government/streams" element={<GovernmentStreams />} />
+                   {/* Government */}
+                    <Route path="/government" element={<Government />} />
+                    <Route path="/government/streams" element={<GovernmentStreams />} />
 
-                   {/* 👮 Officer */}
-                  <Route
-                    path="/lead-officer"
-                    element={
-                      <RequireLeadOrOwner>
-                        <LeadOfficerDashboard />
-                      </RequireLeadOrOwner>
-                    }
-                  />
-                  <Route
-                    path="/officer/lounge"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <TrollOfficerLounge />
-                      </RequireRole>
-                    }
-                  />
-                  <Route
-                    path="/officer/moderation"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <OfficerModeration />
-                      </RequireRole>
-                    }
-                  />
-                  <Route
-                    path="/officer/report/:id"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <ReportDetailsPage />
-                      </RequireRole>
-                    }
-                  />
-                  <Route
-                    path="/officer/scheduling"
-                    element={
-                      <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                        <OfficerScheduling />
-                      </RequireRole>
-                    }
-                  />
-                   <Route
-                     path="/officer/dashboard"
-                     element={
-                       <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                         <OfficerDashboard />
-                       </RequireRole>
-                     }
-                   />
-                   <Route
-                     path="/officer/payroll"
-                     element={
-                       <RequireRole roles={[UserRole.TROLL_OFFICER, UserRole.ADMIN]}>
-                         <OfficerPayrollDashboard />
-                       </RequireRole>
-                     }
-                   />
-                   {/* 👑 Admin */}
+                    {/* 👑 Admin */}
                    <Route
                      path="/admin"
                      element={
@@ -2747,6 +2706,12 @@ const handleVisibilityChange = async () => {
            <BugAlertPopup />
           </AppLayout>
         </LiveContentProvider>
+
+        {/* Grand City Entrance — cinematic first-visit reveal.
+            Null fallback guarantees a render failure never blocks the home page. */}
+        <ErrorBoundary fallback={null}>
+          <GrandCityEntrance />
+        </ErrorBoundary>
 
        {/* Mini Podcast Player - persists across navigation */}
        <MiniPodcastPlayerWrapper />

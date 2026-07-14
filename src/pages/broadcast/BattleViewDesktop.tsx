@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Loader2, Coins, Crown, Flame, Skull, X } from "lucide-react";
+import { Loader2, Coins, Crown, Flame, Skull, X, RefreshCw, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { useBattleViewController } from "../../hooks/useBattleViewController";
@@ -280,8 +280,9 @@ export default function BattleViewDesktop({ battleView }: { battleView: BattleVi
             <button
               onClick={handleLeaveBattle}
               disabled={leaveLoading}
-              className="px-3 py-1.5 rounded-full text-xs font-bold bg-red-600/80 hover:bg-red-500 text-white border border-red-500/40 transition disabled:opacity-60 shadow-lg"
+              className="px-3 py-1.5 rounded-full text-xs font-bold bg-red-600/80 hover:bg-red-500 text-white border border-red-500/40 transition disabled:opacity-60 shadow-lg inline-flex items-center gap-1.5"
             >
+              <Skull size={14} />
               {leaveLoading ? "Leaving..." : "Forfeit"}
             </button>
           </div>
@@ -386,16 +387,18 @@ export default function BattleViewDesktop({ battleView }: { battleView: BattleVi
                 {showRematchOption && participantInfo?.role === "host" && (
                   <button
                     onClick={handleRematch}
-                    className="mt-4 mr-2 px-6 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold rounded-full transition"
+                    className="mt-4 mr-2 px-6 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold rounded-full transition inline-flex items-center gap-1.5"
                   >
+                    <RefreshCw size={14} />
                     Rematch
                   </button>
                 )}
 
                 <button
                   onClick={handleReturnToStream}
-                  className="mt-4 px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-full transition"
+                  className="mt-4 px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-full transition inline-flex items-center gap-1.5"
                 >
+                  <LogOut size={14} />
                   Return Now
                 </button>
               </motion.div>

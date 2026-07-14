@@ -1159,8 +1159,9 @@ const stagePassesHook = useStagePasses(streamStatus === 'live' ? stream.id : und
           !isUniversalBattleActive && effectiveBoxCount === 7 && 'grid-cols-2 grid-rows-4 sm:grid-cols-3 sm:grid-rows-3',
           !isUniversalBattleActive && effectiveBoxCount === 8 && 'grid-cols-2 grid-rows-4 sm:grid-cols-3 sm:grid-rows-3',
           !isUniversalBattleActive && effectiveBoxCount === 9 && 'grid-cols-3 grid-rows-3',
-          // Force aspect-square on mobile for square seats, auto aspect on desktop
-          '[&>*]:aspect-square sm:[&>*]:aspect-auto'
+          // Landscape seats so object-cover stops over-cropping the
+          // broadcaster's landscape camera (matches SetupPage preview).
+          '[&>*]:aspect-video'
         )}
         style={enableStreamSwipe && canSwipe ? { touchAction: 'pan-y' } : undefined}
         onTouchStart={handleTouchStart}
@@ -1903,8 +1904,8 @@ boxClass,
                return (
                  <div key={`troll-left-${seatIndex}`} className="relative">
                    <div className={cn(
-                     "w-full aspect-square rounded-xl border-2 bg-black/60 backdrop-blur-sm overflow-hidden transition-all duration-200",
-                     !isOccupied && "border-dashed border-purple-500/30 bg-black/30",
+                      "w-full aspect-video rounded-xl border-2 bg-black/60 backdrop-blur-sm overflow-hidden transition-all duration-200",
+                      !isOccupied && "border-dashed border-purple-500/30 bg-black/30",
                      isOccupied && "border-solid border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]"
                    )}>
                      {isOccupied ? (
@@ -1962,8 +1963,8 @@ boxClass,
                return (
                  <div key={`troll-right-${seatIndex}`} className="relative">
                    <div className={cn(
-                     "w-full aspect-square rounded-xl border-2 bg-black/60 backdrop-blur-sm overflow-hidden transition-all duration-200",
-                     !isOccupied && "border-dashed border-blue-500/30 bg-black/30",
+                      "w-full aspect-video rounded-xl border-2 bg-black/60 backdrop-blur-sm overflow-hidden transition-all duration-200",
+                      !isOccupied && "border-dashed border-blue-500/30 bg-black/30",
                      isOccupied && "border-solid border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
                    )}>
                      {isOccupied ? (

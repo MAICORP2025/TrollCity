@@ -33,7 +33,6 @@ import VotingTab from '@/components/government/VotingTab'
 import JailTab from '@/components/government/JailTab'
 import RolesTab from '@/components/government/RolesTab'
 import HistoryTab from '@/components/government/HistoryTab'
-import ElectionsTab from '@/components/government/ElectionsTab'
 import PartiesTab from '@/components/government/PartiesTab'
 import CorruptionTab from '@/components/government/CorruptionTab'
 import ProtestsTab from '@/components/government/ProtestsTab'
@@ -57,7 +56,6 @@ type TabId =
   | 'jail'
   | 'roles'
   | 'history'
-  | 'elections'
   | 'parties'
   | 'corruption'
   | 'protests'
@@ -134,15 +132,9 @@ const tabConfig: Record<
     label: 'History',
     description: 'Government action history',
   },
-  elections: {
-    component: ElectionsTab,
-    icon: PartyPopper,
-    label: 'Elections',
-    description: 'Presidential elections and candidates',
-  },
   parties: {
     component: PartiesTab,
-    icon: Users,
+    icon: PartyPopper,
     label: 'Parties',
     description: 'Political parties and affiliations',
   },
@@ -319,7 +311,7 @@ const currentTab = searchParams.get('tab') || 'laws'
                   Troll City Government
                 </h1>
                 <p className="mt-1 text-sm text-slate-400">
-                  Laws, voting, jail, elections, protests, and officer operations.
+                  Laws, voting, jail, protests, and officer operations.
                 </p>
               </div>
             </div>
@@ -407,7 +399,29 @@ const currentTab = searchParams.get('tab') || 'laws'
                     {isActive && <ChevronRight className="h-4 w-4 shrink-0" />}
                   </button>
                 )
-              })}
+              }              )}
+            </div>
+
+            <div className="mt-4 space-y-2 overflow-y-auto pr-1">
+              <button
+                onClick={() => {
+                  navigate('/president')
+                  setSidebarOpen(false)
+                }}
+                className={cn(
+                  'group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition',
+                  'border-white/10 bg-slate-950/70 text-slate-400 hover:border-purple-300/25 hover:bg-purple-400/10 hover:text-white'
+                )}
+              >
+                <Vote className="h-5 w-5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-black">Elections</p>
+                  <p className="line-clamp-1 text-xs text-slate-500">
+                    Presidential elections and candidates
+                  </p>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0" />
+              </button>
             </div>
 
             {reputation && (

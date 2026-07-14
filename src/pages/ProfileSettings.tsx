@@ -530,6 +530,28 @@ export default function ProfileSettings() {
           </div>
         </section>
 
+        <section className={`${trollCityTheme.components.card} space-y-4`}>
+          <h2 className="text-xl font-semibold">Troll City Experience</h2>
+          <div className="flex flex-col gap-4 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Sparkles className="h-5 w-5 text-emerald-400" />
+              <div>
+                <h3 className="font-semibold">Grand Entrance</h3>
+                <p className={`text-xs ${trollCityTheme.text.muted}`}>
+                  Replay the cinematic Troll City welcome sequence.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/?replay-entrance=1")}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${trollCityTheme.gradients.button}`}
+            >
+              Replay Grand Entrance
+            </button>
+          </div>
+        </section>
+
         <section
           className={`${trollCityTheme.components.card} border border-red-500/30`}
         >

@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { useAgoraScreenShare } from '@/hooks/useAgoraScreenShare'
 import { useGamingHeartbeat } from '@/hooks/useGamingHeartbeat'
 import { useBroadcastRecorder } from '@/hooks/useBroadcastRecorder'
+import { useHytroGamingLockdown } from '@/hooks/useFeatureLockdown'
 import GamingChat from '@/components/broadcast/GamingChat'
 import TipBanner from '@/components/broadcast/TipBanner'
 import SaveBroadcastButton from '@/components/broadcast/SaveBroadcastButton'
@@ -67,6 +68,9 @@ function GamingSetupPageInner() {
 
   // ── Agora screen share ──
   const agora = useAgoraScreenShare()
+
+  // HytroGaming lockdown check
+  const { isLocked: isGamingLockedDown } = useHytroGamingLockdown();
 
   // ── Recorder — captures the Agora screen share stream directly (no getDisplayMedia popup) ──
   const recorder = useBroadcastRecorder({
@@ -279,6 +283,10 @@ function GamingSetupPageInner() {
 
   // Phase 2: Go live (join Agora + publish)
   const doGoLive = async (agreementAcceptedAt: string) => {
+    if (isGamingLockedDown) {
+      toast.error('HytroGaming is currently disabled by admin. No one can go live while lockdown is active.');
+      return;
+    }
     if (!streamData?.id || !channelName) { toast.error('Stream not ready'); return; }
     try {
       await supabase.from('streams').update({

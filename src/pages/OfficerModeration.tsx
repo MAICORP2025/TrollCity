@@ -36,6 +36,27 @@ export default function OfficerModeration() {
   const [processingAction, setProcessingAction] = useState(false)
   const [lookingUpUser, setLookingUpUser] = useState(false)
 
+  // Heuristic toxicity check used by the "Check Toxicity" button.
+  const checkToxicity = useCallback(async () => {
+    if (!reason.trim()) {
+      toast.error('Enter content to analyze first')
+      return
+    }
+    const text = reason.toLowerCase()
+    const toxicTerms = [
+      'kill', 'die', 'death', 'hate', 'stupid', 'idiot', 'scam', 'fraud', 'bomb',
+      'threat', 'abuse', 'racist', 'slur', 'loser', 'trash', 'worthless',
+    ]
+    let score = 0
+    for (const term of toxicTerms) {
+      if (text.includes(term)) score += 11
+    }
+    if (text.length > 200) score += 5
+    if (/(.)\1{4,}/.test(text)) score += 5
+    score = Math.min(100, score)
+    setAiScore(score)
+  }, [reason])
+
   // --- Logs State ---
   const [logs, setLogs] = useState<any[]>([])
   const [loadingLogs, setLoadingLogs] = useState(false)
@@ -110,19 +131,7 @@ export default function OfficerModeration() {
     setLookingUpUser(false)
   }
 
-  // AI Check
-  const checkToxicity = async () => {
-    if (!reason) {
-        toast.error('Please enter a reason/content to check')
-        return
-    }
-    // Mock AI Check
-    const score = Math.random() * 100
-    setAiScore(score)
-    if (score > 80) toast.error(`High Toxicity Detected (${score.toFixed(1)}%)`)
-    else if (score > 50) toast.warning(`Moderate Toxicity (${score.toFixed(1)}%)`)
-    else toast.success(`Low Toxicity (${score.toFixed(1)}%)`)
-  }
+
 
   // Execute Action
   const handleExecuteAction = async () => {
@@ -396,7 +405,7 @@ export default function OfficerModeration() {
                             className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20"
                         >
                             <Brain className="w-4 h-4" />
-                            AI Check
+                            Check Toxicity
                         </button>
                         
                         <button 

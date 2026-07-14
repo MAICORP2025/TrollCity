@@ -18,96 +18,6 @@ if (!supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// Helper function to create or update Troll Wall system-generated posts for streams
-async function handleTrollWallSystemPost(streamId, broadcasterId, isLive, title) {
-  if (!broadcasterId) {
-    console.warn('[TrollWallSystemPost] No broadcasterId provided, skipping');
-    return;
-  }
-  try {
-    // Get broadcaster username
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('username')
-      .eq('id', broadcasterId)
-      .single();
-    
-    if (profileError || !profile) {
-      console.error('[TrollWallSystemPost] Failed to fetch broadcaster profile:', profileError);
-      return;
-    }
-    
-    const username = profile.username;
-    const content = isLive 
-      ? `${username} just went live!` 
-      : `${username} is no longer live.`;
-    const activityType = isLive ? 'stream_live' : 'stream_ended';
-    
-    // Try to find existing system-generated post for this stream
-    const { data: existingPost, error: fetchError } = await supabase
-      .from('troll_wall_posts')
-      .select('id')
-      .eq('stream_id', streamId)
-      .eq('is_system_generated', true)
-      .single();
-    
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows returned
-      console.error('[TrollWallSystemPost] Error checking for existing post:', fetchError);
-      return;
-    }
-    
-    if (existingPost) {
-      // Update existing post
-      const { error: updateError } = await supabase
-        .from('troll_wall_posts')
-        .update({
-          content: content,
-          activity_type: activityType,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-          metadata: {
-            ...(existingPost.metadata || {}),
-            stream_title: title || 'Live Stream'
-          }
-        })
-        .eq('id', existingPost.id);
-        
-      if (updateError) {
-        console.error('[TrollWallSystemPost] Error updating existing post:', updateError);
-        return;
-      }
-      
-      console.log(`[TrollWallSystemPost] Updated ${isLive ? 'live' : 'ended'} post for stream ${streamId}`);
-    } else {
-      // Insert new post
-      const { error: insertError } = await supabase
-        .from('troll_wall_posts')
-        .insert({
-          user_id: broadcasterId, // This will be overridden by system_actor in display
-          system_actor: 'Troll City System',
-          actor_user_id: broadcasterId,
-          stream_id: streamId,
-          activity_type: activityType,
-          post_type: 'system',
-          content: content,
-          is_system_generated: true,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-          metadata: {
-            stream_title: title || 'Live Stream'
-          }
-        });
-        
-      if (insertError) {
-        console.error('[TrollWallSystemPost] Error inserting new post:', insertError);
-        return;
-      }
-      
-      console.log(`[TrollWallSystemPost] Created ${isLive ? 'live' : 'ended'} post for stream ${streamId}`);
-    }
-  } catch (error) {
-    console.error('[TrollWallSystemPost] Unexpected error:', error);
-  }
-}
-
 function cleanEnvValue(value) {
   if (typeof value !== 'string') return value;
   return value.trim().replace(/^[\'"]|[\'"]$/g, '');
@@ -503,8 +413,6 @@ async function startStreaming(req, res) {
 
     console.log('[startStreaming] ✅ ALL STEPS SUCCESSFUL');
 
-    // Create Troll Wall system post for live stream
-    await handleTrollWallSystemPost(streamId, broadcasterId, true, title);
     void emitBroadcastMaiTalentEvent({
       activityType: 'broadcast-start',
       streamId,
@@ -669,13 +577,6 @@ async function stopStreaming(req, res) {
     }
 
     console.log(`[stopStreaming] Stream stopped: ${streamId}`);
-
-    // Update Troll Wall system post for ended stream
-    if (stream.broadcaster_id) {
-      await handleTrollWallSystemPost(streamId, stream.broadcaster_id, false, stream.title || 'Live Stream');
-    } else {
-      console.warn(`[stopStreaming] No broadcaster_id on stream ${streamId}, skipping TrollWall post`);
-    }
 
     return res.status(200).json({ success: true, message: "Stream stopped", streamId });
 

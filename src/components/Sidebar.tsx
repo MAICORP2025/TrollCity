@@ -3,53 +3,54 @@ import { Link, useLocation } from 'react-router-dom'
 import UserPresenceCounter from '@/components/sidebar/UserPresenceCounter'
 import { SafeLink } from '@/hooks/useSafeNavigate'
 import {
-   AlertTriangle,
-   Award,
-   Banknote,
-   BookOpen,
-   Briefcase,
-   Building2,
-   Calendar,
-   ChevronLeft,
-   ChevronRight,
-   Church,
-   Coins,
-   Crown,
-   Database,
-   DollarSign,
-   FileText,
-   Gamepad2,
-   Gavel,
-   GraduationCap,
-   Home,
-   Landmark,
-   LayoutDashboard,
-   LifeBuoy,
-   List,
-   Lock,
-   Mail,
-   Megaphone,
-   MessageSquare,
-   Newspaper,
-   Package,
-   Phone,
-   Radio,
-   Scale,
-   Settings,
-   Shield,
-   ShoppingBag,
-   Shuffle,
-   Star,
-   Store,
-   TrendingUp,
-   Trophy,
-    Users,
-    Video,
-    Wallet,
-    Warehouse,
-    Waves,
-    Zap,
-  } from 'lucide-react'
+    AlertTriangle,
+    Award,
+    Banknote,
+    BookOpen,
+    Briefcase,
+    Building2,
+    Calendar,
+    ChevronLeft,
+    ChevronRight,
+    Church,
+    Coins,
+    Crown,
+    Database,
+    DollarSign,
+    FileText,
+    Gamepad2,
+    Gavel,
+    GraduationCap,
+    Home,
+    Landmark,
+    LayoutDashboard,
+    LifeBuoy,
+    List,
+    Lock,
+    Mail,
+    Megaphone,
+    MessageSquare,
+    Newspaper,
+      Package,
+      Phone,
+      Radio,
+      Scale,
+    Settings,
+    Shield,
+    ShoppingBag,
+    Shuffle,
+    Star,
+    Store,
+    TrendingUp,
+    Trophy,
+     Users,
+     Video,
+     Wallet,
+     Warehouse,
+     Waves,
+     Zap,
+     Wrench,
+   } from 'lucide-react'
 
 import CourtEntryModal from './CourtEntryModal'
 import UserProfileWidget from './sidebar/UserProfileWidget'
@@ -435,12 +436,18 @@ export default function Sidebar() {
     const coinBalance = Number((balances as any)?.troll_coins ?? (balances as any)?.balance ?? 0)
     const cashBalance = Number((balances as any)?.cashout_coins ?? 0)
     const cashValue = cashBalance * STORE_USD_PER_COIN
-    return [
-      { label: 'Level', value: String(level || 1) },
-      { label: 'Coins', value: coinBalance > 999 ? `${Math.floor(coinBalance / 1000)}K` : coinBalance.toLocaleString(), subValue: cashValue > 0 ? `$${cashValue.toFixed(2)}` : null },
+
+    const items = [
       { label: 'Family', value: hasFamily ? 'Yes' : 'No' },
     ]
-  }, [balances, hasFamily, level])
+
+    if (user) {
+      items.unshift({ label: 'Level', value: String(level || 1) })
+      items.unshift({ label: 'Coins', value: coinBalance > 999 ? `${Math.floor(coinBalance / 1000)}K` : coinBalance.toLocaleString(), subValue: cashValue > 0 ? `$${cashValue.toFixed(2)}` : null })
+    }
+
+    return items
+  }, [balances, hasFamily, level, user])
 
   return (
     <aside
@@ -492,7 +499,7 @@ export default function Sidebar() {
         </div>
       )}
 
-      {!isSidebarCollapsed && profile && (
+      {!isSidebarCollapsed && profile && user && (
         <div className="relative z-10 shrink-0 grid grid-cols-3 gap-2 px-3 pt-3">
           {quickStatus.map(item => (
             <div key={item.label} className="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.07] via-pink-400/[0.035] to-cyan-400/[0.035] p-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
@@ -683,6 +690,9 @@ export default function Sidebar() {
               {(canSeeOfficer || isLead || canSeeSecretary || isAdmin || profile?.role === UserRole.CEO_ASSISTANT || profile?.role === UserRole.NOAH_ASSISTANT || profile?.role === UserRole.HR_ADMIN || profile?.role === UserRole.HR_MANAGER) && (
                 <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Employees" to="/Employees" active={location.pathname.startsWith('/Employees')} highlight={isUpdated('/Employees')} onClick={() => markAsViewed('/Employees')} className="text-fuchsia-200" tone="purple" />
               )}
+              {(canSeeOfficer || isLead || canSeeSecretary || isAdmin || profile?.role === UserRole.CEO_ASSISTANT || profile?.role === UserRole.NOAH_ASSISTANT || profile?.role === UserRole.HR_ADMIN || profile?.role === UserRole.HR_MANAGER) && (
+                <GridItem collapsed={isSidebarCollapsed} icon={Wrench} label="Department Tools" to="/department-tools" active={location.pathname.startsWith('/department-tools')} highlight={isUpdated('/department-tools')} onClick={() => markAsViewed('/department-tools')} className="text-amber-200" tone="orange" />
+              )}
               {isAdmin && (
                 <>
                   <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Coin Purchase Ledger" to="/admin/coinpurchase-ledger" active={location.pathname.startsWith('/admin/coinpurchase-ledger')} highlight={isUpdated('/admin/coinpurchase-ledger')} onClick={() => markAsViewed('/admin/coinpurchase-ledger')} className="text-cyan-300" tone="cyan" />
@@ -826,7 +836,6 @@ export default function Sidebar() {
             <GridItem collapsed={isSidebarCollapsed} icon={LayoutDashboard} label="Secretary Console" to="/secretary" active={location.pathname.startsWith('/secretary')} highlight={isUpdated('/secretary')} onClick={() => markAsViewed('/secretary')} tone="cyan" />
             <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Government Streams" to="/government/streams" active={location.pathname.startsWith('/government/streams')} highlight={isUpdated('/government/streams')} onClick={() => markAsViewed('/government/streams')} tone="red" />
             <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Officer Lounge" to="/officer/lounge" active={isActive('/officer/lounge')} highlight={isUpdated('/officer/lounge')} onClick={() => markAsViewed('/officer/lounge')} tone="cyan" />
-            <GridItem collapsed={isSidebarCollapsed} icon={AlertTriangle} label="Officer Moderation" to="/officer/moderation" active={isActive('/officer/moderation')} highlight={isUpdated('/officer/moderation')} onClick={() => markAsViewed('/officer/moderation')} tone="red" />
             <GridItem collapsed={isSidebarCollapsed} icon={Calendar} label="Officer Scheduling" to="/officer/scheduling" active={isActive('/officer/scheduling')} highlight={isUpdated('/officer/scheduling')} onClick={() => markAsViewed('/officer/scheduling')} tone="cyan" />
             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Officer Dashboard" to="/officer/dashboard" active={isActive('/officer/dashboard')} highlight={isUpdated('/officer/dashboard')} onClick={() => markAsViewed('/officer/dashboard')} tone="red" />
             <GridItem collapsed={isSidebarCollapsed} icon={Users} label="Lead Officer" to="/lead-officer" active={isActive('/lead-officer')} highlight={isUpdated('/lead-officer')} onClick={() => markAsViewed('/lead-officer')} tone="red" />

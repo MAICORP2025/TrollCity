@@ -79,6 +79,8 @@ function WallPostCard({
   const hasImage = !!post.metadata?.image_url
   const hasVideo = !!post.metadata?.video_url
   const commentCount = post.replies?.length || 0
+  const isLongPost = post.content.length > 100
+  const displayContent = isLongPost ? `${post.content.slice(0, 100).trimEnd()}…` : post.content
   const giftCount = post.gifts
     ? Object.values(post.gifts as Record<string, { count?: number }>).reduce(
         (sum, g) => sum + (g?.count || 0),
@@ -139,8 +141,19 @@ function WallPostCard({
       {/* Post Content */}
       <div className="px-4 pt-3">
         <p className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
-          {post.content}
+          {displayContent}
         </p>
+        {isLongPost && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onClick(post)
+            }}
+            className="mt-1 text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors"
+          >
+            more
+          </button>
+        )}
       </div>
 
       {/* Media */}

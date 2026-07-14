@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../../lib/store'
-import { isTrollOfficer, isLead, isAssistant } from '../permissions'
 
 const OfficerOWCDashboard = React.lazy(() => import('../../../pages/OfficerOWCDashboard'))
 const OfficerModeration = React.lazy(() => import('../../../pages/OfficerModeration'))
@@ -16,12 +16,20 @@ function Frame({ title, children }: { title: string; children: React.ReactNode }
 }
 
 export default function DepartmentToolsTab({ profile }: { profile?: any; realProfile?: any }) {
+  const navigate = useNavigate()
   const { profile: p } = useAuthStore()
-  const officer = isTrollOfficer(p) || isLead(p)
+  const officer = profile?.role === 'troll_officer' || profile?.role === 'lead_troll_officer' || profile?.is_troll_officer || profile?.is_lead_officer
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-400">Role-specific tools. Access follows your permission set.</p>
+      <p className="text-sm text-slate-400">Open Department Tools to access your full role dashboard.</p>
+      <button
+        type="button"
+        onClick={() => navigate('/department-tools')}
+        className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-5 py-3 text-sm font-black text-white shadow-[0_0_28px_rgba(34,211,238,0.22)] transition hover:scale-[1.02]"
+      >
+        Open Department Tools
+      </button>
 
       {officer && (
         <>
@@ -41,20 +49,6 @@ export default function DepartmentToolsTab({ profile }: { profile?: any; realPro
             </Suspense>
           </Frame>
         </>
-      )}
-
-      {isAssistant(p) && (
-        <Frame title="Assistant Tools">
-          <p className="text-sm text-slate-300">
-            Use the Management tab for executive messages, documents, escalations, and the Assistant Workspace.
-          </p>
-        </Frame>
-      )}
-
-      {!officer && !isAssistant(p) && (
-        <Frame title="Department Tools">
-          <p className="text-sm text-slate-400">No department-specific tools are available for your role.</p>
-        </Frame>
       )}
     </div>
   )

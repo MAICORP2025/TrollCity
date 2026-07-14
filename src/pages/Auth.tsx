@@ -366,6 +366,9 @@ const Auth = ({ embedded = false, onClose: _onClose, initialMode }: AuthProps = 
     
     if (data.user && data.session) {
       console.log('Email login successful:', data.user.email)
+      // Mark a fresh login so the Grand City Entrance can replay the
+      // ceremonial welcome (shown on every login, including staff/employees).
+      try { sessionStorage.setItem('tc_just_logged_in', '1') } catch { /* ignore */ }
       // All post-login work (profile fetch, session registration, IP tracking,
       // admin checks, navigation) is handled by the auth store's onAuthStateChange
       // handler via acceptSession → refreshProfile. Do NOT duplicate it here.

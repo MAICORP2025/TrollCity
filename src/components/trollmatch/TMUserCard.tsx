@@ -62,7 +62,7 @@ export function TMUserCard({ user, isNew }: TMUserCardProps) {
       <div
         onClick={handleClick}
         className={`
-          relative w-32 h-32 mx-auto rounded-full overflow-hidden transition-all duration-300
+          relative w-full aspect-square mx-auto rounded-full overflow-hidden transition-all duration-300
           ${user.is_live 
             ? 'ring-4 ring-red-500 shadow-xl shadow-red-500/50' 
             : 'ring-2 ring-purple-500/30 hover:ring-purple-500/60'

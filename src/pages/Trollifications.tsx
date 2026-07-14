@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
 import {
@@ -11,6 +11,7 @@ import {
   CheckCircle,
   CircleDollarSign,
   Clock,
+  ExternalLink,
   FileText,
   Gift,
   Gavel,
@@ -216,7 +217,7 @@ function getCategory(type: string, metadata?: any): FilterKey {
 
 function rewriteAdminJailCopy(notification: EnhancedNotification, isAdmin: boolean): EnhancedNotification {
   const metadata = notification.metadata || {}
-  const type = notification.type
+  const type = String(notification.type)
   const adminCopy = isAdminCopy(metadata)
   const isJailType = ['jail_sentence', 'arrest', 'sentencing', 'release', 'bond_request'].includes(type)
 
@@ -301,12 +302,12 @@ function enhanceNotification(row: Notification, isAdmin: boolean): EnhancedNotif
 
 export default function Trollifications() {
   const { user, profile } = useAuthStore()
-  const navigate = useNavigate()
 
   const [notifications, setNotifications] = useState<EnhancedNotification[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterKey>('all')
   const [latestNotification, setLatestNotification] = useState<EnhancedNotification | null>(null)
+  const [selectedNotification, setSelectedNotification] = useState<EnhancedNotification | null>(null)
 
   const latestAnnouncedIdRef = useRef<string | null>(null)
   const { announceNotification, enabled } = useAdminVoiceNotifications()
@@ -477,7 +478,7 @@ export default function Trollifications() {
   }
 
   const getIcon = (notification: EnhancedNotification) => {
-    const type = notification.type as NotificationType
+    const type = String(notification.type)
 
     if (notification.priority === 'critical') return <Siren className="h-5 w-5 text-red-300" />
     if (notification.category === 'admin') return <Shield className="h-5 w-5 text-cyan-300" />
@@ -516,6 +517,7 @@ export default function Trollifications() {
 
   const getRoute = (notification: EnhancedNotification) => {
     const metadata = notification.metadata || {}
+    const type = String(notification.type)
 
     if (metadata.route) return metadata.route
     if (metadata.action_url) return metadata.action_url
@@ -526,6 +528,8 @@ export default function Trollifications() {
     if (metadata.ticket_id) return `/admin/support?id=${metadata.ticket_id}`
     if (metadata.application_id) return `/admin/applications?id=${metadata.application_id}`
     if (metadata.inmate_id) return `/inmates?inmate=${metadata.inmate_id}`
+
+    if (type === 'new_follower') return null
 
     switch (notification.category) {
       case 'admin':
@@ -551,7 +555,7 @@ export default function Trollifications() {
 
   const handleNotificationClick = (notification: EnhancedNotification) => {
     if (!notification.is_read) void markAsRead(notification.id)
-    navigate(getRoute(notification))
+    setSelectedNotification(notification)
   }
 
   const filterTabs: Array<{ key: FilterKey; label: string; icon: React.ReactNode }> = [
@@ -593,7 +597,7 @@ export default function Trollifications() {
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.08),transparent_34%)]" />
 
           {!notification.is_read && (
-            <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.85)]" />
+            <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-cyan-300" />
           )}
 
           <div className="relative flex items-start gap-4">
@@ -797,6 +801,68 @@ export default function Trollifications() {
           )}
         </section>
       </div>
+
+      {selectedNotification && createPortal(
+        <div
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedNotification(null)}
+        >
+          <div
+            className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-cyan-300/25 bg-[#070b19]/95 shadow-[0_0_60px_rgba(34,211,238,0.12)] backdrop-blur-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                  {getIcon(selectedNotification)}
+                </div>
+                <span className="text-sm font-bold text-white">Notification</span>
+              </div>
+              <button
+                onClick={() => setSelectedNotification(null)}
+                className="rounded-full p-1.5 text-white/40 transition hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto p-4">
+              <h3 className="text-lg font-black text-white">{selectedNotification.title}</h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
+                {selectedNotification.message}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <Clock className="h-3.5 w-3.5" />
+                <span>{new Date(selectedNotification.created_at).toLocaleString()}</span>
+                <span className="text-slate-700">•</span>
+                <span className="capitalize">{selectedNotification.category}</span>
+                {selectedNotification.priority === 'critical' && (
+                  <>
+                    <span className="text-slate-700">•</span>
+                    <span className="text-red-300">Critical</span>
+                  </>
+                )}
+              </div>
+
+              {String(selectedNotification.type) === 'new_follower' && (
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-center text-xs text-slate-400">
+                  This is a follow notification. No action needed.
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-white/[0.06] px-4 py-3">
+              <button
+                onClick={() => setSelectedNotification(null)}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-300 transition hover:border-white/20 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

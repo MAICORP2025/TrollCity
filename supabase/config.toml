@@ -389,3 +389,8 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/upload-to-r2/index.ts"
 
+[functions.get-how-to-video-url]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/get-how-to-video-url/index.ts"
+

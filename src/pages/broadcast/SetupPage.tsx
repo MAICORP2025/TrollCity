@@ -2438,7 +2438,7 @@ livekit_room_name: roomName,
               <div className="flex-1 bg-zinc-900/80 rounded-xl border border-fuchsia-500/20 p-3 flex flex-col gap-2">
                 <div className="flex items-center gap-1.5">
                   <Swords size={13} className="text-fuchsia-400" />
-                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Random Battle Queue</span>
+                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">1v1 Battle</span>
                 </div>
 
                 {/* Battle Mode Dropdown */}

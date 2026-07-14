@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Coins, X, Swords } from "lucide-react";
+import { Coins, X, Swords, LogOut } from "lucide-react";
 
 import { useBattleViewController } from "../../hooks/useBattleViewController";
 import type { BattleViewController } from "../../hooks/useBattleViewController";
@@ -164,11 +164,27 @@ export default function BattleViewMobile({ battleView }: { battleView: BattleVie
     if (streamId) handleGiftSelect(vm.userId, streamId);
   };
 
-  if (loading || error || !battle || !challengerStream || !opponentStream) {
+  if (loading || !battle || !challengerStream || !opponentStream) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-black text-amber-400">
         <span className="animate-spin text-2xl">◌</span>
-        <span className="text-sm font-bold">{error ? "Battle error" : "Entering Battle Arena…"}</span>
+        <span className="text-sm font-bold">Entering Battle Arena…</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-black text-red-400">
+        <span className="text-6xl mb-4">⚠️</span>
+        <h2 className="text-xl font-bold text-white">Battle Error</h2>
+        <span className="font-medium">{error}</span>
+        <button
+          onClick={handleBack}
+          className="mt-4 px-6 py-2 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-lg transition"
+        >
+          Return Home
+        </button>
       </div>
     );
   }
@@ -384,8 +400,9 @@ export default function BattleViewMobile({ battleView }: { battleView: BattleVie
         <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4">
           <button
             onClick={handleReturnToStream}
-            className="rounded-full bg-amber-500 px-6 py-2 font-bold text-black shadow-lg active:scale-95"
+            className="rounded-full bg-amber-500 px-6 py-2 font-bold text-black shadow-lg active:scale-95 inline-flex items-center gap-1.5"
           >
+            <LogOut size={16} />
             Return Now
           </button>
         </div>

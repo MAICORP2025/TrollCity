@@ -573,8 +573,8 @@ function resolveNotificationDestination(
     case 'new_follower':
       return {
         route: username ? `/profile/${encodeURIComponent(username)}` : DEFAULT_NOTIFICATION_DETAIL_ROUTE,
-        label: username ? 'Open profile' : 'Open notification',
-        openInPanel: !username,
+        label: 'Follow notification',
+        openInPanel: true,
       }
 
     case 'message':
@@ -1125,25 +1125,13 @@ export default function Notifications() {
 
   const handleNotificationClick = useCallback(
     async (notification: Notification) => {
-      const destination = getDestination(notification)
-
       if (!notification.is_read) {
         void markAsRead(notification)
       }
 
-      if (destination.openInPanel || !destination.route) {
-        setSelectedNotification(notification)
-        return
-      }
-
-      if (destination.external && destination.route) {
-        window.open(destination.route, '_blank', 'noopener,noreferrer')
-        return
-      }
-
-      navigate(destination.route)
+      setSelectedNotification(notification)
     },
-    [getDestination, markAsRead, navigate]
+    [markAsRead]
   )
 
   const getNotificationIcon = (notification: Notification) => {
@@ -1314,7 +1302,7 @@ case 'stream_live':
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.08),transparent_34%)]" />
 
           {!notification.is_read && (
-            <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.85)]" />
+            <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-cyan-300" />
           )}
 
           <div className="relative flex items-start gap-4">
@@ -1749,7 +1737,7 @@ case 'stream_live':
       {selectedNotification && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm" onClick={() => setSelectedNotification(null)}>
           <div
-            className="relative w-full max-w-2xl overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-slate-950 p-5 shadow-[0_0_50px_rgba(34,211,238,0.18)]"
+            className="relative w-full max-w-2xl overflow-hidden rounded-[2rem] border border-cyan-300/30 bg-slate-950 shadow-[0_0_50px_rgba(34,211,238,0.18)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.12),transparent_36%)]" />

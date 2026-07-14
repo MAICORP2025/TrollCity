@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import {
   LayoutDashboard, Clock, Calendar, MessagesSquare, ListTodo, FileText,
   Megaphone, Lightbulb, Palette, Wrench, Shield, UserPlus, ClipboardCheck,
-  Users, BadgeCheck,
+  Users, BadgeCheck, AlertTriangle,
 } from 'lucide-react'
 
 export type EmployeeAction =
@@ -21,7 +21,7 @@ export type EmployeeAction =
 export type EmployeeTabId =
   | 'home' | 'clock' | 'schedule' | 'chat' | 'tasks' | 'reports'
   | 'announcements' | 'change_requests' | 'frontend_studio'
-  | 'department_tools' | 'management' | 'hiring' | 'attendance' | 'records'
+  | 'department_tools' | 'moderation' | 'management' | 'hiring' | 'attendance' | 'records'
   | 'employment_verification'
 
 export interface EmployeeTab {
@@ -126,6 +126,15 @@ const all = () => true
 const officerTools = (p: EmployeeProfileLike) =>
   isTrollOfficer(p) || isLead(p) || isAdmin(p)
 
+const canSeeModeration = (p: EmployeeProfileLike) => {
+  if (isAdmin(p)) return true
+  if (isTrollOfficer(p)) return true
+  if (isLead(p)) return true
+  if (p.role === 'moderator') return true
+  if (p.troll_role === 'moderator') return true
+  return false
+}
+
 export const EMPLOYEE_TABS: EmployeeTab[] = [
   { id: 'home', label: 'Office Home', icon: LayoutDashboard, show: all },
   { id: 'clock', label: 'Clock In', icon: Clock, show: all },
@@ -140,6 +149,10 @@ export const EMPLOYEE_TABS: EmployeeTab[] = [
     show: (p) => canEmployee(p, 'publish_frontend') || isAdmin(p),
   },
   { id: 'department_tools', label: 'Department Tools', icon: Wrench, show: officerTools },
+  {
+    id: 'moderation', label: 'Moderation', icon: AlertTriangle,
+    show: canSeeModeration,
+  },
   {
     id: 'management', label: 'Management', icon: Shield,
     show: (p) => canEmployee(p, 'view_management') || isLead(p) || isAssistant(p),

@@ -41,6 +41,7 @@ import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import { useWallNotifications } from '@/hooks/useWallNotifications'
 import LeftNavSidebar from '@/components/home/LeftNavSidebar'
+import HowToVideosPage from '@/pages/HowToVideosPage'
 import FeaturedBroadcastersRow from '@/components/home/FeaturedBroadcastersRow'
 import HyTroGamingRow from '@/components/home/HyTroGamingRow'
 import PodcastRow from '@/components/home/PodcastRow'
@@ -51,7 +52,7 @@ import PromoSlot from '@/components/promo/PromoSlot'
 import PodcastCentral from '@/pages/PodcastCentral'
 import { HOME_PAGE_PROMO_PLACEMENTS } from '@/types/cityAds'
 
-type TabType = 'home' | 'live' | 'universe' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'home' | 'live' | 'universe' | 'how-to-videos' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
 const PWAInstallPrompt = lazyWithRetry(() => import('../components/PWAInstallPrompt'))
 const TCNNPopupWidget = lazyWithRetry(() => import('@/components/tcnn/TCNNPopupWidget'))
@@ -99,6 +100,30 @@ const LiveGrid = React.memo(function LiveGrid({
  }) {
   const visible = showLiveGrid ?? true
 
+  const groupedItems = useMemo(() => {
+    const groups: Record<string, LiveItem[]> = {}
+    for (const item of liveItems) {
+      const groupKey = item.category || item.type || 'other'
+      if (!groups[groupKey]) groups[groupKey] = []
+      groups[groupKey].push(item)
+    }
+    return groups
+  }, [liveItems])
+
+  const groupLabels: Record<string, string> = {
+    stream: 'Live Streams',
+    podcast: 'Podcasts',
+    auction: 'Auctions',
+    gaming: 'Gaming',
+    court: 'Troll Court',
+    tcnn: 'TCNN News',
+    other: 'Other',
+  }
+
+  const visibleGroupKeys = useMemo(() => {
+    return Object.keys(groupedItems).filter((key) => groupedItems[key].length > 0)
+  }, [groupedItems])
+
   return (
     <div className="space-y-4">
       <div className={`${glass} rounded-2xl p-4`}>
@@ -108,9 +133,9 @@ const LiveGrid = React.memo(function LiveGrid({
               <Radio className="h-5 w-5 text-red-400" />
               Live Now
             </h2>
-<p className="mt-1 text-xs font-bold text-slate-400">
+            <p className="mt-1 text-xs font-bold text-slate-400">
                {liveItems.length} broadcasting • {totalViewers.toLocaleString()} watching now • {onlineUsers.toLocaleString()} online
-             </p>
+            </p>
           </div>
           {liveItems.length > 0 && (
             <button
@@ -131,7 +156,7 @@ const LiveGrid = React.memo(function LiveGrid({
         </Suspense>
 
         {visible && (
-          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+          <div className="mt-4 space-y-4">
             {loadingLive ? (
               Array.from({ length: 6 }).map((_, index) => (
                 <div key={index} className="aspect-[4/3] animate-pulse rounded-2xl bg-white/5" />
@@ -153,31 +178,40 @@ const LiveGrid = React.memo(function LiveGrid({
                 <p className="mt-1 text-xs text-cyan-400/50">Click here to start your broadcast!</p>
               </button>
             ) : (
-              liveItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => onClickItem(item)}
-                  className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-slate-900 text-left transition hover:border-cyan-300/60"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-slate-950 to-cyan-900/50" />
-                  {item.type === 'auction' ? (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Gavel className="h-16 w-16 text-cyan-300/40" />
-                    </div>
-                  ) : item.streamerAvatar ? (
-                    <img src={item.streamerAvatar} alt={item.streamerName} className="absolute inset-0 h-full w-full object-cover opacity-80" />
-                  ) : (
-                    <Play className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-white/20" />
-                  )}
-                  <div className="absolute left-2 top-2 rounded-lg bg-red-600 px-2 py-1 text-[10px] font-black text-white">LIVE</div>
-                  <div className="absolute right-2 top-2 rounded-lg bg-black/50 px-2 py-1 text-[10px] font-black text-white">
-                    👁 {item.viewerCount}
+              visibleGroupKeys.map((groupKey) => (
+                <div key={groupKey}>
+                  <h3 className="text-sm font-black uppercase tracking-[0.14em] text-slate-300 mb-2">
+                    {groupLabels[groupKey] || groupKey}
+                  </h3>
+                  <div className="grid grid-cols-4 gap-2 md:grid-cols-6">
+                    {groupedItems[groupKey].map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => onClickItem(item)}
+                        className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-slate-900 text-left transition hover:border-cyan-300/60"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-slate-950 to-cyan-900/50" />
+                        {item.type === 'auction' ? (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Gavel className="h-8 w-8 text-cyan-300/40" />
+                          </div>
+                        ) : item.streamerAvatar ? (
+                          <img src={item.streamerAvatar} alt={item.streamerName} className="absolute inset-0 h-full w-full object-cover opacity-80" />
+                        ) : (
+                          <Play className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/20" />
+                        )}
+                        <div className="absolute left-1.5 top-1.5 rounded-md bg-red-600 px-1.5 py-0.5 text-[8px] font-black text-white">LIVE</div>
+                        <div className="absolute right-1.5 top-1.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[8px] font-black text-white">
+                          👁 {item.viewerCount}
+                        </div>
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-2">
+                          <p className="truncate text-[10px] font-black text-white">{item.title}</p>
+                          <p className="truncate text-[8px] font-bold text-slate-300">{item.streamerName}</p>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-3">
-                    <p className="truncate text-sm font-black text-white">{item.title}</p>
-                    <p className="truncate text-xs font-bold text-slate-300">{item.streamerName}</p>
-                  </div>
-                </button>
+                </div>
               ))
             )}
           </div>
@@ -658,7 +692,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tabParam = params.get('tab')
-    if (tabParam && ['home', 'live', 'universe', 'laws-fees', 'leagues', 'president', 'academy'].includes(tabParam)) {
+    if (tabParam && ['home', 'live', 'universe', 'how-to-videos', 'laws-fees', 'leagues', 'president', 'academy'].includes(tabParam)) {
       setActiveTab(tabParam as TabType)
     }
   }, [])
@@ -942,6 +976,28 @@ export default function Home() {
               />
               <div className="min-w-0 flex-1">
                 <BattleGrid items={battleItems} onClickItem={handleScrollItemClick} />
+              </div>
+            </div>
+          )}
+
+         {activeTab === 'how-to-videos' && (
+            <div className="flex gap-4">
+              <LeftNavSidebar
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                liveCount={allLiveItems.length}
+                battleCount={battleItems.length}
+                followersLiveCount={0}
+                presidentTabLabel={presidentTabLabel}
+                showPresidentTab={showPresidentTab}
+                wallNotificationCount={wallNotificationCount}
+              />
+              <div className="min-w-0 flex-1">
+                <section className={`${glass} rounded-2xl p-4`}>
+                  <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" /></div>}>
+                    <HowToVideosPage />
+                  </Suspense>
+                </section>
               </div>
             </div>
           )}

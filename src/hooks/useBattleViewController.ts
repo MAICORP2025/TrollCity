@@ -49,12 +49,33 @@ export function useBattleViewController({
   const onToggleMic = onToggleMicProp || (() => {});
   // Track connection phases to avoid repeated renders from track events
   const [trackRevision, setTrackRevision] = useState(0);
-  // Debounce track revision to prevent flashing from rapid track events
   const trackRevisionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTrackRevisionRef = useRef(0);
   const [connectionPhase, setConnectionPhase] = useState<'idle' | 'connecting' | 'room-connected' | 'local-ready' | 'remote-ready'>('idle');
   const roomConnectedAtRef = useRef<number | null>(null);
   const preflightSetInBattleRef = useRef(false);
+  const [battleTick, setBattleTick] = useState(0);
+  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectionRetryCountRef = useRef(0);
+  const MAX_CONNECTION_RETRIES = 5;
+  const CONNECTION_TIMEOUT_MS = 3000;
+
+  const deferError = useCallback((message: string, delayMs?: number) => {
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+    }
+    connectionTimeoutRef.current = setTimeout(() => {
+      setError(message);
+      setLoading(false);
+    }, delayMs ?? CONNECTION_TIMEOUT_MS);
+  }, []);
+
+  const clearDeferredError = useCallback(() => {
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+  }, []);
   
   const [battle, setBattle] = useState<any>(null);
   const [challengerStream, setChallengerStream] = useState<Stream | null>(null);
@@ -418,7 +439,7 @@ export function useBattleViewController({
 
           // Add connection error handling with retry logic
           let connectAttempts = 0;
-          const maxConnectAttempts = 3;
+          const maxConnectAttempts = MAX_CONNECTION_RETRIES;
           const connectWithRetry = async () => {
             while (connectAttempts < maxConnectAttempts) {
               try {
@@ -442,8 +463,8 @@ export function useBattleViewController({
                     connectError?.message?.includes('connection failed') ||
                     connectError?.message?.includes('Failed to connect')) {
                   if (connectAttempts < maxConnectAttempts) {
-                    // Wait before retrying (exponential backoff)
-                    await new Promise(resolve => setTimeout(resolve, 1000 * connectAttempts));
+                    // Exponential backoff: 1s, 2s, 4s, 8s
+                    await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, connectAttempts - 1)));
                     continue;
                   }
                 }
@@ -548,7 +569,7 @@ export function useBattleViewController({
           
           // Add connection error handling for viewers too
           let connectAttempts = 0;
-          const maxConnectAttempts = 3;
+          const maxConnectAttempts = MAX_CONNECTION_RETRIES;
           
           while (connectAttempts < maxConnectAttempts) {
             try {
@@ -568,7 +589,7 @@ export function useBattleViewController({
               console.warn(`[BattleView] Viewer connection attempt ${connectAttempts} failed:`, connectError?.message || connectError);
               
               if (connectAttempts < maxConnectAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * connectAttempts));
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, connectAttempts - 1)));
               }
             }
           }
@@ -591,9 +612,10 @@ export function useBattleViewController({
         if (prev.some(p => p.identity === participant.identity)) {
           return prev;
         }
-        if (import.meta.env.DEV) console.log('[BattleView] âœ… Participant connected:', participant.identity, 'total:', prev.length + 1);
+        if (import.meta.env.DEV) console.log('[BattleView] Participant connected:', participant.identity, 'total:', prev.length + 1);
         return [...prev, participant];
       });
+      setBattleTick(t => t + 1);
     };
 
     // Handle participant disconnected
@@ -620,7 +642,8 @@ export function useBattleViewController({
         trackSid: track.sid,
         participantIdentity: participant.identity,
       });
-      // Debounce trackRevision to prevent flashing â€” batch rapid track events into single update
+      setBattleTick(t => t + 1);
+      // Debounce trackRevision to prevent flashing — batch rapid track events into single update
       if (trackRevisionTimerRef.current) {
         clearTimeout(trackRevisionTimerRef.current);
       }
@@ -642,6 +665,7 @@ export function useBattleViewController({
         trackSid: track.sid,
         participantIdentity: participant.identity,
       });
+      setBattleTick(t => t + 1);
       // Track unsubscribed â€” also debounced
       if (trackRevisionTimerRef.current) {
         clearTimeout(trackRevisionTimerRef.current);
@@ -659,13 +683,18 @@ export function useBattleViewController({
         console.log('[BattleView] Skipping track published - room not connected');
         return;
       }
-      console.log('[BattleView] Track published:', {
-        trackKind: publication.kind,
-        trackSid: publication.trackSid,
-        trackSource: publication.source,
-        participantIdentity: participant.identity,
-      });
-      // Don't trigger rerender on TrackPublished - wait for TrackSubscribed
+      if (import.meta.env.DEV) {
+        console.log('[BattleView] Track published:', {
+          trackKind: publication.kind,
+          trackSid: publication.trackSid,
+          trackSource: publication.source,
+          participantIdentity: participant.identity,
+          battleId,
+          expectedChallenger: challengerLiveKitIdentity,
+          expectedOpponent: opponentLiveKitIdentity,
+        });
+      }
+      setBattleTick(t => t + 1);
     };
 
     // Handle track unpublished
@@ -716,6 +745,7 @@ export function useBattleViewController({
       console.log('[BattleView] Room reconnected');
       setConnectionStatus('connected');
       isRoomConnectedRef.current = true;
+      setBattleTick(t => t + 1);
     });
     
     client.on(RoomEvent.ConnectionStateChanged, (state) => {
@@ -907,10 +937,16 @@ export function useBattleViewController({
     }
   }, [challengerStream, opponentStream]);
 
-  // Initialize battle
-  useEffect(() => {
-    const initBattle = async () => {
-      try {
+   // Initialize battle
+   useEffect(() => {
+     const initBattle = async () => {
+       try {
+         if (connectionTimeoutRef.current) {
+           clearTimeout(connectionTimeoutRef.current);
+           connectionTimeoutRef.current = null;
+         }
+         setError(null);
+         setLoading(true);
         // Set battle mode flag to hide TrollEngine during battles
         // FIX 7: Only set if not already set to avoid repeated updates
         if (!preflightSetInBattleRef.current && !PreflightStore.getInBattle()) {
@@ -955,10 +991,10 @@ export function useBattleViewController({
             setBattle(realtimeCandidate);
             resolvedBattle = realtimeCandidate;
           } else {
-            // wait up to 1500ms for realtime to populate
+            // wait up to 3000ms for realtime to populate
             let found = false;
             const start = Date.now();
-            while (!found && Date.now() - start < 1500) {
+            while (!found && Date.now() - start < 3000) {
               // eslint-disable-next-line no-await-in-loop
               await new Promise((r) => setTimeout(r, 100));
               const candidate = (battleRealtime as any)?.battle;
@@ -977,10 +1013,10 @@ export function useBattleViewController({
                 console.log('[BattleView] Using window realtime fallback for battle', battleId);
                 setBattle(realtimeFallback);
                 resolvedBattle = realtimeFallback;
-              } else {
-                setError('Battle not found');
-                return;
-              }
+          } else {
+            deferError('Battle not found');
+            return;
+          }
             }
           }
         } else {
@@ -1000,7 +1036,7 @@ export function useBattleViewController({
           .in('id', [resolvedBattle.challenger_stream_id, resolvedBattle.opponent_stream_id]);
             
         if (streamsError || !streams) {
-          setError('Failed to load battle streams: ' + (streamsError?.message || 'Unknown error'));
+          deferError('Failed to load battle streams: ' + (streamsError?.message || 'Unknown error'));
           return;
         }
 
@@ -1008,11 +1044,11 @@ export function useBattleViewController({
         const oStream = streams.find(s => s.id === resolvedBattle.opponent_stream_id);
             
         if (!cStream) {
-          setError('Challenger stream not found or not live.');
+          deferError('Challenger stream not found or not live.');
           return;
         }
         if (!oStream) {
-          setError('Opponent stream not found or not live.');
+          deferError('Opponent stream not found or not live.');
           return;
         }
               
@@ -1048,7 +1084,7 @@ export function useBattleViewController({
         setBattleParticipants((participantData as any[]) || []);
       } catch (e) {
         console.error("[BattleView] Initialization error:", e);
-        setError('Failed to initialize battle');
+        deferError('Failed to initialize battle');
       } finally {
         setLoading(false);
       }
@@ -1058,8 +1094,9 @@ export function useBattleViewController({
     // Consolidated battle realtime: replaces 6 separate channels with 1
     // Channels removed: battle:${battleId}, battle_participants:${battleId},
     //   battle_arena:${battleId}, battle_stream_${challengerId},
-    //   battle_stream_${opponentId}, battle-sync-gifts:${streamId} (Ã—2)
+    //   battle_stream_${opponentId}, battle-sync-gifts:${streamId} (×2)
     return () => {
+      clearDeferredError();
       // Clear battle mode flag when leaving battle
       PreflightStore.setInBattle(false);
       preflightSetInBattleRef.current = false;
@@ -1079,8 +1116,9 @@ export function useBattleViewController({
   // Sync consolidated realtime state into BattleView state
   useEffect(() => {
     if (!battleRealtime.battle) return;
+    clearDeferredError();
     setBattle((prev: any) => {
-      // PHASE 2: Avoid unnecessary re-renders â€” only update if battle data actually changed
+      // PHASE 2: Avoid unnecessary re-renders — only update if battle data actually changed
       if (!prev) return battleRealtime.battle;
       const keys = ['score_challenger', 'score_opponent', 'status', 'started_at', 'ends_at', 'winner_id', 'sudden_death'];
       const changed = keys.some((k) => (prev as any)[k] !== (battleRealtime.battle as any)[k]);
@@ -1095,6 +1133,7 @@ export function useBattleViewController({
   useEffect(() => {
     if (error === 'Battle not found' && (battleRealtime as any)?.battle) {
       console.log('[BattleView] Clearing "Battle not found" error due to realtime data', battleId);
+      clearDeferredError();
       setError(null);
       setBattle((battleRealtime as any).battle);
     }
@@ -1976,31 +2015,93 @@ export function useBattleViewController({
     console.log('[BattleView] Local videoTrack:', !!battleLocalVideoTrack);
   }, [challengerLiveKitIdentity, opponentLiveKitIdentity, remoteUsers.length, battleLocalVideoTrack]);
 
-  const findRemoteByIdentity = (targetIdentity: string) => {
-    const normalizedTarget = String(targetIdentity || '').replace(/-/g, '').toLowerCase();
-    return remoteUsers?.find((u) => {
+  // Diagnostic logging: room participants and their video track SIDs
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (remoteUsers.length === 0) return;
+    const trackMap: Record<string, string[]> = {};
+    for (const u of remoteUsers) {
+      const videoPubs = getTrackPublications(u, 'video');
+      const sids = videoPubs.filter((p: any) => p.track).map((p: any) => p.track.sid || p.trackSid);
+      trackMap[u.identity] = sids;
+    }
+    console.log('[BattleView] Room participant video track SIDs:', trackMap);
+  }, [remoteUsers, battleTick, trackRevision]);
+
+  const findRemoteByIdentity = (targetIdentity: string, expectedUserId?: string) => {
+    if (!targetIdentity || !remoteUsers) return null;
+    
+    const normalizedTarget = String(targetIdentity).replace(/-/g, '').toLowerCase();
+    
+    return remoteUsers.find((u) => {
       const id = String(u.identity || '');
       const normalized = id.replace(/-/g, '').toLowerCase();
-      return (
-        id === targetIdentity ||
-        normalized === normalizedTarget ||
-        normalized.startsWith(normalizedTarget.substring(0, 8)) ||
-        normalizedTarget.startsWith(normalized.substring(0, 8))
-      );
+      
+      // Strict identity match
+      if (id === targetIdentity || normalized === normalizedTarget) {
+        if (expectedUserId && u.metadata) {
+          try {
+            const metadata = typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata;
+            const metadataUserId = metadata.user_id || metadata.userId;
+            if (metadataUserId && metadataUserId !== expectedUserId) {
+              return false;
+            }
+          } catch {
+            // ignore metadata parse errors
+          }
+        }
+        return true;
+      }
+      
+      // Match by metadata user_id if identity doesn't match
+      if (expectedUserId && u.metadata) {
+        try {
+          const metadata = typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata;
+          const metadataUserId = metadata.user_id || metadata.userId;
+          if (metadataUserId === expectedUserId) {
+            return true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      
+      return false;
     });
   };
 
-  // Handle challenger video - use mapping to find remote user, or use local tracks for broadcaster
-  const challengerUser = findRemoteByIdentity(challengerLiveKitIdentity) ||
-    (challengerStream && effectiveUserId === challengerStream.user_id
-      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
-      : null);
+  const resolveBoxUser = (streamUser?: string | null, liveKitIdentity?: string, isLocalBroadcaster: boolean) => {
+    if (isLocalBroadcaster) {
+      return { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true };
+    }
+    if (!streamUser || !liveKitIdentity) return null;
+    return findRemoteByIdentity(liveKitIdentity, streamUser);
+  };
 
-  // Handle opponent video - use mapping to find remote user, or use local tracks for broadcaster
-  const opponentUser = findRemoteByIdentity(opponentLiveKitIdentity) ||
-    (opponentStream && effectiveUserId === opponentStream.user_id
-      ? { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true }
-      : null);
+  const isChallengerBroadcaster = challengerStream ? effectiveUserId === challengerStream.user_id : false;
+  const isOpponentBroadcaster = opponentStream ? effectiveUserId === opponentStream.user_id : false;
+
+  const challengerUser = resolveBoxUser(challengerStream?.user_id, challengerLiveKitIdentity, isChallengerBroadcaster);
+  const opponentUser = resolveBoxUser(opponentStream?.user_id, opponentLiveKitIdentity, isOpponentBroadcaster);
+
+  if (import.meta.env.DEV) {
+    const challengerIdentity = (challengerUser as any)?.identity;
+    const opponentIdentity = (opponentUser as any)?.identity;
+    if (challengerIdentity && opponentIdentity && challengerIdentity === opponentIdentity) {
+      console.warn('[BattleView] ⚠️ SAME participant resolved for BOTH boxes:', challengerIdentity);
+    }
+    console.log('[BattleView] Box resolution:', {
+      battleId,
+      challengerStreamUserId: challengerStream?.user_id?.substring(0, 8),
+      opponentStreamUserId: opponentStream?.user_id?.substring(0, 8),
+      challengerLiveKitIdentity,
+      opponentLiveKitIdentity,
+      challengerResolved: challengerUser ? (challengerUser as any).identity || 'local' : 'null',
+      opponentResolved: opponentUser ? (opponentUser as any).identity || 'local' : 'null',
+      remoteCount: remoteUsers?.length || 0,
+      battleTick,
+    });
+  }
 
   // Desktop keyboard navigation to the next/previous live battle.
   // Switching battles navigates to the other battle's stream, which remounts
@@ -2064,11 +2165,44 @@ export function useBattleViewController({
     }
   }, [challengerStream?.title, opponentStream?.title]);
 
-  const followBroadcaster = useCallback(() => {
-    if (challengerStream?.user_id) {
-      navigate(`/profile/id/${challengerStream.user_id}`);
+  const followBroadcaster = useCallback(async () => {
+    const targetId = challengerStream?.user_id;
+    if (!targetId) return;
+    if (!user) {
+      toast.info('Sign in to follow this streamer');
+      navigate('/auth');
+      return;
     }
-  }, [challengerStream?.user_id, navigate]);
+    if (targetId === user.id) {
+      toast.info("You can't follow yourself");
+      return;
+    }
+
+    try {
+      const { data: existing } = await supabase
+        .from('user_follows')
+        .select('*')
+        .eq('follower_id', user.id)
+        .eq('following_id', targetId)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from('user_follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', targetId);
+        if (!error) toast.success(`Unfollowed ${challengerStream?.title || 'streamer'}`);
+      } else {
+        const { error } = await supabase
+          .from('user_follows')
+          .insert({ follower_id: user.id, following_id: targetId });
+        if (!error) toast.success(`Following ${challengerStream?.title || 'streamer'}`);
+      }
+    } catch {
+      toast.error('Follow action failed');
+    }
+  }, [challengerStream?.user_id, challengerStream?.title, user, navigate]);
 
   // BattleChat manages its own input/send pipeline; exposed for interface parity.
   const sendMessage = useCallback(() => {}, []);

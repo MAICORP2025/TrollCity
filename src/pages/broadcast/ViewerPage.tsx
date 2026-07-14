@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from '
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
+  ArrowLeft,
   BadgeCheck,
   Crown,
   Gift,
@@ -355,42 +356,67 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
    const audioTrackId = audioTrack?.mediaStreamTrack?.id || audioTrack?.sid || null
 
   // Use refs to track what we actually attached, so we only detach/reattach
-  // when the underlying track identity truly changes.
-  const attachedVideoIdRef = useRef<string | null>(null)
+  // when the underlying track truly changes.
+  const attachedVideoTrackRef = useRef<RemoteVideoTrack | null>(null)
   const attachedAudioIdRef = useRef<string | null>(null)
 
    useEffect(() => {
     const videoEl = videoRef.current
     if (!videoEl) return
 
-    // Only (re-)attach if the track identity actually changed.
-    // When videoTrack temporarily goes null (brief renegotiation), we keep the
-    // last attached track on the element so the stream stays visible.
-    if (videoTrackId !== attachedVideoIdRef.current) {
-      // Detach previous track if we had one attached and are replacing it
-      if (attachedVideoIdRef.current !== null && videoTrack) {
-        try {
-          videoTrack?.detach?.(videoEl)
-        } catch {
-          // ignore
+    const previousTrack = attachedVideoTrackRef.current
+
+    if (previousTrack) {
+      try {
+        previousTrack.detach()
+      } catch {
+        // ignore
+      }
+      attachedVideoTrackRef.current = null
+    }
+
+    if (!videoTrack) {
+      videoEl.srcObject = null
+      return
+    }
+
+    let cancelled = false
+
+    const attachAndPlay = async () => {
+      try {
+        videoEl.autoplay = true
+        videoEl.playsInline = true
+        videoEl.muted = true
+        videoEl.setAttribute('playsinline', '')
+        videoEl.setAttribute('webkit-playsinline', '')
+
+        videoTrack.attach(videoEl)
+        attachedVideoTrackRef.current = videoTrack
+
+        if (!cancelled) {
+          await videoEl.play()
         }
+      } catch (error) {
+        console.warn('[ViewerPage] Mobile remote video failed:', error)
+      }
+    }
+
+    void attachAndPlay()
+
+    return () => {
+      cancelled = true
+
+      try {
+        videoTrack.detach(videoEl)
+      } catch {
+        // ignore
       }
 
-      if (videoTrack) {
-        try {
-          videoTrack.attach(videoEl)
-          videoEl.style.transform = shouldMirror ? 'scaleX(-1)' : 'none'
-          videoEl.play().catch(() => {})
-        } catch (err) {
-          console.warn('[ViewerPage] Failed to attach remote video track:', err)
-        }
-        attachedVideoIdRef.current = videoTrackId
+      if (attachedVideoTrackRef.current === videoTrack) {
+        attachedVideoTrackRef.current = null
       }
-      // If videoTrack is null, intentionally do NOT update attachedVideoIdRef.
-      // This preserves the previous track on the video element and prevents
-      // flicker to fallback during brief track unsubscriptions.
     }
-  }, [videoTrack, videoTrackId, trackTick, shouldMirror])
+  }, [videoTrack, videoTrackId])
 
   useEffect(() => {
     const audioEl = audioRef.current
@@ -428,58 +454,24 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
         ref={videoRef}
         autoPlay
         playsInline
-        muted={false}
+        muted
+        disablePictureInPicture
+        controls={false}
         className={cn(
-          'h-full w-full',
+          'absolute inset-0 block h-full w-full bg-black',
           objectFit === 'contain' ? 'object-contain' : 'object-cover',
           shouldMirror && '-scale-x-100',
         )}
       />
       <audio ref={audioRef} autoPlay />
-      {!videoTrack && !attachedVideoIdRef.current && (
+      {!videoTrack && !attachedVideoTrackRef.current && (
         <div className="absolute inset-0 flex items-center justify-center">
           {fallback}
         </div>
       )}
     </div>
   )
-}, (prevProps, nextProps) => {
-  // Custom comparator for React.memo — returns true to SKIP re-render.
-  // Only re-render when the participant's actual track identity changes.
-
-  const prevVideo = getVideoTrackFromParticipant(prevProps.participant)
-  const nextVideo = getVideoTrackFromParticipant(nextProps.participant)
-  const prevAudio = getAudioTrackFromParticipant(prevProps.participant)
-  const nextAudio = getAudioTrackFromParticipant(nextProps.participant)
-
-  // Compare MediaStreamTrack IDs — the actual browser-level track identity
-  const prevVideoId = prevVideo?.mediaStreamTrack?.id || null
-  const nextVideoId = nextVideo?.mediaStreamTrack?.id || null
-  const prevAudioId = prevAudio?.mediaStreamTrack?.id || null
-  const nextAudioId = nextAudio?.mediaStreamTrack?.id || null
-
-  // Also compare the track SID (LiveKit-level identity) as fallback
-  const prevVideoSid = prevVideo?.sid || null
-  const nextVideoSid = nextVideo?.sid || null
-  const prevAudioSid = prevAudio?.sid || null
-  const nextAudioSid = nextAudio?.sid || null
-
-  const tracksUnchanged =
-    prevVideoId === nextVideoId &&
-    prevAudioId === nextAudioId &&
-    prevVideoSid === nextVideoSid &&
-    prevAudioSid === nextAudioSid
-
-  // Also check non-track props
-  const otherPropsUnchanged =
-    prevProps.mirror === nextProps.mirror &&
-    prevProps.className === nextProps.className &&
-    prevProps.onTap === nextProps.onTap &&
-    prevProps.room === nextProps.room
-
-  // Return true = skip re-render (props are "equal")
-  return tracksUnchanged && otherPropsUnchanged
-})
+  })
 
 function LocalVideoSurface({
   videoTrack,
@@ -1627,14 +1619,6 @@ const isActive = isStreamActive(stream)
         prevAudioId === nextAudioId &&
         prevIdentity === nextIdentity
       ) {
-        return prev
-      }
-
-      if (prevVideoId && !nextVideoId) {
-        return prev
-      }
-
-      if (prevAudioId && !nextAudioId) {
         return prev
       }
 
@@ -2988,11 +2972,31 @@ const heartbeat = window.setInterval(() => {
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:42px_42px] opacity-25" />
 
-          <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
+            <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
 
-           {!isMobileViewer && (
-             <>
-               <BroadcastNeonHeader
+            {isMobileViewer && (
+              <div className="absolute left-3 top-3 z-40">
+                <button
+                  onClick={() => navigate('/')}
+                  className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md border border-white/10 hover:bg-black/80 transition-colors"
+                >
+                  <ArrowLeft size={14} />
+                  Back
+                </button>
+              </div>
+            )}
+             {!isMobileViewer && (
+                <>
+                  <div className="absolute left-4 top-4 z-40">
+                    <button
+                      onClick={() => navigate('/')}
+                      className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md border border-white/10 hover:bg-black/80 transition-colors"
+                    >
+                      <ArrowLeft size={14} />
+                      Back
+                    </button>
+                  </div>
+                  <BroadcastNeonHeader
                  stream={stream}
                  broadcasterProfile={broadcasterProfile
                    ? {
@@ -3062,41 +3066,50 @@ const heartbeat = window.setInterval(() => {
              />
            )}
 
-  <main
-               className={cn(
-                 'relative z-10 flex flex-1 min-h-0',
-                 isMobileViewer
-                   ? layoutMode === 'grid'
-                     ? 'grid overflow-hidden pr-12'
-                     : 'flex-col overflow-hidden px-0 pt-0'
-                   : 'grid gap-4 px-5 py-4',
-                   !isMobileViewer && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr]' : '',
-               )}
-                style={
-                 isMobileViewer && layoutMode === 'grid'
-                   ? {
-                       gridTemplateColumns: 'repeat(2, 1fr)',
-                       gridAutoRows: '1fr',
-                       gap: '4px',
-                       maxHeight: `calc(100dvh - ${MOBILE_CHAT_INPUT_HEIGHT + 8}px - env(safe-area-inset-bottom))`,
-                     }
-                  : !isMobileViewer
+   <main
+                className={cn(
+                  'relative z-10 flex flex-1 min-h-0',
+                  isMobileViewer
                     ? layoutMode === 'grid'
-                      ? {
-                          gridTemplateColumns: `repeat(${Math.min(4, Math.max(2, Math.min(effectiveBoxCount, 8)))}, minmax(0, 1fr))`,
-                          gridAutoRows: 'minmax(0, 1fr)',
-                          gap: '12px',
-                        }
-                      : {
-                          gridTemplateColumns:
-                            seatCards.length > 0
-                              ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
-                              : 'minmax(560px, 1fr) 360px',
-                        }
-                    : undefined
-              }
-            >
-             {/* Broadcast Frame as border decoration */}
+                      ? 'grid overflow-hidden pr-12'
+                      : 'flex-col overflow-hidden px-0 pt-0'
+                    : 'grid gap-4 px-5 py-4',
+                    !isMobileViewer && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr]' : '',
+                )}
+                 style={
+                  isMobileViewer && layoutMode === 'grid'
+                    ? {
+                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gridAutoRows: '1fr',
+                        gap: '4px',
+                        maxHeight: `calc(100dvh - ${MOBILE_CHAT_INPUT_HEIGHT + 8}px - env(safe-area-inset-bottom))`,
+                      }
+                   : !isMobileViewer
+                     ? layoutMode === 'grid'
+                       ? {
+                           gridTemplateColumns: `repeat(${Math.min(4, Math.max(2, Math.min(effectiveBoxCount, 8)))}, minmax(0, 1fr))`,
+                           gridAutoRows: 'minmax(0, 1fr)',
+                           gap: '12px',
+                         }
+                       : {
+                           gridTemplateColumns:
+                             seatCards.length > 0
+                               ? 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px'
+                               : 'minmax(560px, 1fr) 360px',
+                         }
+                     : undefined
+               }
+             >
+               <div className="absolute left-3 top-3 z-40 md:left-4 md:top-4">
+                 <button
+                   onClick={() => navigate('/')}
+                   className="flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1.5 text-xs font-bold text-white backdrop-blur-md border border-white/10 hover:bg-black/80 transition-colors"
+                 >
+                   <ArrowLeft size={14} />
+                   <span className="hidden sm:inline">Back</span>
+                 </button>
+               </div>
+              {/* Broadcast Frame as border decoration */}
              {broadcastFrame && (
                <BroadcastFrame frame={broadcastFrame} className="absolute inset-0 z-0 rounded-3xl pointer-events-none">
                  <div className="absolute inset-0" />

@@ -50,17 +50,17 @@ export function parseTextWithLinks(text: string | null | undefined): React.React
       parts.push(text.slice(lastIndex, matchIndex));
     }
     
-    // Handle #username tag
+    // Handle #hashtag tag - open in explore search
     if (match[3]) {
-      const username = match[3];
+      const tag = match[3];
       parts.push(
         <Link
           key={`tag-${matchIndex}`}
-          to={`/profile/${username}`}
-          className="text-purple-400 font-semibold hover:text-purple-300"
+          to={`/explore?q=${encodeURIComponent(tag)}&tab=posts`}
+          className="text-cyan-400 font-semibold hover:text-cyan-300"
           onClick={(e) => e.stopPropagation()}
         >
-          {username}
+          {tag}
         </Link>
       );
       lastIndex = matchIndex + match[0].length;

@@ -20,7 +20,6 @@ import { toast } from 'sonner'
 import { StreamAudienceMember } from '../../hooks/useStreamAudiencePresence'
 import { useNavigate } from 'react-router-dom'
 import StaffWalkieTalkieButton from '../StaffWalkieTalkieButton'
-import StorageIndicator from './StorageIndicator'
 import ProfileFrame from '@/components/profile/ProfileFrame'
 import { useUserFrame } from '@/hooks/useUserFrame'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -315,11 +314,6 @@ export default function BroadcastNeonHeader({
 
         {/* Right side actions */}
         <div className={cn("flex shrink-0 items-center", isMobile ? "gap-1" : "gap-2")}>
-          {/* Storage indicator - desktop only */}
-          {isHost && !isMobile && (
-            <StorageIndicator userId={profile?.id} storageType="broadcast" />
-          )}
-          
           {/* Staff walkie talkie - desktop only */}
           {isHost && !isMobile && (
             <div className="relative">

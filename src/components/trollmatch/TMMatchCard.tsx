@@ -140,31 +140,31 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        whileHover={{ y: -4 }}
+        whileHover={{ y: -2 }}
         className="relative bg-slate-800/80 backdrop-blur-sm rounded-2xl border border-purple-500/20 overflow-hidden group"
       >
         {/* Online Indicator */}
         {isOnline && (
-          <div className="absolute top-3 right-3 z-10">
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-500/50" />
+          <div className="absolute top-2 right-2 z-10">
+            <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-500/50" />
           </div>
         )}
 
         {/* Avatar */}
         <div 
-          className="relative h-40 bg-gradient-to-br from-purple-900/50 to-pink-900/50 cursor-pointer"
+          className="relative bg-gradient-to-br from-purple-900/50 to-pink-900/50 cursor-pointer"
           onClick={handleViewProfile}
         >
           {match.avatar_url ? (
             <img 
               src={match.avatar_url} 
               alt={match.username}
-              className="w-full h-full object-cover"
+              className="w-full aspect-square object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="w-20 h-20 rounded-full bg-slate-700 flex items-center justify-center">
-                <span className="text-3xl font-bold text-slate-400">
+            <div className="w-full aspect-square flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center">
+                <span className="text-2xl font-bold text-slate-400">
                   {match.username.charAt(0).toUpperCase()}
                 </span>
               </div>
@@ -178,10 +178,10 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
         </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="p-2">
           {/* Username */}
           <h3 
-            className="font-bold text-white text-lg cursor-pointer hover:text-purple-400 transition-colors"
+            className="font-bold text-white text-sm truncate cursor-pointer hover:text-purple-400 transition-colors"
             onClick={handleViewProfile}
           >
             @{match.username}
@@ -190,14 +190,14 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
           {/* Match Score */}
           {match.match_score > 0 && (
             <div className="flex items-center gap-1 mt-1">
-              <span className="text-xs text-purple-400 font-medium">
+              <span className="text-[10px] text-purple-400 font-medium">
                 {match.match_score}% Match
               </span>
               <div className="flex gap-0.5">
                 {[...Array(5)].map((_, i) => (
                   <div 
                     key={i}
-                    className={`w-1.5 h-1.5 rounded-full ${
+                    className={`w-1 h-1 rounded-full ${
                       i < Math.ceil(match.match_score / 20) 
                         ? 'bg-purple-500' 
                         : 'bg-slate-700'
@@ -210,42 +210,37 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
 
           {/* Shared Interests */}
           {match.shared_interests && match.shared_interests.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-3">
-              {match.shared_interests.slice(0, 3).map((interest) => (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {match.shared_interests.slice(0, 2).map((interest) => (
                 <span 
                   key={interest}
-                  className="px-2 py-0.5 text-xs font-medium bg-purple-500/20 text-purple-300 rounded-full"
+                  className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/20 text-purple-300 rounded-full"
                 >
                   {interest}
                 </span>
               ))}
-              {match.shared_interests.length > 3 && (
-                <span className="px-2 py-0.5 text-xs font-medium bg-slate-700 text-slate-400 rounded-full">
-                  +{match.shared_interests.length - 3}
-                </span>
-              )}
             </div>
           )}
 
           {/* Dating indicator */}
           {type === 'dating' && (
-            <div className="flex items-center gap-1 mt-3 text-pink-400">
-              <Heart className="w-4 h-4" />
-              <span className="text-xs font-medium">Dating</span>
+            <div className="flex items-center gap-1 mt-2 text-pink-400">
+              <Heart className="w-3 h-3" />
+              <span className="text-[10px] font-medium">Dating</span>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex gap-2 mt-4">
+          <div className="flex gap-1 mt-2">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleMessage}
-              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition-colors"
             >
-              <MessageCircle className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                {price > 0 ? `${price} 💰` : 'Message'}
+              <MessageCircle className="w-3 h-3" />
+              <span className="text-xs font-medium">
+                {price > 0 ? `${price}` : 'Msg'}
               </span>
             </motion.button>
 
@@ -253,30 +248,20 @@ export function TMMatchCard({ match, type, onMessage }: TMMatchCardProps) {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleViewProfile}
-              className="p-2 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
+              className="p-1.5 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
               title="View Profile"
             >
-              <Eye className="w-4 h-4" />
+              <Eye className="w-3 h-3" />
             </motion.button>
 
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleInviteToFamily}
-              className="p-2 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
+              className="p-1.5 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
               title="Invite to Family"
             >
-              <UserPlus className="w-4 h-4" />
-            </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleFollow}
-              className="p-2 rounded-xl bg-slate-700/50 text-slate-300 hover:bg-slate-700 transition-colors"
-              title="Follow"
-            >
-              <Star className="w-4 h-4" />
+              <UserPlus className="w-3 h-3" />
             </motion.button>
           </div>
         </div>

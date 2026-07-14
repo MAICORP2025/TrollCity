@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils'
 import { usePodcastStore } from '@/stores/podcastStore'
 import { trollCityBroadcastTheme as theme } from '@/styles/broadcastTheme'
 import { showStorageStartWarning } from '@/hooks/useStorageUsage'
+import { usePodcastLockdown } from '@/hooks/useFeatureLockdown'
 
 type PodcastStatus =
   | 'scheduled'
@@ -123,6 +124,7 @@ export default function PodcastCentral() {
   const navigate = useNavigate()
   const { user, profile } = useAuthStore()
   const { isMobileWidth } = useIsMobile()
+  const { isLocked: isPodcastLockedDown } = usePodcastLockdown()
 
   useSEO({
     title: 'Podcasts | Troll City - Live Podcast Streaming & Creator Podcasts',
@@ -347,6 +349,10 @@ export default function PodcastCentral() {
   )
 
   const handleStartPodcast = useCallback(async () => {
+    if (isPodcastLockedDown) {
+      toast.error('Podcasts are currently disabled by admin. No one can start a podcast while lockdown is active.');
+      return;
+    }
     if (!user?.id) {
       toast.error('Sign in to start a podcast.')
       return
@@ -441,6 +447,7 @@ export default function PodcastCentral() {
       setIsStarting(false)
     }
   }, [
+    isPodcastLockedDown,
     user?.id,
     profile?.username,
     profile?.role,

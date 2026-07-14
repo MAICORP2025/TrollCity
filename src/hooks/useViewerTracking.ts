@@ -115,11 +115,25 @@ export function useViewerTracking(streamId: string | null, isHost: boolean = fal
           // Also heartbeat into stream_viewers table for the "Active" list
           // Only for authenticated users (UUID required)
           if (isValidUUID(user?.id)) {
-            await supabase.from('stream_viewers').upsert({
-              stream_id: streamId,
-              user_id: user.id,
-              last_seen: new Date().toISOString()
-            }, { onConflict: 'stream_id,user_id' });
+            const { error: viewerError } = await supabase
+              .from('stream_viewers')
+              .upsert(
+                {
+                  stream_id: streamId,
+                  user_id: user.id,
+                  last_seen: new Date().toISOString(),
+                },
+                { onConflict: 'stream_id,user_id' }
+              );
+
+            if (viewerError?.code === '42P10') {
+              await supabase
+                .from('stream_viewers')
+                .update({ last_seen: new Date().toISOString() })
+                .eq('stream_id', streamId)
+                .eq('user_id', user.id);
+            }
+
             void logStreamAnalyticsEvent(streamId, user.id, 'join');
 
             try {

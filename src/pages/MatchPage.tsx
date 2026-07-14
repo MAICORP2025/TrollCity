@@ -272,7 +272,7 @@ export function MatchPage() {
                   description="No users have joined Troll Match yet."
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
                   {allUsers.map((matchUser) => (
                     <TMUserCard
                       key={matchUser.user_id}
@@ -297,7 +297,7 @@ export function MatchPage() {
                   }
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
                   {currentMatches.map((match) => (
                     <TMMatchCard
                       key={match.user_id}

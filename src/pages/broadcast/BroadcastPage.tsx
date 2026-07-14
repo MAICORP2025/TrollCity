@@ -5485,9 +5485,7 @@ const toggleMicrophone = useCallback(async () => {
                 )}
                 style={
                   isMobileHost
-                    ? layoutMode === 'grid'
-                      ? { height: '100%', maxHeight: '100%' }
-                      : { height: 'calc(100dvh - 180px)', maxHeight: 'calc(100dvh - 180px)' }
+                    ? { height: 'calc(100dvh - 180px)', maxHeight: 'calc(100dvh - 180px)' }
                     : undefined
                 }
               >

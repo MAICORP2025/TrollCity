@@ -17,6 +17,7 @@ import AnnouncementsTab from './tabs/AnnouncementsTab'
 import ChangeRequestsTab from './tabs/ChangeRequestsTab'
 import FrontendStudioTab from './tabs/FrontendStudioTab'
 import DepartmentToolsTab from './tabs/DepartmentToolsTab'
+import ModerationTab from './tabs/ModerationTab'
 import ManagementTab from './tabs/ManagementTab'
 import HiringTab from './tabs/HiringTab'
 import AttendanceTab from './tabs/AttendanceTab'
@@ -34,6 +35,7 @@ const TAB_COMPONENTS: Record<EmployeeTabId, React.ComponentType<any>> = {
   change_requests: ChangeRequestsTab,
   frontend_studio: FrontendStudioTab,
   department_tools: DepartmentToolsTab,
+  moderation: ModerationTab,
   management: ManagementTab,
   hiring: HiringTab,
   attendance: AttendanceTab,

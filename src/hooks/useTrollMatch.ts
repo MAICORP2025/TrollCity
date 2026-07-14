@@ -257,17 +257,20 @@ export function useTMUpdateProfile() {
       preference?: TMPreference[];
       messagePrice?: number;
     }) => {
-      if (!user?.id) throw new Error('Must be logged in');
+      if (!user?.id) throw new Error('Not authenticated');
 
       try {
-        const { error } = await supabase.rpc('update_tm_profile', {
-          p_user_id: user.id,
-          p_interests: params.interests ?? null,
-          p_dating_enabled: params.datingEnabled ?? null,
-          p_gender: params.gender ?? null,
-          p_preference: params.preference ?? null,
-          p_message_price: params.messagePrice ?? null,
-        });
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({
+            interests: params.interests,
+            dating_enabled: params.datingEnabled,
+            gender: params.gender,
+            preference: params.preference,
+            message_price: params.messagePrice,
+            last_active: new Date().toISOString(),
+          })
+          .eq('id', user.id);
 
         if (error) throw error;
 

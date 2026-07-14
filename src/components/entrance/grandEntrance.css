@@ -1,0 +1,698 @@
+/* =============================================================
+   Troll City — Grand City Entrance
+   Cinematic ceremonial entrance overlay styles
+   ============================================================= */
+
+:root {
+  --tc-green: #4dffa0;
+  --tc-green-bright: #9bffca;
+  --tc-green-deep: #1faf6a;
+  --tc-gold: #e3c46a;
+  --tc-gold-deep: #b8923a;
+  --tc-charcoal: #0a0c0b;
+  --tc-charcoal-2: #131716;
+  --tc-charcoal-3: #1c211f;
+}
+
+.gce-root {
+  position: fixed;
+  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  height: 100dvh;
+  width: 100%;
+  max-width: 100vw;
+  z-index: 10000;
+  overflow: hidden;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  isolation: isolate;
+}
+
+.gce-root * {
+  box-sizing: border-box;
+}
+
+/* Respect safe areas on mobile / PWA */
+.gce-safe {
+  position: absolute;
+  inset: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------
+   Backdrop (dark screen that fades to reveal the home page)
+   ------------------------------------------------------------- */
+.gce-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 18%, rgba(20, 30, 26, 0.9) 0%, rgba(6, 8, 7, 0.98) 55%, #040504 100%),
+    linear-gradient(180deg, #050706 0%, #0a0c0b 60%, #060807 100%);
+  opacity: 1;
+  transition: opacity 900ms ease;
+  z-index: 10;
+}
+
+.gce-is-revealing .gce-backdrop {
+  opacity: 0;
+}
+
+/* During reveal, let pointer events pass through to the home page */
+.gce-is-revealing {
+  pointer-events: none;
+}
+
+/* Ambient glow that begins at 0.0s */
+.gce-ambient {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 40% at 50% 50%, rgba(77, 255, 160, 0.10), transparent 70%);
+  opacity: 0;
+  animation: gce-ambient 5200ms ease-in-out forwards;
+  pointer-events: none;
+}
+
+@keyframes gce-ambient {
+  0% { opacity: 0; }
+  20% { opacity: 0.5; }
+  60% { opacity: 0.85; }
+  100% { opacity: 0.55; }
+}
+
+/* Light beam between the doors (brightens as doors open) */
+.gce-beam {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12vw;
+  max-width: 160px;
+  height: 100%;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg,
+    rgba(155, 255, 202, 0.0) 0%,
+    rgba(155, 255, 202, 0.35) 45%,
+    rgba(77, 255, 160, 0.55) 55%,
+    rgba(155, 255, 202, 0.0) 100%);
+  filter: blur(14px);
+  opacity: 0;
+  transition: opacity 1700ms ease, width 1700ms ease, filter 1700ms ease;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.gce-is-opening .gce-beam {
+  opacity: 1;
+  width: 46vw;
+  max-width: 620px;
+  filter: blur(26px);
+}
+
+/* Floating particles */
+.gce-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.gce-particle {
+  position: absolute;
+  bottom: -10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--tc-green-bright);
+  box-shadow: 0 0 8px 2px rgba(77, 255, 160, 0.6);
+  opacity: 0;
+  animation: gce-float linear infinite;
+}
+
+@keyframes gce-float {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  10% { opacity: 0.9; }
+  90% { opacity: 0.7; }
+  100% { transform: translateY(-105vh) translateX(var(--drift, 0px)); opacity: 0; }
+}
+
+/* City silhouette at the base */
+.gce-city {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 38%;
+  width: 100%;
+  opacity: 0;
+  transition: opacity 1500ms ease;
+  pointer-events: none;
+}
+
+.gce-is-doors .gce-city,
+.gce-is-revealing .gce-city {
+  opacity: 0.9;
+}
+
+.gce-city svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.gce-city .gce-window {
+  animation: gce-twinkle 3.6s ease-in-out infinite;
+}
+
+@keyframes gce-twinkle {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* -------------------------------------------------------------
+   Doors
+   ------------------------------------------------------------- */
+.gce-doors {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  perspective: 2000px;
+  perspective-origin: 50% 50%;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+
+.gce-is-doors .gce-doors {
+  opacity: 1;
+}
+
+.gce-door {
+  position: relative;
+  width: 50%;
+  height: 100%;
+  transform-style: preserve-3d;
+  background:
+    linear-gradient(180deg, #14181a 0%, #0c0f0e 50%, #070908 100%);
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.85);
+  transition: transform 1750ms cubic-bezier(0.76, 0, 0.18, 1), opacity 700ms ease;
+  will-change: transform;
+  backface-visibility: hidden;
+  overflow: hidden;
+}
+
+.gce-door-left { transform-origin: center right; }
+.gce-door-right { transform-origin: center left; }
+
+/* Inner door panel with metallic seams */
+.gce-door-panel {
+  position: absolute;
+  inset: 6%;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, #1b211f 0%, #101513 55%, #0a0d0c 100%);
+  border: 1px solid rgba(77, 255, 160, 0.18);
+  box-shadow:
+    inset 0 0 40px rgba(0, 0, 0, 0.7),
+    0 0 30px rgba(77, 255, 160, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4%;
+}
+
+/* Vertical neon edge lighting on inner seam */
+.gce-door-left .gce-door-panel { border-right: 2px solid rgba(77, 255, 160, 0.55); box-shadow: inset -18px 0 40px rgba(77,255,160,0.10), inset 0 0 40px rgba(0,0,0,0.7); }
+.gce-door-right .gce-door-panel { border-left: 2px solid rgba(77, 255, 160, 0.55); box-shadow: inset 18px 0 40px rgba(77,255,160,0.10), inset 0 0 40px rgba(0,0,0,0.7); }
+
+/* Horizontal metal seams */
+.gce-seam {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(227, 196, 106, 0.35), transparent);
+}
+.gce-seam-1 { top: 22%; }
+.gce-seam-2 { top: 50%; }
+.gce-seam-3 { top: 78%; }
+
+/* Gold handle */
+.gce-handle {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 16%;
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--tc-gold), var(--tc-gold-deep));
+  box-shadow: 0 0 14px rgba(227, 196, 106, 0.45);
+}
+.gce-door-left .gce-handle { right: 12%; transform: translateY(-50%); }
+.gce-door-right .gce-handle { left: 12%; transform: translateY(-50%); }
+
+/* Engraved city name near base of each door */
+.gce-door-name {
+  position: absolute;
+  bottom: 9%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  font-size: clamp(10px, 1.4vw, 18px);
+  color: rgba(155, 255, 202, 0.65);
+  text-shadow: 0 0 12px rgba(77, 255, 160, 0.4);
+}
+
+.gce-crest {
+  width: clamp(54px, 9vw, 110px);
+  height: clamp(54px, 9vw, 110px);
+  filter: drop-shadow(0 0 14px rgba(77, 255, 160, 0.35));
+}
+
+/* Opening: slide + subtle 3D tilt */
+.gce-is-opening .gce-door-left {
+  transform: translateX(-102%) rotateY(-28deg);
+}
+.gce-is-opening .gce-door-right {
+  transform: translateX(102%) rotateY(28deg);
+}
+.gce-is-opening .gce-door {
+  opacity: 1;
+}
+
+/* -------------------------------------------------------------
+   Title
+   ------------------------------------------------------------- */
+.gce-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -58%);
+  width: min(92vw, 920px);
+  text-align: center;
+  z-index: 40;
+  pointer-events: none;
+  transition: opacity 900ms ease, transform 900ms ease;
+}
+
+.gce-is-revealing .gce-title {
+  opacity: 0;
+  transform: translate(-50%, -70%);
+}
+
+.gce-welcome {
+  font-size: clamp(13px, 2.4vw, 22px);
+  letter-spacing: 0.55em;
+  text-transform: uppercase;
+  color: rgba(227, 196, 106, 0.92);
+  margin-bottom: clamp(8px, 1.6vw, 18px);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 800ms ease, transform 800ms ease;
+  text-shadow: 0 0 18px rgba(227, 196, 106, 0.3);
+}
+
+.gce-title-main {
+  font-weight: 900;
+  line-height: 1.02;
+  font-size: clamp(32px, 8.5vw, 104px);
+  letter-spacing: 0.04em;
+  background: linear-gradient(180deg, #ffffff 0%, var(--tc-green-bright) 55%, var(--tc-green-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 38px rgba(77, 255, 160, 0.28);
+  opacity: 0;
+  transform: translateY(20px) scale(0.98);
+  transition: opacity 900ms ease, transform 900ms ease;
+}
+
+.gce-subtitle {
+  margin-top: clamp(10px, 2vw, 22px);
+  font-size: clamp(12px, 2.2vw, 20px);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(220, 235, 228, 0.9);
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 800ms ease, transform 800ms ease;
+}
+
+.gce-is-welcome .gce-welcome { opacity: 1; transform: translateY(0); }
+.gce-is-title .gce-title-main { opacity: 1; transform: translateY(0) scale(1); }
+.gce-is-subtitle .gce-subtitle { opacity: 1; transform: translateY(0); }
+
+/* -------------------------------------------------------------
+   Ceremonial Ribbon
+   ------------------------------------------------------------- */
+.gce-ribbon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 60%;
+  height: clamp(44px, 7vw, 76px);
+  z-index: 42;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+.gce-is-ribbon .gce-ribbon { opacity: 1; }
+
+.gce-ribbon-half {
+  position: relative;
+  width: 50%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.10) 0 14px, transparent 14px 28px),
+    linear-gradient(180deg, #ff8080 0%, #ef4444 45%, #b91c1c 100%);
+  box-shadow: 0 0 26px rgba(239, 68, 68, 0.4), inset 0 0 18px rgba(255,255,255,0.12);
+  transform: scaleX(0);
+  transition: transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 700ms ease, translate 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, translate;
+}
+.gce-ribbon-left { transform-origin: right center; border-right: 2px solid rgba(255,255,255,0.35); }
+.gce-ribbon-right { transform-origin: left center; border-left: 2px solid rgba(255,255,255,0.35); }
+
+.gce-is-ribbon .gce-ribbon-half { transform: scaleX(1); }
+
+/* Diagonal cut ends once severed */
+.gce-ribbon-half::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+}
+.gce-ribbon-left::after { right: -1px; background: linear-gradient(135deg, transparent 49%, #b91c1c 50%); }
+.gce-ribbon-right::after { left: -1px; background: linear-gradient(225deg, transparent 49%, #b91c1c 50%); }
+
+.gce-ribbon-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  font-size: clamp(10px, 1.6vw, 16px);
+  color: #3a0008;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+  white-space: nowrap;
+  z-index: 2;
+}
+
+/* Separated halves fall away */
+.gce-is-separated .gce-ribbon-left {
+  translate: -130% 60%;
+  rotate: -16deg;
+  opacity: 0;
+}
+.gce-is-separated .gce-ribbon-right {
+  translate: 130% 60%;
+  rotate: 16deg;
+  opacity: 0;
+}
+
+/* -------------------------------------------------------------
+   Ceremonial Scissors
+   ------------------------------------------------------------- */
+.gce-scissors {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(90px, 16vw, 190px);
+  height: auto;
+  z-index: 46;
+  transform: translate(-50%, 120%) rotate(-18deg);
+  opacity: 0;
+  transition: transform 620ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 400ms ease;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,0.5));
+}
+
+.gce-is-scissors .gce-scissors {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+.gce-is-cut .gce-scissors {
+  transform: translate(-50%, -50%) rotate(0deg) scale(0.96);
+}
+
+/* Blades closing during the cut */
+.gce-scissor-blade {
+  transform-origin: 70% 30%;
+  transition: transform 220ms ease-in;
+}
+.gce-is-cut .gce-scissor-blade-top { transform: rotate(-12deg); }
+.gce-is-cut .gce-scissor-blade-bottom { transform: rotate(12deg); }
+
+.gce-is-separated .gce-scissors {
+  opacity: 0;
+  transform: translate(-50%, -160%) rotate(20deg);
+}
+
+/* -------------------------------------------------------------
+   Controls (skip, enter, audio)
+   ------------------------------------------------------------- */
+.gce-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.gce-btn {
+  pointer-events: auto;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gce-skip {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  right: max(14px, env(safe-area-inset-right, 0px));
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: rgba(220, 235, 228, 0.7);
+  background: rgba(10, 14, 12, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  transition: color 200ms ease, border-color 200ms ease, background 200ms ease;
+}
+.gce-skip:hover, .gce-skip:focus-visible {
+  color: #fff;
+  border-color: rgba(77, 255, 160, 0.5);
+  background: rgba(20, 30, 26, 0.7);
+}
+.gce-skip:focus-visible { outline: 2px solid var(--tc-green); outline-offset: 2px; }
+
+.gce-audio {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  right: max(120px, calc(env(safe-area-inset-right, 0px) + 110px));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  color: rgba(220, 235, 228, 0.75);
+  background: rgba(10, 14, 12, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  transition: color 200ms ease, border-color 200ms ease;
+}
+.gce-audio:hover, .gce-audio:focus-visible {
+  color: #fff;
+  border-color: rgba(77, 255, 160, 0.5);
+}
+.gce-audio:focus-visible { outline: 2px solid var(--tc-green); outline-offset: 2px; }
+.gce-audio svg { width: 20px; height: 20px; }
+
+.gce-enter-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: max(8%, calc(env(safe-area-inset-bottom, 0px) + 40px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 600ms ease;
+  pointer-events: none;
+}
+.gce-is-enter .gce-enter-wrap { opacity: 1; pointer-events: auto; }
+
+.gce-enter {
+  pointer-events: auto;
+  font-size: clamp(14px, 2vw, 18px);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 16px 34px;
+  border-radius: 999px;
+  color: #04281a;
+  background: linear-gradient(180deg, var(--tc-green-bright), var(--tc-green));
+  box-shadow: 0 0 30px rgba(77, 255, 160, 0.45), 0 10px 26px rgba(0,0,0,0.4);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: transform 200ms ease, box-shadow 200ms ease, filter 200ms ease;
+}
+.gce-enter:hover, .gce-enter:focus-visible {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  box-shadow: 0 0 44px rgba(77, 255, 160, 0.6), 0 12px 30px rgba(0,0,0,0.45);
+}
+.gce-enter:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+.gce-enter-hint {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(220, 235, 228, 0.55);
+}
+
+.gce-brand {
+  position: absolute;
+  left: 50%;
+  bottom: max(2.5%, calc(env(safe-area-inset-bottom, 0px) + 14px));
+  transform: translateX(-50%);
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: rgba(227, 196, 106, 0.55);
+  z-index: 41;
+  pointer-events: none;
+}
+
+/* Screen-reader only */
+.gce-sr {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* -------------------------------------------------------------
+   Reduced motion
+   ------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .gce-ambient,
+  .gce-particle,
+  .gce-city .gce-window {
+    animation: none !important;
+  }
+  .gce-backdrop,
+  .gce-doors,
+  .gce-door,
+  .gce-title,
+  .gce-welcome,
+  .gce-title-main,
+  .gce-subtitle,
+  .gce-ribbon,
+  .gce-ribbon-half,
+  .gce-scissors,
+  .gce-enter-wrap {
+    transition-duration: 600ms !important;
+    transition-property: opacity !important;
+  }
+  .gce-door { transform: none !important; }
+  .gce-is-opening .gce-door-left,
+  .gce-is-opening .gce-door-right { transform: none !important; }
+}
+
+/* Low-power: hide heavy effects */
+.gce-lowpower .gce-particles,
+.gce-lowpower .gce-beam,
+.gce-lowpower .gce-city {
+  display: none !important;
+}
+.gce-lowpower .gce-door { transition-duration: 900ms; }
+
+/* -------------------------------------------------------------
+   Confetti Trumpets (celebration)
+   ------------------------------------------------------------- */
+.gce-confetti-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 48;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.gce-trumpet {
+  position: absolute;
+  bottom: -10px;
+  width: clamp(54px, 9vw, 96px);
+  height: auto;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+  animation: gce-trumpet-in 500ms ease-out both;
+}
+.gce-trumpet-left { left: 6vw; transform: rotate(-22deg); }
+.gce-trumpet-right { right: 6vw; transform: rotate(22deg) scaleX(-1); }
+
+@keyframes gce-trumpet-in {
+  0% { transform: translateY(40px) rotate(-40deg); opacity: 0; }
+  100% { opacity: 1; }
+}
+.gce-trumpet-right { animation-name: gce-trumpet-in-right; }
+@keyframes gce-trumpet-in-right {
+  0% { transform: translateY(40px) rotate(40deg) scaleX(-1); opacity: 0; }
+  100% { transform: rotate(22deg) scaleX(-1); opacity: 1; }
+}
+
+.gce-confetti {
+  position: absolute;
+  bottom: 8%;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: gce-confetti-fly var(--dur, 2200ms) cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+  will-change: transform, opacity;
+}
+.gce-trumpet-left .gce-confetti { left: 12%; }
+.gce-trumpet-right .gce-confetti { right: 12%; }
+
+@keyframes gce-confetti-fly {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% {
+    transform: translate(var(--dx, 60px), var(--dy, -60vh)) rotate(var(--rot, 540deg));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gce-confetti, .gce-trumpet,
+  .gce-trumpet-right { animation: none !important; display: none !important; }
+}

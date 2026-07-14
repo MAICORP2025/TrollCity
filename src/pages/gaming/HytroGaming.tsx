@@ -49,6 +49,8 @@ import { useAuthStore } from '@/lib/store';
 import { cn, formatCompactNumber } from '@/lib/utils';
 import useSEO from '@/hooks/useSEO';
 import LazyLiveThumbnail from '@/components/broadcast/LazyLiveThumbnail';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { isStandalone } from '@/pwa/install';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -312,6 +314,9 @@ function GamingStreamCard({
 export default function HytroGaming() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
+  const { isMobile } = useIsMobile();
+  const isPWA = isStandalone();
+  const isMobileOrPWA = isMobile || isPWA;
 
   // ── Agency status check ──────────────────────────────────────────────────
   const [agencyStatus, setAgencyStatus] = useState<'loading' | 'approved' | 'pending' | 'none' | 'exempt'>('loading');
@@ -591,13 +596,15 @@ export default function HytroGaming() {
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() => navigate('/broadcast/setup/gaming')}
-              className="hidden rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-4 py-2.5 text-xs font-black text-white shadow-[0_0_28px_rgba(34,211,238,0.22)] transition hover:scale-[1.02] lg:inline-flex"
-            >
-              Go Live
-            </button>
+            {!isMobileOrPWA && (
+              <button
+                type="button"
+                onClick={() => navigate('/broadcast/setup/gaming')}
+                className="hidden rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-4 py-2.5 text-xs font-black text-white shadow-[0_0_28px_rgba(34,211,238,0.22)] transition hover:scale-[1.02] lg:inline-flex"
+              >
+                Go Live
+              </button>
+            )}
           </div>
 
           <div className="mt-3 sm:hidden">
@@ -626,75 +633,80 @@ export default function HytroGaming() {
         </div>
       </header>
 
-      {/* ── Agency Application Gate ─────────────────────────────────────────── */}
-      {agencyStatus === 'loading' && (
-        <div className="relative z-10 mx-auto max-w-7xl px-4 py-12">
-          <div className="flex flex-col items-center justify-center gap-4 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
-            <p className="text-sm text-slate-400">Checking agency status...</p>
-          </div>
-        </div>
-      )}
-
-      {agencyStatus === 'pending' && (
-        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-6">
-          <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5 text-center">
-            <Clock3 className="mx-auto h-8 w-8 text-amber-300" />
-            <h3 className="mt-3 text-lg font-black text-amber-100">Agency Application Pending</h3>
-            <p className="mt-2 text-sm text-slate-400">
-              Your agency application is under review. You'll be able to access HytroGaming once approved.
+      {/* ── Mobile/PWA Notice ────────────────────────────────────────────────── */}
+      {isMobileOrPWA && (
+        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-4">
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/5 p-4 text-center">
+            <p className="text-sm font-semibold text-cyan-100">
+              HytroGame streaming is currently available on desktop. You can still watch and interact with streams from this device.
             </p>
-            <button
-              type="button"
-              onClick={() => navigate('/hytrogaming/apply')}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300 px-5 py-2.5 text-sm font-black text-slate-950 transition hover:bg-amber-200"
-            >
-              <Briefcase className="h-4 w-4" />
-              View Application
-            </button>
-          </div>
-        </div>
-      )}
-
-      {agencyStatus === 'none' && user && (
-        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-6">
-          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/5 p-6 text-center sm:p-8">
-            <Gamepad2 className="mx-auto h-10 w-10 text-cyan-300" />
-            <h3 className="mt-4 text-xl font-black text-white">Apply for Agency to Game Share</h3>
-            <p className="mt-2 max-w-lg mx-auto text-sm text-slate-400">
-              To stream on HytroGaming, you need to apply for an agency. 
-              The startup fee is the same as regular agencies, with a monthly fee of 5,000 Troll Coins.
-              You can also apply for a loan to cover the fees.
-            </p>
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <button
-                type="button"
-                onClick={() => navigate('/hytrogaming/apply')}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-6 py-3 text-sm font-black text-white shadow-[0_0_35px_rgba(34,211,238,0.20)] transition hover:scale-[1.02]"
-              >
-                <Briefcase className="h-4 w-4" />
-                Apply for Agency
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/agencies')}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white/90 transition hover:bg-white/[0.1]"
-              >
-                Learn More
-              </button>
-            </div>
           </div>
         </div>
       )}
 
       <main className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-6 sm:pt-8">
-        {/* Only show content if user has agency or is exempt */}
-        {(agencyStatus !== 'approved' && agencyStatus !== 'exempt') && (
-          <div className="py-12 text-center">
-            <p className="text-sm text-slate-500">Apply for an agency to access HytroGaming streams.</p>
+        {/* ── Desktop Agency Gate ───────────────────────────────────────────── */}
+        {!isMobileOrPWA && agencyStatus === 'loading' && (
+          <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
+            <p className="text-sm text-slate-400">Checking agency status...</p>
           </div>
         )}
-        {(agencyStatus === 'approved' || agencyStatus === 'exempt') && (
+
+        {!isMobileOrPWA && agencyStatus === 'pending' && (
+          <div className="mx-auto max-w-7xl px-4 py-12">
+            <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 p-5 text-center">
+              <Clock3 className="mx-auto h-8 w-8 text-amber-300" />
+              <h3 className="mt-3 text-lg font-black text-amber-100">Agency Application Pending</h3>
+              <p className="mt-2 text-sm text-slate-400">
+                Your agency application is under review. You'll be able to access HytroGaming once approved.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/hytrogaming/apply')}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300 px-5 py-2.5 text-sm font-black text-slate-950 transition hover:bg-amber-200"
+              >
+                <Briefcase className="h-4 w-4" />
+                View Application
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!isMobileOrPWA && agencyStatus === 'none' && user && (
+          <div className="mx-auto max-w-7xl px-4 py-12">
+            <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/5 p-6 text-center sm:p-8">
+              <Gamepad2 className="mx-auto h-10 w-10 text-cyan-300" />
+              <h3 className="mt-4 text-xl font-black text-white">Apply for Agency to Game Share</h3>
+              <p className="mt-2 max-w-lg mx-auto text-sm text-slate-400">
+                To stream on HytroGaming, you need to apply for an agency. 
+                The startup fee is the same as regular agencies, with a monthly fee of 5,000 Troll Coins.
+                You can also apply for a loan to cover the fees.
+              </p>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <button
+                  type="button"
+                  onClick={() => navigate('/hytrogaming/apply')}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-6 py-3 text-sm font-black text-white shadow-[0_0_35px_rgba(34,211,238,0.20)] transition hover:scale-[1.02]"
+                >
+                  <Briefcase className="h-4 w-4" />
+                  Apply for Agency
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/agencies')}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white/90 transition hover:bg-white/[0.1]"
+                >
+                  Learn More
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Streams Content ───────────────────────────────────────────────── */}
+        {/* Mobile/PWA always shows streams. Desktop requires approved/exempt. */}
+        {(isMobileOrPWA || agencyStatus === 'approved' || agencyStatus === 'exempt') && (
         <>
         {/* Hero */}
         <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/30 backdrop-blur-2xl sm:p-8 lg:p-10">
@@ -724,14 +736,16 @@ export default function HytroGaming() {
               </p>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => navigate('/broadcast/setup/gaming')}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-5 py-3 text-sm font-black text-white shadow-[0_0_35px_rgba(34,211,238,0.20)] transition hover:scale-[1.02]"
-                >
-                  <Radio className="h-4 w-4" />
-                  Start Gaming Stream
-                </button>
+                {!isMobileOrPWA && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/broadcast/setup/gaming')}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 px-5 py-3 text-sm font-black text-white shadow-[0_0_35px_rgba(34,211,238,0.20)] transition hover:scale-[1.02]"
+                  >
+                    <Radio className="h-4 w-4" />
+                    Start Gaming Stream
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -898,7 +912,7 @@ export default function HytroGaming() {
                     : 'Be the first creator to light up the HytroGaming arena.'}
                 </p>
 
-                {!searchQuery.trim() && (
+                {!searchQuery.trim() && !isMobileOrPWA && (
                   <button
                     type="button"
                     onClick={() => navigate('/broadcast/setup/gaming')}
@@ -911,7 +925,7 @@ export default function HytroGaming() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {filteredStreams.map((stream) => (
                 <GamingStreamCard
                   key={stream.id}

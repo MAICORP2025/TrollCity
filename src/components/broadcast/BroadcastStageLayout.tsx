@@ -293,7 +293,7 @@ function EmptyStagePassTile({
       disabled={disabled}
       onClick={isHost ? onOpenPassModal : onRequestPass}
        className={cn(
-         'relative aspect-square overflow-hidden rounded-2xl border border-dashed p-4 text-center transition-all',
+          'relative aspect-video overflow-hidden rounded-2xl border border-dashed p-4 text-center transition-all',
         'bg-black/25 backdrop-blur-xl',
         disabled
           ? 'cursor-not-allowed border-white/10 text-white/35'

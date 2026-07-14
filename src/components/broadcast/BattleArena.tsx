@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { Stream } from '../../types/broadcast';
 import { useAuthStore } from '../../lib/store';
 import { PreflightStore } from '../../lib/preflightStore';
-import { Loader2, Coins, User, MicOff, VideoOff, Mic, Video, Plus, Minus, Crown, Flame, Skull, X } from 'lucide-react';
+import { Loader2, Coins, User, MicOff, VideoOff, Mic, Video, Plus, Minus, Crown, Flame, Skull, X, Gift } from 'lucide-react';
 import { useCoins } from '../../lib/hooks/useCoins';
 import useTrollFamilyActivity from '../../hooks/useTrollFamilyActivity';
 import { useBattleRealtime } from '../../hooks/useBattleRealtime';
@@ -336,8 +336,10 @@ interface BattleParticipantTileProps extends BattleParticipant {
 
 export const BattleVideoRenderer = ({
   videoTrack,
+  isHost = false,
 }: {
   videoTrack?: LocalVideoTrack | RemoteVideoTrack;
+  isHost?: boolean;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -388,6 +390,16 @@ export const BattleVideoRenderer = ({
   }, [videoTrack]);
 
   if (!videoTrack) {
+    if (isHost) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+          <div className="flex flex-col items-center gap-2 text-white/70">
+            <VideoOff size={32} className="animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider">Reconnecting...</span>
+          </div>
+        </div>
+      );
+    }
     return null;
   }
 
@@ -461,8 +473,8 @@ const BattleParticipantTile = ({
   }, [identity, isSingleHost, isHost, name, side, videoTrack]);
 
   const containerClass = isSingleHost
-    ? `relative w-full aspect-square md:h-full min-h-0 rounded-2xl overflow-hidden bg-black transition-all duration-300`
-    : `relative w-full aspect-square md:aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 ${side === 'challenger' ? 'border-emerald-400/70 shadow-[0_0_22px_rgba(16,185,129,0.24)]' : 'border-fuchsia-500/60 shadow-[0_0_22px_rgba(192,38,211,0.24)]'} bg-black`;
+    ? `relative w-full aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden bg-black transition-all duration-300`
+    : `relative w-full aspect-video md:aspect-video md:h-full min-h-0 rounded-2xl overflow-hidden border-2 transition-all duration-300 ${side === 'challenger' ? 'border-emerald-400/70 shadow-[0_0_22px_rgba(16,185,129,0.24)]' : 'border-fuchsia-500/60 shadow-[0_0_22px_rgba(192,38,211,0.24)]'} bg-black`;
 
   return (
     <div
@@ -478,6 +490,7 @@ const BattleParticipantTile = ({
       <div className="absolute inset-0 pointer-events-none">
         <BattleVideoRenderer
           videoTrack={videoTrack}
+          isHost={isHost}
         />
       </div>
 
@@ -985,16 +998,14 @@ const BattleArena = ({
           };
 
           // Helper to find RemoteParticipant by LiveKit identity
-          const findRemoteParticipant = (livekitIdentity: string): RemoteParticipant | undefined => {
-            const normalizedIdentity = String(livekitIdentity || '').replace(/-/g, '').toLowerCase();
+          const findRemoteParticipant = (liveKitIdentity: string): RemoteParticipant | undefined => {
+            const normalizedTarget = String(liveKitIdentity || '').replace(/-/g, '').toLowerCase();
             return remoteUsers.find((u) => {
               const id = String(u.identity || '');
               const normalized = id.replace(/-/g, '').toLowerCase();
               return (
-                id === livekitIdentity ||
-                normalized === normalizedIdentity ||
-                normalized.startsWith(normalizedIdentity.substring(0, 8)) ||
-                normalizedIdentity.startsWith(normalized.substring(0, 8))
+                id === liveKitIdentity ||
+                normalized === normalizedTarget
               );
             });
           };
@@ -1119,22 +1130,20 @@ const BattleArena = ({
               }
             }
 
-            // Final fallback for viewer/mobile: infer host identity even when mapping is stale/missing.
+            // Final fallback for viewer/mobile: infer host identity only when mapping is stale/missing.
+            // Use STRICT matching to prevent the same remote participant being assigned to both teams.
             if (!matchedUserId) {
-              if (
-                remoteIdentityNorm === challengerIdentityGuess ||
-                remoteIdentityNorm.startsWith(challengerIdentityGuess.substring(0, 8)) ||
-                challengerIdentityGuess.startsWith(remoteIdentityNorm.substring(0, 8))
-              ) {
+              const challengerExact = remoteIdentityNorm === challengerIdentityGuess;
+              const opponentExact = remoteIdentityNorm === opponentIdentityGuess;
+              if (challengerExact && !opponentExact) {
                 matchedUserId = challengerHostId;
                 matchedTeam = 'challenger';
-              } else if (
-                remoteIdentityNorm === opponentIdentityGuess ||
-                remoteIdentityNorm.startsWith(opponentIdentityGuess.substring(0, 8)) ||
-                opponentIdentityGuess.startsWith(remoteIdentityNorm.substring(0, 8))
-              ) {
+              } else if (opponentExact && !challengerExact) {
                 matchedUserId = opponentHostId;
                 matchedTeam = 'opponent';
+              } else if (challengerExact && opponentExact) {
+                matchedUserId = challengerHostId;
+                matchedTeam = 'challenger';
               }
             }
 
@@ -1318,9 +1327,7 @@ const BattleArena = ({
           const normalized = id.replace(/-/g, '').toLowerCase();
           return (
             id === liveKitIdentity ||
-            normalized === normalizedIdentity ||
-            normalized.startsWith(normalizedIdentity.substring(0, 8)) ||
-            normalizedIdentity.startsWith(normalized.substring(0, 8))
+            normalized === normalizedIdentity
           );
         });
         if (!remote) return;
@@ -1413,10 +1420,17 @@ const BattleArena = ({
         const finalChallengerHost = participantsData.find(p => p.role === 'host' && p.team === 'challenger' && p.videoTrack);
         const finalOpponentHost = participantsData.find(p => p.role === 'host' && p.team === 'opponent' && p.videoTrack);
 
+        const assignedRemoteIdentities = new Set<string>();
+        for (const p of participantsData) {
+          if (p.videoTrack && (p as any).__remoteIdentity) {
+            assignedRemoteIdentities.add((p as any).__remoteIdentity);
+          }
+        }
+
         if (!finalChallengerHost) {
           const anyRemoteWithVideo = remoteUsers.find(u => {
             const pubs = getTrackPublications(u, 'video');
-            return pubs.some(p => p.track);
+            return pubs.some(p => p.track) && !assignedRemoteIdentities.has(u.identity);
           });
           if (anyRemoteWithVideo) {
             const p = anyRemoteWithVideo;
@@ -1435,7 +1449,8 @@ const BattleArena = ({
               team: 'challenger',
               sourceStreamId: undefined,
               seatIndex: 0,
-            });
+            } as any);
+            assignedRemoteIdentities.add(p.identity);
             console.log('[BattleArena] ULTRA-FALLBACK: Assigned remote user to challenger slot', p.identity?.substring(0, 8));
           }
         }
@@ -1443,7 +1458,7 @@ const BattleArena = ({
         if (!finalOpponentHost) {
           const anyRemoteWithVideo = remoteUsers.find(u => {
             const pubs = getTrackPublications(u, 'video');
-            return pubs.some(p => p.track) && u.identity !== participantsData.find(p => p.videoTrack)?.identity;
+            return pubs.some(p => p.track) && !assignedRemoteIdentities.has(u.identity);
           });
           if (anyRemoteWithVideo) {
             const p = anyRemoteWithVideo;
@@ -1462,7 +1477,7 @@ const BattleArena = ({
               team: 'opponent',
               sourceStreamId: undefined,
               seatIndex: 0,
-            });
+            } as any);
             console.log('[BattleArena] ULTRA-FALLBACK: Assigned remote user to opponent slot', p.identity?.substring(0, 8));
           }
         }
@@ -1549,7 +1564,7 @@ const BattleArena = ({
   const handleAddSeat = async (team: 'challenger' | 'opponent') => {
     if (seatSaving[team] || !onChangeBoxCount) return;
     const cur = team === 'challenger' ? challengerBoxCount : opponentBoxCount;
-    const next = Math.min(6, (cur || 1) + 1);
+    const next = Math.min(3, (cur || 1) + 1);
     if (next === (cur || 1)) return;
     setSeatSaving((s) => ({ ...s, [team]: true }));
     try {
@@ -1593,7 +1608,7 @@ const BattleArena = ({
             <Minus size={14} />
           </button>
         )}
-        {boxCount < 6 && (
+        {boxCount < 3 && (
           <button
             type="button"
             disabled={saving}
@@ -2151,10 +2166,11 @@ return (
             {!isBroadcaster && (
               <button
                 onClick={() => handleSideGiftClick('challenger')}
-                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
-              >
-                Gift Side A
-              </button>
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
+               >
+                 <Gift size={14} />
+                 Gift Side A
+               </button>
             )}
             
              {/* Unified Grid for Host + Guests */}
@@ -2293,10 +2309,11 @@ return (
             {!isBroadcaster && (
               <button
                 onClick={() => handleSideGiftClick('opponent')}
-                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-              >
-                Gift Side B
-              </button>
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
+               >
+                 <Gift size={14} />
+                 Gift Side B
+               </button>
             )}
             
              {/* Unified Grid for Host + Guests - match BroadcastGrid layout */}
@@ -2411,10 +2428,11 @@ return (
             {!isBroadcaster && (
               <button
                 onClick={() => handleSideGiftClick('challenger')}
-                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
-              >
-                Gift Side A
-              </button>
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 text-white border border-purple-400/50 shadow-lg shadow-purple-500/20 transition-all hover:scale-105"
+               >
+                 <Gift size={14} />
+                 Gift Side A
+               </button>
             )}
             <div className={`grid gap-2 ${getGridClass(challengerSlots.length)} h-full`}>
               {challengerSlots.map((slot, idx) => (
@@ -2512,10 +2530,11 @@ return (
             {!isBroadcaster && (
               <button
                 onClick={() => handleSideGiftClick('opponent')}
-                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
-              >
-                Gift Side B
-              </button>
+                className="hidden md:inline-flex self-start relative z-20 pointer-events-auto touch-manipulation items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white border border-emerald-400/50 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
+               >
+                 <Gift size={14} />
+                 Gift Side B
+               </button>
             )}
             <div className={`grid gap-2 ${getGridClass(opponentSlots.length)} h-full`}>
               {opponentSlots.map((slot, idx) => (

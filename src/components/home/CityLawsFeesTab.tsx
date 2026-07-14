@@ -66,7 +66,7 @@ export default function CityLawsFeesTab() {
     },
     {
       name: 'Auction Payout',
-      rate: 'Seller receives 97%',
+      rate: 'Auctioneer receives 97%',
       description: 'Auction sale after platform fee',
       icon: <Gavel className="h-4 w-4" />,
     },
@@ -79,8 +79,8 @@ export default function CityLawsFeesTab() {
   ], [])
 
   const payoutInfo = {
-    day: 'Fridays',
-    system: 'MAI Pay via MAICorp.online',
+    day: 'Based on Level Every Hr, Every 24 hrs, or every Friday',
+    system: 'MAI Pay',
   }
 
   const getTimeRemaining = (endDate: string | null) => {
@@ -273,7 +273,7 @@ export default function CityLawsFeesTab() {
                   <div key={protest.id} className="border-b border-red-300/10 py-2 last:border-0">
                     <p className="font-bold text-red-200">{protest.title}</p>
                     <p className="text-xs text-slate-400">
-                      {protest.participant_count} participants • {protest.status}
+                      {protest.participant_count} participants ï¿½ {protest.status}
                     </p>
                   </div>
                 ))}
@@ -402,7 +402,7 @@ function VotingLawCard({
           />
         </div>
         <p className="mt-1 text-xs text-slate-400">
-          {getTimeRemaining(law.voting_ends_at)} • {law.required_votes} votes needed
+          {getTimeRemaining(law.voting_ends_at)} ï¿½ {law.required_votes} votes needed
         </p>
       </div>
     </div>

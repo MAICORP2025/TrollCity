@@ -106,6 +106,10 @@ const AuthCallback = () => {
 
         setAuth(u as any, sessionData, sessionId)
 
+        // Mark a fresh login so the Grand City Entrance replays the
+        // ceremonial welcome on every login (including staff/employees).
+        try { sessionStorage.setItem('tc_just_logged_in', '1') } catch { /* ignore */ }
+
         const fetchProfile = async () => {
           const { data: profile } = await supabase
             .from('user_profiles')

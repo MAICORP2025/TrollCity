@@ -501,15 +501,16 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Courses', icon: BookOpen, path: '/academy/courses' },
         ],
       },
-      {
-        category: 'Tools & Help',
-        items: [
-          { label: 'Stats', icon: Activity, path: '/stats' },
-          { label: 'Support', icon: Heart, path: '/support' },
-          { label: 'Safety', icon: Shield, path: '/safety' },
-          { label: 'Policies', icon: FileText_M, path: '/legal' },
-        ],
-      },
+        {
+          category: 'Tools & Help',
+          items: [
+            { label: 'Beta Feedback', icon: ClipboardList, path: '/beta-feedback' },
+            { label: 'Stats', icon: Activity, path: '/stats' },
+            { label: 'Support', icon: Heart, path: '/support' },
+            { label: 'Safety', icon: Shield, path: '/safety' },
+            { label: 'Policies', icon: FileText_M, path: '/legal' },
+          ],
+        },
       ...(isAdmin
         ? [
             {
@@ -806,10 +807,11 @@ export default function BottomNavBar() {
               /* MOBILE: 7 tiles — Home, Go Live, Coins, Chats, Treelz, Podcast, More */
                <nav className="flex flex-1 items-center justify-around">
                  <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
-                 <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
-                 <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
-                 <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
-                 <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
+                  <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
+                  <NavButton icon={ClipboardList} label="Beta" to="/beta-feedback" active={isActive('/beta-feedback')} size="large" />
+                  <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
+                  <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
+                  <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
                  <NavButton
                    icon={LayoutGrid}
                    label="More"
@@ -841,26 +843,22 @@ export default function BottomNavBar() {
                 <NavButton icon={Users} label="Family" to="/family/home" active={isActive('/family')} badge={badges.family} badgeKey="family" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Store} label="Shop" to="/marketplace" active={isActive('/marketplace')} badge={badges.shop} badgeKey="shop" onBadgeDismiss={badges.dismiss} />
                 <NavButton icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} badge={badges.inventory} badgeKey="inventory" onBadgeDismiss={badges.dismiss} />
-                <NavButton icon={BookOpen} label="Church" to="/church" active={isActive('/church')} />
-                <NavButton icon={Compass} label="Explore" to="/explore" active={isActive('/explore') || isActive('/live')} />
+                 <NavButton icon={BookOpen} label="Church" to="/church" active={isActive('/church')} />
+                 <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} />
+                 <NavButton icon={Compass} label="Explore" to="/explore" active={isActive('/explore') || isActive('/live')} />
+               </nav>
+             )}
 
-                <NavButton icon={Shuffle} label="Troll Wheel" to="/troll-wheel" active={isActive('/troll-wheel')} />
-<NavButton icon={Car} label="Cars" to="/ktauto" active={isActive('/ktauto')} />
-                  <NavButton icon={Briefcase} label="Careers" to="/careers" active={isActive('/careers')} />
-
-                  <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} />
-              </nav>
-            )}
-
-            {/* RIGHT: More Pages (desktop only — mobile has it in the 5-tile row) */}
-            <div className="hidden min-w-0 flex-1 items-center justify-end md:flex">
-              <NavButton
-                icon={LayoutGrid}
-                label="More"
-                onClick={() => setMorePagesOpen(true)}
-                active={morePagesOpen}
-              />
-            </div>
+             {/* RIGHT: Beta Feedback + More Pages (desktop only) */}
+             <div className="hidden min-w-0 flex-1 items-center justify-end gap-2 md:flex">
+               <NavButton icon={ClipboardList} label="Beta Feedback" to="/beta-feedback" active={isActive('/beta-feedback')} />
+               <NavButton
+                 icon={LayoutGrid}
+                 label="More"
+                 onClick={() => setMorePagesOpen(true)}
+                 active={morePagesOpen}
+               />
+             </div>
           </div>
         </div>
       </div>
