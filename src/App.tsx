@@ -494,6 +494,7 @@ import ExitPage from "./pages/ExitPage.js";
 import FoundingOfficerTrial from "./pages/FoundingOfficerTrial.js";
 import AppLayout from "./components/layout/AppLayout.js";
 import ExploreFeed from "./pages/ExploreFeed.js";
+import HighBcastersPage from "./pages/HighBcasters";
 import ExploreSearchResults from "./pages/ExploreSearchResults.js";
 import StreamSwipePage from "./pages/StreamSwipePage.js";
 import ApplicationPage from "./pages/ApplicationPage.js";
@@ -1523,9 +1524,10 @@ const handleVisibilityChange = async () => {
                 <Route path="/legal/creator-earnings" element={<CreatorEarnings />} />
                 <Route path="/legal/gambling-disclosure" element={<GamblingDisclosure />} />
                  
-                {/* 🔓 Public Discover & Watch */}
-                <Route path="/explore" element={<ExploreSearchResults />} />
-                <Route path="/live-swipe" element={<StreamSwipePage />} />
+                 {/* 🔓 Public Discover & Watch */}
+                 <Route path="/explore" element={<ExploreSearchResults />} />
+                 <Route path="/high-bcasters" element={<HighBcastersPage />} />
+                 <Route path="/live-swipe" element={<StreamSwipePage />} />
                 <Route path="/embed/:id" element={<EmbedPage />} />
                 <Route path="/how-to-videos" element={<HowToVideosPage />} />
                 <Route path="/hytrogaming" element={<HytroGaming />} />

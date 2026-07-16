@@ -35,6 +35,7 @@ import MobileViewerPage from "./pages/MobileViewerPage";
 import MobileBroadcastPage from "./pages/MobileBroadcastPage";
 import MobileProfilePage from "./pages/MobileProfilePage";
 import MobileWalletPage from "./pages/MobileWalletPage";
+import MobileHighBcastersPage from "./pages/MobileHighBcastersPage";
 import MobileLiveNowPage from "./pages/MobileLiveNowPage";
 import MobileNotificationsPage from "./pages/MobileNotificationsPage";
 import MobileMessagesPage from "./pages/MobileMessagesPage";
@@ -135,6 +136,17 @@ export const mobileRoutes: MobileRouteItem[] = [
     icon: DollarSign,
     priority: 40,
     regular: true,
+    showInBottomBubble: true,
+  },
+  {
+    key: "high-bcasters",
+    label: "High Bcasters",
+    path: "/high-bcasters",
+    element: <MobileHighBcastersPage />,
+    icon: Crown,
+    priority: 52,
+    regular: true,
+    public: true,
     showInBottomBubble: true,
   },
   {

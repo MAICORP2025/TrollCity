@@ -20,6 +20,7 @@ import {
   Package,
   Play,
   Plus,
+  Printer,
   Radio,
   RefreshCw,
   Save,
@@ -39,6 +40,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { validateFile, FILE_VALIDATION } from '../../lib/fileValidation'
 import { cn } from '../../lib/utils'
+import { generateBarcodeDataURL } from '../../lib/barcode'
 
 interface AuctionShow {
   id: string
@@ -69,6 +71,8 @@ interface AuctionLot {
   status: 'draft' | 'queued' | 'live' | 'sold' | 'pass' | 'removed'
   queue_position: number
   created_at: string
+  show_title?: string | null
+  barcode?: string | null
 }
 
 const CATEGORIES = [
@@ -166,8 +170,16 @@ export default function AuctionStudio() {
 
   const [showCreator, setShowCreator] = useState(false)
   const [lotCreator, setLotCreator] = useState(false)
+  const [inventoryPicker, setInventoryPicker] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [query, setQuery] = useState('')
+  const [testScanPopup, setTestScanPopup] = useState<{
+    barcode: string
+    title: string | null
+    lot_number: string | null
+    found: boolean
+    timestamp: string
+  } | null>(null)
 
   const [showForm, setShowForm] = useState({
     title: '',
@@ -313,6 +325,107 @@ export default function AuctionStudio() {
   useEffect(() => {
     void fetchMyShows()
   }, [fetchMyShows])
+
+  // Listen for test-scan broadcasts from the Auction App's "Test Barcode Scanner"
+  // so the auctioneer gets a popup confirming the scanner is linked and the
+  // barcode matches an item.
+  useEffect(() => {
+    if (!auctioneerId) return
+    const channel = supabase
+      .channel(`auctioneer_test_scan:${auctioneerId}`)
+      .on('broadcast', { event: 'test_scan' }, ({ payload }) => {
+        setTestScanPopup({
+          barcode: payload.barcode,
+          title: payload.title || null,
+          lot_number: payload.lot_number || null,
+          found: !!payload.found,
+          timestamp: payload.timestamp,
+        })
+      })
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [auctioneerId])
+
+  // Inventory pulled from every show (auction_lots with qty > 0), used to add
+  // to the queue and deduct stock as lots are queued.
+  const [inventory, setInventory] = useState<AuctionLot[]>([])
+
+  const fetchInventory = useCallback(async () => {
+    if (!auctioneerId) return
+    try {
+      const { data: showsData } = await supabase
+        .from('auction_shows')
+        .select('id, title')
+        .eq('auctioneer_id', auctioneerId)
+      const showIds = (showsData || []).map((s) => s.id)
+      const showMap = new Map((showsData || []).map((s) => [s.id, s.title]))
+      if (showIds.length === 0) {
+        setInventory([])
+        return
+      }
+      const { data } = await supabase
+        .from('auction_lots')
+        .select('*')
+        .in('auction_show_id', showIds)
+        .neq('status', 'removed')
+        .gt('quantity', 0)
+        .order('created_at', { ascending: false })
+      const rows = (data || []) as AuctionLot[]
+      setInventory(
+        rows.map((row) => ({ ...row, show_title: showMap.get(row.auction_show_id) || null }) as any),
+      )
+    } catch (error) {
+      logStudioError('fetchInventory', error, 'Failed to load inventory')
+    }
+  }, [auctioneerId])
+
+  useEffect(() => {
+    void fetchInventory()
+  }, [fetchInventory])
+
+  const addFromInventory = async (sourceLotId: string, qty: number) => {
+    if (!selectedShow) return toast.error('Select a show first')
+    if (!qty || qty < 1) return toast.error('Choose at least 1 item')
+    const source = inventory.find((i) => i.id === sourceLotId)
+    if (!source) return toast.error('Inventory item not found')
+    if (qty > (source.quantity || 0)) return toast.error('Not enough stock in inventory')
+
+    try {
+      const maxPosition = lots.reduce((max, lot) => Math.max(max, Number(lot.queue_position || 0)), 0)
+      const { error: insertError } = await supabase.from('auction_lots').insert({
+        auction_show_id: selectedShow.id,
+        title: source.title,
+        description: source.description,
+        image_url: source.image_url,
+        starting_bid: Number(source.starting_bid || 100),
+        reserve_price: Number(source.reserve_price || 0) > 0 ? Number(source.reserve_price) : null,
+        bid_increment: Number(source.bid_increment || 500),
+        buy_now_price: Number(source.buy_now_price || 0) > 0 ? Number(source.buy_now_price) : null,
+        quantity: qty,
+        condition: source.condition,
+        status: 'queued',
+        queue_position: maxPosition + 1,
+      })
+      if (insertError) throw insertError
+
+      const remaining = (source.quantity || 0) - qty
+      const { error: updateError } = await supabase
+        .from('auction_lots')
+        .update({ quantity: remaining })
+        .eq('id', sourceLotId)
+      if (updateError) throw updateError
+
+      toast.success(`Added ${qty} × ${source.title} to queue`)
+      await fetchInventory()
+      await fetchLots(selectedShow.id)
+      await fetchMyShows()
+    } catch (error: any) {
+      const message = logStudioError('addFromInventory', error, 'Failed to add from inventory')
+      toast.error(message)
+    }
+  }
 
   useEffect(() => {
     if (selectedShow?.id) {
@@ -525,6 +638,61 @@ export default function AuctionStudio() {
     }
   }
 
+  const printBarcodeLabel = useCallback(async (lotId: string) => {
+    try {
+      const start = Date.now()
+      const wait = async () => {
+        const { data: lot } = await supabase
+          .from('auction_lots')
+          .select('*')
+          .eq('id', lotId)
+          .single()
+        if (lot?.barcode && lot?.lot_number) {
+          const dataURL = generateBarcodeDataURL(lot.barcode)
+          const printWindow = window.open('', '_blank', 'width=400,height=600')
+          if (!printWindow) {
+            toast.error('Pop-up blocked. Allow pop-ups to print labels.')
+            return
+          }
+          printWindow.document.write(`
+            <html>
+              <head>
+                <title>Print Label</title>
+                <style>
+                  @page { size: 2.4in 1in; margin: 0; }
+                  body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #fff; font-family: Arial, sans-serif; }
+                  .label { width: 2.4in; height: 1in; border: 2px solid #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+                  .label img { max-width: 90%; max-height: 55%; }
+                  .label p { margin: 2px 0; font-size: 14px; font-weight: bold; text-align: center; }
+                  .label .meta { font-size: 10px; color: #333; }
+                </style>
+              </head>
+              <body>
+                <div class="label">
+                  <img src="${dataURL}" alt="${lot.barcode}" />
+                  <p>${lot.barcode}</p>
+                  <p class="meta">${lot.title} · ${selectedShow?.title || ''}</p>
+                </div>
+              </body>
+            </html>
+          `)
+          printWindow.document.close()
+          printWindow.focus()
+          setTimeout(() => {
+            printWindow.print()
+          }, 300)
+        } else if (Date.now() - start < 3000) {
+          setTimeout(wait, 200)
+        } else {
+          toast.error('Barcode not ready yet')
+        }
+      }
+      void wait()
+    } catch {
+      toast.error('Failed to print label')
+    }
+  }, [selectedShow?.title])
+
   const goLive = async (show: AuctionShow) => {
     const showLotCount = show.lot_count || lots.length
 
@@ -719,6 +887,7 @@ export default function AuctionStudio() {
                     lotCount={selectedShow.lot_count || lots.length}
                     onPreview={() => navigate(`/auctions/${selectedShow.id}`)}
                     onAddItem={() => setLotCreator(true)}
+                    onAddFromInventory={() => setInventoryPicker(true)}
                     onGoLive={() => void goLive(selectedShow)}
                     onDelete={() => void deleteShow(selectedShow.id)}
                   />
@@ -779,6 +948,7 @@ export default function AuctionStudio() {
                               onSold={() => void updateLotStatus(lot.id, 'sold')}
                               onPass={() => void updateLotStatus(lot.id, 'pass')}
                               onRemove={() => void updateLotStatus(lot.id, 'removed')}
+                              onPrint={() => void printBarcodeLabel(lot.id)}
                             />
                           ))}
                         </div>
@@ -1078,7 +1248,181 @@ export default function AuctionStudio() {
           </button>
         </Modal>
       )}
+
+      {inventoryPicker && (
+        <InventoryPickerModal
+          inventory={inventory}
+          onClose={() => setInventoryPicker(false)}
+          onAdd={async (id, qty) => {
+            await addFromInventory(id, qty)
+          }}
+        />
+      )}
+
+      {testScanPopup && (
+        <TestScanPopup
+          data={testScanPopup}
+          onClose={() => setTestScanPopup(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function TestScanPopup({
+  data,
+  onClose,
+}: {
+  data: { barcode: string; title: string | null; lot_number: string | null; found: boolean; timestamp: string }
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 8000)
+    return () => clearTimeout(t)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-[99995] flex items-start justify-center bg-black/70 p-4 pt-28 backdrop-blur-md">
+      <div className={cn(panel, 'w-full max-w-md overflow-hidden p-6 text-center')}>
+        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full border border-emerald-300/30 bg-emerald-400/10">
+          <CheckCircle2 className="h-7 w-7 text-emerald-300" />
+        </div>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Scanner Connected</p>
+        <h2 className="mt-1 text-xl font-black text-white">Test Scan Received</h2>
+
+        <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-white/[0.03] p-4 text-left">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Barcode</p>
+          <p className="break-all font-mono text-sm font-bold text-cyan-200">{data.barcode}</p>
+
+          {data.title ? (
+            <>
+              <p className="mt-3 text-xs font-bold uppercase tracking-wider text-slate-500">Item</p>
+              <p className="font-black text-white">{data.title}</p>
+              {data.lot_number && (
+                <p className="text-xs text-slate-400">Lot #{data.lot_number}</p>
+              )}
+            </>
+          ) : (
+            <p className="mt-3 text-sm font-bold text-amber-300">
+              Barcode received, but no matching item was found. The scanner link works.
+            </p>
+          )}
+        </div>
+
+        <p className="mt-3 text-[10px] text-slate-500">
+          {new Date(data.timestamp).toLocaleTimeString()} · Auction App → Auction Studio
+        </p>
+
+        <button onClick={onClose} className={cn(primary, 'mt-4 w-full')}>
+          <Check className="h-4 w-4" />
+          Got it
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function InventoryPickerModal({
+  inventory,
+  onClose,
+  onAdd,
+}: {
+  inventory: AuctionLot[]
+  onClose: () => void
+  onAdd: (lotId: string, qty: number) => Promise<void>
+}) {
+  const [selectedId, setSelectedId] = useState<string>('')
+  const [qty, setQty] = useState<number>(1)
+  const [busy, setBusy] = useState(false)
+
+  const selected = inventory.find((i) => i.id === selectedId) || null
+  const max = selected ? (selected.quantity || 0) : 0
+
+  const handleAdd = async () => {
+    if (!selectedId) return toast.error('Select an inventory item')
+    if (qty < 1) return toast.error('Choose at least 1 item')
+    setBusy(true)
+    try {
+      await onAdd(selectedId, qty)
+      onClose()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title="Add from Inventory" onClose={onClose}>
+      <Field label="Inventory Item">
+        <select
+          className={input}
+          value={selectedId}
+          onChange={(e) => {
+            setSelectedId(e.target.value)
+            setQty(1)
+          }}
+        >
+          <option value="" className="bg-slate-950">Select an item…</option>
+          {inventory.map((item) => (
+            <option key={item.id} value={item.id} className="bg-slate-950">
+              {item.title} — {item.quantity} in stock{(item.show_title && item.show_title !== '') ? ` (${item.show_title})` : ''}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {inventory.length === 0 && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-center text-sm text-slate-500">
+          No inventory items with stock available. Add items to a show first.
+        </div>
+      )}
+
+      {selected && (
+        <div className="rounded-2xl border border-cyan-300/15 bg-white/[0.03] p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-16 w-20 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-[#07101f]">
+              {selected.image_url ? (
+                <img src={selected.image_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <Package className="h-7 w-7 text-slate-600" />
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-black text-white">{selected.title}</p>
+              <p className="text-xs text-slate-400">In stock: <span className="text-amber-300">{selected.quantity}</span></p>
+              {selected.barcode && (
+                <p className="text-[10px] font-mono text-slate-500">{selected.barcode}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <Field label={`How many to add? (max ${max})`}>
+              <input
+                type="number"
+                min={1}
+                max={max}
+                className={input}
+                value={qty}
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(max, Number(e.target.value) || 1))
+                  setQty(v)
+                }}
+              />
+            </Field>
+            <p className="mt-2 text-xs text-slate-500">
+              Adding <span className="font-bold text-cyan-200">{qty}</span> will deduct that many from your inventory stock.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <button onClick={handleAdd} disabled={!selectedId || busy} className={cn(primary, 'w-full')}>
+        <Box className="h-4 w-4" />
+        {busy ? 'Adding…' : 'Add to Queue'}
+      </button>
+    </Modal>
   )
 }
 
@@ -1276,6 +1620,7 @@ function ShowHero({
   lotCount,
   onPreview,
   onAddItem,
+  onAddFromInventory,
   onGoLive,
   onDelete,
 }: {
@@ -1284,6 +1629,7 @@ function ShowHero({
   lotCount: number
   onPreview: () => void
   onAddItem: () => void
+  onAddFromInventory: () => void
   onGoLive: () => void
   onDelete: () => void
 }) {
@@ -1344,6 +1690,11 @@ function ShowHero({
               Add Item
             </button>
 
+            <button onClick={onAddFromInventory} className={secondary}>
+              <Box className="h-4 w-4" />
+              Add from Inventory
+            </button>
+
             {canGoLive && (
               <button onClick={onGoLive} className={primary}>
                 <Radio className="h-4 w-4" />
@@ -1381,6 +1732,7 @@ function LotRow({
   onSold,
   onPass,
   onRemove,
+  onPrint,
 }: {
   lot: AuctionLot
   index: number
@@ -1391,6 +1743,7 @@ function LotRow({
   onSold: () => void
   onPass: () => void
   onRemove: () => void
+  onPrint?: () => void
 }) {
   return (
     <article
@@ -1513,6 +1866,16 @@ function LotRow({
           <X className="h-3.5 w-3.5" />
           Pass Lot
         </button>
+
+        {onPrint && (
+          <button
+            onClick={onPrint}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/25 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-400/20"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Print Barcode
+          </button>
+        )}
 
         <div className="flex-1" />
 

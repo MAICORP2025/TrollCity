@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   Check,
   CheckCircle2,
@@ -6,10 +6,14 @@ import {
   DollarSign,
   Loader2,
   Package,
+  Printer,
+  Scan,
   Search,
   Send,
   ShoppingBag,
   Truck,
+  User,
+  Users,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -17,6 +21,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
+import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
 
 import AuctionNav from './AuctionNav'
 
@@ -105,6 +110,8 @@ export default function AuctionSales() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [scanInput, setScanInput] = useState('')
+  const [scanResult, setScanResult] = useState<SaleRecord[] | null>(null)
 
   // Shipping modal
   const [shippingModal, setShippingModal] = useState(false)
@@ -112,6 +119,36 @@ export default function AuctionSales() {
   const [trackingNumber, setTrackingNumber] = useState('')
   const [carrier, setCarrier] = useState<ShippingCarrier>('usps')
   const [submittingShipping, setSubmittingShipping] = useState(false)
+
+  const handleBarcodeScan = useCallback(async (barcode: string) => {
+    if (!barcode.trim()) return
+    try {
+      const { data, error } = await supabase.rpc('scan_lot_barcode', { p_barcode: barcode.trim() })
+      if (error) throw error
+      const result = data as any
+      if (result?.found && result?.order) {
+        const matched = sales.filter((s) => s.winner_user_id === result.order.winner_user_id)
+        setScanResult(matched.length > 0 ? matched : [sales.find((s) => s.lot_id === result.lot.id)].filter(Boolean) as SaleRecord[])
+        setSearchQuery(result.order.winner_username || '')
+        toast.success(`Found orders for @${result.order.winner_username || 'user'}`)
+      } else {
+        toast.error('Lot not found')
+        setScanResult(null)
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Scan failed')
+      setScanResult(null)
+    }
+  }, [sales, supabase])
+
+  useBarcodeScanner({
+    minLength: 3,
+    onScan: handleBarcodeScan,
+  })
+
+  const submitScan = () => {
+    if (scanInput.trim()) handleBarcodeScan(scanInput.trim())
+  }
 
   const fetchSales = useCallback(async () => {
     if (!user?.id) {
@@ -243,16 +280,16 @@ export default function AuctionSales() {
     void fetchSales()
   }, [fetchSales])
 
-  const filteredSales = useMemo(() => {
-    let result = sales
+  const groupedSales = useMemo(() => {
+    let base = sales
 
     if (filterStatus !== 'all') {
-      result = result.filter((s) => s.fulfillment_status === filterStatus)
+      base = base.filter((s) => s.fulfillment_status === filterStatus)
     }
 
     const query = searchQuery.trim().toLowerCase()
     if (query) {
-      result = result.filter(
+      base = base.filter(
         (s) =>
           s.lot_title.toLowerCase().includes(query) ||
           s.winner_username?.toLowerCase().includes(query) ||
@@ -260,21 +297,27 @@ export default function AuctionSales() {
       )
     }
 
-    return result.sort((a, b) => {
-      // Sort by fulfillment status priority, then by date
-      const statusOrder: Record<string, number> = {
-        pending: 0,
-        awaiting_fulfillment: 1,
-        ready_to_ship: 1,
-        packed: 1,
-        shipped: 2,
-        delivered: 3,
-        disputed: 4,
-        cancelled: 5,
-      }
-      return (statusOrder[a.fulfillment_status] || 0) - (statusOrder[b.fulfillment_status] || 0)
-    })
-  }, [sales, filterStatus, searchQuery])
+    if (scanResult) {
+      base = scanResult
+    }
+
+    const groups = new Map<string, SaleRecord[]>()
+    for (const sale of base) {
+      const key = sale.winner_user_id || 'unknown'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(sale)
+    }
+    return Array.from(groups.entries()).map(([userId, sales]) => ({
+      userId,
+      username: sales[0]?.winner_username || 'Unknown',
+      sales: sales.sort((a, b) => {
+        const statusOrder: Record<string, number> = {
+          pending: 0, awaiting_fulfillment: 1, ready_to_ship: 1, packed: 1, shipped: 2, delivered: 3, disputed: 4, cancelled: 5,
+        }
+        return (statusOrder[a.fulfillment_status] || 0) - (statusOrder[b.fulfillment_status] || 0)
+      }),
+    }))
+  }, [sales, filterStatus, searchQuery, scanResult])
 
   const stats = useMemo(() => {
     return {
@@ -412,6 +455,30 @@ export default function AuctionSales() {
 
         {/* Sales list */}
         <div className={cn(panel, 'p-4')}>
+          {/* Barcode scanner */}
+          <div className="mb-4 rounded-xl border border-cyan-300/10 bg-cyan-400/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-black text-cyan-100">
+              <Scan className="h-4 w-4" />
+              Scan Barcode to Find Orders
+            </div>
+            <p className="mt-1 text-xs text-slate-400">Scan an item barcode to look up the winner's orders.</p>
+            <div className="mt-2 flex gap-2">
+              <input
+                value={scanInput}
+                onChange={(e) => setScanInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submitScan()}
+                placeholder="Scan or enter barcode..."
+                className={cn(input, 'flex-1')}
+              />
+              <button onClick={submitScan} disabled={!scanInput.trim()} className={secondary}>
+                <Search className="h-4 w-4" /> Find
+              </button>
+              {scanResult && (
+                <button onClick={() => { setScanResult(null); setSearchQuery('') }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-200 transition hover:border-cyan-300/25 hover:bg-cyan-400/10 hover:text-cyan-100">Clear</button>
+              )}
+            </div>
+          </div>
+
           {loading ? (
             <div className="flex min-h-[300px] items-center justify-center">
               <div className="text-center">
@@ -419,7 +486,7 @@ export default function AuctionSales() {
                 <p className="text-sm text-slate-500">Loading sales...</p>
               </div>
             </div>
-          ) : filteredSales.length === 0 ? (
+          ) : groupedSales.length === 0 ? (
             <div className="flex min-h-[300px] items-center justify-center text-center">
               <div>
                 <DollarSign className="mx-auto mb-4 h-12 w-12 text-slate-600" />
@@ -430,14 +497,36 @@ export default function AuctionSales() {
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredSales.map((sale) => (
-                <SaleCard
-                  key={sale.id}
-                  sale={sale}
-                  onOpenShipping={() => openShippingModal(sale)}
-                  onMarkDelivered={() => markDelivered(sale)}
-                />
+            <div className="space-y-4">
+              {groupedSales.map((group) => (
+                <div key={group.userId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-400/10">
+                        <Users className="h-4 w-4 text-cyan-300" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-white">@{group.username}</p>
+                        <p className="text-[10px] text-slate-500">{group.sales.length} item(s)</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-400">
+                        Total: {formatCoins(group.sales.reduce((sum, s) => sum + s.final_bid + s.shipping_cost, 0))} TC
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {group.sales.map((sale) => (
+                      <SaleCard
+                        key={sale.id}
+                        sale={sale}
+                        onOpenShipping={() => openShippingModal(sale)}
+                        onMarkDelivered={() => markDelivered(sale)}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}

@@ -604,6 +604,10 @@ export default function Sidebar() {
                 )}
               </div>
 
+              <SectionTitle title="Broadcasting" collapsed={isSidebarCollapsed} />
+              <GridItem collapsed={isSidebarCollapsed} icon={Radio} label="Live Now" to="/live" active={isActive('/live') || isActive('/high-bcasters')} highlight={isUpdated('/live')} onClick={() => markAsViewed('/live')} tone="red" glow="pink" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Crown} label="High Bcasters" to="/high-bcasters" active={isActive('/high-bcasters')} highlight={isUpdated('/high-bcasters')} onClick={() => markAsViewed('/high-bcasters')} tone="purple" glow="purple" />
+
               <SectionTitle title="City Core" collapsed={isSidebarCollapsed} />
               <GridItem collapsed={isSidebarCollapsed} icon={Home} label="Home" to="/home" active={isActive('/home')} highlight={isUpdated('/home')} onClick={() => markAsViewed('/home')} tone="purple" />
               <GridItem collapsed={isSidebarCollapsed} icon={Coins} label="Buy Coins" to="/store" active={isActive('/store')} highlight={isUpdated('/store')} onClick={() => markAsViewed('/store')} tone="green" glow="green" />

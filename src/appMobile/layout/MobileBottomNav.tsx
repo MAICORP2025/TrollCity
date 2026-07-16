@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   Coins,
+  Crown,
   Home,
   LogOut,
   MessageCircle,
@@ -405,14 +406,18 @@ export default function MobileBottomNav() {
           <Home size={15} />
           <span className="text-[7px] font-bold leading-none">Home</span>
         </NavLink>
-        <NavLink to="/broadcast/setup" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
-          <Radio size={15} />
-          <span className="text-[7px] font-bold leading-none">Go Live</span>
-        </NavLink>
-        <NavLink to="/store" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
-          <Coins size={15} />
-          <span className="text-[7px] font-bold leading-none">Coins</span>
-        </NavLink>
+         <NavLink to="/broadcast/setup" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+           <Radio size={15} />
+           <span className="text-[7px] font-bold leading-none">Go Live</span>
+         </NavLink>
+         <NavLink to="/high-bcasters" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-yellow-400" : "text-slate-500"}`}>
+           <Crown size={15} />
+           <span className="text-[7px] font-bold leading-none">Bcasters</span>
+         </NavLink>
+         <NavLink to="/store" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
+           <Coins size={15} />
+           <span className="text-[7px] font-bold leading-none">Coins</span>
+         </NavLink>
         <NavLink to="/utromail" className={({ isActive }) => `flex min-w-0 shrink flex-col items-center gap-0.5 px-0.5 ${isActive ? "text-cyan-400" : "text-slate-500"}`}>
           <MessageCircle size={15} />
           <span className="text-[7px] font-bold leading-none">Chats</span>

@@ -365,8 +365,11 @@ function GiftPreview({
 
     if (!video.duration || !isFinite(video.duration)) return
     const ms = Math.round(video.duration * 1000)
-    onDurationKnown?.(gift.id, ms)
-  }, [gift.id, label, onDurationKnown])
+
+    if (!gift.animation_duration_ms) {
+      onDurationKnown?.(gift.id, ms)
+    }
+  }, [gift.id, gift.animation_duration_ms, label, onDurationKnown])
 
   useEffect(() => {
     soundUrlRef.current = visual.soundUrl
@@ -464,18 +467,9 @@ function GiftPreview({
           muted={false}
           playsInline
           preload="auto"
+          loop
           onLoadedMetadata={handleLoadedMetadata}
           onCanPlay={handleCanPlay}
-          onEnded={() => {
-            if (import.meta.env.DEV) {
-              console.info('[GiftVideoOverlay] video ended naturally', {
-                giftId: gift.id,
-                giftName: label,
-                resolvedUrl: resolved.url,
-              })
-            }
-            onVideoEnd?.()
-          }}
           onError={(event) => {
             const videoEl = event.currentTarget
             const mediaError = videoEl.error

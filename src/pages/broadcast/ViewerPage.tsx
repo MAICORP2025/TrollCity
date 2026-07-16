@@ -3289,13 +3289,13 @@ const heartbeat = window.setInterval(() => {
              {/* ── LEFT: Host Video Card / Mobile Watch Surface ─────────────── */}
             {layoutMode === 'grid' ? (
               /* ===== GRID MODE: Broadcaster tile (same size as seat tiles) ===== */
-              <div
-               className={cn(
-                   'relative min-h-0 overflow-hidden border border-cyan-400/30 bg-transparent',
-                   'aspect-square',
-                   isMobileViewer ? 'rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(45,212,191,0.15)]'
-                 )}
-              >
+               <div
+                className={cn(
+                    'relative min-h-0 overflow-hidden border border-cyan-400/30 bg-transparent',
+                    'aspect-video',
+                    isMobileViewer ? 'rounded-lg' : 'rounded-2xl shadow-[0_0_20px_rgba(45,212,191,0.15)]'
+                  )}
+               >
                 <RemoteVideoSurface
                   participant={broadcasterState.participant}
                   mirror={true}
@@ -3733,23 +3733,24 @@ const heartbeat = window.setInterval(() => {
                   }
                 : undefined;
 
-              return (
-                <div
-                  key={`grid-seat-${seat.seatIndex}`}
-                  className={cn(
-                    'relative min-h-0 overflow-hidden border bg-transparent transition-all',
-                    isMobileViewer ? 'aspect-square rounded-lg' : 'rounded-2xl shadow-[inset_0_0_18px_rgba(15,23,42,0.78)]',
-                    isMine
-                      ? 'border-emerald-300/60'
-                      : seat.isOccupied
-                        ? 'border-purple-300/45 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)]'
-                        : seat.isLocked
-                          ? 'border-white/10 bg-transparent opacity-70'
-                          : 'border-white/10 bg-transparent',
-                    canClickSeat ? 'cursor-pointer' : ''
-                  )}
-                  {...seatClickProps}
-                >
+               return (
+                 <div
+                   key={`grid-seat-${seat.seatIndex}`}
+                    className={cn(
+                      'relative min-h-0 overflow-hidden border bg-transparent transition-all',
+                      isMobileViewer ? 'aspect-video rounded-lg' : 'rounded-2xl shadow-[inset_0_0_18px_rgba(15,23,42,0.78)]',
+                     isMine
+                       ? 'border-emerald-300/60'
+                       : seat.isOccupied
+                         ? 'border-purple-300/45 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.12),transparent_45%),rgba(2,6,23,0.82)]'
+                         : seat.isLocked
+                           ? 'border-white/10 bg-transparent opacity-70'
+                           : 'border-white/10 bg-transparent',
+                     canClickSeat ? 'cursor-pointer' : '',
+                     isMobileViewer && stream?.has_rgb_effect ? 'rgb-box' : '',
+                   )}
+                   {...seatClickProps}
+                 >
                   {isMine ? (
                     <LocalVideoSurface
                       videoTrack={localVideoTrack}
@@ -3899,19 +3900,20 @@ const heartbeat = window.setInterval(() => {
                          })
                        : null
 
-                     return (
-                          <div
-                          key={seat.seatIndex}
-                          className={cn(
-                            'relative aspect-square overflow-hidden rounded-lg border',
-                           isMine
-                             ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                             : seat.isOccupied
-                               ? 'border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
-                               : 'border-white/20',
-                           'bg-transparent w-full'
-                         )}
-                      >
+                      return (
+                           <div
+                           key={seat.seatIndex}
+                            className={cn(
+                              'relative aspect-video overflow-hidden rounded-lg border',
+                            isMine
+                              ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                              : seat.isOccupied
+                                ? 'border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
+                                : 'border-white/20',
+                            'bg-transparent w-full',
+                            stream?.has_rgb_effect ? 'rgb-box' : '',
+                          )}
+                       >
                         {isMine ? (
                           <LocalVideoSurface
                             videoTrack={localVideoTrack}

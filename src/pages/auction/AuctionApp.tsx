@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Box, Camera, ChevronRight, Coins, Package, RefreshCw, Scan,
+  ArrowLeft, Box, Camera, ChevronRight, Coins, Package, Printer, RefreshCw, Scan,
   Settings as SettingsIcon, Smartphone, Truck, Wifi, WifiOff, Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -11,6 +11,7 @@ import { useAuthStore } from '../../lib/store'
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
 import { useLotSelection } from '../../hooks/useLotSelection'
 import { CARRIERS } from '../../lib/auctionFees'
+import { generateBarcodeDataURL } from '../../lib/barcode'
 import ItemBarcodeLabel from '../../components/auction/ItemBarcodeLabel'
 
 type Tab = 'live' | 'items' | 'scanner' | 'orders' | 'shipping' | 'sales' | 'devices' | 'settings'
@@ -220,7 +221,13 @@ export default function AuctionApp() {
         {activeTab === 'items' && (
           <ItemsPanel show={show} lots={lots} onChanged={() => void loadLots()} />
         )}
-        {activeTab === 'scanner' && <ScannerPanel show={show} lots={lots} onSelectLot={() => void loadLots()} />}
+        {activeTab === 'scanner' && <ScannerPanel show={show} lots={lots} onSelectLot={() => void loadLots()} auctioneerId={auctioneerId} onStartLot={(id) => {
+          supabase.rpc('auction_lot_action', { p_show_id: show.id, p_lot_id: id, p_action: 'start' }).then(({ error }) => {
+            if (error) return toast.error(error.message)
+            toast.success('Auction started')
+            void loadLots()
+          })
+        }} />}
         {activeTab === 'orders' && <OrdersPanel orders={orders} />}
         {activeTab === 'shipping' && <ShippingPanel orders={orders} onChanged={() => void loadOrders()} />}
         {activeTab === 'sales' && <SalesPanel orders={orders} lots={lots} />}
@@ -368,9 +375,64 @@ function ItemsPanel({ show, lots, onChanged }: { show: ShowRow; lots: LotRow[]; 
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', sku: '', starting_bid: 100, bid_increment: 500, shipping_base_price: 0, shipping_method: 'shipping' })
 
+  const printBarcodeLabel = useCallback(async (lotId: string) => {
+    try {
+      const start = Date.now()
+      const wait = async () => {
+        const { data: lot } = await supabase
+          .from('auction_lots')
+          .select('*')
+          .eq('id', lotId)
+          .single()
+        if (lot?.barcode && lot?.lot_number) {
+          const dataURL = generateBarcodeDataURL(lot.barcode)
+          const printWindow = window.open('', '_blank', 'width=400,height=600')
+          if (!printWindow) {
+            toast.error('Pop-up blocked. Allow pop-ups to print labels.')
+            return
+          }
+          printWindow.document.write(`
+            <html>
+              <head>
+                <title>Print Label</title>
+                <style>
+                  @page { size: 2.4in 1in; margin: 0; }
+                  body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #fff; font-family: Arial, sans-serif; }
+                  .label { width: 2.4in; height: 1in; border: 2px solid #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+                  .label img { max-width: 90%; max-height: 55%; }
+                  .label p { margin: 2px 0; font-size: 14px; font-weight: bold; text-align: center; }
+                  .label .meta { font-size: 10px; color: #333; }
+                </style>
+              </head>
+              <body>
+                <div class="label">
+                  <img src="${dataURL}" alt="${lot.barcode}" />
+                  <p>${lot.barcode}</p>
+                  <p class="meta">${lot.title} · ${show.title}</p>
+                </div>
+              </body>
+            </html>
+          `)
+          printWindow.document.close()
+          printWindow.focus()
+          setTimeout(() => {
+            printWindow.print()
+          }, 300)
+        } else if (Date.now() - start < 3000) {
+          setTimeout(wait, 200)
+        } else {
+          toast.error('Barcode not ready yet')
+        }
+      }
+      void wait()
+    } catch {
+      toast.error('Failed to print label')
+    }
+  }, [show.title])
+
   const create = async () => {
     if (!form.title.trim()) return toast.error('Title required')
-    const { error } = await supabase.from('auction_lots').insert({
+    const { data, error } = await supabase.from('auction_lots').insert({
       auction_show_id: show.id,
       title: form.title.trim(),
       description: form.description.trim() || null,
@@ -380,12 +442,15 @@ function ItemsPanel({ show, lots, onChanged }: { show: ShowRow; lots: LotRow[]; 
       shipping_base_price: Number(form.shipping_base_price),
       shipping_method: form.shipping_method,
       status: 'queued',
-    })
+    }).select('id').single()
     if (error) return toast.error(error.message)
     toast.success('Item added — barcode generated automatically')
     setCreating(false)
     setForm({ title: '', description: '', sku: '', starting_bid: 100, bid_increment: 500, shipping_base_price: 0, shipping_method: 'shipping' })
     onChanged()
+    if (data?.id) {
+      void printBarcodeLabel(data.id)
+    }
   }
 
   return (
@@ -425,7 +490,16 @@ function ItemsPanel({ show, lots, onChanged }: { show: ShowRow; lots: LotRow[]; 
               <p className="truncate font-bold">{l.title}</p>
               <p className="text-xs text-slate-400">{l.lot_number} · {l.status}</p>
             </div>
-            <ItemBarcodeLabel lot={l} showName={show.title} />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void printBarcodeLabel(l.id)}
+                className="inline-flex items-center gap-1 rounded-lg border border-cyan-300/20 bg-cyan-400/10 px-2.5 py-1.5 text-[10px] font-bold text-cyan-100 transition hover:border-cyan-300/35 hover:bg-cyan-400/20"
+                title="Print barcode label"
+              >
+                <Printer className="h-3 w-3" /> Print
+              </button>
+              <ItemBarcodeLabel lot={l} showName={show.title} />
+            </div>
           </div>
         ))}
       </div>
@@ -434,14 +508,120 @@ function ItemsPanel({ show, lots, onChanged }: { show: ShowRow; lots: LotRow[]; 
 }
 
 // ---------------------------------------------------------------- SCANNER
-function ScannerPanel({ show, lots, onSelectLot }: { show: ShowRow; lots: LotRow[]; onSelectLot: () => void }) {
+function ScannerPanel({ show, lots, onSelectLot, onStartLot, auctioneerId }: { show: ShowRow; lots: LotRow[]; onSelectLot: () => void; onStartLot?: (id: string) => void; auctioneerId: string | null }) {
   const navigate = useNavigate()
   const [manual, setManual] = useState('')
   const [last, setLast] = useState<{ code: string; ok: boolean; msg: string } | null>(null)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
+  const [testScanMode, setTestScanMode] = useState(false)
+  const [testScanStatus, setTestScanStatus] = useState<string>('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const barcodeDetectorRef = useRef<any>(null)
+  const lastScanTimeRef = useRef(0)
   const selection = useLotSelection({
     showId: show.id,
-    onSelect: (lot) => { setLast({ code: lot.barcode || lot.lot_number || lot.id, ok: true, msg: `Loaded: ${lot.title}` }); toast.success(`Loaded ${lot.title}`) },
+    onSelect: (lot) => {
+      setLast({ code: lot.barcode || lot.lot_number || lot.id, ok: true, msg: `Loaded: ${lot.title}` })
+      toast.success(`Loaded ${lot.title}`)
+      if (onStartLot && (lot.status === 'queued' || lot.status === 'draft')) {
+        onStartLot(lot.id)
+      }
+    },
   })
+
+  const startCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error('Camera access is not supported in this browser.')
+      return
+    }
+    try {
+      setCameraReady(false)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        audio: false,
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.setAttribute('playsinline', 'true')
+        videoRef.current.muted = true
+        await videoRef.current.play()
+      }
+      setCameraActive(true)
+      setCameraReady(true)
+    } catch (err: any) {
+      console.error('[Scanner] Camera error:', err)
+      toast.error(err?.message || 'Camera access denied.')
+      setCameraActive(false)
+      setCameraReady(false)
+    }
+  }, [])
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setCameraActive(false)
+    setCameraReady(false)
+  }, [])
+
+  useEffect(() => {
+    if ('BarcodeDetector' in window) {
+      try {
+        barcodeDetectorRef.current = new (window as any).BarcodeDetector({
+          formats: ['qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'],
+        })
+      } catch (err) {
+        console.warn('[Scanner] BarcodeDetector init failed:', err)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!cameraActive || !cameraReady || !barcodeDetectorRef.current) return
+    let animFrame: number
+    const detectFrame = async () => {
+      if (!videoRef.current || videoRef.current.readyState < 2) {
+        animFrame = requestAnimationFrame(detectFrame)
+        return
+      }
+      try {
+        const barcodes = await barcodeDetectorRef.current.detect(videoRef.current)
+        if (barcodes && barcodes.length > 0) {
+          const now = Date.now()
+          if (now - lastScanTimeRef.current < 2000) {
+            animFrame = requestAnimationFrame(detectFrame)
+            return
+          }
+          lastScanTimeRef.current = now
+          const barcode = barcodes[0]
+          const code = barcode.rawValue || ''
+          if (code) {
+            setLast({ code, ok: true, msg: `Scanned: ${code}` })
+            void selection.resolve(code)
+            onSelectLot()
+          }
+        }
+      } catch {
+        // detection failed silently
+      }
+      animFrame = requestAnimationFrame(detectFrame)
+    }
+    animFrame = requestAnimationFrame(detectFrame)
+    return () => cancelAnimationFrame(animFrame)
+  }, [cameraActive, cameraReady, selection, onSelectLot])
+
+  useEffect(() => {
+    return () => {
+      stopCamera()
+    }
+  }, [stopCamera])
 
   // HID keyboard scanner (USB/Bluetooth) — global capture, ignores focused inputs.
   const { scannedValue } = useBarcodeScanner({ onScan: (v) => { void selection.resolve(v); onSelectLot() } })
@@ -450,8 +630,130 @@ function ScannerPanel({ show, lots, onSelectLot }: { show: ShowRow; lots: LotRow
 
   const submitManual = () => { if (manual.trim()) { void selection.resolve(manual); onSelectLot() } }
 
+  // Test-scan mode: scan a barcode, resolve the matching item, and broadcast a
+  // connection-confirmation alert to the auctioneer's Auction Studio so they
+  // can verify the scanner is linked and the barcode is accurate.
+  const emitTestScan = useCallback(
+    async (code: string) => {
+      if (!auctioneerId) return
+      setTestScanStatus('Looking up item…')
+      const lot = await selection.resolve(code)
+      const matched = selection.selected
+      try {
+        await supabase
+          .channel(`auctioneer_test_scan:${auctioneerId}`)
+          .send({
+            type: 'broadcast',
+            event: 'test_scan',
+            payload: {
+              barcode: code,
+              title: matched?.title || null,
+              lot_number: matched?.lot_number || null,
+              found: !!matched,
+              timestamp: new Date().toISOString(),
+            },
+          })
+      } catch (err) {
+        console.warn('[Scanner] test scan broadcast failed:', err)
+      }
+      setTestScanStatus(
+        matched
+          ? `Sent "${matched.title}" to Auction Studio — check the popup there.`
+          : 'Barcode not matched to an item. Still sent to Auction Studio to confirm the link.',
+      )
+    },
+    [auctioneerId, selection],
+  )
+
+  // Dedicated detection loop for test-scan mode.
+  useEffect(() => {
+    if (!testScanMode || !cameraActive || !cameraReady || !barcodeDetectorRef.current) return
+    let animFrame: number
+    const detectFrame = async () => {
+      if (!videoRef.current || videoRef.current.readyState < 2) {
+        animFrame = requestAnimationFrame(detectFrame)
+        return
+      }
+      try {
+        const barcodes = await barcodeDetectorRef.current.detect(videoRef.current)
+        if (barcodes && barcodes.length > 0) {
+          const now = Date.now()
+          if (now - lastScanTimeRef.current < 2000) {
+            animFrame = requestAnimationFrame(detectFrame)
+            return
+          }
+          lastScanTimeRef.current = now
+          const code = barcodes[0].rawValue || ''
+          if (code) {
+            setTestScanStatus('Scanned — sending to Auction Studio…')
+            await emitTestScan(code)
+            stopCamera()
+            setTestScanMode(false)
+            return
+          }
+        }
+      } catch {
+        // detection failed silently
+      }
+      animFrame = requestAnimationFrame(detectFrame)
+    }
+    animFrame = requestAnimationFrame(detectFrame)
+    return () => cancelAnimationFrame(animFrame)
+  }, [testScanMode, cameraActive, cameraReady, emitTestScan, stopCamera])
+
+  const isDraft = show.status === 'draft'
+
   return (
     <div className="space-y-4">
+      {/* Test Scanner Connection — opens camera, scans, confirms link in Studio */}
+      <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5">
+        <h3 className="flex items-center gap-2 text-lg font-black"><Scan className="h-5 w-5 text-cyan-300" /> Test Barcode Scanner</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Open your camera and scan any item barcode. A popup appears in your Auctioneer Studio confirming the scanner is connected and the barcode matches the item.
+        </p>
+        <div className="mt-3">
+          {!testScanMode ? (
+            <button
+              onClick={() => { setTestScanStatus(''); setTestScanMode(true); void startCamera() }}
+              className="rounded-xl border border-cyan-200/40 bg-cyan-300 px-4 py-2.5 text-sm font-black text-slate-950 shadow-[0_0_26px_rgba(34,211,238,0.28)]"
+            >
+              <Camera className="mr-1 inline h-4 w-4" /> Start Test Scan
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
+                <video ref={videoRef} className="h-64 w-full object-cover" playsInline muted />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-40 w-40 rounded-2xl border-2 border-cyan-400/80 shadow-[0_0_24px_rgba(34,211,238,0.35)]" />
+                </div>
+              </div>
+              <button onClick={() => { stopCamera(); setTestScanMode(false) }} className="rounded-xl border border-red-300/30 bg-red-500/10 px-4 py-2.5 font-bold text-red-100">Cancel</button>
+            </div>
+          )}
+          {testScanStatus && <p className="mt-2 text-xs font-bold text-cyan-200">{testScanStatus}</p>}
+        </div>
+      </div>
+
+      {isDraft && (
+        <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5">
+          <h3 className="flex items-center gap-2 text-lg font-black"><Camera className="h-5 w-5 text-cyan-300" /> Camera Barcode Scanner</h3>
+          <p className="mt-1 text-xs text-slate-500">Use your device camera to scan item barcodes while the show is in draft mode.</p>
+          <div className="mt-3">
+            {!cameraActive ? (
+              <button onClick={startCamera} className="rounded-xl border border-cyan-300/30 bg-cyan-500/20 px-4 py-2.5 font-bold text-cyan-100">Open Camera</button>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
+                  <video ref={videoRef} className="h-64 w-full object-cover" playsInline muted />
+                </div>
+                <button onClick={stopCamera} className="rounded-xl border border-red-300/30 bg-red-500/10 px-4 py-2.5 font-bold text-red-100">Stop Camera</button>
+              </div>
+            )}
+          </div>
+          {last && <p className="mt-2 text-xs font-bold text-emerald-300">{last.msg}</p>}
+        </div>
+      )}
+
       <div className="rounded-3xl border border-cyan-400/20 bg-white/[0.04] p-5">
         <h3 className="flex items-center gap-2 text-lg font-black"><Scan className="h-5 w-5 text-cyan-300" /> Scan / Enter Item</h3>
         <p className="mt-1 text-xs text-slate-500">USB/Bluetooth HID scanners work automatically. Or enter a barcode, lot #, SKU, or title.</p>
@@ -469,13 +771,15 @@ function ScannerPanel({ show, lots, onSelectLot }: { show: ShowRow; lots: LotRow
         {last && <p className="mt-2 text-xs font-bold text-emerald-300">{last.msg}</p>}
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <div className="mb-2 flex items-center gap-2 text-sm font-black"><Camera className="h-4 w-4" /> Phone Camera</div>
-        <p className="text-xs text-slate-400">
-          Open <span className="font-mono text-cyan-300">/auctioneer/scanner</span> on your phone, pair it, and scan. The same server logic resolves the lot.
-        </p>
-        <button onClick={() => navigate('/auctioneer/scanner')} className="mt-3 rounded-xl border border-cyan-300/20 bg-white/5 px-4 py-2 text-sm font-bold">Open Phone Scanner</button>
-      </div>
+      {!isDraft && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-black"><Camera className="h-4 w-4" /> Phone Camera</div>
+          <p className="text-xs text-slate-400">
+            Open <span className="font-mono text-cyan-300">/auctioneer/scanner</span> on your phone, pair it, and scan. The same server logic resolves the lot.
+          </p>
+          <button onClick={() => navigate('/auctioneer/scanner')} className="mt-3 rounded-xl border border-cyan-300/20 bg-white/5 px-4 py-2 text-sm font-bold">Open Phone Scanner</button>
+        </div>
+      )}
 
       <div>
         <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Recent queue</p>

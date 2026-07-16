@@ -5,10 +5,8 @@ import {
   Copy,
   Loader2,
   Monitor,
-  Plus,
   Printer,
   QrCode,
-  Scan,
   Smartphone,
   Trash2,
   X,
@@ -20,6 +18,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { cn } from '../../lib/utils'
 import { generateUUID } from '../../lib/uuid'
+import { generateBarcodeDataURL } from '../../lib/barcode'
 
 type DeviceType = 'scanner' | 'printer'
 type ConnectionType = 'phone' | 'browser'
@@ -49,11 +48,6 @@ interface Device {
   created_at: string
 }
 
-const BRANDS: Record<DeviceType, string[]> = {
-  scanner: ['Zebra', 'Honeywell', 'Netum', 'Socket Mobile', 'Generic HID'],
-  printer: ['DYMO', 'Brother', 'Zebra', 'Rollo', 'Bluetooth Thermal', 'USB Thermal'],
-}
-
 const STATUS_CONFIG: Record<DeviceStatus, { label: string; color: string; dot: string }> = {
   connected: { label: 'Connected', color: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100', dot: 'bg-emerald-400' },
   disconnected: { label: 'Disconnected', color: 'border-slate-400/30 bg-slate-500/10 text-slate-200', dot: 'bg-slate-400' },
@@ -78,8 +72,6 @@ export default function DeviceManagement() {
   const { user } = useAuthStore()
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [selectedType, setSelectedType] = useState<DeviceType>('scanner')
   const [diagnostics, setDiagnostics] = useState<string[]>([])
 
   // Mobile scanner pairing state
@@ -94,13 +86,6 @@ export default function DeviceManagement() {
   // Tracks sessions that have already shown a "connected" toast so heartbeat
   // updates (which re-fire postgres_changes) don't spam the popup repeatedly.
   const connectedToastShownRef = useRef<Set<string>>(new Set())
-
-  const [form, setForm] = useState({
-    device_name: '',
-    device_type: 'scanner' as DeviceType,
-    device_brand: '',
-    connection_type: 'phone' as ConnectionType,
-  })
 
   const fetchDevices = useCallback(async () => {
     if (!user?.id) { setLoading(false); return }
@@ -121,33 +106,10 @@ export default function DeviceManagement() {
 
   useEffect(() => { void fetchDevices() }, [fetchDevices])
 
-  const addDevice = async () => {
-    if (!form.device_name.trim()) { toast.error('Device name required'); return }
-    try {
-      const { error } = await supabase.from('auction_devices').insert({
-        user_id: user!.id,
-        device_name: form.device_name.trim(),
-        device_type: form.device_type,
-        device_brand: form.device_brand || null,
-        connection_type: form.device_type === 'printer' ? 'browser' : 'phone',
-        status: 'disconnected',
-      })
-      if (error) throw error
-      toast.success('Device added')
-      setShowAddModal(false)
-      setForm({ device_name: '', device_type: 'scanner', device_brand: '', connection_type: 'phone' })
-      await fetchDevices()
-    } catch (error: any) {
-      toast.error(error?.message || 'Failed to add device')
-    }
-  }
-
   const removeDevice = async (id: string) => {
     try {
-      // Find the device being removed
       const device = devices.find(d => d.id === id)
 
-      // If it's a Bluetooth device that's currently connected, disconnect first
       if (device?.connection_type === 'bluetooth' && device?.status === 'connected') {
         if (bluetoothDeviceRef.current && bluetoothDeviceRef.current.gatt?.connected) {
           bluetoothDeviceRef.current.gatt.disconnect()
@@ -156,7 +118,6 @@ export default function DeviceManagement() {
         bluetoothServerRef.current = null
       }
 
-      // Also remove any associated mobile device sessions for this device name
       if (device?.device_name) {
         await supabase
           .from('auction_device_sessions')
@@ -165,8 +126,9 @@ export default function DeviceManagement() {
           .eq('auctioneer_id', user?.id || '')
       }
 
-      // Remove the device from auction_devices
       await supabase.from('auction_devices').delete().eq('id', id)
+
+      setDevices(prev => prev.filter(d => d.id !== id))
       toast.success('Device removed')
       await fetchDevices()
     } catch {
@@ -524,36 +486,113 @@ export default function DeviceManagement() {
     }
   }, [fetchMobileSessions])
 
+  const [selectedPrinter, setSelectedPrinter] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('tc_default_printer') || ''
+    }
+    return ''
+  })
+
   const copyPairingCode = useCallback(() => {
     navigator.clipboard.writeText(pairingCode)
     toast.success('Pairing code copied!')
   }, [pairingCode])
 
-  const addBrowserPrinter = useCallback(async () => {
+  const detectPrinters = useCallback(async () => {
     if (!user?.id) return
 
     try {
+      const detectedPrinters: Array<{ name: string; type: string }> = []
+
       if (typeof window !== 'undefined' && typeof window.print === 'function') {
         window.print()
+        detectedPrinters.push({ name: 'Browser Print System', type: 'browser' })
       }
 
-      const { error } = await supabase.from('auction_devices').insert({
-        user_id: user.id,
-        device_name: 'Browser Printer',
-        device_type: 'printer',
-        device_brand: 'System Printer',
-        connection_type: 'browser',
-        status: 'connected',
-      })
+      const printerName = `Browser Printer ${new Date().toLocaleTimeString()}`
 
-      if (error) throw error
+      const { data: existing } = await supabase
+        .from('auction_devices')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('device_type', 'printer')
+        .maybeSingle()
 
-      toast.success('Browser printer detected and added')
+      if (existing) {
+        await supabase
+          .from('auction_devices')
+          .update({
+            device_name: printerName,
+            device_brand: 'System Printer',
+            connection_type: 'browser',
+            status: 'connected',
+            last_connected_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id)
+      } else {
+        await supabase.from('auction_devices').insert({
+          user_id: user.id,
+          device_name: printerName,
+          device_type: 'printer',
+          device_brand: 'System Printer',
+          connection_type: 'browser',
+          status: 'connected',
+        })
+      }
+
+      toast.success('Printer detected — use your browser print dialog to select the target printer')
       await fetchDevices()
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to detect browser printer')
+      toast.error(err?.message || 'Failed to detect printer')
     }
   }, [fetchDevices, user?.id])
+
+  const selectPrinter = useCallback(async (printerName: string) => {
+    setSelectedPrinter(printerName)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tc_default_printer', printerName)
+    }
+    toast.success(`Default printer set to: ${printerName}`)
+  }, [])
+
+  const printTestLabel = useCallback(async () => {
+    try {
+      const testDataURL = generateBarcodeDataURL('TC-TEST-000001')
+      const printWindow = window.open('', '_blank', 'width=400,height=600')
+      if (!printWindow) {
+        toast.error('Pop-up blocked. Allow pop-ups for this site to print labels.')
+        return
+      }
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Test Print Label</title>
+            <style>
+              @page { size: 2.4in 1in; margin: 0; }
+              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #fff; }
+              .label { width: 2.4in; height: 1in; border: 2px dashed #ccc; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: Arial, sans-serif; }
+              .label img { max-width: 90%; max-height: 60%; }
+              .label p { margin: 4px 0; font-size: 12px; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="label">
+              <img src="${testDataURL}" alt="Test Barcode" />
+              <p>TC-TEST-000001</p>
+              <p style="font-size: 10px; color: #666;">Test Label — Troll City Auction</p>
+            </div>
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+      printWindow.focus()
+      setTimeout(() => {
+        printWindow.print()
+      }, 300)
+    } catch {
+      toast.error('Failed to open print dialog')
+    }
+  }, [])
 
   // Subscribe to scan events from mobile scanners
   useEffect(() => {
@@ -604,9 +643,6 @@ export default function DeviceManagement() {
             <div className="flex gap-2">
               <button onClick={runDiagnostics} className={ghost}>
                 <Activity className="h-4 w-4" /> Diagnostics
-              </button>
-              <button onClick={() => setShowAddModal(true)} className={primary}>
-                <Plus className="h-4 w-4" /> Add Device
               </button>
             </div>
           </div>
@@ -715,52 +751,54 @@ export default function DeviceManagement() {
           )}
         </section>
 
-        {/* Connected Scanners */}
-        <section className={cn(panel, 'p-5')}>
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-black">
-            <Scan className="h-5 w-5 text-cyan-300" />
-            Connected Scanners ({scanners.length})
-          </h2>
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-cyan-300" />
-            </div>
-          ) : scanners.length === 0 ? (
-            <div className="py-10 text-center">
-              <Scan className="mx-auto mb-3 h-10 w-10 text-slate-700" />
-              <p className="text-sm text-slate-500">Phone-based scanning is the supported path</p>
-              <p className="text-xs text-slate-600 mt-1">Use the mobile pairing flow above to connect your phone as the scanner.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {scanners.map(device => (
-                <DeviceRow key={device.id} device={device} onToggle={toggleConnection} onRemove={removeDevice} />
-              ))}
-            </div>
-          )}
-        </section>
-
         {/* Connected Printers */}
         <section className={cn(panel, 'p-5')}>
           <h2 className="mb-4 flex items-center gap-2 text-lg font-black">
             <Printer className="h-5 w-5 text-cyan-300" />
             Connected Printers ({printers.length})
           </h2>
-          <div className="mb-3 flex justify-end">
-            <button onClick={() => void addBrowserPrinter()} className={secondary}>
-              <Printer className="h-4 w-4" /> Detect Browser Printer
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button onClick={detectPrinters} className={secondary}>
+              <Printer className="h-4 w-4" /> Detect Printers
             </button>
+            <button onClick={printTestLabel} className={ghost}>
+              Print Test Label
+            </button>
+            {selectedPrinter && (
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-1 text-[10px] font-bold text-cyan-200">
+                Default: {selectedPrinter}
+              </span>
+            )}
           </div>
           {printers.length === 0 ? (
             <div className="py-10 text-center">
               <Printer className="mx-auto mb-3 h-10 w-10 text-slate-700" />
               <p className="text-sm text-slate-500">No printers configured</p>
-              <p className="text-xs text-slate-600 mt-1">Use the browser print dialog on your PC or laptop to pick a printer.</p>
+              <p className="text-xs text-slate-600 mt-1">Click "Detect Printers" to open your browser print dialog and select a printer.</p>
             </div>
           ) : (
             <div className="space-y-2">
               {printers.map(device => (
-                <DeviceRow key={device.id} device={device} onToggle={toggleConnection} onRemove={removeDevice} />
+                <div key={device.id} className="flex items-center justify-between rounded-xl border border-cyan-300/10 bg-[#0a1425]/80 p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                    <div>
+                      <p className="text-sm font-bold text-white">{device.device_name}</p>
+                      <p className="text-xs text-slate-500">{device.device_brand} · {device.connection_type.toUpperCase()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => selectPrinter(device.device_name)}
+                      className={cn(ghost, 'text-xs')}
+                    >
+                      {selectedPrinter === device.device_name ? 'Selected' : 'Select'}
+                    </button>
+                    <button onClick={() => removeDevice(device.id)} className={cn(ghost, 'text-xs text-red-300')}>
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -779,78 +817,6 @@ export default function DeviceManagement() {
               ))}
             </div>
           </section>
-        )}
-
-        {/* Add Device Modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className={cn(panel, 'w-full max-w-md p-6')}>
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-xl font-black text-white">Add Device</h3>
-                <button onClick={() => setShowAddModal(false)} className={ghost}>
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">Device Type</label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setForm(f => ({ ...f, device_type: 'scanner' }))}
-                      className={cn('flex-1 rounded-xl border p-3 text-sm font-bold transition', form.device_type === 'scanner' ? 'border-cyan-300/30 bg-cyan-400/12 text-cyan-100' : 'border-white/10 bg-white/[0.035] text-slate-400')}
-                    >
-                      <Scan className="mx-auto mb-1 h-5 w-5" />
-                      Scanner
-                    </button>
-                    <button
-                      onClick={() => setForm(f => ({ ...f, device_type: 'printer' }))}
-                      className={cn('flex-1 rounded-xl border p-3 text-sm font-bold transition', form.device_type === 'printer' ? 'border-cyan-300/30 bg-cyan-400/12 text-cyan-100' : 'border-white/10 bg-white/[0.035] text-slate-400')}
-                    >
-                      <Printer className="mx-auto mb-1 h-5 w-5" />
-                      Printer
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">Device Name</label>
-                  <input
-                    value={form.device_name}
-                    onChange={e => setForm(f => ({ ...f, device_name: e.target.value }))}
-                    placeholder="My Zebra Scanner"
-                    className={input}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs text-slate-500">Brand</label>
-                  <select
-                    value={form.device_brand}
-                    onChange={e => setForm(f => ({ ...f, device_brand: e.target.value }))}
-                    className={input}
-                  >
-                    <option value="" className="bg-slate-950">Select brand...</option>
-                    {BRANDS[form.device_type].map(b => (
-                      <option key={b} value={b} className="bg-slate-950">{b}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="rounded-xl border border-cyan-300/10 bg-cyan-400/5 p-3 text-xs text-slate-400">
-                  {form.device_type === 'scanner' ? (
-                    <p>Phone pairing is the supported scanner path for auctioneers. No wired or Bluetooth scanner options are available.</p>
-                  ) : (
-                    <p>Printers are detected through your browser/PC print options. Use the print dialog to select your local printer.</p>
-                  )}
-                </div>
-
-                <button onClick={addDevice} className={cn(primary, 'w-full')}>
-                  <Plus className="h-4 w-4" /> Add Device
-                </button>
-              </div>
-            </div>
-          </div>
         )}
 
         {/* ── Mobile Scanner Pairing Modal ──────────────────────────────────── */}

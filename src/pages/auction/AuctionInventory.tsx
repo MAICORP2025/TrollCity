@@ -20,6 +20,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { validateFile, FILE_VALIDATION } from '../../lib/fileValidation'
 import { cn } from '../../lib/utils'
+import { generateBarcodeDataURL } from '../../lib/barcode'
 
 import AuctionNav from './AuctionNav'
 
@@ -286,7 +287,7 @@ export default function AuctionInventory() {
         queue_position: nextPosition,
       }
 
-      const { error } = await supabase.from('auction_lots').insert(payload)
+      const { data, error } = await supabase.from('auction_lots').insert(payload).select('id').single()
       if (error) throw error
 
       toast.success('Item added to show queue')
@@ -302,6 +303,58 @@ export default function AuctionInventory() {
         auction_show_id: '',
       })
       await fetchInventory()
+
+      if (data?.id) {
+        const start = Date.now()
+        const wait = async () => {
+          const { data: lot } = await supabase
+            .from('auction_lots')
+            .select('*')
+            .eq('id', data.id)
+            .single()
+          if (lot?.barcode && lot?.lot_number) {
+            const show = shows.find(s => s.id === form.auction_show_id)
+            const dataURL = generateBarcodeDataURL(lot.barcode)
+            const printWindow = window.open('', '_blank', 'width=400,height=600')
+            if (!printWindow) {
+              toast.error('Pop-up blocked. Allow pop-ups to print labels.')
+              return
+            }
+            printWindow.document.write(`
+              <html>
+                <head>
+                  <title>Print Label</title>
+                  <style>
+                    @page { size: 2.4in 1in; margin: 0; }
+                    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #fff; font-family: Arial, sans-serif; }
+                    .label { width: 2.4in; height: 1in; border: 2px solid #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+                    .label img { max-width: 90%; max-height: 55%; }
+                    .label p { margin: 2px 0; font-size: 14px; font-weight: bold; text-align: center; }
+                    .label .meta { font-size: 10px; color: #333; }
+                  </style>
+                </head>
+                <body>
+                  <div class="label">
+                    <img src="${dataURL}" alt="${lot.barcode}" />
+                    <p>${lot.barcode}</p>
+                    <p class="meta">${lot.title} · ${show?.title || ''}</p>
+                  </div>
+                </body>
+              </html>
+            `)
+            printWindow.document.close()
+            printWindow.focus()
+            setTimeout(() => {
+              printWindow.print()
+            }, 300)
+          } else if (Date.now() - start < 3000) {
+            setTimeout(wait, 200)
+          } else {
+            toast.error('Barcode not ready yet')
+          }
+        }
+        void wait()
+      }
     } catch (error: any) {
       toast.error(error?.message || 'Failed to add item')
     }
