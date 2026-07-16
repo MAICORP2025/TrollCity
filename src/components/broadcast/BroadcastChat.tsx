@@ -1478,7 +1478,7 @@ const fetchMessages = async () => {
         await recordChatMessage(content.length, streamId);
         
         onMessageSent?.();
-    } catch (err: any) {
+        } catch (err: any) {
         console.error('BroadcastChat send failed:', err);
         const errMsg = String(err.message || '').toLowerCase();
         if (errMsg.includes('rate limit')) {
@@ -1487,6 +1487,8 @@ const fetchMessages = async () => {
             toast.error('Your chat has been disabled by moderation.');
         } else if (errMsg.includes('missing required fields')) {
             toast.error('Failed to send message. Please try again.');
+        } else if (errMsg.includes('currently disabled')) {
+            toast.error('Your chat is currently disabled.');
         } else {
             toast.error('Failed to send message. Please try again.');
         }

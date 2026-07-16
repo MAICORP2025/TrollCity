@@ -2,14 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { toast } from 'sonner';
-import { Coins, AlertCircle, ArrowLeft, Timer } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Timer } from 'lucide-react';
 
 export default function KickFeePage() {
     const { streamId } = useParams<{ streamId: string }>();
     const navigate = useNavigate();
-    const { user, profile, refreshProfile } = useAuthStore();
-    const [loading, setLoading] = useState(false);
+    const { user } = useAuthStore();
     const [checkingStatus, setCheckingStatus] = useState(true);
     const [banInfo, setBanInfo] = useState<{ expires_at: string } | null>(null);
 
@@ -57,35 +55,8 @@ export default function KickFeePage() {
         return () => { supabase.removeChannel(channel); };
     }, [user, streamId, navigate]);
 
-    const handlePayFee = async () => {
-        if (!user || !streamId) return;
-        if ((profile?.troll_coins || 0) < 100) {
-            toast.error("Insufficient Troll Coins!");
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const { data, error } = await supabase.rpc('pay_kick_fee', {
-                p_stream_id: streamId,
-                p_user_id: user.id
-            });
-
-            if (error) throw error;
-
-            if (data === true) {
-                toast.success("Fee paid! You can now re-enter.");
-                await refreshProfile(); // Update balance
-                navigate(`/watch/${streamId}`);
-            } else {
-                toast.error("Failed to process payment");
-            }
-        } catch (e: any) {
-            console.error(e);
-            toast.error(e.message || "An error occurred");
-        } finally {
-            setLoading(false);
-        }
+    const handleReturnHome = () => {
+        navigate('/');
     };
 
     if (checkingStatus) {
@@ -118,39 +89,13 @@ export default function KickFeePage() {
                     </span>
                 </div>
 
-                <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-white/10"></div>
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-zinc-900 px-2 text-zinc-500">Or Pay to Re-enter</span>
-                    </div>
-                </div>
-
-                <div className="space-y-4">
-                    <button
-                        onClick={handlePayFee}
-                        disabled={loading}
-                        className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-black py-4 rounded-xl flex items-center justify-center gap-3 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                            "Processing..."
-                        ) : (
-                            <>
-                                <Coins size={24} className="text-black" />
-                                PAY 100 COINS TO ENTER
-                            </>
-                        )}
-                    </button>
-                    
-                    <p className="text-xs text-zinc-500">
-                        Current Balance: <span className="text-yellow-500 font-bold">{profile?.troll_coins || 0}</span> Coins
-                    </p>
-                </div>
+                <p className="text-xs text-zinc-500">
+                    There is no fee to rejoin. You can return to the broadcast once the timeout ends.
+                </p>
 
                 <button 
-                    onClick={() => navigate('/')}
-                    className="flex items-center justify-center gap-2 text-zinc-500 hover:text-white text-sm mt-4 w-full"
+                    onClick={handleReturnHome}
+                    className="flex items-center justify-center gap-2 text-zinc-300 hover:text-white text-sm mt-4 w-full bg-zinc-800 hover:bg-zinc-700 py-3 rounded-xl transition-colors"
                 >
                     <ArrowLeft size={16} />
                     Return to Home

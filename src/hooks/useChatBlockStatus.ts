@@ -37,31 +37,69 @@ export function useChatBlockStatus(userId?: string | null, streamId?: string | n
     let highestIsPermanent = false;
 
     // 1 ── stream-specific / global block from chat_blocks
-    let query = supabase
+    const activeFilter = `is_permanent.eq.true,expires_at.gt.${new Date().toISOString()}`;
+
+    const streamQuery = streamId
+      ? supabase
+          .from('chat_blocks')
+          .select('expires_at, is_permanent')
+          .eq('user_id', userId)
+          .eq('stream_id', streamId)
+          .or(activeFilter)
+          .order('is_permanent', { ascending: false })
+          .order('expires_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null as any });
+
+    const globalQuery = supabase
       .from('chat_blocks')
       .select('expires_at, is_permanent')
       .eq('user_id', userId)
-      .or(`is_permanent.eq.true,expires_at.gt.${new Date().toISOString()}`)
+      .is('stream_id', null)
+      .or(activeFilter)
       .order('is_permanent', { ascending: false })
+      .order('expires_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const [{ data: streamBlock }, { data: globalBlock }] = await Promise.all([streamQuery, globalQuery])
+
+    const bestBlock = [streamBlock, globalBlock].find((b) => b?.expires_at) as { expires_at: string; is_permanent: boolean } | undefined
+
+    if (bestBlock?.expires_at) {
+      highestBlocked = true
+      if (bestBlock.is_permanent) {
+        highestIsPermanent = true
+        highestExpiresAt = null
+      } else {
+        highestExpiresAt = bestBlock.expires_at
+      }
+    }
+
+    // 2 ── broadcast restriction via user_broadcast_restrictions
+    let restrictionQuery = supabase
+      .from('user_broadcast_restrictions')
+      .select('expires_at, chat_disabled, status')
+      .eq('user_id', userId)
+      .eq('chat_disabled', true)
+      .eq('status', 'active')
+      .or(`expires_at.gt.${new Date().toISOString()}`)
       .order('expires_at', { ascending: false })
       .limit(1);
 
     if (streamId) {
-      query = query.or(`stream_id.eq.${streamId},stream_id.is.null`);
+      restrictionQuery = restrictionQuery.or(`stream_id.eq.${streamId},stream_id.is.null`);
     }
 
-    const { data } = await query.maybeSingle();
-    if (data?.expires_at) {
+    const { data: restriction } = await restrictionQuery.maybeSingle();
+    if (restriction?.expires_at) {
       highestBlocked = true;
-      if (data.is_permanent) {
-        highestIsPermanent = true;
-        highestExpiresAt = null;
-      } else {
-        highestExpiresAt = data.expires_at;
-      }
+      highestExpiresAt = restriction.expires_at;
+      highestIsPermanent = !restriction.expires_at;
     }
 
-    // 2 ── global moderator block via user_profiles.muted_until
+    // 3 ── global moderator block via user_profiles.muted_until
     const mutedUntil = profileMutedUntilRef.current;
 
     if (mutedUntil) {
@@ -136,6 +174,18 @@ export function useChatBlockStatus(userId?: string | null, streamId?: string | n
           event: '*',
           schema: 'public',
           table: 'chat_blocks',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          void refresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_broadcast_restrictions',
           filter: `user_id=eq.${userId}`,
         },
         () => {

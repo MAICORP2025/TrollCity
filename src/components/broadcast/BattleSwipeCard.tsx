@@ -3,7 +3,7 @@
  * Displays battle streams with duel visuals, scores, and competitor info
   */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { Eye, Heart, MessageCircle, Gift, Share2, Users, Sword, Shield, Trophy, Coins } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Room, RoomEvent, RemoteParticipant, RemoteVideoTrack, RemoteAudioTrack } from 'livekit-client';
+import { getLiveKitRoomName } from '../../lib/liveUtils';
 import ShareModal from './ShareModal';
 
 interface BattleSwipeCardProps {
@@ -66,6 +67,27 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
   const pendingLikesRef = useRef(0);
   const flushInProgressRef = useRef(false);
   
+  // Stable viewer identity. Signed-in users use their id; anonymous guests get
+  // a persistent per-session guest id so they can watch without logging in.
+  const viewerIdentity = useMemo(() => {
+    if (user?.id) return user.id;
+    if (typeof window === 'undefined') {
+      return `guest-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    try {
+      const storageKey = `swipe-guest:${stream.id}`;
+      let guestId = sessionStorage.getItem(storageKey);
+      if (!guestId) {
+        const rand = window.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+        guestId = `guest-${rand}`;
+        sessionStorage.setItem(storageKey, guestId);
+      }
+      return guestId;
+    } catch {
+      return `guest-${Math.random().toString(36).slice(2, 10)}`;
+    }
+  }, [user?.id, stream.id]);
+  
   // Fetch battle data
   useEffect(() => {
     const fetchBattleData = async () => {
@@ -103,30 +125,38 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
   
   // Join LiveKit channel when card becomes active
   const joinStream = useCallback(async () => {
-    if (!isActive || hasJoinedRef.current || !user) return;
-    
+    if (!isActive || hasJoinedRef.current) return;
+
     hasJoinedRef.current = true;
     setIsJoining(true);
-    
+
     try {
       const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
       if (!livekitUrl) {
         console.warn('VITE_LIVEKIT_URL not configured');
+        hasJoinedRef.current = false;
         setIsJoining(false);
         return;
       }
-      
-      // Get viewer token from livekit-token function
+
+      const roomName = getLiveKitRoomName(stream as any, stream.id) || stream.id;
+
+      // Get viewer token from livekit-token function (anonymous guests allowed)
       const { data: tokenData, error: tokenError } = await supabase.functions.invoke('livekit-token', {
         body: {
-          room: stream.id,
-          userId: user.id,
-          role: 'viewer'
+          room: roomName,
+          roomName,
+          identity: viewerIdentity,
+          userId: viewerIdentity,
+          name: (user as any)?.username || 'Viewer',
+          role: 'audience',
+          mode: 'audience',
         }
       });
       
       if (tokenError || !tokenData?.token) {
         console.error('Token error:', tokenError);
+        hasJoinedRef.current = false;
         setIsJoining(false);
         return;
       }
@@ -155,24 +185,26 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
       });
       
       // Handle track subscribed
-      room.on(RoomEvent.TrackSubscribed, (track: RemoteVideoTrack | RemoteAudioTrack, participant: RemoteParticipant) => {
+      room.on(RoomEvent.TrackSubscribed, (track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
         console.log('[BattleSwipeCard] Track subscribed:', track.kind, 'from', participant.identity);
-        // Force re-render
+        // Force re-render so the video track attaches
         setRemoteUsers(prev => [...prev]);
       });
       
       // Handle track unsubscribed
-      room.on(RoomEvent.TrackUnsubscribed, (track: RemoteVideoTrack | RemoteAudioTrack, participant: RemoteParticipant) => {
+      room.on(RoomEvent.TrackUnsubscribed, (track: RemoteVideoTrack | RemoteAudioTrack, publication, participant: RemoteParticipant) => {
         console.log('[BattleSwipeCard] Track unsubscribed:', track.kind, 'from', participant.identity);
         setRemoteUsers(prev => [...prev]);
       });
       
-      // Connect to room
+      // Connect to room (identity is carried by the token)
       await room.connect(livekitUrl, tokenData.token, {
-        name: stream.id,
-        identity: user.id
+        autoSubscribe: true,
       });
-      
+
+      // Apply current mute state to remote audio playback.
+      try { room.setAudioVolume?.(isMuted ? 0 : 100); } catch { /* noop */ }
+
        // Get existing participants
        const existingParticipants = Array.from(room.remoteParticipants?.values() || []);
        setRemoteUsers(existingParticipants);
@@ -185,7 +217,7 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
     } finally {
       setIsJoining(false);
     }
-  }, [isActive, stream.id, user]);
+  }, [isActive, stream, viewerIdentity, isMuted, user]);
   
   // Join/leave based on active state
   useEffect(() => {
@@ -337,8 +369,17 @@ export default function BattleSwipeCard({ stream, isActive, isMuted, onClose, br
                     <div 
                       ref={(el) => {
                         if (el && videoTrack) {
-                          const attached = videoTrack.attach();
+                          const attached = videoTrack.attach() as HTMLVideoElement;
+                          // Required for reliable autoplay on mobile / PWA (iOS Safari):
+                          attached.muted = true;
+                          attached.autoplay = true;
+                          attached.playsInline = true;
+                          attached.setAttribute('playsinline', '');
+                          attached.setAttribute('webkit-playsinline', '');
+                          attached.className = 'w-full h-full object-cover';
+                          el.innerHTML = '';
                           el.appendChild(attached);
+                          attached.play?.().catch(() => {});
                         }
                       }}
                       className="w-full h-full object-cover"

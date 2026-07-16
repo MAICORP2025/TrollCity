@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Gift, Shield, Gavel, Ban, Eye, Clock, UserCheck, User,
@@ -136,6 +136,14 @@ const ModActionsPopup = memo(function ModActionsPopup({
   const [endStreamReason, setEndStreamReason] = useState('');
   
   const isOfficer = isStaffProfile(profile);
+  const isPlainUser = !isOfficer &&
+    !profile?.is_admin &&
+    !profile?.is_lead_officer &&
+    !(profile?.role && ['admin', 'ceo', 'owner', 'superadmin', 'staff', 'moderator', 'lead_troll_officer', 'broadcaster'].includes(profile.role));
+  const visibleActions = useMemo(
+    () => isPlainUser ? MOD_ACTIONS.filter((a) => a.id !== 'arrest') : MOD_ACTIONS,
+    [isPlainUser]
+  );
   const currentActorId = currentUserId || profile?.id;
   const [effectiveStreamId, setEffectiveStreamId] = useState(streamId || '');
   const [effectiveHostId, setEffectiveHostId] = useState(hostId || '');
@@ -182,26 +190,7 @@ const ModActionsPopup = memo(function ModActionsPopup({
     resolveActiveStream();
   }, [streamId, hostId, targetUserId, currentActorId, isOpen]);
 
-  const logModerationAction = async (actionType: string, reason: string, details?: string) => {
-    if (!currentActorId || !targetUserId) return;
-
-    try {
-      await supabase.from('moderation_actions').insert({
-        officer_id: currentActorId,
-        actor_id: currentActorId,
-        target_user_id: targetUserId,
-        action: actionType,
-        action_type: actionType,
-        reason,
-        details: details || reason,
-        status: 'active',
-      });
-    } catch (error) {
-      console.warn('[ModActions] Moderation action log skipped:', error);
-    }
-  };
-
-  // User search handlers
+  // Check if target is host
   const handleUserSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
@@ -256,24 +245,13 @@ const ModActionsPopup = memo(function ModActionsPopup({
     setIsMuting(true);
     try {
       if (effectiveStreamId) {
-        const { data, error } = await supabase.rpc('moderator_mute_user', {
+        const { error } = await supabase.rpc('moderator_mute_user', {
           p_stream_id: effectiveStreamId,
           p_target_user_id: targetUserId,
           p_duration_minutes: muteDuration,
           p_reason: `Muted for ${muteDuration} minutes`,
         });
-
         if (error) throw error;
-        if (!data?.success) throw new Error(data?.message || 'Failed to mute');
-
-        // Muting also disables the user's chat so they see the
-        // "chat disabled by moderation" notice in the viewer.
-        await supabase.rpc('moderator_disable_chat', {
-          p_stream_id: effectiveStreamId,
-          p_target_user_id: targetUserId,
-          p_duration_minutes: muteDuration,
-          p_reason: `Chat disabled for ${muteDuration} minutes`,
-        }).then(() => undefined, () => undefined);
       } else {
         const mutedUntil = new Date(Date.now() + muteDuration * 60 * 1000).toISOString();
         const { error } = await supabase
@@ -287,8 +265,6 @@ const ModActionsPopup = memo(function ModActionsPopup({
 
         if (error) throw error;
 
-        // Global mute also disables chat globally (stream_id IS NULL).
-        // Best-effort: a chat-block failure must not block the mute itself.
         await supabase
           .from('chat_blocks')
           .upsert(
@@ -303,8 +279,7 @@ const ModActionsPopup = memo(function ModActionsPopup({
           )
           .then(() => undefined, () => undefined);
       }
-      
-      await logModerationAction('mute', `Muted for ${muteDuration} minutes`, effectiveStreamId ? `stream:${effectiveStreamId}` : 'global');
+
       toast.success(`${targetUsername} has been muted for ${muteDuration} minutes`);
       setShowMuteModal(false);
       onMuteUser?.(targetUserId, muteDuration);
@@ -320,13 +295,11 @@ const ModActionsPopup = memo(function ModActionsPopup({
     if (!targetUserId) return;
     try {
       if (effectiveStreamId) {
-        const { data, error } = await supabase.rpc('moderator_unmute_user', {
+        const { error } = await supabase.rpc('moderator_unmute_user', {
           p_stream_id: effectiveStreamId,
           p_target_user_id: targetUserId,
         });
-
         if (error) throw error;
-        if (!data?.success) throw new Error(data?.message || 'Failed to unmute');
       } else {
         const { error } = await supabase
           .from('user_profiles')
@@ -339,8 +312,7 @@ const ModActionsPopup = memo(function ModActionsPopup({
 
         if (error) throw error;
       }
-      
-      await logModerationAction('unmute', 'User unmuted', effectiveStreamId ? `stream:${effectiveStreamId}` : 'global');
+
       toast.success(`${targetUsername} has been unmuted`);
       onUnmuteUser?.(targetUserId);
     } catch (error) {
@@ -435,7 +407,6 @@ const ModActionsPopup = memo(function ModActionsPopup({
       });
       
       toast.success(`${targetUsername} arrested - Court: ${new Date(courtDateStr).toLocaleDateString()}`);
-      await logModerationAction('arrest', arrestReason, `severity:${arrestSeverity}; bail:${bail}`);
       setShowArrestModal(false);
       setArrestReason('');
       setArrestSeverity('moderate');
@@ -453,15 +424,13 @@ const ModActionsPopup = memo(function ModActionsPopup({
     setIsDisablingChat(true);
     try {
       if (effectiveStreamId) {
-        const { data, error } = await supabase.rpc('moderator_disable_chat', {
+        const { error } = await supabase.rpc('moderator_disable_chat', {
           p_stream_id: effectiveStreamId,
           p_target_user_id: targetUserId,
           p_duration_minutes: chatDisableDuration,
           p_reason: `Chat disabled for ${chatDisableDuration} minutes`,
         });
-
         if (error) throw error;
-        if (!data?.success) throw new Error(data?.message || 'Failed to disable chat');
       } else {
         const disabledUntil = new Date(Date.now() + chatDisableDuration * 60 * 1000).toISOString();
         await supabase
@@ -472,8 +441,7 @@ const ModActionsPopup = memo(function ModActionsPopup({
           })
           .eq('id', targetUserId);
       }
-      
-      await logModerationAction('disable_chat', `Chat disabled for ${chatDisableDuration} minutes`, effectiveStreamId ? `stream:${effectiveStreamId}` : 'global');
+
       toast.success(`${targetUsername}'s chat disabled for ${chatDisableDuration} minutes`);
       setShowDisableChatModal(false);
       onDisableChat?.(targetUserId, chatDisableDuration);
@@ -490,34 +458,57 @@ const ModActionsPopup = memo(function ModActionsPopup({
     setIsSuspendingLicense(true);
     try {
       const suspendedUntil = new Date(Date.now() + suspendLicenseDuration * 60 * 60 * 1000).toISOString();
-      
-      const { data, error } = await supabase
+
+      const { error: licenseError } = await supabase
         .from('user_driver_licenses')
         .upsert({
           user_id: targetUserId,
           status: 'suspended',
           suspended_until: suspendedUntil,
-          updated_at: new Date().toISOString()
+          expires_at: suspendedUntil,
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
-      if (error) throw error;
+      if (licenseError) throw licenseError;
 
-      // Sync suspension to user_profiles so canBroadcast / sidebar reflects it immediately
-      await supabase
+      const { error: profileError } = await supabase
         .from('user_profiles')
         .update({ drivers_license_status: 'suspended' })
         .eq('id', targetUserId);
 
-      // Log the suspension in notifications
+      if (profileError) {
+        console.error('[ModActions] Profile update error:', profileError);
+      }
+
+      const { data: broadcastCheck } = await supabase.rpc('can_user_broadcast', { p_user_id: targetUserId });
+
       await supabase.from('notifications').insert({
         user_id: targetUserId,
         type: 'license_suspension_started',
         title: 'License Suspended',
         message: `Your driver's license has been suspended for ${suspendLicenseDuration} hours. Reason: ${licenseSuspendReason}`,
-        data: { reason: licenseSuspendReason, duration_hours: suspendLicenseDuration }
+        data: { reason: licenseSuspendReason, duration_hours: suspendLicenseDuration, suspendedUntil, granted_by: currentActorId },
       });
 
-      await logModerationAction('suspend_license', licenseSuspendReason, `duration_hours:${suspendLicenseDuration}`);
+      await supabase.from('broadcast_mod_actions').insert({
+        action_type: 'suspend_license',
+        action_name: 'Suspend License',
+        target_user_id: targetUserId,
+        target_display_name: targetUsername,
+        target_role_before: targetUser?.role,
+        target_role_after: targetUser?.role,
+        reason: licenseSuspendReason,
+        duration_minutes: suspendLicenseDuration * 60,
+        previous_status: 'unknown',
+        new_status: 'suspended',
+        expires_at: suspendedUntil,
+        success: true,
+        actor_id: currentActorId,
+        actor_role: profile?.role,
+        actor_display_name: profile?.username || profile?.full_name || 'Unknown',
+        created_at: new Date().toISOString(),
+      });
+
       toast.success(`${targetUsername}'s license suspended for ${suspendLicenseDuration} hours`);
       setShowSuspendLicenseModal(false);
       setLicenseSuspendReason('');
@@ -534,59 +525,76 @@ const ModActionsPopup = memo(function ModActionsPopup({
     if (!targetUserId) return;
     setIsGrantingLicense(true);
     try {
-      const now = new Date().toISOString();
+      const licenseExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const insuranceExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      const { error } = await supabase
+      const { error: licenseError } = await supabase
         .from('user_driver_licenses')
         .upsert({
           user_id: targetUserId,
           status: 'active',
           suspended_until: null,
-          updated_at: now
+          issued_at: new Date().toISOString(),
+          expires_at: licenseExpiresAt,
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
-      if (error) throw error;
-
-      const carInsuranceExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      if (licenseError) throw licenseError;
 
       const { error: profileError } = await supabase
         .from('user_profiles')
         .update({
-          license_status: 'active',
           drivers_license_status: 'active',
-          car_insurance_expiry: carInsuranceExpiry,
-          updated_at: now
+          drivers_license_expiry: licenseExpiresAt,
+          car_insurance_expiry: insuranceExpiresAt,
         })
         .eq('id', targetUserId);
 
-      if (profileError) throw profileError;
-
-      const { error: insuranceError } = await supabase
-        .from('car_insurances')
-        .insert({
-          user_id: targetUserId,
-          vehicle_id: null,
-          expires_at: carInsuranceExpiry,
-          deductible_paid: 0
-        });
-
-      if (insuranceError) {
-        console.warn('License grant car insurance insert failed:', insuranceError);
+      if (profileError) {
+        console.error('[ModActions] Profile update error:', profileError);
       }
 
-      const { error: notificationError } = await supabase.from('notifications').insert({
+      const { error: insuranceError } = await supabase
+        .from('user_insurances')
+        .upsert({
+          user_id: targetUserId,
+          protection_type: 'car',
+          is_active: true,
+          expires_at: insuranceExpiresAt,
+          issued_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,protection_type' });
+
+      if (insuranceError) {
+        console.error('[ModActions] Insurance insert error:', insuranceError);
+      }
+
+      const { data: broadcastCheck } = await supabase.rpc('can_user_broadcast', { p_user_id: targetUserId });
+
+      await supabase.from('notifications').insert({
         user_id: targetUserId,
         type: 'license_granted',
         title: 'Driver License Granted',
-        message: 'Your driver license and one week of car insurance have been granted by moderators. You can now broadcast and go live.',
-        data: { granted_by: currentActorId, car_insurance_expiry: carInsuranceExpiry }
+        message: 'Your driver license and 30 days of car insurance have been granted by moderators. You can now broadcast and go live.',
+        data: { granted_by: currentActorId, license_expires_at: licenseExpiresAt, insurance_expires_at: insuranceExpiresAt },
       });
 
-      if (notificationError) {
-        console.warn('License grant notification failed:', notificationError);
-      }
+      await supabase.from('broadcast_mod_actions').insert({
+        action_type: 'grant_license',
+        action_name: 'Grant License',
+        target_user_id: targetUserId,
+        target_display_name: targetUsername,
+        target_role_before: targetUser?.role,
+        target_role_after: targetUser?.role,
+        previous_status: 'none',
+        new_status: 'active',
+        expires_at: licenseExpiresAt,
+        success: true,
+        actor_id: currentActorId,
+        actor_role: profile?.role,
+        actor_display_name: profile?.username || profile?.full_name || 'Unknown',
+        created_at: new Date().toISOString(),
+      });
 
-      await logModerationAction('grant_license', 'License granted by moderator');
       toast.success(`${targetUsername} has been granted a driver license`);
       onClose();
     } catch (error) {
@@ -600,7 +608,6 @@ const ModActionsPopup = memo(function ModActionsPopup({
   const handleKick = async () => {
     if (!targetUserId) return;
     
-    // Check if user has insurance and current user is not admin/lead
     const isAdminOrLead = profile?.role === 'admin' || 
                          profile?.role === 'lead_troll_officer' || 
                          profile?.is_admin ||
@@ -615,7 +622,6 @@ const ModActionsPopup = memo(function ModActionsPopup({
     try {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetUserId);
 
-      // Guest identities (e.g. TC-xxxx) are not UUIDs, so remove them directly from active seat session.
       if (!isUuid) {
         if (!effectiveStreamId) {
           toast.error('Guest kick requires an active stream');
@@ -654,23 +660,19 @@ const ModActionsPopup = memo(function ModActionsPopup({
 
         if (profileError) throw profileError;
 
-        await logModerationAction('kick', 'Global kick by moderator', 'global');
         toast.success(`${targetUsername} has been kicked globally`);
         onKickUser?.(targetUserId);
         onClose();
         return;
       }
 
-      const { data, error } = await supabase.rpc('moderator_kick_user', {
+      const { error: kickError } = await supabase.rpc('moderator_kick_user', {
         p_stream_id: effectiveStreamId,
         p_target_user_id: targetUserId,
         p_reason: 'Kicked by moderator',
       });
+      if (kickError) throw kickError;
 
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.message || 'Failed to kick');
-      
-      await logModerationAction('kick', 'Kicked by moderator', effectiveStreamId ? `stream:${effectiveStreamId}` : 'global');
       toast.success(`${targetUsername} has been kicked from the broadcast`);
       onKickUser?.(targetUserId);
       onClose();
@@ -740,25 +742,12 @@ const ModActionsPopup = memo(function ModActionsPopup({
     }
 
     try {
-      const { data, error } = await supabase.rpc('remove_stream_broadofficer', {
+      const { error } = await supabase.rpc('remove_stream_broadofficer', {
         p_stream_id: sid,
         p_officer_id: targetUserId,
       });
-
       if (error) throw error;
-      const result = Array.isArray(data) ? data[0] : data;
-      if (result && result.success === false) {
-        toast.error(result.error || 'Failed to remove Broadofficer');
-        return;
-      }
 
-      if (result?.removed === false) {
-        toast.info(`${targetUsername} is not a Broadofficer on this stream`);
-        onClose();
-        return;
-      }
-
-      // System chat message
       const content = `${targetUsername} is no longer a Broadofficer.`;
       const systemMessage = {
         id: `broadofficer-removed-${sid}-${targetUserId}-${Date.now()}`,
@@ -782,10 +771,8 @@ const ModActionsPopup = memo(function ModActionsPopup({
         }
       });
 
-      // Notify the removed user
       void notifyBroadofficerRemoved(targetUserId, sid, profile?.username || undefined);
 
-      await logModerationAction('remove_officer', 'Broadofficer status removed', `stream:${sid}`);
       toast.success(`${targetUsername} is no longer a Broadofficer`);
       onClose();
     } catch (error) {
@@ -796,30 +783,56 @@ const ModActionsPopup = memo(function ModActionsPopup({
 
   const handleSetToUser = async () => {
     if (!targetUserId || !currentActorId) return;
-    
+
     try {
-      const { error } = await supabase.rpc('set_user_role', { p_user_id: targetUserId });
+      const { data: authCheck, error: authError } = await supabase.rpc('can_set_to_user', {
+        p_actor_id: currentActorId,
+        p_target_id: targetUserId,
+      });
 
-      if (error) {
-        const { error: updateError } = await supabase
-          .from('user_profiles')
-          .update({
-            role: 'user',
-            troll_role: null,
-            is_admin: false,
-            is_troll_officer: false,
-            is_lead_officer: false,
-            is_prosecutor: false,
-            is_attorney: false,
-            is_staff: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', targetUserId);
-
-        if (updateError) throw updateError;
+      if (authError || !authCheck?.allowed) {
+        throw new Error(authError?.message || authCheck?.reason || 'Unauthorized');
       }
-      
-      await logModerationAction('set_to_user', 'All roles removed and user reset to standard user');
+
+      const { error: resetError } = await supabase.rpc('reset_user_permissions', {
+        p_target_user_id: targetUserId,
+      });
+      if (resetError) throw resetError;
+
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({
+          role: 'user',
+          troll_role: null,
+          is_admin: false,
+          is_troll_officer: false,
+          is_lead_officer: false,
+          is_prosecutor: false,
+          is_attorney: false,
+          is_secretary: false,
+          is_staff: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetUserId);
+
+      if (updateError) throw updateError;
+
+      await supabase.from('broadcast_mod_actions').insert({
+        action_type: 'set_to_user',
+        action_name: 'Set to User',
+        target_user_id: targetUserId,
+        target_display_name: targetUsername,
+        target_role_before: targetUser?.role,
+        target_role_after: 'user',
+        previous_status: targetUser?.role,
+        new_status: 'user',
+        success: true,
+        actor_id: currentActorId,
+        actor_role: profile?.role,
+        actor_display_name: profile?.username || profile?.full_name || 'Unknown',
+        created_at: new Date().toISOString(),
+      });
+
       toast.success(`${targetUsername} set to user - all roles and dashboard access removed`);
       onClose();
     } catch (error) {
@@ -832,62 +845,90 @@ const ModActionsPopup = memo(function ModActionsPopup({
     if (!currentActorId) return;
     setIsEndingStream(true);
     try {
-      let streamToEnd = effectiveStreamId;
+      const streamIdToEnd = effectiveStreamId || targetUserId ? undefined : undefined;
+      let streamData: any = null;
 
-      if (!streamToEnd && targetUserId) {
+      if (!streamIdToEnd && targetUserId) {
         const { data: activeStream } = await supabase
           .from('streams')
-          .select('id, user_id, broadcaster_id')
+          .select('id, user_id, broadcaster_id, status, is_live, stream_channel')
           .or(`user_id.eq.${targetUserId},broadcaster_id.eq.${targetUserId}`)
           .or('is_live.eq.true,status.eq.live,status.eq.active')
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        streamToEnd = activeStream?.id || '';
+        streamData = activeStream;
+      } else if (effectiveStreamId) {
+        const { data: stream } = await supabase
+          .from('streams')
+          .select('id, user_id, broadcaster_id, status, is_live, stream_channel')
+          .eq('id', effectiveStreamId)
+          .maybeSingle();
+        streamData = stream;
       }
 
-      if (!streamToEnd) {
-        toast.error('No active stream found to end');
-        return;
+      if (!streamData?.id) {
+        throw new Error('No active stream found to end');
       }
 
-      // Update stream status to ended
-      const { error } = await supabase
+      const isStreamOwner = streamData.user_id === currentActorId || streamData.broadcaster_id === currentActorId;
+      const isAdmin = profile?.role === 'admin' || profile?.is_admin === true;
+      if (!isStreamOwner && !isAdmin) {
+        throw new Error('Only stream owner or admin can end this stream');
+      }
+
+      const { error: updateError } = await supabase
         .from('streams')
-        .update({ 
+        .update({
           status: 'ended',
           is_live: false,
-          ended_at: new Date().toISOString()
+          ended_at: new Date().toISOString(),
+          end_time: new Date().toISOString(),
+          is_force_ended: true,
+          ended_by: currentActorId,
+          updated_at: new Date().toISOString(),
         })
-        .eq('id', streamToEnd);
-      
-      if (error) throw error;
-      
-      // Add broadcast restriction for the broadcaster
-      const { data: streamData } = await supabase
-        .from('streams')
-        .select('user_id')
-        .eq('id', streamToEnd)
-        .single();
-      
-      if (streamData?.user_id) {
-        const restrictUntil = new Date(Date.now() + restrictDuration * 60 * 1000).toISOString();
-        await supabase.from('broadcast_restrictions').insert({
-          user_id: streamData.user_id,
-          restricted_by: currentActorId,
-          reason: endStreamReason || 'Ended by officer',
-          duration_minutes: restrictDuration,
-          expires_at: restrictUntil
-        });
+        .eq('id', streamData.id);
+
+      if (updateError) throw updateError;
+
+      const restrictUntil = new Date(Date.now() + restrictDuration * 60 * 1000).toISOString();
+      await supabase.from('broadcast_restrictions').insert({
+        user_id: streamData.user_id,
+        restricted_by: currentActorId,
+        reason: endStreamReason || 'Ended by moderator',
+        duration_minutes: restrictDuration,
+        expires_at: restrictUntil,
+      });
+
+      const roomName = streamData.stream_channel || streamData.id;
+      if (roomName) {
+        await supabase.from('stream_participants').delete().eq('stream_id', streamData.id);
       }
-      
-      await logModerationAction('end_stream', endStreamReason || 'Ended by officer', `stream:${streamToEnd}`);
+
+      await supabase.from('broadcast_mod_actions').insert({
+        action_type: 'end_stream',
+        action_name: 'End Stream',
+        target_user_id: streamData.user_id,
+        broadcast_id: streamData.id,
+        livekit_room_name: roomName,
+        reason: endStreamReason || 'Ended by moderator',
+        duration_minutes: restrictDuration,
+        new_status: 'ended',
+        expires_at: restrictUntil,
+        success: true,
+        actor_id: currentActorId,
+        actor_role: profile?.role,
+        actor_display_name: profile?.username || profile?.full_name || 'Unknown',
+        created_at: new Date().toISOString(),
+      });
+
       toast.success('Stream ended and broadcaster restricted');
       setShowEndStreamModal(false);
       onClose();
     } catch (error) {
-      console.error('[ModActions] Error ending stream:', error);
+      console.error('Error ending stream:', error);
       toast.error('Failed to end stream');
     } finally {
       setIsEndingStream(false);
@@ -1001,7 +1042,7 @@ const ModActionsPopup = memo(function ModActionsPopup({
                </div>
                
                <div className="grid grid-cols-2 gap-3">
-              {MOD_ACTIONS.map((action) => {
+              {visibleActions.map((action) => {
                 const Icon = action.icon;
                 const isKickAction = action.id === 'kick';
                 const isDisabled = (isKickAction && hasInsuranceProtection && 

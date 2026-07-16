@@ -32,6 +32,8 @@ import { Stream } from '../../types/broadcast'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
 import BroadcastNeonHeader from '../../components/broadcast/BroadcastNeonHeader'
 import AudienceBubbleTicker from '@/components/broadcast/AudienceBubbleTicker'
+import MobileAudienceTicker from '@/components/broadcast/MobileAudienceTicker'
+import RandomBattleButton from '@/components/broadcast/RandomBattleButton'
 import BroadcastOfficerModal from '../../components/broadcast/BroadcastOfficerModal'
 import PayBroadOfficersModal from '../../components/broadcast/PayBroadOfficersModal'
 import MoreControlsDrawer from '../../components/broadcast/MoreControlsDrawer'
@@ -530,6 +532,7 @@ import GiftBoxModal from '@/components/broadcast/GiftBoxModal'
 import GiftVideoOverlay from '@/components/broadcast/GiftVideoOverlay'
 import PinProductModal from '@/components/broadcast/PinProductModal'
 import UserActionModal from '@/components/broadcast/UserActionModal'
+import ModActionsPopup from '@/components/broadcast/ModActionsPopup'
 import CityStatusPanel from '@/components/city/CityStatusPanel'
 import CityStatusOrb from '@/components/city/CityStatusOrb'
 import { useCityStatusOrb } from '@/lib/hooks/useCityStatusOrb'
@@ -2555,6 +2558,9 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
       }
 
       for (const seat of seatsToRemove) {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seat.id)) {
+          continue
+        }
         const { error: leaveError } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
         if (leaveError) {
           throw leaveError
@@ -4185,6 +4191,43 @@ const toggleMicrophone = useCallback(async () => {
       // No-op
     }, [])
 
+    // Authoritative current-user roles from user_profile_roles + user_profiles,
+    // fetched from the DB (not derived flags / not gated on staff clock-in), so
+    // broadcasters, broadofficers, admins, ceos and all staff get the full
+    // ModActionsPopup moderation menu when tapping a chat username.
+    const [myProfileRoleTypes, setMyProfileRoleTypes] = useState<string[]>([])
+    const [myProfileAdminFlags, setMyProfileAdminFlags] = useState<{ is_admin: boolean; is_ceo: boolean; role: string | null }>({ is_admin: false, is_ceo: false, role: null })
+
+    useEffect(() => {
+      if (!user?.id) { setMyProfileRoleTypes([]); setMyProfileAdminFlags({ is_admin: false, is_ceo: false, role: null }); return }
+      let active = true
+      const refresh = async () => {
+        const [{ data: roles }, { data: prof }] = await Promise.all([
+          supabase.from('user_profile_roles').select('role_type').eq('user_id', user.id).eq('is_active', true),
+          supabase.from('user_profiles').select('is_admin, is_ceo, role').eq('id', user.id).maybeSingle(),
+        ])
+        if (!active) return
+        if (roles) setMyProfileRoleTypes(roles.map((r: any) => String(r.role_type).toLowerCase()))
+        if (prof) setMyProfileAdminFlags({ is_admin: Boolean(prof.is_admin), is_ceo: Boolean(prof.is_ceo), role: prof.role ?? null })
+      }
+      void refresh()
+      return () => { active = false }
+    }, [user?.id])
+
+    const MOD_MENU_ROLE_TYPES = new Set([
+      'broadcaster', 'troll_officer', 'lead_troll_officer', 'pastor',
+      'secretary', 'ceo_assistant', 'noah_assistant', 'agency_leader',
+      'agency_hr', 'agency_hr_manager', 'attorney', 'prosecutor',
+      'journalist', 'news_caster', 'chief_news_caster', 'auctioneer', 'seller', 'troller',
+    ])
+    const hasModMenuFromRoles = myProfileRoleTypes.some((r) => MOD_MENU_ROLE_TYPES.has(r))
+    const showModActionMenu = Boolean(
+      isHost || isCurrentUserBroadofficer || hasModMenuFromRoles ||
+      myProfileAdminFlags.is_admin || myProfileAdminFlags.is_ceo ||
+      ['admin', 'ceo', 'owner', 'superadmin', 'staff', 'moderator'].includes(myProfileAdminFlags.role ?? '')
+    )
+
+
    // -- Troll Button -------------------------------------------------------
    // Viewers (non-host) can click once per broadcast to trigger a random
    // temporary prank effect.  The host can never be targeted by their own
@@ -4968,34 +5011,34 @@ const toggleMicrophone = useCallback(async () => {
           let removedUserId: string | null = targetUserId || null
           let removedSessionId: string | null = seatSessionId || null
 
-           if (seatSessionId) {
-             const seat = Object.values(seats).find((s: any) => s.id === seatSessionId)
-             if (seat?.seat_index) {
-               removedSeatIndex = seat.seat_index
-             }
+            if (seatSessionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seatSessionId)) {
+              const seat = Object.values(seats).find((s: any) => s.id === seatSessionId)
+              if (seat?.seat_index) {
+                removedSeatIndex = seat.seat_index
+              }
 
-             const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seatSessionId })
-             if (error) {
-               toast.error('Failed to remove user from seat')
-               return
-             }
-             kicked = true
-           } else {
-             const seat = Object.values(seats).find(
-               (s: any) => s.user_id === targetUserId || s.guest_id === targetUserId,
-             )
-             if (seat?.id) {
-               removedSeatIndex = seat.seat_index
-               removedUserId = seat.user_id || seat.guest_id || targetUserId || null
-               removedSessionId = seat.id
-               const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
-               if (error) {
-                 toast.error('Failed to remove user from seat')
-                 return
-               }
-               kicked = true
-             }
-           }
+              const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seatSessionId })
+              if (error) {
+                toast.error('Failed to remove user from seat')
+                return
+              }
+              kicked = true
+            } else {
+              const seat = Object.values(seats).find(
+                (s: any) => s.user_id === targetUserId || s.guest_id === targetUserId,
+              )
+              if (seat?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seat.id)) {
+                removedSeatIndex = seat.seat_index
+                removedUserId = seat.user_id || seat.guest_id || targetUserId || null
+                removedSessionId = seat.id
+                const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
+                if (error) {
+                  toast.error('Failed to remove user from seat')
+                  return
+                }
+                kicked = true
+              }
+            }
 
            if (!kicked) {
              toast.error('Seat session not found')
@@ -5055,38 +5098,41 @@ const toggleMicrophone = useCallback(async () => {
        void doBlock()
      }
 
-      function handleMute(userId: string) {
-        const doMute = async () => {
-          try {
-            const { error } = await supabase.rpc('moderator_mute_user', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: 5, p_reason: 'Muted by moderator' })
-            if (error) throw error
-            // Muting also disables the user's chat so they see the
-            // "chat disabled by moderation" notice in the viewer.
-            await supabase.rpc('moderator_disable_chat', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: 5, p_reason: 'Chat disabled by moderator' })
-              .then(() => undefined, () => undefined)
-            toast.success('User muted for 5 minutes')
-          } catch (err) {
-            toast.error('Failed to mute user')
-          }
-        }
-        void doMute()
-      }
-
-     function handleDisableChat(userId: string) {
-       const doDisable = async () => {
-         try {
-           const { error } = await supabase.rpc('moderator_disable_chat', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: 5, p_reason: 'Chat disabled by moderator' })
-           if (error) {
-             toast.error('Failed to disable chat')
-           } else {
-             toast.success('User chat disabled for 5 minutes')
+       function handleMute(userId: string) {
+         const doMute = async () => {
+           try {
+             const { error } = await supabase.rpc('moderator_mute_user', {
+               p_stream_id: streamId,
+               p_target_user_id: userId,
+               p_duration_minutes: 5,
+               p_reason: 'Muted by moderator',
+             });
+             if (error) throw error;
+             toast.success('User muted for 5 minutes')
+           } catch (err) {
+             toast.error('Failed to mute user')
            }
-         } catch (err) {
-           toast.error('Failed to disable chat')
          }
+         void doMute()
        }
-       void doDisable()
-     }
+
+       function handleDisableChat(userId: string) {
+         const doDisable = async () => {
+           try {
+             const { error } = await supabase.rpc('moderator_disable_chat', {
+               p_stream_id: streamId,
+               p_target_user_id: userId,
+               p_duration_minutes: 5,
+               p_reason: 'Chat disabled by moderator',
+             });
+             if (error) throw error;
+             toast.success('User chat disabled for 5 minutes')
+           } catch (err) {
+             toast.error('Failed to disable chat')
+           }
+         }
+         void doDisable()
+       }
 
   const [isAssignOfficerModalOpen, setIsAssignOfficerModalOpen] = useState(false)
   const [isPayBroadOfficersModalOpen, setIsPayBroadOfficersModalOpen] = useState(false)
@@ -5219,11 +5265,17 @@ const toggleMicrophone = useCallback(async () => {
 
             {/* Background layers � identical to Sidebar ShellBackdrop */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.13),transparent_44%)]" />
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-300/65 to-transparent" />
+
+            {/* RGB broadcast effect — only when enabled, rendered ABOVE the seat grid */}
+            {stream?.has_rgb_effect && (
+              <div className="pointer-events-none absolute inset-0 z-30 mix-blend-screen">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.35),transparent_42%)]" />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.28),transparent_46%)]" />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.24),transparent_44%)]" />
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.18)_0%,rgba(14,165,233,0.12)_44%,rgba(236,72,153,0.16)_100%)]" />
+              </div>
+            )}
 
 {/* TOP HEADER */}
 
@@ -5246,18 +5298,19 @@ const toggleMicrophone = useCallback(async () => {
                 />
              )}
 
-             {/* Random Battle Banner � prominent notice for queue/active battle */}
-             {stream && (
-               <RandomBattleBanner
-                 phase={randomBattleQueue.phase}
-                 delayUntil={randomBattleQueue.delayUntil}
-                 isBroadcaster={isHost}
-                 onStartQueue={randomBattleQueue.startQueue}
-                 onStopQueue={randomBattleQueue.stopQueue}
-                 isBusy={randomBattleQueue.isBusy}
-                 mobileSafe={isMobileWidth}
-               />
-             )}
+              {/* Random Battle Banner — prominent notice for queue/active battle (desktop only; mobile uses the squared button in the ticker) */}
+              {stream && !isMobileHost && (
+                <RandomBattleBanner
+                  phase={randomBattleQueue.phase}
+                  delayUntil={randomBattleQueue.delayUntil}
+                  isBroadcaster={isHost}
+                  onStartQueue={randomBattleQueue.startQueue}
+                  onStopQueue={randomBattleQueue.stopQueue}
+                  isBusy={randomBattleQueue.isBusy}
+                  mobileSafe={isMobileWidth}
+                />
+              )}
+
 
              {/* --- AUDIENCE TICKER: full-width, neon style, always visible --- */}
              <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
@@ -6892,28 +6945,55 @@ const toggleMicrophone = useCallback(async () => {
 
                 {/* Floating chat messages on video */}
                 {floatingMessages.length > 0 && (
-                  <div
-                    className="pointer-events-none absolute inset-x-0 bottom-0 z-10 overflow-hidden"
-                    style={{ bottom: viewerSeatCards.length > 0 ? '48%' : '16px', top: '40px' }}
-                  >
-                    <div className="flex flex-col-reverse gap-1 px-3 pb-2">
-                      {floatingMessages.slice(0, 8).map((msg) => (
-                        <div
-                          key={msg.id}
-                          className="pointer-events-auto max-w-[80%] self-start rounded-xl border border-cyan-300/15 bg-black/50 px-2.5 py-1.5 backdrop-blur-md"
-                        >
-                          <button
-                            onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                            className="text-[11px] font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                  isMobileHost ? (
+                    /* MOBILE: flying chats rise up from the bottom input box and fade at the top */
+                    <div
+                      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 overflow-hidden"
+                      style={{ bottom: '84px', top: '40px' }}
+                    >
+                      <div className="flex flex-col-reverse items-start gap-1 px-3">
+                        {floatingMessages.slice(0, 6).map((msg, idx) => (
+                          <div
+                            key={msg.id}
+                            className="pointer-events-auto max-w-[80%] self-start rounded-xl border border-cyan-300/15 bg-black/50 px-2.5 py-1.5 backdrop-blur-md mobile-rise-chat"
+                            style={{ animationDelay: `${idx * 120}ms` }}
                           >
-                            {msg.username}
-                          </button>
-                          <span className="mx-1 text-white/30 text-[11px]">:</span>
-                          <span className="text-[11px] text-white/80">{msg.content}</span>
-                        </div>
-                      ))}
+                            <button
+                              onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                              className="text-[11px] font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                            >
+                              {msg.username}
+                            </button>
+                            <span className="mx-1 text-white/30 text-[11px]">:</span>
+                            <span className="text-[11px] text-white/80">{msg.content}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 overflow-hidden"
+                      style={{ bottom: viewerSeatCards.length > 0 ? '48%' : '16px', top: '40px' }}
+                    >
+                      <div className="flex flex-col-reverse gap-1 px-3 pb-2">
+                        {floatingMessages.slice(0, 8).map((msg) => (
+                          <div
+                            key={msg.id}
+                            className="pointer-events-auto max-w-[80%] self-start rounded-xl border border-cyan-300/15 bg-black/50 px-2.5 py-1.5 backdrop-blur-md"
+                          >
+                            <button
+                              onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                              className="text-[11px] font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                            >
+                              {msg.username}
+                            </button>
+                            <span className="mx-1 text-white/30 text-[11px]">:</span>
+                            <span className="text-[11px] text-white/80">{msg.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
                 )}
 
                 {/* Mic / Camera status pills - top right */}
@@ -6940,13 +7020,30 @@ const toggleMicrophone = useCallback(async () => {
                   </span>
                 </div>
 
-                {/* Viewer count - below LIVE badge */}
-                <div className="absolute left-3 top-10 z-30">
-                  <span className="inline-flex h-5 items-center gap-1 rounded-full border border-white/10 bg-black/40 px-2 text-[9px] font-bold text-white/60 backdrop-blur-md">
-                    <Users className="h-2.5 w-2.5" />
-                    {liveViewerCount}
-                  </span>
-                </div>
+                {/* MOBILE: Audience ticker with viewer count + squared Random Battle button */}
+                {isMobileHost && stream && (
+                  <div className="absolute inset-x-0 top-0 z-20 flex items-start gap-2 px-3 pt-[44px]">
+                    <div className="pointer-events-auto flex-1 rounded-2xl border border-cyan-400/10 bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 px-2 py-1.5 backdrop-blur-xl shadow-[0_2px_24px_0_rgba(34,211,238,0.10)]">
+                      <MobileAudienceTicker
+                        audience={audience}
+                        currentUserId={user?.id}
+                        hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
+                        viewerCount={liveViewerCount}
+                        maxVisible={6}
+                        onModerateUser={handleOpenUserAction}
+                      />
+                    </div>
+                    <div className="pointer-events-auto relative mt-0.5">
+                      <RandomBattleButton
+                        phase={randomBattleQueue.phase}
+                        isBroadcaster={isHost}
+                        isBusy={randomBattleQueue.isBusy}
+                        onStartQueue={randomBattleQueue.startQueue}
+                        onStopQueue={randomBattleQueue.stopQueue}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Settings button - bottom right */}
                 <div className="absolute bottom-4 right-3 z-50 flex flex-col items-end gap-2">
@@ -6980,6 +7077,7 @@ const toggleMicrophone = useCallback(async () => {
                     }}
                     onAssignOfficer={() => setIsAssignOfficerModalOpen(true)}
                     onPayOfficers={() => setIsPayBroadOfficersModalOpen(true)}
+                    onSeat={handleOpenSeatsModal}
                   />
                 </div>
               </>
@@ -7250,6 +7348,23 @@ const toggleMicrophone = useCallback(async () => {
 
               {/* User Action Modal (for gifts, mod actions, etc.) */}
               {userActionTarget && (
+                showModActionMenu ? (
+                  <ModActionsPopup
+                    isOpen={true}
+                    onClose={handleCloseUserAction}
+                    targetUser={{
+                      id: userActionTarget.userId,
+                      username: userActionTarget.username || '',
+                      avatar_url: userProfiles?.[userActionTarget.userId]?.avatar_url || '',
+                      role: userActionTarget.role,
+                    } as any}
+                    targetUsername={userActionTarget.username || ''}
+                    targetUserId={userActionTarget.userId}
+                    streamId={streamId || ''}
+                    hostId={stream?.user_id || ''}
+                    currentUserId={user?.id}
+                  />
+                ) : (
                 <div className="pointer-events-auto">
                 <UserActionModal
                   streamId={streamId}
@@ -7265,6 +7380,7 @@ const toggleMicrophone = useCallback(async () => {
                   onKickStage={() => handleGeneralKick()}
                 />
                 </div>
+                )
               )}
 
               {/* Broadcaster Stats Modal */}

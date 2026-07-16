@@ -192,7 +192,6 @@ export default function BroadcastBottomBar({
               <span className="inline-block h-4 w-4 rounded-full bg-gradient-to-br from-purple-400 via-cyan-400 to-pink-400 shadow-md mr-1" />
               {liveViewerCount >= 1000 ? `${(liveViewerCount / 1000).toFixed(1)}K` : liveViewerCount}
             </span>
-            <span className="text-xs font-bold tabular-nums text-white/70">⏱ {liveTimer}</span>
           </div>
           {/* Host action buttons row */}
           <div className="flex items-center gap-2">

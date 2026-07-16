@@ -404,6 +404,7 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
 
     processedMessageIds.current.add(txnId);
 
+    let parsedBody: any;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
@@ -425,7 +426,7 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
       const contentType = response.headers.get('content-type') || '';
       const rawText = await response.text();
       const hasJsonBody = contentType.toLowerCase().includes('application/json') && rawText.trim().length > 0;
-      const parsedBody = hasJsonBody ? JSON.parse(rawText) : undefined;
+      parsedBody = hasJsonBody ? JSON.parse(rawText) : undefined;
 
       if (!response.ok) {
         const msg = (parsedBody as any)?.error || (parsedBody as any)?.message || rawText || response.statusText;
@@ -445,10 +446,15 @@ export const useStreamChat = ({ streamId, hostId, isHost }: UseStreamChatProps) 
 
       trackChatMessage();
 
-    } catch (err: any) {
+      } catch (err: any) {
       console.error('Error sending message:', err);
-      if (String(err.message || '').toLowerCase().includes('rate limit')) {
+      const errMsg = String(err.message || '').toLowerCase();
+      if (errMsg.includes('rate limit')) {
         toast.error('You are sending messages too fast. Please slow down.');
+      } else if (errMsg.includes('currently disabled') || (errMsg.includes('chat') && errMsg.includes('disabled'))) {
+        toast.error('Your chat is currently disabled.');
+      } else if (parsedBody?.error) {
+        toast.error(parsedBody.error);
       } else {
         toast.error('Failed to send message: ' + err.message);
       }

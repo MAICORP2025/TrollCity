@@ -459,14 +459,14 @@ export default function UserActionModal({
     const durationLabel = nextDuration === 0 ? 'permanently disable' : `disable for ${nextDuration} minutes`;
     if (!confirm(`${durationLabel.charAt(0).toUpperCase() + durationLabel.slice(1)}${strikeInfo} for ${displayName}?`)) return;
 
-    const { data, error } = await supabase.rpc('moderator_disable_chat', { p_stream_id: streamId, p_target_user_id: userId, p_duration_minutes: nextDuration === 0 ? null : nextDuration, p_reason: 'Chat disabled by moderator' });
+    const { error } = await supabase.rpc('moderator_disable_chat', {
+      p_stream_id: streamId,
+      p_target_user_id: userId,
+      p_duration_minutes: nextDuration === 0 ? null : nextDuration,
+      p_reason: 'Chat disabled by moderator',
+    });
     if (error) toast.error("Failed to disable user chat");
-    else if (data && data.is_permanent) {
-        toast.success("User permanently disabled from chatting in your stream");
-        onClose();
-    } else if (data && !data.success) {
-        toast.error(data.message || "Failed to disable user chat");
-    } else {
+    else {
         const mins = nextDuration === 0 ? 'permanently' : `for ${nextDuration} minutes`;
         toast.success(`User chat disabled ${mins}`);
         onClose();

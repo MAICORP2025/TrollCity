@@ -72,6 +72,11 @@ function safeNumber(value: any, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function isValidSeatSessionId(id: string | null | undefined): boolean {
+  if (!id) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+}
+
 async function checkIsSubscribedToBroadcaster(userId: string, broadcasterId: string): Promise<boolean> {
   try {
     const { data, error } = await supabase
@@ -531,6 +536,15 @@ export function useStreamSeats(
 
     const seatIndex = currentSeat.seat_index
     const userId = currentSeat.user_id || currentSeat.guest_id || effectiveUserId || null
+
+    if (!isValidSeatSessionId(currentSeat.id)) {
+      safeSetSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+      safeSetMySeat(null)
+      seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+      mySeatRef.current = null
+      safeSetSeatVersion(v => v + 1)
+      return
+    }
 
     safeSetLeavingSeatId(seatIndex)
 

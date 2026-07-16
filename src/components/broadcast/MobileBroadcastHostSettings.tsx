@@ -46,6 +46,7 @@ interface MobileBroadcastHostSettingsProps {
   onTextPopup?: () => void;
   onAssignOfficer?: () => void;
   onPayOfficers?: () => void;
+  onSeat?: () => void;
   onToggleSeatsLock?: () => void;
   isRecording?: boolean;
   onToggleRecord?: () => void;
@@ -164,6 +165,7 @@ export default function MobileBroadcastHostSettings({
   onTextPopup,
   onAssignOfficer,
   onPayOfficers,
+  onSeat,
   onToggleSeatsLock,
   isRecording = false,
   onToggleRecord,
@@ -539,6 +541,15 @@ export default function MobileBroadcastHostSettings({
               >
                 <Coins className="h-5 w-5" />
                 <span className="text-sm font-bold">Pay Broad Officers</span>
+              </button>
+            )}
+            {onSeat && (
+              <button
+                onClick={() => { onSeat(); closePopup(); }}
+                className="flex w-full items-center gap-3 rounded-xl border border-purple-400/30 bg-purple-500/10 px-4 py-3 text-purple-300 transition-all active:scale-[0.98]"
+              >
+                <Ticket className="h-5 w-5" />
+                <span className="text-sm font-bold">Seat</span>
               </button>
             )}
           </div>

@@ -62,6 +62,7 @@ import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '../../hooks/useStreamAudiencePresence'
 import { AudienceBubbleTicker } from '../../components/broadcast/AudienceBubbleTicker'
+import MobileAudienceTicker from '../../components/broadcast/MobileAudienceTicker'
 import { TopSubscribersBar } from '../../components/broadcast/TopSubscribersBar'
 import { useSubscriberUsernames, useCreatorSubscription } from '../../hooks/useCreatorSubscription'
 import SubscriptionTierSelector from '../../components/user/SubscriptionTierSelector'
@@ -81,6 +82,7 @@ import { useCityStatusOrb } from '../../lib/hooks/useCityStatusOrb'
 import SeatCityStatusOrb from '../../components/broadcast/SeatCityStatusOrb'
 import { useGhostMode } from '../../hooks/useGhostMode'
 import { useChatBlockStatus } from '../../hooks/useChatBlockStatus'
+import { sendChatThroughGate } from '../../lib/sendChatThroughGate'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -645,6 +647,7 @@ function ViewerPage() {
               message: newNotification.message || 'Broadcaster has made you a Broadofficer.',
               streamId: newNotification.data?.stream_id || '',
             })
+            toast.success('🛡️ You have been assigned as a Broadofficer!')
             refreshCurrentUserProfile()
           }
         }
@@ -654,6 +657,49 @@ function ViewerPage() {
     return () => {
       if (channel) {
         supabase.removeChannel(channel)
+      }
+    }
+  }, [refreshCurrentUserProfile])
+
+  // Poll for recent broadofficer assignments as a fallback for mobile/PWA where realtime may be throttled
+  useEffect(() => {
+    const { user: currentUser } = useAuthStore.getState()
+    if (!currentUser?.id) return
+
+    let pollInterval: number | null = null
+
+    const checkForRecentAssignment = async () => {
+      try {
+        const fifteenSecondsAgo = new Date(Date.now() - 15000).toISOString()
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('id, message, data, created_at')
+          .eq('user_id', currentUser.id)
+          .eq('type', 'broadofficer_assigned')
+          .gte('created_at', fifteenSecondsAgo)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (error || !data?.length) return
+
+        const notification = data[0] as any
+        setBroadofficerPopup({
+          visible: true,
+          message: notification.message || 'Broadcaster has made you a Broadofficer.',
+          streamId: notification.data?.stream_id || '',
+        })
+        toast.success('🛡️ You have been assigned as a Broadofficer!')
+        refreshCurrentUserProfile()
+      } catch {
+        // silent
+      }
+    }
+
+    pollInterval = window.setInterval(checkForRecentAssignment, 15000)
+
+    return () => {
+      if (pollInterval) {
+        window.clearInterval(pollInterval)
       }
     }
   }, [refreshCurrentUserProfile])
@@ -864,6 +910,9 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
   const [isStreamBroadofficer, setIsStreamBroadofficer] = useState(false)
   // Server-authoritative moderation context (staff role + clock-in), realtime
   const [modContext, setModContext] = useState<any>(null)
+  // Authoritative current-user roles read from user_profile_roles (not derived flags).
+  const [myProfileRoleTypes, setMyProfileRoleTypes] = useState<string[]>([])
+  const [myProfileAdminFlags, setMyProfileAdminFlags] = useState<{ is_admin: boolean; is_ceo: boolean; role: string | null }>({ is_admin: false, is_ceo: false, role: null })
   const { topGifters, isLoading: isTopFansLoading } = useStreamTopGifters({ streamId: streamId || null, limit: 10 })
 
   // Realtime broadofficer status for THIS stream. Powers appear/disappear
@@ -915,6 +964,63 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
       .subscribe()
     return () => { active = false; void supabase.removeChannel(channel) }
   }, [streamId, user?.id])
+
+  // Authoritative current-user roles from user_profile_roles + user_profiles.
+  // The mod action menu for viewers is decided from these roles (not derived
+  // isModOrHigher flags and not gated on staff clock-in), so broadcasters,
+  // broadofficers, admins, ceos and all staff always get the full moderation menu.
+  useEffect(() => {
+    if (!user?.id) { setMyProfileRoleTypes([]); return }
+    let active = true
+    const refresh = async () => {
+      const { data: roles } = await supabase
+        .from('user_profile_roles')
+        .select('role_type')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+      if (active && roles) {
+        setMyProfileRoleTypes(roles.map((r: any) => String(r.role_type).toLowerCase()))
+      }
+    }
+    void refresh()
+    return () => { active = false }
+  }, [user?.id])
+
+  // Authoritative admin/ceo flags read straight from user_profiles (not the
+  // possibly-stale local auth profile) so the mod menu shows for admins too.
+  useEffect(() => {
+    if (!user?.id) { setMyProfileAdminFlags({ is_admin: false, is_ceo: false, role: null }); return }
+    let active = true
+    const refresh = async () => {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('is_admin, is_ceo, role')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (active && data) {
+        setMyProfileAdminFlags({
+          is_admin: Boolean(data.is_admin),
+          is_ceo: Boolean(data.is_ceo),
+          role: data.role ?? null,
+        })
+      }
+    }
+    void refresh()
+    return () => { active = false }
+  }, [user?.id])
+
+  const MOD_MENU_ROLE_TYPES = new Set([
+    'broadcaster', 'troll_officer', 'lead_troll_officer', 'pastor',
+    'secretary', 'ceo_assistant', 'noah_assistant', 'agency_leader',
+    'agency_hr', 'agency_hr_manager', 'attorney', 'prosecutor',
+    'journalist', 'news_caster', 'chief_news_caster', 'auctioneer', 'seller', 'troller',
+  ])
+  const hasModMenuFromRoles = myProfileRoleTypes.some((r) => MOD_MENU_ROLE_TYPES.has(r))
+  const showModActionMenu = Boolean(
+    modContext?.has_full_staff_tools || isStreamBroadofficer || hasModMenuFromRoles ||
+    myProfileAdminFlags.is_admin || myProfileAdminFlags.is_ceo ||
+    ['admin', 'ceo', 'owner', 'superadmin', 'staff', 'moderator'].includes(myProfileAdminFlags.role ?? '')
+  )
 
   const resolveGiftAmount = useCallback((giftData: any): number => {
     const metadata = giftData?.metadata || {}
@@ -2430,6 +2536,45 @@ useStreamRealtime(
     }
 
     void checkKickGuard()
+
+    const kickChannel = supabase
+      .channel(`kick-guard:${streamId}:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'stream_kicks',
+          filter: `stream_id=eq.${streamId},user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const kick = payload.new
+          const kickTimestamp = new Date(kick.created_at).getTime()
+          const timeSinceKick = Date.now() - kickTimestamp
+          if (timeSinceKick < KICK_BAN_DURATION_MS) {
+            const remainingMs = KICK_BAN_DURATION_MS - timeSinceKick
+            const hoursRemaining = Math.ceil(remainingMs / (60 * 60 * 1000))
+            toast.error(`You were kicked from this broadcast and cannot rejoin for ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`)
+            localStorage.setItem(getKickStorageKey(streamId, user.id), JSON.stringify({
+              timestamp: kickTimestamp,
+              streamId,
+              reason: kick.reason || 'Kicked by moderator'
+            }))
+            leaveLiveKitRoom().catch(() => {})
+            hasJoinedAudienceRef.current = false
+            joiningAudienceRef.current = false
+            currentRoomKeyRef.current = null
+            navigate('/', { replace: true })
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (kickChannel) {
+        supabase.removeChannel(kickChannel)
+      }
+    }
   }, [streamId, user?.id, navigate])
 
   // Pin/unpin messages (staff/broadcaster/broadofficer/admin/CEO only)
@@ -2817,14 +2962,16 @@ const heartbeat = window.setInterval(() => {
     })
   }, [effectiveBoxCount, seats, stream, user?.id, mySeat])
 
-    // Mobile seat grid: square cards, scrollable below broadcaster
+    // Mobile seat grid: square cards, scrollable below broadcaster.
+    // Height is driven by the number of rows (3 columns) so the square cards fit.
      const mobileSeatGridHeight = useMemo(() => {
        if (!isMobileViewer || seatCards.length === 0) return 0
        const count = seatCards.length
-       if (count <= 3) return 180
-       if (count <= 6) return 240
-       if (count <= 9) return 320
-       return 380
+       const rows = Math.ceil(count / 3)
+       // ~ One square card is roughly (screen width - padding - gaps) / 3 ~ 110px on phones.
+       const card = Math.min(120, Math.max(88, Math.round((window.innerWidth - 32 - 16) / 3)))
+       const gap = 8
+       return Math.min(420, rows * card + (rows - 1) * gap + 8)
      }, [isMobileViewer, seatCards.length])
  
     // Mobile seat grids use a tighter 3-column layout so all seats remain visible.
@@ -2936,6 +3083,7 @@ const heartbeat = window.setInterval(() => {
         {broadofficerPopupVisible && (
           <div
             className="fixed inset-x-0 top-4 z-[200] flex justify-center pointer-events-none"
+            style={{ top: `max(1rem, env(safe-area-inset-top))` }}
             onClick={dismissBroadofficerPopup}
           >
             <div
@@ -2953,9 +3101,9 @@ const heartbeat = window.setInterval(() => {
                 </div>
                 <button
                   onClick={dismissBroadofficerPopup}
-                  className="shrink-0 rounded-lg p-1 text-blue-300/60 hover:text-white hover:bg-white/10 transition-colors"
+                  className="shrink-0 rounded-lg p-2 text-blue-300/60 hover:text-white hover:bg-white/10 transition-colors"
                 >
-                  <X size={14} />
+                  <X size={16} />
                 </button>
               </div>
             </div>
@@ -2966,16 +3114,22 @@ const heartbeat = window.setInterval(() => {
 
           {/* Background layers — identical to Sidebar ShellBackdrop */}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.22),transparent_42%)]" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.16),transparent_46%)]" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.13),transparent_44%)]" />
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.10)_0%,rgba(14,165,233,0.07)_44%,rgba(236,72,153,0.09)_100%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:42px_42px] opacity-25" />
+
+          {/* RGB broadcast effect — only when enabled, rendered ABOVE the seat overlay (seats are z-20) */}
+          {stream?.has_rgb_effect && (
+            <div className="pointer-events-none absolute inset-0 z-30 mix-blend-screen">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_20%_20%,rgba(147,51,234,0.35),transparent_42%)]" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_80%_0%,rgba(45,212,191,0.28),transparent_46%)]" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_140%_at_95%_88%,rgba(236,72,153,0.24),transparent_44%)]" />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(109,40,217,0.18)_0%,rgba(14,165,233,0.12)_44%,rgba(236,72,153,0.16)_100%)]" />
+            </div>
+          )}
 
             <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
 
             {isMobileViewer && (
-              <div className="absolute left-3 top-3 z-40">
+              <div className="absolute left-3 top-3 z-40 flex items-center gap-2">
                 <button
                   onClick={() => navigate('/')}
                   className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md border border-white/10 hover:bg-black/80 transition-colors"
@@ -2983,6 +3137,22 @@ const heartbeat = window.setInterval(() => {
                   <ArrowLeft size={14} />
                   Back
                 </button>
+              </div>
+            )}
+
+            {/* MOBILE: Audience ticker with viewer count + mini profile pics + coins sent */}
+            {isMobileViewer && stream && (
+              <div className="absolute inset-x-0 top-0 z-30 flex items-center px-3 pt-[52px] pointer-events-none">
+                <div className="pointer-events-auto w-full rounded-2xl border border-cyan-400/10 bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 px-2 py-1.5 backdrop-blur-xl shadow-[0_2px_24px_0_rgba(34,211,238,0.10)]">
+                  <MobileAudienceTicker
+                    audience={audience}
+                    currentUserId={user?.id}
+                    hostUserId={hostId || undefined}
+                    viewerCount={viewerCount}
+                    maxVisible={7}
+                    onModerateUser={handleOpenUserAction}
+                  />
+                </div>
               </div>
             )}
              {!isMobileViewer && (
@@ -3733,13 +3903,13 @@ const heartbeat = window.setInterval(() => {
                           <div
                           key={seat.seatIndex}
                           className={cn(
-                            'relative overflow-hidden rounded-lg border',
+                            'relative aspect-square overflow-hidden rounded-lg border',
                            isMine
                              ? 'border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
                              : seat.isOccupied
                                ? 'border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
                                : 'border-white/20',
-                           'bg-transparent h-[68px] w-full'
+                           'bg-transparent w-full'
                          )}
                       >
                         {isMine ? (
@@ -3941,6 +4111,24 @@ const heartbeat = window.setInterval(() => {
                         }, CHAT_FLOAT_MS)
 
                         try {
+                          const result = await sendChatThroughGate({ streamId, content: text })
+                          if (!result.ok) {
+                            setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                            const errMsg = String(result.error || '').toLowerCase()
+                            if (errMsg.includes('currently disabled') || (errMsg.includes('chat') && errMsg.includes('disabled'))) {
+                              toast.error('Your chat is currently disabled.')
+                            } else if (errMsg.includes('muted')) {
+                              toast.error('You are muted in this stream.')
+                            } else if (errMsg.includes('banned')) {
+                              toast.error('You are banned from this stream.')
+                            } else if (errMsg.includes('high traffic')) {
+                              // High traffic sampling: silently drop optimistic message
+                            } else if (result.error) {
+                              toast.error(result.error)
+                            }
+                            return
+                          }
+
                           const chatChannel = floatingChatChannelRef.current;
                           if (chatChannel) {
                             chatChannel.send({
@@ -4196,6 +4384,24 @@ const heartbeat = window.setInterval(() => {
                       }, CHAT_FLOAT_MS)
 
                       try {
+                        const result = await sendChatThroughGate({ streamId, content: text })
+                        if (!result.ok) {
+                          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                          const errMsg = String(result.error || '').toLowerCase()
+                          if (errMsg.includes('currently disabled') || (errMsg.includes('chat') && errMsg.includes('disabled'))) {
+                            toast.error('Your chat is currently disabled.')
+                          } else if (errMsg.includes('muted')) {
+                            toast.error('You are muted in this stream.')
+                          } else if (errMsg.includes('banned')) {
+                            toast.error('You are banned from this stream.')
+                          } else if (errMsg.includes('high traffic')) {
+                            // High traffic sampling: silently drop optimistic message
+                          } else if (result.error) {
+                            toast.error(result.error)
+                          }
+                          return
+                        }
+
                         const chatChannel = floatingChatChannelRef.current;
                         if (chatChannel) {
                           chatChannel.send({
@@ -4217,10 +4423,12 @@ const heartbeat = window.setInterval(() => {
                       placeholder={
                         hostChatDisabledByOfficer
                           ? 'Chat disabled by officer control'
-                          : 'Say something…'
+                          : userChatDisabled
+                            ? 'Chat disabled'
+                            : 'Say something…'
                       }
-                      disabled={hostChatDisabledByOfficer}
-                      readOnly={hostChatDisabledByOfficer}
+                      disabled={hostChatDisabledByOfficer || userChatDisabled}
+                      readOnly={hostChatDisabledByOfficer || userChatDisabled}
                       className="h-10 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white placeholder:text-white/35 outline-none transition-colors focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
                       maxLength={280}
                     />
@@ -4348,26 +4556,35 @@ const heartbeat = window.setInterval(() => {
             className="fixed inset-x-3 z-40 pointer-events-auto"
             style={{ bottom: `env(safe-area-inset-bottom)` }}
           >
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                const text = chatInput.trim()
-                if (!text) return
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  const text = chatInput.trim()
+                  if (!text) return
 
-                if (hostChatDisabledByOfficer) {
-                  toast.error(
-                    hostChatDisableRemainingMs
-                      ? `Chat is disabled by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
-                      : 'Chat is disabled by officer control'
-                  )
-                  return
-                }
+                  if (hostChatDisabledByOfficer) {
+                    toast.error(
+                      hostChatDisableRemainingMs
+                        ? `Chat is disabled by officer control. Try again in ${Math.ceil(hostChatDisableRemainingMs / 60000)} minute(s).`
+                        : 'Chat is disabled by officer control'
+                    )
+                    return
+                  }
 
-                if (!user && !reserveAnonymousChatSlot()) {
-                  toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
-                  navigate('/auth?mode=login')
-                  return
-                }
+                  if (userChatDisabled) {
+                    toast.error(
+                      chatDisabledRemainingMinutes
+                        ? `Your chat is disabled. Try again in ${chatDisabledRemainingMinutes} minute${chatDisabledRemainingMinutes === 1 ? '' : 's'}.`
+                        : 'Your chat has been permanently disabled in this stream.'
+                    )
+                    return
+                  }
+
+                  if (!user && !reserveAnonymousChatSlot()) {
+                    toast.error('You’ve used your 5 anonymous chats. Sign in to keep chatting.')
+                    navigate('/auth?mode=login')
+                    return
+                  }
 
                 const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                 const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -4380,13 +4597,31 @@ const heartbeat = window.setInterval(() => {
                 }, 20000)
 
                 try {
+                  const result = await sendChatThroughGate({ streamId, content: text })
+                  if (!result.ok) {
+                    setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                    const errMsg = String(result.error || '').toLowerCase()
+                    if (errMsg.includes('currently disabled') || (errMsg.includes('chat') && errMsg.includes('disabled'))) {
+                      toast.error('Your chat is currently disabled.')
+                    } else if (errMsg.includes('muted')) {
+                      toast.error('You are muted in this stream.')
+                    } else if (errMsg.includes('banned')) {
+                      toast.error('You are banned from this stream.')
+                    } else if (errMsg.includes('high traffic')) {
+                      // High traffic sampling: silently drop optimistic message
+                    } else if (result.error) {
+                      toast.error(result.error)
+                    }
+                    return
+                  }
+
                   const chatChannel = floatingChatChannelRef.current;
                   if (chatChannel) {
                     chatChannel.send({
                       type: 'broadcast',
                       event: 'floating_chat',
                       payload: { username, content: text },
-                    }).catch(() => { })
+                    }).catch(() => {})
                   }
                 } catch {
                   // keep local optimistic message visible
@@ -4428,67 +4663,66 @@ const heartbeat = window.setInterval(() => {
            </div>
          )}
 
-         {/* ── MOBILE: Chat ticker in center of screen ── */}
-         {isMobileViewer && floatingMessages.length > 0 && !isMobileChatOpen && (
-           <div
-             className="fixed inset-x-0 z-30 pointer-events-none flex flex-col items-center"
-             style={{
-               top: '35%',
-               left: 0,
-               right: '48px',
-             }}
-           >
-             <AnimatePresence initial={false}>
-               {floatingMessages.slice(0, 3).map((message, idx) => (
-                 <motion.div
-                   key={message.id}
-                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                   exit={{ opacity: 0, y: -15, scale: 0.95 }}
-                   transition={{ duration: 0.4, ease: 'easeOut' }}
-                   className={cn(
-                     'pointer-events-auto mb-2 max-w-[85%] rounded-xl border-2 border-black px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.5)]',
-                     idx === 0 ? 'bg-purple-700/95' : 'bg-purple-700/70'
-                   )}
-                 >
-                   {isModOrHigher ? (
-                     <button
-                       type="button"
-                       onClick={(e) => { e.stopPropagation(); handleOpenFloatingChatUsername(message.username) }}
-                       className="font-black text-[11px] inline-flex items-center gap-1 cursor-pointer"
-                       style={{
-                         color: '#39ff14',
-                         textShadow: '0 0 4px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
-                       }}
-                     >
-                       {message.username}
-                     </button>
-                   ) : (
-                     <span
-                       className="font-black text-[11px] inline-flex items-center gap-1"
-                       style={{
-                         color: '#39ff14',
-                         textShadow: '0 0 4px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
-                       }}
-                     >
-                       {message.username}
-                     </span>
-                   )}
-                   {' '}
-                   <span
-                     className="text-[11px]"
-                     style={{
-                       color: '#39ff14',
-                       textShadow: '0 0 3px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
-                     }}
-                   >
-                     {message.content}
-                   </span>
-                 </motion.div>
-               ))}
-             </AnimatePresence>
-           </div>
-         )}
+          {/* ── MOBILE: Flying chat that rises up the screen from the chat input box ── */}
+          {isMobileViewer && floatingMessages.length > 0 && !isMobileChatOpen && (
+            <div
+              className="fixed inset-x-0 z-30 pointer-events-none flex flex-col items-start justify-end overflow-hidden"
+              style={{
+                left: 0,
+                right: '48px',
+                bottom: `calc(${MOBILE_CHAT_INPUT_HEIGHT}px + env(safe-area-inset-bottom))`,
+                top: 0,
+              }}
+            >
+              <AnimatePresence initial={false}>
+                {floatingMessages.slice(0, 6).map((message) => (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 0 }}
+                    animate={{ opacity: [0, 1, 1, 0], y: 'calc(-100dvh + 80px)' }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 7, ease: 'linear' }}
+                    className="pointer-events-auto mb-1 max-w-[85%] self-start bg-transparent"
+                  >
+                    {isModOrHigher ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleOpenFloatingChatUsername(message.username) }}
+                        className="font-black text-[12px] inline-flex items-center gap-1 cursor-pointer"
+                        style={{
+                          color: '#ffffff',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                        }}
+                      >
+                        {message.username}
+                      </button>
+                    ) : (
+                      <span
+                        className="font-black text-[12px] inline-flex items-center gap-1"
+                        style={{
+                          color: '#ffffff',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                        }}
+                      >
+                        {message.username}
+                      </span>
+                    )}
+                    {' '}
+                    <span
+                      className="text-[12px]"
+                      style={{
+                        color: '#ffffff',
+                        textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                      }}
+                    >
+                      {message.content}
+                    </span>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+
 
          {/* ── MOBILE: Toggleable chat box ── */}
          {isMobileViewer && isMobileChatOpen && (
@@ -4705,7 +4939,7 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
               userProfiles={userProfiles} />
 
 {userActionTarget && (
-              modContext?.has_full_staff_tools ? (
+              showModActionMenu ? (
                 <ModActionsPopup
                   isOpen={true}
                   onClose={() => setUserActionTarget(null)}

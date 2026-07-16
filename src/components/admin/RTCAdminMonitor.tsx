@@ -745,32 +745,14 @@ const openAction = useCallback((user: UserListItem, action: string) => {
                   return;
               }
               const { error } = await supabase.rpc('moderator_mute_user', {
-                  p_stream_id: selectedStream.id,
-                  p_target_user_id: actionTarget.id,
-                  p_duration_minutes: minutes,
-                  p_reason: actionReason || 'Admin mute via RTC Monitor',
+                p_stream_id: selectedStream.id,
+                p_target_user_id: actionTarget.id,
+                p_duration_minutes: minutes,
+                p_reason: actionReason || 'Admin mute via RTC Monitor',
               });
               if (error) throw error;
-              // Muting also disables the user's chat so they see the
-              // "chat disabled by moderation" notice in the viewer.
-              await supabase.rpc('moderator_disable_chat', {
-                  p_stream_id: selectedStream.id,
-                  p_target_user_id: actionTarget.id,
-                  p_duration_minutes: minutes,
-                  p_reason: actionReason || 'Admin mute via RTC Monitor',
-              }).then(() => undefined, () => undefined);
-             await supabase.from('moderation_actions').insert({
-               actor_id: profile?.id,
-               officer_id: profile?.id,
-               target_user_id: actionTarget.id,
-               action: 'mute',
-               action_type: 'mute',
-               reason: actionReason || 'Admin mute via RTC Monitor',
-               details: `duration_minutes:${minutes}`,
-               status: 'active',
-             }).then(() => undefined, () => undefined);
-             toast.success(`@${actionTarget.username} muted`);
-         }
+              toast.success(`@${actionTarget.username} muted`);
+          }
 
          if (activeAction === 'kick' || activeAction === 'ban') {
              const minutes = activeAction === 'kick' ? 10 : actionDuration ? parseInt(actionDuration, 10) * 1440 : 525600;

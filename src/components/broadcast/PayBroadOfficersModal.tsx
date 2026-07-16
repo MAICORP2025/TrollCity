@@ -59,15 +59,23 @@ export default function PayBroadOfficersModal({
     fetchOfficers();
   }, [isOpen, streamId, broadcasterId]);
 
-  const handlePay = useCallback(async () => {
+   const handlePay = useCallback(async () => {
     if (!isValid || loading) return;
 
     setLoading(true);
     try {
       let successCount = 0;
       let failCount = 0;
+      let remainingBalance = broadcasterBalance;
 
       for (const officer of officers) {
+        // Stop paying once the broadcaster can no longer afford the per-officer amount.
+        // This guarantees troll_coins only ever deduct from the broadcaster and never go negative.
+        if (amountNum > remainingBalance) {
+          failCount++;
+          continue;
+        }
+
         const { data, error } = await supabase.rpc('pay_broadofficer_individual', {
           p_stream_id: streamId,
           p_officer_id: officer.user_id,
@@ -79,6 +87,7 @@ export default function PayBroadOfficersModal({
           failCount++;
         } else {
           successCount++;
+          remainingBalance = Number(data?.broadcaster_balance ?? remainingBalance - amountNum);
         }
       }
 
@@ -99,7 +108,8 @@ export default function PayBroadOfficersModal({
     } finally {
       setLoading(false);
     }
-  }, [isValid, loading, streamId, amountNum, officers, totalCost, onClose]);
+  }, [isValid, loading, streamId, amountNum, officers, totalCost, broadcasterBalance, onClose]);
+
 
   if (!isOpen) return null;
 

@@ -3,7 +3,7 @@
  * Displays stream video/grid with overlay info
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -12,7 +12,46 @@ import { toast } from 'sonner';
 import { Eye, Heart, MessageCircle, Gift, Share2, Users, UserPlus, Coins } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Room, RoomEvent, RemoteParticipant, RemoteVideoTrack, RemoteAudioTrack } from 'livekit-client';
+import { getLiveKitRoomName } from '../../lib/liveUtils';
 import ShareModal from './ShareModal';
+
+/**
+ * Attaches a remote participant's video (and audio) tracks to real media
+ * elements so viewers actually see the broadcast. Anonymous viewers included.
+ */
+function RemoteMedia({ participant, muted }: { participant: RemoteParticipant; muted: boolean }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    const audioEl = audioRef.current;
+
+    const videoPub = Array.from(participant.videoTrackPublications.values()).find((p) => p.track);
+    const audioPub = Array.from(participant.audioTrackPublications.values()).find((p) => p.track);
+    const videoTrack = videoPub?.track as RemoteVideoTrack | undefined;
+    const audioTrack = audioPub?.track as RemoteAudioTrack | undefined;
+
+    if (videoTrack && videoEl) {
+      try { videoTrack.attach(videoEl); } catch (e) { console.warn('[StreamSwipeCard] video attach failed:', e); }
+    }
+    if (audioTrack && audioEl) {
+      try { audioTrack.attach(audioEl); } catch (e) { console.warn('[StreamSwipeCard] audio attach failed:', e); }
+    }
+
+    return () => {
+      if (videoTrack && videoEl) { try { videoTrack.detach(videoEl); } catch { /* noop */ } }
+      if (audioTrack && audioEl) { try { audioTrack.detach(audioEl); } catch { /* noop */ } }
+    };
+  }, [participant]);
+
+  return (
+    <div className="relative w-full h-full bg-black">
+      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+      <audio ref={audioRef} autoPlay muted={muted} />
+    </div>
+  );
+}
 
 interface StreamSwipeCardProps {
   stream: Stream & {
@@ -56,85 +95,102 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
   const pendingLikesRef = useRef(0);
   const flushInProgressRef = useRef(false);
   
-  // Convert stream ID to numeric UID for Agora
-  const stringToUid = (str: string): number => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
+  // Stable viewer identity. Signed-in users use their id; anonymous guests get
+  // a persistent per-session guest id so they can watch without logging in.
+  const viewerIdentity = useMemo(() => {
+    if (user?.id) return user.id;
+    if (typeof window === 'undefined') {
+      return `guest-${Math.random().toString(36).slice(2, 10)}`;
     }
-    return Math.abs(hash);
-  };
-  
-  // Join Agora channel when card becomes active
+    try {
+      const storageKey = `swipe-guest:${stream.id}`;
+      let guestId = sessionStorage.getItem(storageKey);
+      if (!guestId) {
+        const rand = window.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+        guestId = `guest-${rand}`;
+        sessionStorage.setItem(storageKey, guestId);
+      }
+      return guestId;
+    } catch {
+      return `guest-${Math.random().toString(36).slice(2, 10)}`;
+    }
+  }, [user?.id, stream.id]);
+
+  // Join the LiveKit room as an audience member when the card becomes active.
+  // Works for anonymous guests — no sign-in required to watch the broadcaster.
   const joinStream = useCallback(async () => {
-    if (!isActive || hasJoinedRef.current || !user) return;
-    
+    if (!isActive || hasJoinedRef.current) return;
+
     hasJoinedRef.current = true;
     setIsJoining(true);
-    
+
     try {
-      const appId = import.meta.env.VITE_AGORA_APP_ID;
-      if (!appId) {
-        console.warn('VITE_AGORA_APP_ID not configured');
+      const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
+      if (!livekitUrl) {
+        console.warn('VITE_LIVEKIT_URL not configured');
+        hasJoinedRef.current = false;
         setIsJoining(false);
         return;
       }
-      
-      // Get viewer token
-      const numericUid = stringToUid(user.id);
+
+      const roomName = getLiveKitRoomName(stream as any, stream.id) || stream.id;
+
+      // Audience token — anonymous guests are allowed to subscribe.
       const { data: tokenData, error: tokenError } = await supabase.functions.invoke('livekit-token', {
         body: {
-          channel: stream.id,
-          uid: numericUid,
-          role: 'subscriber'
-        }
+          room: roomName,
+          roomName,
+          identity: viewerIdentity,
+          userId: viewerIdentity,
+          name: (user as any)?.username || 'Viewer',
+          role: 'audience',
+          mode: 'audience',
+        },
       });
-      
+
       if (tokenError || !tokenData?.token) {
         console.error('Token error:', tokenError);
+        hasJoinedRef.current = false;
         setIsJoining(false);
         return;
       }
-      
-      // Create Agora client
+
       const room = new Room({
-        mode: 'rtc',
-        codec: 'vp8'
+        adaptiveStream: true,
+        dynacast: true,
       });
-      
+
       roomRef.current = room;
-      
-      // Handle user published
-      room.on(RoomEvent.ParticipantConnected, (participant) => {
-        setRemoteUsers(prev => [...prev, participant]);
-      });
-      
-      // Handle user unpublished
-      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-        setRemoteUsers(prev => prev.filter(u => u.identity !== participant.identity));
-      });
-      
-      // Join channel
-      const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
+
+      const syncParticipants = () => {
+        const list = room.remoteParticipants ? Array.from(room.remoteParticipants.values()) : [];
+        setRemoteUsers([...list]);
+      };
+
+      room.on(RoomEvent.ParticipantConnected, syncParticipants);
+      room.on(RoomEvent.ParticipantDisconnected, syncParticipants);
+      room.on(RoomEvent.TrackSubscribed, syncParticipants);
+      room.on(RoomEvent.TrackUnsubscribed, syncParticipants);
+
       await room.connect(livekitUrl, tokenData.token, {
         autoSubscribe: true,
       });
-      
-      // Handle mute state
-      if (isMuted) {
-        // Audio handled by LiveKit;
-      }
-      
+
+      // Apply current mute state to remote audio playback.
+      try { room.setAudioVolume?.(isMuted ? 0 : 100); } catch { /* noop */ }
+
+      // Pick up any participants/tracks already present on connect.
+      syncParticipants();
+
       console.log('[StreamSwipeCard] Joined stream:', stream.id);
-      
+
     } catch (error) {
       console.error('Error joining stream:', error);
       hasJoinedRef.current = false;
     } finally {
       setIsJoining(false);
     }
-  }, [stream.id]);
+  }, [isActive, stream, viewerIdentity, isMuted, user]);
   
   // Leave stream when card becomes inactive
   const leaveStream = useCallback(async () => {
@@ -276,6 +332,20 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
     const isGaming = stream.agora_channel || stream.category === 'gaming';
     navigate(isGaming ? `/gaming/watch/${stream.id}?from=swipe` : `/watch/${stream.id}?from=swipe`);
   };
+
+  // Open the share sheet (available to everyone, including guests)
+  const handleShare = () => {
+    setIsShareModalOpen(true);
+  };
+
+  // Joining a stage seat requires an account
+  const handleJoinSeat = () => {
+    if (!user) {
+      navigate('/auth?mode=signup');
+      return;
+    }
+    navigate(`/watch/${stream.id}?from=swipe`);
+  };
   
   const broadcaster = stream.broadcaster;
   const isHost = user?.id === stream.user_id;
@@ -295,15 +365,19 @@ export default function StreamSwipeCard({ stream, isActive, isMuted, onClose, br
             remoteUsers.length === 2 ? "grid grid-cols-2" :
             "grid grid-cols-2 gap-0.5"
           )}>
-            {remoteUsers.map((remoteUser) => (
-              <div key={remoteUser.identity} className="relative bg-black">
-                <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-                  <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center">
-                    <Users className="w-8 h-8 text-zinc-600" />
-                  </div>
+            {remoteUsers.map((remoteUser) => {
+              const videoPub = Array.from(remoteUser.videoTrackPublications.values()).find((p) => p.track);
+              const trackKey = videoPub?.trackSid || 'novideo';
+              return (
+                <div key={remoteUser.identity} className="relative bg-black">
+                  <RemoteMedia
+                    key={`${remoteUser.identity}-${trackKey}`}
+                    participant={remoteUser}
+                    muted={isMuted}
+                  />
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           /* Placeholder when no video */

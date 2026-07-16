@@ -249,21 +249,25 @@ export default function AllUsersList({ streamId, onClose }: AllUsersListProps) {
                 user_profiles: { username: 'System', avatar_url: '' }
             };
 
-            void supabase.from('stream_messages').insert({
+            const { error: sysInsertError } = await supabase.from('stream_messages').insert({
                 stream_id: streamId,
                 user_id: user?.id || userId,
                 content,
                 type: 'system'
             });
 
-            const channel = supabase.channel(`stream-chat:${streamId}-${Date.now()}`);
-            channel.subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage });
-                    // Clean up after send completes or times out
-                    setTimeout(() => { supabase.removeChannel(channel) }, 3000);
-                }
-            });
+            if (sysInsertError) {
+                console.error('[AllUsersList] Failed to persist broadofficer system message:', sysInsertError);
+            } else {
+                const channel = supabase.channel(`stream-chat:${streamId}-${Date.now()}`);
+                channel.subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        void channel.send({ type: 'broadcast', event: 'chat', payload: systemMessage });
+                        // Clean up after send completes or times out
+                        setTimeout(() => { supabase.removeChannel(channel) }, 3000);
+                    }
+                });
+            }
 
             void notifyBroadofficerAssigned(userId, (user as any)?.username || 'Broadcaster', streamId);
             toast.success(`${username} promoted to Broad Officer`);

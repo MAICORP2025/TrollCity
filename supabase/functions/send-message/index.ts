@@ -494,22 +494,8 @@ serve(async (req) => {
       }
     }
 
-    await Promise.allSettled(
-      publishChannels.flatMap((channelName) =>
-        adapters.map((a) => a.publish(channelName, "chat", envelope))
-      )
-    );
-
-    // Also publish gift events to the main stream channel for gift animations
-    if (type === "gift") {
-      const streamChannel = `stream:${stream_id}`;
-      await Promise.allSettled(
-        adapters.map((a) => a.publish(streamChannel, "gift_sent", envelope))
-      );
-      console.log(`[GIFT] Also published to stream channel: ${streamChannel}`);
-    }
-
-    // 9. Insert message into database for persistence and visibility to other users
+    // 9. Insert message into database FIRST so RLS policies (e.g. chat-blocked)
+    // win over realtime delivery. Broadcast only AFTER the insert succeeds.
     const { error: insertError } = await supabase
       .from("stream_messages")
       .insert({
@@ -525,13 +511,46 @@ serve(async (req) => {
         user_created_at: userProfile.created_at,
         user_rgb_expires_at: userProfile.rgb_username_expires_at,
         user_glowing_username_color: userProfile.glowing_username_color,
-      });
+      })
+      .select()
+      .single();
 
     if (insertError) {
+      // RLS rejection (42501) or other insert failure — do NOT broadcast.
+      // Failing closed here prevents everyone from seeing a message the
+      // database refused to persist.
       console.error("[ERROR] Failed to insert message into database:", insertError);
-      // Don't fail the request - message was already published via realtime
-    } else {
-      console.log("[SUCCESS] Message inserted into stream_messages table:", txn_id);
+      const isRlsRejection = insertError.code === "42501";
+      return new Response(
+        JSON.stringify({
+          error: isRlsRejection
+            ? "Your chat is currently disabled."
+            : "Message could not be sent.",
+          code: isRlsRejection ? "CHAT_DISABLED" : "INSERT_FAILED",
+        }),
+        {
+          status: 403,
+          headers: { ...headers, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    console.log("[SUCCESS] Message inserted into stream_messages table:", txn_id);
+
+    // 8. Publish to Realtime AFTER the database has accepted the message.
+    await Promise.allSettled(
+      publishChannels.flatMap((channelName) =>
+        adapters.map((a) => a.publish(channelName, "chat", envelope))
+      )
+    );
+
+    // Also publish gift events to the main stream channel for gift animations
+    if (type === "gift") {
+      const streamChannel = `stream:${stream_id}`;
+      await Promise.allSettled(
+        adapters.map((a) => a.publish(streamChannel, "gift_sent", envelope))
+      );
+      console.log(`[GIFT] Also published to stream channel: ${streamChannel}`);
     }
 
     // Send push notification via Web Push (VAPID) using our push-notifications Edge Function
