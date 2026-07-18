@@ -569,22 +569,13 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
     async function checkBroadcasterLimit() {
       if (!user?.id) return;
 
+      const BETA_MAX_BROADCASTERS = 25;
+
       // If "Remove All Restrictions" is enabled, skip the cap entirely
       if (allRestrictionsDisabled) {
         setBroadcasterLimitInfo({
           current: 0,
-          max: 0,
-          canStart: true,
-          unrestricted: true,
-        });
-        return;
-      }
-
-      // If start cap is not enabled in control panel, allow freely
-      if (!startCapEnabled) {
-        setBroadcasterLimitInfo({
-          current: 0,
-          max: 0,
+          max: BETA_MAX_BROADCASTERS,
           canStart: true,
           unrestricted: true,
         });
@@ -604,7 +595,7 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       if (isStaffOrAdmin) {
         setBroadcasterLimitInfo({
           current: 0,
-          max: startCapMax,
+          max: BETA_MAX_BROADCASTERS,
           canStart: true,
           unrestricted: true,
           isStaffBypass: true,
@@ -644,8 +635,8 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       }
       const currentCount = orderedBroadcasters.length;
 
-      // Use the max limit from control panel (default 10)
-      const maxLimit = startCapMax || 10;
+      // Hard-enforced beta limit of 25 simultaneous broadcasters
+      const maxLimit = BETA_MAX_BROADCASTERS;
 
       // Check if current user is already in the allowed broadcasters
       const userPosition = orderedBroadcasters.indexOf(user.id);
@@ -1572,7 +1563,7 @@ const handleStartStream = async () => {
     }
     if (!user) return;
     if (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) {
-      toast.error(`Weekly broadcaster limit reached (${broadcasterLimitInfo.current}/${broadcasterLimitInfo.max}). You are not in the first ${broadcasterLimitInfo.max}. Please try again next week.`);
+      toast.error('All broadcasting slots are currently in use. Please try again later.');
       return;
     }
     if (!inlineAgreementChecked) {
@@ -1803,6 +1794,9 @@ livekit_room_name: roomName,
              status: 'live',
              is_live: true,
              started_at: new Date().toISOString(),
+             // Seed activity so the inactivity auto-end grace window starts now,
+             // not from a NULL that would make the stream eligible to end early.
+             last_activity_at: new Date().toISOString(),
              ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? {
                random_battle_queued_at: new Date().toISOString(),
                battle_mode: 'random_queue',
@@ -1885,31 +1879,6 @@ livekit_room_name: roomName,
           } catch (err) {
             console.error('[PromoCard] Broadcast start reward failed:', err)
           }
-
-        // Create a system wall post so the stream appears on the Troll Wall feed
-        // Runs independently — if it fails, the stream is still live
-        try {
-          const bcName = profile?.username || profile?.display_name || 'A Broadcaster'
-          const bcStreamUrl = `/watch/${data.id}`
-          await supabase.from('troll_wall_posts').insert({
-            user_id: user?.id,
-            username: 'Troll City System',
-            post_type: 'stream_announce',
-            content: `📺 ${bcName} is now LIVE on Troll City!`,
-            is_system_generated: true,
-            metadata: {
-              stream_id: data.id,
-              stream_url: bcStreamUrl,
-              category: data.category || 'general',
-              broadcaster_name: bcName,
-              broadcaster_id: user?.id,
-              thumbnail_url: null,
-              live: true,
-            },
-          })
-        } catch (wallErr: any) {
-          console.warn('[SetupPage] Wall post creation failed:', wallErr)
-        }
 
         // Stream is now created, LiveKit is connected, tracks are published, and DB is updated.
         // Proceed to broadcast room.
@@ -2184,7 +2153,7 @@ livekit_room_name: roomName,
               "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold border",
               broadcasterLimitInfo.canStart ? "bg-blue-500/10 border-blue-500/20 text-blue-400" : "bg-red-500/10 border-red-500/20 text-red-400"
             )}>
-              {broadcasterLimitInfo.current}/{broadcasterLimitInfo.max} this week
+              {broadcasterLimitInfo.current}/{broadcasterLimitInfo.max} live now
             </div>
           )}
           {broadcasterLimitInfo?.unrestricted && broadcasterLimitInfo?.isStaffBypass && (
@@ -2770,9 +2739,9 @@ livekit_room_name: roomName,
                    'Grant Permissions'
                  ) : (isBroadcastLocked && !canBroadcast()) ? (
                    'Broadcast Locked'
-                 ) : (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ? (
-                   'Limit Reached'
-                 ) : (
+                  ) : (broadcasterLimitInfo && !broadcasterLimitInfo.canStart) ? (
+                    'Slots Full'
+                  ) : (
                    <>
                      <Radio size={16} />
                      Start Broadcast

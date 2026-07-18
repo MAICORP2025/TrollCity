@@ -187,6 +187,23 @@ function GiftSystemProviderInner({
         // Play gift sent sound
         BattleSounds.giftSent();
 
+        // Feed the Troll: push the server-computed event for instant UI updates.
+        // (Also delivered via postgres_changes as a durable fallback.)
+        if (result?.troll_event && result.troll_event.eventType) {
+          try {
+            import('@/components/feed-the-troll/useFeedTheTroll').then((m) =>
+              m.emitTrollEvent(effectiveStreamId, {
+                ...(result.troll_event as any),
+                createdAt:
+                  (result.troll_event as any).createdAt ||
+                  new Date().toISOString(),
+              })
+            );
+          } catch {
+            /* non-critical */
+          }
+        }
+
         // Non-critical post-send operations — fire and forget for instant UI response
         void (async () => {
           try { await quietRefreshGiftProfile(user.id) } catch (e) { if (import.meta.env.DEV) console.warn('[GiftSystem] profile refresh failed:', e) }

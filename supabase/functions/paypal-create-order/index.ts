@@ -34,6 +34,7 @@ Deno.serve(async (req) => {
     let coins = payload.coins ?? 0
     const user_uid = payload.user_id ?? payload.userId
     const package_key = payload.package_id ?? payload.packageId
+    const purchase_type = payload.purchaseType ?? payload.purchase_type ?? 'coins'
 
     const amtNum = Number(amount)
     if (!amtNum || amtNum <= 0) {
@@ -49,8 +50,11 @@ Deno.serve(async (req) => {
       )
     }
     const cn = Number(coins)
-    if (!cn || cn <= 0) {
-      coins = Math.max(1, Math.round(amtNum * 100))
+    // Non-coin products (e.g. MAI Pay Plus) have no coin amount.
+    if (purchase_type !== 'mai_pay_plus') {
+      if (!cn || cn <= 0) {
+        coins = Math.max(1, Math.round(amtNum * 100))
+      }
     }
     
     const clientId = Deno.env.get('PAYPAL_CLIENT_ID')
@@ -86,12 +90,14 @@ Deno.serve(async (req) => {
                 currency_code: 'USD',
                 value: String(amtNum)
             },
-            description: `${coins.toLocaleString()} Troll Coins`,
+            description: purchase_type === 'mai_pay_plus'
+              ? 'MAI Pay Plus Upgrade'
+              : `${coins.toLocaleString()} Troll Coins`,
             custom_id: JSON.stringify({
               userId: user_uid,
               packageId: package_key ?? null,
               coins,
-              purchaseType: "coins",
+              purchaseType: purchase_type,
             })
         }]
     }

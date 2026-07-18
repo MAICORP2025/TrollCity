@@ -276,6 +276,8 @@ export default function LiveAuctionRoom() {
   const [auctioneerConnecting, setAuctioneerConnecting] = useState(false)
   const [agoraConnected, setAgoraConnected] = useState(false)
   const [remoteReady, setRemoteReady] = useState(false)
+  const [agoraError, setAgoraError] = useState<string | null>(null)
+  const [agoraReadyToRetry, setAgoraReadyToRetry] = useState(false)
 
   // Display text (announcement from auctioneer)
   const [displayText, setDisplayText] = useState<string>('')
@@ -532,6 +534,7 @@ export default function LiveAuctionRoom() {
       activeAgoraKeyRef.current = null
       setAgoraConnected(false)
       setRemoteReady(false)
+      setAgoraReadyToRetry(false)
     }
   }, [])
 
@@ -596,9 +599,16 @@ export default function LiveAuctionRoom() {
       setShow(nextShow)
       setDisplayText((data as any).display_text || '')
 
-      if (nextShow.status !== 'live') {
-        toast.error('This auction is not currently live')
-        navigate('/auctions')
+      // Allow viewers who are already on the page to remain for scheduled shows
+      // so they see the show flip to LIVE in real time (the realtime subscription
+      // updates status). Only bounce ended/cancelled shows without a win.
+      if (nextShow.status === 'ended' || nextShow.status === 'cancelled') {
+        if (nextShow.status === 'ended') {
+          void redirectOnAuctionEnd()
+        } else {
+          toast.error('This auction has been cancelled')
+          navigate('/auctions')
+        }
         return
       }
 
@@ -704,19 +714,40 @@ export default function LiveAuctionRoom() {
     []
   )
 
+  const subscribeAndPlay = useCallback(async (remoteUser: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
+    try {
+      await clientRef.current?.subscribe(remoteUser, mediaType)
+    } catch (err) {
+      logAgoraError('subscribe failed', err)
+      return
+    }
+
+    if (mediaType === 'video' && remoteUser.videoTrack && remoteVideoRef.current) {
+      remoteUser.videoTrack.play(remoteVideoRef.current)
+      setRemoteReady(true)
+    }
+
+    if (mediaType === 'audio' && remoteUser.audioTrack) {
+      remoteUser.audioTrack.play()
+    }
+  }, [])
+
   const buildAgoraClient = useCallback(() => {
     const client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' })
 
-    client.on('user-published', async (remoteUser: IAgoraRTCRemoteUser, mediaType) => {
-      await client.subscribe(remoteUser, mediaType)
+    // Subscribe to and play any media a remote user publishes.
+    client.on('user-published', (remoteUser: IAgoraRTCRemoteUser, mediaType) => {
+      void subscribeAndPlay(remoteUser, mediaType)
+    })
 
-      if (mediaType === 'video' && remoteUser.videoTrack && remoteVideoRef.current) {
-        remoteUser.videoTrack.play(remoteVideoRef.current)
-        setRemoteReady(true)
+    // Handle a host that was already live *before* this client finished
+    // subscribing: catch any published tracks that the event missed.
+    client.on('user-joined', (remoteUser: IAgoraRTCRemoteUser) => {
+      if (remoteUser.hasPublishedVideo || (remoteUser as any).videoTrack) {
+        void subscribeAndPlay(remoteUser, 'video')
       }
-
-      if (mediaType === 'audio' && remoteUser.audioTrack) {
-        remoteUser.audioTrack.play()
+      if (remoteUser.hasPublishedAudio || (remoteUser as any).audioTrack) {
+        void subscribeAndPlay(remoteUser, 'audio')
       }
     })
 
@@ -726,8 +757,38 @@ export default function LiveAuctionRoom() {
 
     client.on('user-left', () => setRemoteReady(false))
 
+    // Recover from temporary disconnects (mobile backgrounding, flaky wifi).
+    client.on('connection-state-change', (curState: string, revState: string) => {
+      debugAgora('connection-state-change', curState, revState)
+      if (curState === 'RECONNECTING' || curState === 'DISCONNECTED') {
+        setAgoraConnected(false)
+        scheduleViewerReconnect()
+      } else if (curState === 'CONNECTED') {
+        setAgoraConnected(true)
+        // A host that published while we were reconnecting: re-scan.
+        client.remoteUsers.forEach((u) => {
+          if (u.hasPublishedVideo || (u as any).videoTrack) void subscribeAndPlay(u, 'video')
+          if (u.hasPublishedAudio || (u as any).audioTrack) void subscribeAndPlay(u, 'audio')
+        })
+      }
+    })
+
+    // Proactively refresh the token before it expires to avoid a dropped stream.
+    client.on('token-privilege-will-expire', async () => {
+      debugAgora('token-privilege-will-expire — renewing')
+      try {
+        if (!show) return
+        const channelName = getAgoraChannelName(show)
+        const uid = makeAgoraUid(user?.id || '', 'viewer')
+        const token = await getAgoraToken(channelName, uid, 'audience')
+        await client.renewToken(token)
+      } catch (err) {
+        logAgoraError('token renewal failed', err)
+      }
+    })
+
     return client
-  }, [])
+  }, [getAgoraChannelName, scheduleViewerReconnect, show, subscribeAndPlay, user?.id])
 
   const scheduleViewerReconnect = useCallback(() => {
     if (retryTimerRef.current) return
@@ -778,16 +839,36 @@ export default function LiveAuctionRoom() {
 
       agoraJoinedRef.current = true
       setAgoraConnected(true)
+
+      // Catch the host if it was already live *before* we subscribed. The
+      // user-published event would have been missed otherwise, leaving viewers
+      // stuck on "Waiting for Agora" forever.
+      client.remoteUsers.forEach((u) => {
+        if (u.hasPublishedVideo || (u as any).videoTrack) void subscribeAndPlay(u, 'video')
+        if (u.hasPublishedAudio || (u as any).audioTrack) void subscribeAndPlay(u, 'audio')
+      })
     } catch (error: any) {
       const agoraErrorMessage = logAgoraError('Viewer Agora connection failed', error)
-      toast.error(agoraErrorMessage || 'Failed to connect to Agora auction stream')
+      // CAN_NOT_GET_GATEWAY_SERVER / no active status => invalid project, token,
+      // or account config. Surface an admin-facing error instead of an opaque
+      // "Waiting for Agora" that never recovers.
+      const isGateway = /CAN_NOT_GET_GATEWAY_SERVER|no active status|gateway/i.test(String(error?.message || ''))
+      setAgoraError(isGateway
+        ? 'Unable to connect to Agora: gateway unavailable. Check the Agora project, token endpoint, or account status.'
+        : (agoraErrorMessage || 'Failed to connect to Agora auction stream'))
+      setAgoraReadyToRetry(true)
+      if (isGateway) {
+        toast.error('Unable to connect to Agora: gateway unavailable. Check the Agora project, token endpoint, or account status.')
+      } else {
+        toast.error(agoraErrorMessage || 'Failed to connect to Agora auction stream')
+      }
       GLOBAL_AGORA_JOIN_LOCKS.delete(agoraKey)
       activeAgoraKeyRef.current = null
       await cleanupAgora()
     } finally {
       agoraConnectingRef.current = false
     }
-  }, [buildAgoraClient, cleanupAgora, getAgoraToken, isAuctioneer, scheduleViewerReconnect, show, showId, user?.id])
+  }, [buildAgoraClient, cleanupAgora, getAgoraToken, isAuctioneer, scheduleViewerReconnect, show, showId, subscribeAndPlay, user?.id])
 
   useEffect(() => {
     connectViewerAgoraRef.current = connectViewerAgora
@@ -838,7 +919,7 @@ export default function LiveAuctionRoom() {
 
       const [micTrack, camTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
         { AEC: true, ANS: true, AGC: true },
-        { encoderConfig: '720p_2', facingMode: 'user' }
+        { encoderConfig: '720p_2', facingMode: { ideal: 'environment' } }
       )
 
       localAudioTrackRef.current = micTrack
@@ -1187,6 +1268,20 @@ export default function LiveAuctionRoom() {
           if (payload.new?.display_text !== undefined) {
             setDisplayText(payload.new.display_text || '')
           }
+          // Keep the local show record in sync so viewers who are already on the
+          // page see the show flip to LIVE and the active item update instantly.
+          if (payload.new?.status || payload.new?.current_lot_id || payload.new?.live_started_at) {
+            setShow((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: payload.new.status ?? prev.status,
+                    current_lot_id: payload.new.current_lot_id ?? prev.current_lot_id,
+                    live_started_at: payload.new.live_started_at ?? prev.live_started_at,
+                  }
+                : prev,
+            )
+          }
           // Detect when show ends and route bidders/viewers accordingly
           if (payload.new?.status === 'ended' && payload.old?.status === 'live') {
             void redirectOnAuctionEnd()
@@ -1454,12 +1549,30 @@ export default function LiveAuctionRoom() {
             ) : (
               <div className="absolute inset-0 bg-black">
                 <div ref={remoteVideoRef} className="absolute inset-0 h-full w-full bg-black [&>div]:!h-full [&>div]:!w-full [&_video]:!h-full [&_video]:!w-full [&_video]:!object-cover" />
-                {!remoteReady && (
+                {agoraError ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-950 via-red-950/30 to-purple-950/40 px-6 text-center">
+                    <AlertCircle className="h-12 w-12 text-red-300" />
+                    <p className="max-w-md text-sm font-bold text-red-100">{agoraError}</p>
+                    <button
+                      onClick={() => {
+                        setAgoraError(null)
+                        void connectViewerRef.current?.()
+                      }}
+                      className="rounded-xl border border-cyan-300/40 bg-cyan-500/20 px-5 py-2.5 font-bold text-cyan-100 hover:bg-cyan-500/30"
+                    >
+                      Retry connection
+                    </button>
+                  </div>
+                ) : !remoteReady && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-cyan-950/20 to-purple-950/20">
-                    <Gavel className="h-16 w-16 animate-pulse text-cyan-300" />
-                    <p className="mt-4 text-xl font-black text-cyan-100">Waiting for Agora stream</p>
+                    <Video className="h-16 w-16 animate-pulse text-cyan-300" />
+                    <p className="mt-4 text-xl font-black text-cyan-100">
+                      {agoraConnected ? 'Waiting for auctioneer video' : 'Connecting to Agora auction room...'}
+                    </p>
                     <p className="mt-1 text-sm text-slate-400">
-                      {agoraConnected ? 'Connected to the room. Waiting for auctioneer video.' : 'Connecting to Agora auction room...'}
+                      {agoraConnected
+                        ? 'The auctioneer has not started their camera yet.'
+                        : 'Establishing a secure connection to the live auction stream.'}
                     </p>
                   </div>
                 )}

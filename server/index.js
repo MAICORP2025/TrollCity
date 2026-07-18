@@ -119,6 +119,54 @@ app.use((req, res, next) => {
   });
 });
 
+// ============================================================================
+// PLATFORM CAPACITY LIMITS (Beta)
+// ============================================================================
+const MAX_CONCURRENT_CONNECTIONS = 675;
+let activeConnections = 0;
+const connectionListeners = new Set();
+function notifyConnectionListeners() {
+  connectionListeners.forEach(fn => { try { fn(); } catch {} });
+}
+
+app.use((req, res, next) => {
+  activeConnections++;
+  notifyConnectionListeners();
+  res.on('finish', () => {
+    activeConnections = Math.max(0, activeConnections - 1);
+    notifyConnectionListeners();
+  });
+  res.on('close', () => {
+    activeConnections = Math.max(0, activeConnections - 1);
+    notifyConnectionListeners();
+  });
+  next();
+});
+
+app.get('/api/admin/capacity', (req, res) => {
+  res.status(200).json({
+    activeConnections,
+    maxConnections: MAX_CONCURRENT_CONNECTIONS,
+    remainingConnections: Math.max(0, MAX_CONCURRENT_CONNECTIONS - activeConnections),
+  });
+});
+
+app.post('/api/admin/capacity/subscribe', (req, res) => {
+  const id = Date.now().toString();
+  const listener = () => {
+    res.write(`data: ${JSON.stringify({ activeConnections, maxConnections: MAX_CONCURRENT_CONNECTIONS, remainingConnections: Math.max(0, MAX_CONCURRENT_CONNECTIONS - activeConnections) })}\n\n`);
+  };
+  connectionListeners.add(listener);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.write(`data: ${JSON.stringify({ activeConnections, maxConnections: MAX_CONCURRENT_CONNECTIONS, remainingConnections: Math.max(0, MAX_CONCURRENT_CONNECTIONS - activeConnections) })}\n\n`);
+  req.on('close', () => {
+    connectionListeners.delete(listener);
+    res.end();
+  });
+});
+
 // API Routes - Lazy-loaded to defer Supabase client initialization until after env is confirmed
 
 // Health Check

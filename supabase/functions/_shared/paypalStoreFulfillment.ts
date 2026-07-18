@@ -118,6 +118,7 @@ export async function fulfillPaypalCoinStorePurchase(
     verifiedCurrency: string;
     packageId?: string | null | undefined;
     status?: string;
+    purchaseType?: string;
   },
 ): Promise<PaypalFulfillmentResult | { success: false; error: string }> {
   const {
@@ -128,7 +129,54 @@ export async function fulfillPaypalCoinStorePurchase(
     verifiedCurrency,
     packageId,
     status = "",
+    purchaseType = "coins",
   } = params;
+
+  // ── MAI Pay Plus paid upgrade ───────────────────────────────────────────
+  // Sets the mai_pay_plus flag on the user profile. No coins are granted.
+  if (purchaseType === "mai_pay_plus") {
+    const { error: txErr } = await supabase.from("coin_transactions").insert({
+      user_id: userId,
+      amount: 0,
+      type: "mai_pay_plus_purchase",
+      description: `MAI Pay Plus upgrade ($${verifiedAmount.toFixed(2)})`,
+      platform_profit: verifiedAmount,
+      usd_amount: verifiedAmount,
+      external_id: orderId,
+      paypal_order_id: orderId,
+      paypal_capture_id: captureId,
+      source: "purchase",
+      metadata: {
+        paypal_order_id: orderId,
+        paypal_capture_id: captureId,
+        package_id: packageId ?? null,
+        amount_paid: verifiedAmount,
+        purchase_kind: "mai_pay_plus",
+      },
+    });
+
+    if (txErr && txErr.code !== "23505") {
+      console.error("[fulfill] mai_pay_plus tx insert error:", txErr);
+    }
+
+    const { error: profileErr } = await supabase
+      .from("user_profiles")
+      .update({ mai_pay_plus: true, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+
+    if (profileErr) {
+      console.error("[fulfill] mai_pay_plus profile update error:", profileErr);
+      return { success: false, error: profileErr.message || "Failed to activate MAI Pay Plus" };
+    }
+
+    return {
+      success: true,
+      coinsAdded: 0,
+      repay: null,
+      newLoanBalance: null,
+      loanStatus: null,
+    };
+  }
 
   let { coinsToCredit, dbItem } = await resolveCoinPackWithUsdHint(
     supabase,

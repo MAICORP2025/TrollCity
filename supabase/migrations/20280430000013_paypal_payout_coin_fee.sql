@@ -1,4 +1,4 @@
--- Apply the 2.9% coin fee to PayPal payout requests as well as Visa redemptions.
+-- Apply the 0%coin fee to PayPal payout requests as well as Visa redemptions.
 
 CREATE OR REPLACE FUNCTION public.request_paypal_payout(p_user_id uuid, p_coins bigint, p_usd numeric)
 RETURNS jsonb

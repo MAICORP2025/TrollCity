@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+﻿import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProfileFrame from '@/components/profile/ProfileFrame';
@@ -176,7 +176,35 @@ function useRoleChecks(profile: any) {
     trollRole === 'auctioneer' ||
     !!(profile as any)?.is_auctioneer
 
-  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isHRAdmin, isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster, isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer, role, trollRole };
+  // Any profile whose role is an approved employee role can open the
+  // employee office (mirrors permissions.ts APPROVED_ROLES).
+  const isEmployee =
+    isAdmin ||
+    isLead ||
+    isOfficer ||
+    isSecretary ||
+    isCEOAssistant ||
+    isNoahAssistant ||
+    isHRAdmin ||
+    new Set([
+      'troll_officer', 'lead_troll_officer', 'secretary', 'ceo_assistant',
+      'noah_assistant', 'hr_admin', 'hr_manager', 'agency_hr_manager',
+      'pastor', 'agency_leader', 'attorney', 'prosecutor', 'journalist',
+      'auctioneer', 'troller', 'agency_hr', 'president', 'vice_president',
+      'troll_city_secretary', 'troll_city_treasurer', 'executive_secretary',
+      'academy_teacher', 'admissions_officer', 'employee',
+    ]).has(role) ||
+    new Set([
+      'troll_officer', 'lead_troll_officer', 'secretary', 'ceo_assistant',
+      'noah_assistant', 'hr_admin', 'hr_manager', 'agency_hr_manager',
+      'pastor', 'agency_leader', 'attorney', 'prosecutor', 'journalist',
+      'auctioneer', 'troller', 'agency_hr', 'president', 'vice_president',
+      'troll_city_secretary', 'troll_city_treasurer', 'executive_secretary',
+      'academy_teacher', 'admissions_officer', 'employee',
+    ]).has(trollRole)
+    ;
+
+  return { isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isHRAdmin, isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster, isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer, isEmployee, role, trollRole };
 }
 
 /* ─── Format helpers ─── */
@@ -379,7 +407,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
   const {
     isAdmin, isSecretary, isLead, isOfficer, isPresident, isBroadcaster, isAgencyHR, isHRAdmin,
     isAgencyLeader, isAttorney, isProsecutor, isPastor, isJournalist, isNewsCaster,
-    isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer,
+    isChiefNewsCaster, isCEOAssistant, isNoahAssistant, isAuctioneer, isEmployee,
   } = useRoleChecks(profile);
   const [search, setSearch] = useState('');
 
@@ -447,7 +475,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           ...(isLead
             ? [{ label: 'Lead HQ', icon: Star as any, path: '/lead-officer' }]
             : []),
-          ...(isOfficer || isLead || isSecretary || isAdmin || isCEOAssistant || isNoahAssistant || isHRAdmin
+          ...(isOfficer || isLead || isSecretary || isAdmin || isCEOAssistant || isNoahAssistant || isHRAdmin || isEmployee
             ? [{ label: 'Employees', icon: Briefcase as any, path: '/Employees' }]
             : []),
           ...(isSecretary || isAdmin
@@ -830,7 +858,6 @@ export default function BottomNavBar() {
                  <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
                  <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
                  <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} />
-                 <NavButton icon={Crown} label="High Bcasters" to="/high-bcasters" active={isActive('/high-bcasters')} />
                  <NavButton icon={Crown} label="High Bcasters" to="/high-bcasters" active={isActive('/high-bcasters')} />
                  <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} />
                  <NavButton icon={Gavel} label="Auctions" to="/auctions" active={isActive('/auctions')} badge={badges.auctions} badgeKey="auctions" onBadgeDismiss={badges.dismiss} />

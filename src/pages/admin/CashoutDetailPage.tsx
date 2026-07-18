@@ -340,7 +340,7 @@ export default function AdminCashoutDetailPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div><p className="text-sm text-slate-400">User</p><p className="font-bold text-white">{details.username}</p></div>
                 <div><p className="text-sm text-slate-400">Payout Coins</p><p className="font-bold text-troll-gold">{payoutCoins.toLocaleString()}</p></div>
-                <div><p className="text-sm text-slate-400">Fee (2.9%)</p><p className="font-bold text-red-300">-{feeCoins.toLocaleString()}</p></div>
+                <div><p className="text-sm text-slate-400">Fee (0%)</p><p className="font-bold text-red-300">-{feeCoins.toLocaleString()}</p></div>
                 <div><p className="text-sm text-slate-400">Cash Amount</p><p className="font-bold text-white">${details.cash_amount?.toFixed(2)}</p></div>
               </div>
               <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-2 md:grid-cols-4 gap-4">

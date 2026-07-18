@@ -319,7 +319,7 @@ Before going live, verify:
 ### FAQ
 
 **Q: How long does it take to approve a payment?**
-A: Usually within 24 hours, but can be faster if admin monitors in real-time.
+A: Usually Within 5 Minutes, but can be faster if admin monitors in real-time.
 
 **Q: Can users cancel a payment request?**
 A: Not automatically, but admin can mark it as `canceled` in dashboard.

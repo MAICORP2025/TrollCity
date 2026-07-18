@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase, getSystemSettings } from '../lib/supabase'
-import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from '../lib/payoutWindow'
 import { toast } from 'sonner'
 import { X, DollarSign, AlertCircle, Star, Shield } from 'lucide-react'
 import { RequestPayoutResponse } from '../types/earnings'
+import { CASHOUT_TIERS } from '../config/coinConfig'
 
 interface RequestPayoutModalProps {
   userId: string
@@ -21,7 +21,6 @@ export default function RequestPayoutModal({
   const [coinsToRedeem, setCoinsToRedeem] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [referralBonus, setReferralBonus] = useState<{ isReferred: boolean; isFounding: boolean }>({ isReferred: false, isFounding: false })
-  const payoutWindowOpen = isPayoutWindowOpen()
   const payoutsDisabled = true
 
   useEffect(() => {
@@ -41,13 +40,17 @@ export default function RequestPayoutModal({
       })
   }, [userId])
 
-  const MINIMUM_COINS = 7000 // $21 minimum
-  // Conversion rate varies by tier: $21/7k = $0.003, $49.50/14k = $0.0035357, $90/27k = $0.00333, $150/47k = $0.00319
-  // Using average rate for display purposes
-  const CONVERSION_RATE = 0.003 // Approximate rate for display
+  const MINIMUM_COINS = CASHOUT_TIERS[0].coins // minimum cashout tier
+  const estimateUsd = (coins: number) => {
+    let best = CASHOUT_TIERS[0];
+    for (const tier of CASHOUT_TIERS) {
+      if (coins >= tier.coins) best = tier;
+    }
+    return best.usd * (coins / best.coins);
+  }
 
   const coinsNum = parseInt(coinsToRedeem, 10) || 0
-  const usdAmount = coinsNum * CONVERSION_RATE
+  const usdAmount = estimateUsd(coinsNum)
   const isValid = coinsNum >= MINIMUM_COINS && coinsNum <= availableCoins
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,11 +58,6 @@ export default function RequestPayoutModal({
     
     if (!isValid) {
       toast.error(`Please enter between ${MINIMUM_COINS.toLocaleString()} and ${availableCoins.toLocaleString()} coins`)
-      return
-    }
-
-    if (!payoutWindowOpen) {
-      toast.error(PAYOUT_WINDOW_LABEL)
       return
     }
 
@@ -143,11 +141,6 @@ export default function RequestPayoutModal({
           <p className="text-sm text-gray-400 mt-1">
             Convert your coins to cash
           </p>
-          {!payoutWindowOpen && (
-            <div className="mt-3 rounded-lg border border-yellow-500/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
-              {PAYOUT_WINDOW_LABEL}
-            </div>
-          )}
         </div>
 
         {/* Available Balance */}
@@ -161,7 +154,7 @@ export default function RequestPayoutModal({
           <div className="flex justify-between items-center mt-2">
             <span className="text-gray-400">USD Value:</span>
             <span className="text-lg font-semibold text-green-400">
-              ${(availableCoins * CONVERSION_RATE).toFixed(2)}
+              ${estimateUsd(availableCoins).toFixed(2)}
             </span>
           </div>
         </div>
@@ -201,7 +194,7 @@ export default function RequestPayoutModal({
               required
             />
             <p className="text-xs text-gray-500 mt-1">
-              Minimum: {MINIMUM_COINS.toLocaleString()} coins (${(MINIMUM_COINS * CONVERSION_RATE).toFixed(2)})
+              Minimum: {MINIMUM_COINS.toLocaleString()} coins (${estimateUsd(MINIMUM_COINS).toFixed(2)})
             </p>
           </div>
 
@@ -246,7 +239,7 @@ export default function RequestPayoutModal({
             </button>
             <button
               type="submit"
-              disabled={!isValid || loading || !payoutWindowOpen}
+              disabled={!isValid || loading}
               className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Submitting...' : 'Submit Request'}

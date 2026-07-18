@@ -307,30 +307,6 @@ function GamingSetupPageInner() {
       console.error('[GamingSetupPage] Go live failed:', err);
       toast.error(err?.message || 'Failed to go live');
     }
-    // Create a system wall post so the stream appears on the Troll Wall feed
-    // This runs independently of the go-live flow above — if it fails, the stream is still live
-    try {
-      const broadcasterName = profile?.username || profile?.display_name || 'A Gamer'
-      const streamUrl = `/gaming/watch/${streamData.id}`
-      await supabase.from('troll_wall_posts').insert({
-        user_id: user?.id,
-        username: 'Troll City System',
-        post_type: 'stream_announce',
-        content: `🎮 ${broadcasterName} is now LIVE on HytroGaming!`,
-        is_system_generated: true,
-        metadata: {
-          stream_id: streamData.id,
-          stream_url: streamUrl,
-          category: 'gaming',
-          broadcaster_name: broadcasterName,
-          broadcaster_id: user?.id,
-          thumbnail_url: null,
-          live: true,
-        },
-      })
-    } catch (wallErr: any) {
-      console.warn('[GamingSetupPage] Wall post creation failed:', wallErr)
-    }
   };
 
   const handleGoLive = useCallback(() => {

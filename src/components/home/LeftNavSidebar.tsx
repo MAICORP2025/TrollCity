@@ -20,7 +20,7 @@ import FloatingPoster from './FloatingPoster'
 import LevelStatusCard from './LevelStatusCard'
 import { grantNavCoins } from '@/lib/grantNavCoins'
 
-type TabType = 'home' | 'live' | 'universe' | 'how-to-videos' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'home' | 'live' | 'universe' | 'jobs' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
 interface LeftNavSidebarProps {
   activeTab: TabType
@@ -67,7 +67,7 @@ export default function LeftNavSidebar({
     { label: 'Wall', icon: PenSquare, activeGradient: 'from-purple-500 to-pink-600', count: wallNotificationCount, isExternal: true, path: '/wall' },
     { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount + battleCount },
     { id: 'universe', label: 'Universe', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
-    { id: 'how-to-videos', label: 'How-To Videos', icon: PlayCircle, activeGradient: 'from-cyan-500 to-blue-600' },
+    { id: 'jobs', label: 'Jobs', icon: PlayCircle, activeGradient: 'from-cyan-500 to-blue-600' },
     { id: 'podcast', label: 'Podcast', icon: Mic, activeGradient: 'from-purple-500 to-fuchsia-600' },
     { id: 'laws-fees', label: 'City Laws', icon: FileText, activeGradient: 'from-cyan-500 to-blue-600' },
     { id: 'leagues', label: 'Leagues', icon: Trophy, activeGradient: 'from-purple-500 to-indigo-600' },

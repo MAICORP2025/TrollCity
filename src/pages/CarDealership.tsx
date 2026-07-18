@@ -25,6 +25,19 @@ export default function CarDealership() {
 
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleCatalogItem | null>(null);
 
+  const openVehicle = (vehicle: VehicleCatalogItem) => {
+    setSelectedVehicle(vehicle)
+    // Bring the user to the top so the modal is always visible (especially on
+    // mobile where the grid can be scrolled far down before tapping a car).
+    try {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+      const scroller = document.querySelector('.app-viewport main') as HTMLElement | null
+      if (scroller) scroller.scrollTop = 0
+    } catch {
+      /* ignore */
+    }
+  };
+
   const handlePurchase = async () => {
     if (!user || !selectedVehicle) return;
 
@@ -154,7 +167,7 @@ export default function CarDealership() {
                     </div>
 
                     <button
-                      onClick={() => setSelectedVehicle(vehicle)}
+                      onClick={() => openVehicle(vehicle)}
                       disabled={isPurchasing || isOutOfStock}
                       className={`w-full py-3 ${isOutOfStock ? 'bg-gray-700 cursor-not-allowed' : trollCityTheme.gradients.button} rounded-lg font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:-translate-y-0.5`}
                     >
@@ -177,7 +190,7 @@ export default function CarDealership() {
 
       {/* Purchase Modal */}
       {selectedVehicle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-20 sm:items-center sm:pt-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh] flex flex-col md:flex-row">
 
             {/* Left: Vehicle Preview */}

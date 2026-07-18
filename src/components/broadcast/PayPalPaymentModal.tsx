@@ -30,6 +30,8 @@ interface PayPalPaymentModalProps {
   onCardSaved?: () => void
   saveOnly?: boolean
   onProfileUpdate?: (profile: any) => void
+  /** When false (e.g. MAI Pay Plus upgrade), coins are not required to render. */
+  requireCoins?: boolean
 }
 
 type PaymentStep = 'select' | 'processing' | 'success'
@@ -46,6 +48,7 @@ export default function PayPalPaymentModal({
   onCardSaved,
   saveOnly = false,
   onProfileUpdate,
+  requireCoins = true,
 }: PayPalPaymentModalProps) {
   const [step, setStep] = useState<PaymentStep>('select')
   const [paymentResult, setPaymentResult] = useState<any>(null)
@@ -155,7 +158,7 @@ export default function PayPalPaymentModal({
     if (!paypalButtonsRef.current) return
     if (!window.paypal?.Buttons) return
     if (!Number.isFinite(amountUsd) || amountUsd <= 0) return
-    if (!Number.isFinite(Number(coins)) || Number(coins) <= 0) return
+    if (requireCoins && (!Number.isFinite(Number(coins)) || Number(coins) <= 0)) return
 
     safelyClosePayPalButtons()
     clearPayPalContainer()

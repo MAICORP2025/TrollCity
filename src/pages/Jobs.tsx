@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/store'
 import { supabase, UserRole } from '@/lib/supabase'
-import useSEO from '@/hooks/useSEO';
+import useSEO from '@/hooks/useSEO'
 import {
   Briefcase,
   Search,
@@ -26,6 +26,11 @@ import {
   Unlock,
   RefreshCw,
   UserCheck,
+  CheckCircle2,
+  XCircle,
+  Clock3,
+  Mail,
+  ClipboardCheck,
 } from 'lucide-react'
 
 interface JobPosition {
@@ -37,6 +42,7 @@ interface JobPosition {
   benefits: string[]
   icon: React.ElementType
   color: string
+  isEmployeePosition: boolean
 }
 
 interface CareerPositionSettings {
@@ -48,6 +54,21 @@ interface CareerPositionSettings {
   is_open: boolean
 }
 
+interface JobApplication {
+  id: string
+  position_id: string | null
+  status: string
+  created_at: string
+}
+
+const EMPLOYEE_ROLES = new Set([
+  'troll_officer',
+  'lead_troll_officer',
+  'secretary',
+  'ceo_assistant',
+  'noah_assistant',
+])
+
 const jobPositions: JobPosition[] = [
   {
     id: 'auctioneer',
@@ -58,6 +79,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Auctioneer Studio access', 'Earn from successful auctions', 'Moderate auction rooms'],
     icon: Star,
     color: 'from-green-500 to-emerald-500',
+    isEmployeePosition: false,
   },
   {
     id: 'prosecutor',
@@ -68,6 +90,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Prosecutor badge', 'Access to case management', 'City-wide recognition'],
     icon: Gavel,
     color: 'from-red-500 to-orange-500',
+    isEmployeePosition: false,
   },
   {
     id: 'attorney',
@@ -78,6 +101,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Attorney badge', 'Access to court case system', 'Build reputation as advocate'],
     icon: FileText,
     color: 'from-amber-500 to-yellow-500',
+    isEmployeePosition: false,
   },
   {
     id: 'tcnn_news_caster',
@@ -88,6 +112,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['News Caster badge', 'Ability to go live on TCNN', 'Platform-wide visibility'],
     icon: Mic,
     color: 'from-red-500 to-orange-500',
+    isEmployeePosition: false,
   },
   {
     id: 'secretary',
@@ -98,6 +123,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Secretary tools access', 'City operations role', 'Potential weekly role perk from Treasury'],
     icon: Briefcase,
     color: 'from-cyan-500 to-blue-500',
+    isEmployeePosition: true,
   },
   {
     id: 'tcnn_chief_news_caster',
@@ -108,6 +134,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Chief News Caster badge', 'Manage TCNN staff', 'Access to TCNN analytics dashboard'],
     icon: Radio,
     color: 'from-amber-500 to-yellow-500',
+    isEmployeePosition: false,
   },
   {
     id: 'troll_officer',
@@ -118,6 +145,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Officer badge', 'Access to officer tools', 'Potential weekly role perk from Treasury'],
     icon: Shield,
     color: 'from-purple-500 to-pink-500',
+    isEmployeePosition: true,
   },
   {
     id: 'journalist',
@@ -128,6 +156,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Journalist badge', 'Access to TCNN content dashboard', 'Potential to advance to News Caster'],
     icon: Newspaper,
     color: 'from-blue-500 to-cyan-500',
+    isEmployeePosition: false,
   },
   {
     id: 'lead_troll_officer',
@@ -138,6 +167,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Leadership role', 'Officer oversight tools', 'Potential weekly role perk from Treasury'],
     icon: Crown,
     color: 'from-yellow-500 to-orange-500',
+    isEmployeePosition: true,
   },
   {
     id: 'troller',
@@ -148,6 +178,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Earn coins from engagement', 'Broadcast growth opportunities', 'Platform-wide promotion potential'],
     icon: Video,
     color: 'from-cyan-500 to-blue-500',
+    isEmployeePosition: false,
   },
   {
     id: 'agency_hr_manager',
@@ -158,6 +189,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Agency HR dashboard access', 'Oversees all agencies', 'Reports to admin dashboard'],
     icon: Building2,
     color: 'from-slate-400 to-cyan-500',
+    isEmployeePosition: false,
   },
   {
     id: 'agency_hr',
@@ -168,8 +200,9 @@ const jobPositions: JobPosition[] = [
     benefits: ['Agency support access', 'HR experience', 'Staff pipeline'],
     icon: UserCheck,
     color: 'from-teal-500 to-cyan-500',
+    isEmployeePosition: false,
   },
-{
+  {
     id: 'agency_leader',
     title: 'Agency Leader',
     department: 'Agencies',
@@ -178,6 +211,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Agency dashboard access', 'Build creator teams', 'Potential weekly role perk from Treasury'],
     icon: Users,
     color: 'from-violet-500 to-purple-500',
+    isEmployeePosition: false,
   },
   {
     id: 'ceo_assistant',
@@ -188,6 +222,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Executive assistant role', 'Potential weekly role perk from Treasury', 'Direct CEO support assignment'],
     icon: Crown,
     color: 'from-yellow-400 to-cyan-500',
+    isEmployeePosition: true,
   },
   {
     id: 'noah_assistant',
@@ -198,6 +233,7 @@ const jobPositions: JobPosition[] = [
     benefits: ['Admin assistant role', 'Potential weekly role perk from Treasury', 'Assigned to Noah Admin support'],
     icon: Briefcase,
     color: 'from-purple-500 to-cyan-500',
+    isEmployeePosition: true,
   },
   {
     id: 'pastor',
@@ -208,25 +244,40 @@ const jobPositions: JobPosition[] = [
     benefits: ['Pastor badge', 'Access to Pastor Dashboard', 'Church broadcast capabilities', 'Pastoral chat channels'],
     icon: Church,
     color: 'from-green-500 to-emerald-500',
+    isEmployeePosition: false,
   },
 ]
 
 const DEFAULT_MAX_APPLICATIONS = 10
 
-export default function OpenPositions() {
+const positionToRoleCheck: Record<string, { field: string; message: string }> = {
+  auctioneer: { field: 'is_auctioneer', message: 'You are already an Auctioneer' },
+  secretary: { field: 'is_secretary', message: 'You are already a Secretary' },
+  troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
+  lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
+  troller: { field: 'is_troller', message: 'You are already a Troller' },
+  journalist: { field: 'is_journalist', message: 'You are already a Journalist' },
+  tcnn_news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
+  tcnn_chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
+  prosecutor: { field: 'is_prosecutor', message: 'You are already a Prosecutor' },
+  attorney: { field: 'is_attorney', message: 'You are already an Attorney' },
+  pastor: { field: 'is_pastor', message: 'You are already a Pastor' },
+  agency_hr_manager: { field: 'is_agency_hr_manager', message: 'You are already an Agency HR Manager' },
+  agency_leader: { field: 'is_agency_leader', message: 'You are already an Agency Leader' },
+  ceo_assistant: { field: 'is_ceo_assistant', message: 'You are already a CEO Assistant' },
+  noah_assistant: { field: 'is_noah_assistant', message: 'You are already a Noah Assistant' },
+}
+
+export default function JobsPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { profile, user } = useAuthStore()
 
   useSEO({
-    title: 'Careers | Troll City - Join Our Team & Make Money Online',
-    description: 'Troll City has its own proprietary HR system, payroll provider, built-in role applications, time clock, time off requests, internal handbook, and HR resources. Apply for roles in the HR Center.',
-    keywords: [
-      'careers', 'make money online', 'work from home', 'side income',
-      'online opportunities', 'creator economy', 'remote jobs', 'Troll City careers',
-      'weekly payouts', 'earn money online', 'online business', 'jobs',
-      'HR Center', 'Troll City HR', 'proprietary payroll', 'time clock'
-    ]
-  });
+    title: 'Jobs | Troll City - Join Our Team & Make Money Online',
+    description: 'Browse open positions at Troll City. Apply for roles in moderation, court, broadcasting, agency management, and executive support.',
+    keywords: ['jobs', 'careers', 'hiring', 'troll city jobs', 'online jobs', 'remote work'],
+  })
 
   const [query, setQuery] = useState('')
   const [department, setDepartment] = useState('All')
@@ -235,6 +286,7 @@ export default function OpenPositions() {
   const [adminDrafts, setAdminDrafts] = useState<Record<string, { max_applications: number; is_open: boolean }>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [userApplications, setUserApplications] = useState<JobApplication[]>([])
 
   const isAdminOrLead =
     profile?.role === 'admin' ||
@@ -254,7 +306,7 @@ export default function OpenPositions() {
     return ['All', ...Array.from(new Set(jobPositions.map((job) => job.department)))]
   }, [])
 
-  const loadCareerData = async () => {
+  const loadJobsData = async () => {
     setIsLoading(true)
 
     try {
@@ -293,16 +345,28 @@ export default function OpenPositions() {
       setSettingsById(nextSettingsById)
       setAdminDrafts(nextDrafts)
       setCountsById(nextCountsById)
+
+      if (user) {
+        const { data: myApps, error: myAppsError } = await supabase
+          .from('job_applications')
+          .select('id, position_id, status, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (!myAppsError && myApps) {
+          setUserApplications(myApps)
+        }
+      }
     } catch (error: any) {
-      console.error('[Careers] Failed to load career data:', error)
-      toast.error(error?.message || 'Could not load career settings')
+      console.error('[Jobs] Failed to load jobs data:', error)
+      toast.error(error?.message || 'Could not load job listings')
     } finally {
       setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    loadCareerData()
+    loadJobsData()
   }, [])
 
   const filteredJobs = useMemo(() => {
@@ -320,7 +384,7 @@ export default function OpenPositions() {
     })
   }, [query, department])
 
-  const getCareerState = (position: JobPosition) => {
+  const getJobState = (position: JobPosition) => {
     const settings = settingsById[position.id]
     const maxApplications = Number(settings?.max_applications ?? DEFAULT_MAX_APPLICATIONS)
     const usedApplications = Number(countsById[position.id] ?? 0)
@@ -340,35 +404,25 @@ export default function OpenPositions() {
     }
   }
 
-  const positionToRoleCheck: Record<string, { field: string; message: string }> = {
-  auctioneer: { field: 'is_auctioneer', message: 'You are already an Auctioneer' },
-  secretary: { field: 'is_secretary', message: 'You are already a Secretary' },
-  troll_officer: { field: 'is_troll_officer', message: 'You are already a Troll Officer' },
-  lead_troll_officer: { field: 'is_lead_officer', message: 'You are already a Lead Troll Officer' },
-  troller: { field: 'is_troller', message: 'You are already a Troller' },
-  journalist: { field: 'is_journalist', message: 'You are already a Journalist' },
-  tcnn_news_caster: { field: 'is_news_caster', message: 'You are already a News Caster' },
-  tcnn_chief_news_caster: { field: 'is_chief_news_caster', message: 'You are already a Chief News Caster' },
-  prosecutor: { field: 'is_prosecutor', message: 'You are already a Prosecutor' },
-  attorney: { field: 'is_attorney', message: 'You are already an Attorney' },
-}
+  const getUserApplicationStatus = (positionId: string): JobApplication | undefined => {
+    return userApplications.find((app) => app.position_id === positionId)
+  }
 
-const handleApply = async (position: JobPosition) => {
+  const handleApply = async (position: JobPosition) => {
     if (!user) {
-      toast.error('Please sign in to apply')
-      navigate('/auth')
+      navigate(`/jobs/apply?position=${position.id}`)
       return
     }
 
-    const state = getCareerState(position)
+    const state = getJobState(position)
 
     if (!state.isOpen) {
-      toast.error('This career is currently closed')
+      toast.error('This position is currently closed')
       return
     }
 
     if (state.isFilled) {
-      toast.error('This career is filled right now')
+      toast.error('This position is filled right now')
       return
     }
 
@@ -384,28 +438,17 @@ const handleApply = async (position: JobPosition) => {
       return
     }
 
-    const { data: existingApplication, error } = await supabase
-      .from('job_applications')
-      .select('id, status')
-      .eq('user_id', user.id)
-      .eq('position_id', position.id)
-      .maybeSingle()
-
-    if (error) {
-      toast.error(error.message)
+    const existing = getUserApplicationStatus(position.id)
+    if (existing) {
+      toast.info('You already applied for this position')
+      navigate('/jobs/status')
       return
     }
 
-    if (existingApplication) {
-      toast.info('You already applied for this career')
-      navigate(`/apply?position=${position.id}`)
-      return
-    }
-
-    navigate(`/apply?position=${position.id}`)
+    navigate(`/jobs/apply?position=${position.id}`)
   }
 
-  const saveCareerSettings = async (position: JobPosition) => {
+  const saveJobSettings = async (position: JobPosition) => {
     if (!user || !isAdminOrLead) return
 
     const draft = adminDrafts[position.id] || {
@@ -437,10 +480,10 @@ const handleApply = async (position: JobPosition) => {
       if (error) throw error
 
       toast.success(`${position.title} settings saved`)
-      await loadCareerData()
+      await loadJobsData()
     } catch (error: any) {
-      console.error('[Careers] Save failed:', error)
-      toast.error(error?.message || 'Could not save career settings')
+      console.error('[Jobs] Save failed:', error)
+      toast.error(error?.message || 'Could not save job settings')
     } finally {
       setSavingId(null)
     }
@@ -464,24 +507,24 @@ const handleApply = async (position: JobPosition) => {
             <div>
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-xs font-black uppercase tracking-[0.25em] text-cyan-100">
                 <Sparkles className="h-4 w-4" />
-                Troll City Careers
+                Troll City Jobs
               </div>
 
               <h1 className="max-w-4xl text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Applications &{' '}
+                Open Positions &{' '}
                 <span className="bg-gradient-to-r from-cyan-200 via-purple-200 to-pink-200 bg-clip-text text-transparent">
                   Careers
                 </span>
               </h1>
 
               <p className="mt-5 max-w-3xl text-base leading-7 text-slate-300 sm:text-lg">
-                Apply for official Troll City roles through our proprietary HR and payroll management system.
-                Track your applications, clock in/out, request time off, and manage payroll — all from HR Center.
+                Browse open positions at Troll City. Employee positions include payroll, onboarding, and employee tools.
+                Platform roles unlock department access after approval.
               </p>
 
               {isAdminOrLead && (
                 <p className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-100">
-                  Admin mode active: set application slots to 0 to disable a career.
+                  Admin mode active: set application slots to 0 to disable a position.
                 </p>
               )}
             </div>
@@ -490,19 +533,62 @@ const handleApply = async (position: JobPosition) => {
               <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4">
                 <Briefcase className="mb-3 h-5 w-5 text-cyan-300" />
                 <p className="text-2xl font-black">{jobPositions.length}</p>
-                <p className="text-xs font-medium text-slate-300">Career paths</p>
+                <p className="text-xs font-medium text-slate-300">Open positions</p>
               </div>
 
               <div className="rounded-2xl border border-purple-400/20 bg-purple-500/10 p-4">
                 <Crown className="mb-3 h-5 w-5 text-purple-300" />
                 <p className="text-2xl font-black">
-                  {jobPositions.reduce((total, job) => total + getCareerState(job).remainingApplications, 0)}
+                  {jobPositions.reduce((total, job) => total + getJobState(job).remainingApplications, 0)}
                 </p>
                 <p className="text-xs font-medium text-slate-300">Open slots</p>
               </div>
             </div>
           </div>
         </section>
+
+        {user && (
+          <section className="mt-8 rounded-[1.75rem] border border-white/10 bg-black/50 p-4 shadow-xl shadow-black/30 backdrop-blur-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-white">My Applications</h2>
+                <p className="text-sm text-slate-400">Track your application status</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/jobs/status')}
+                className="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-100 transition hover:bg-cyan-500/20"
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                View Status
+              </button>
+            </div>
+            {userApplications.length > 0 && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {userApplications.slice(0, 6).map((app) => {
+                  const position = jobPositions.find((j) => j.id === app.position_id)
+                  if (!position) return null
+                  return (
+                    <div key={app.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="font-black text-white">{position.title}</p>
+                      <p className="text-xs text-slate-400">{position.department}</p>
+                      <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-bold ${
+                        app.status === 'pending' ? 'bg-amber-500/10 text-amber-200' :
+                        app.status === 'reviewing' ? 'bg-cyan-500/10 text-cyan-200' :
+                        app.status === 'interview' ? 'bg-violet-500/10 text-violet-200' :
+                        app.status === 'approved' ? 'bg-emerald-500/10 text-emerald-200' :
+                        app.status === 'rejected' ? 'bg-rose-500/10 text-rose-200' :
+                        'bg-slate-500/10 text-slate-200'
+                      }`}>
+                        {app.status}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="mt-8 rounded-[1.75rem] border border-white/10 bg-black/50 p-4 shadow-xl shadow-black/30 backdrop-blur-xl">
           <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto] lg:items-center">
@@ -511,7 +597,7 @@ const handleApply = async (position: JobPosition) => {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search careers, departments, or descriptions..."
+                placeholder="Search positions, departments, or descriptions..."
                 className="w-full rounded-2xl border border-white/10 bg-black/40 py-3 pl-12 pr-4 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/20"
               />
             </label>
@@ -530,7 +616,7 @@ const handleApply = async (position: JobPosition) => {
 
             <button
               type="button"
-              onClick={loadCareerData}
+              onClick={loadJobsData}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-bold text-white transition hover:border-cyan-300/40 hover:bg-white/[0.08]"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -542,11 +628,12 @@ const handleApply = async (position: JobPosition) => {
         <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredJobs.map((position) => {
             const Icon = position.icon
-            const state = getCareerState(position)
+            const state = getJobState(position)
             const draft = adminDrafts[position.id] || {
               max_applications: state.maxApplications,
               is_open: state.isOpen,
             }
+            const userApp = user ? getUserApplicationStatus(position.id) : null
 
             return (
               <article
@@ -567,12 +654,18 @@ const handleApply = async (position: JobPosition) => {
                     </div>
 
                     <div className="rounded-full bg-black/25 px-3 py-1 text-xs font-black text-white">
-                      {state.canApply ? `${state.remainingApplications} open` : 'Filled'}
+                      {position.isEmployeePosition ? 'Employee Position' : 'Platform Role'}
                     </div>
                   </div>
                 </div>
 
                 <div className="p-5">
+                  {position.isEmployeePosition && (
+                    <div className="mb-4 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs font-semibold text-amber-100">
+                      This position requires a desktop computer or laptop with a webcam, microphone, speakers, and reliable internet connection.
+                    </div>
+                  )}
+
                   <p className="min-h-24 text-sm leading-6 text-slate-300">
                     {position.description}
                   </p>
@@ -596,7 +689,6 @@ const handleApply = async (position: JobPosition) => {
                     <h3 className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-cyan-200">
                       Requirements
                     </h3>
-
                     <ul className="space-y-2">
                       {position.requirements.map((requirement) => (
                         <li key={requirement} className="flex gap-2 text-sm text-slate-300">
@@ -611,7 +703,6 @@ const handleApply = async (position: JobPosition) => {
                     <h3 className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-purple-200">
                       Benefits
                     </h3>
-
                     <ul className="space-y-2">
                       {position.benefits.map((benefit) => (
                         <li key={benefit} className="flex gap-2 text-sm text-slate-300">
@@ -666,7 +757,7 @@ const handleApply = async (position: JobPosition) => {
                         <button
                           type="button"
                           disabled={savingId === position.id}
-                          onClick={() => saveCareerSettings(position)}
+                          onClick={() => saveJobSettings(position)}
                           className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60"
                         >
                           <Save className="h-4 w-4" />
@@ -676,17 +767,25 @@ const handleApply = async (position: JobPosition) => {
                     </div>
                   )}
 
+                  {userApp && (
+                    <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-3 text-center">
+                      <p className="text-sm font-bold text-cyan-100">Application Status: {userApp.status}</p>
+                    </div>
+                  )}
+
                   <button
                     type="button"
-                    disabled={!state.canApply}
+                    disabled={!state.canApply && !userApp}
                     onClick={() => handleApply(position)}
                     className={`mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-black text-white shadow-lg shadow-black/30 transition ${
                       state.canApply
                         ? `bg-gradient-to-r ${position.color} hover:scale-[1.02]`
-                        : 'cursor-not-allowed bg-slate-700 text-slate-400'
+                        : userApp
+                          ? 'bg-cyan-600 hover:bg-cyan-500'
+                          : 'cursor-not-allowed bg-slate-700 text-slate-400'
                     }`}
                   >
-                    {state.canApply ? 'Apply Now' : state.isOpen ? 'Filled' : 'Closed'}
+                    {userApp ? 'View Application' : state.canApply ? 'Apply Now' : state.isOpen ? 'Filled' : 'Closed'}
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>

@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../lib/store'
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner'
 import { useLotSelection } from '../../hooks/useLotSelection'
+import { useZxingScanner } from '../../hooks/useZxingScanner'
 import { CARRIERS } from '../../lib/auctionFees'
 import { generateBarcodeDataURL } from '../../lib/barcode'
 import ItemBarcodeLabel from '../../components/auction/ItemBarcodeLabel'
@@ -519,6 +520,7 @@ function ScannerPanel({ show, lots, onSelectLot, onStartLot, auctioneerId }: { s
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const barcodeDetectorRef = useRef<any>(null)
+  const [barcodeSupported, setBarcodeSupported] = useState(true)
   const lastScanTimeRef = useRef(0)
   const selection = useLotSelection({
     showId: show.id,
@@ -577,9 +579,14 @@ function ScannerPanel({ show, lots, onSelectLot, onStartLot, auctioneerId }: { s
         barcodeDetectorRef.current = new (window as any).BarcodeDetector({
           formats: ['qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'],
         })
+        setBarcodeSupported(true)
       } catch (err) {
         console.warn('[Scanner] BarcodeDetector init failed:', err)
+        setBarcodeSupported(false)
       }
+    } else {
+      console.warn('[Scanner] BarcodeDetector API not available — using ZXing fallback')
+      setBarcodeSupported(false)
     }
   }, [])
 
@@ -616,6 +623,21 @@ function ScannerPanel({ show, lots, onSelectLot, onStartLot, auctioneerId }: { s
     animFrame = requestAnimationFrame(detectFrame)
     return () => cancelAnimationFrame(animFrame)
   }, [cameraActive, cameraReady, selection, onSelectLot])
+
+  // ZXing fallback decoder when the native BarcodeDetector is unavailable
+  // (e.g. iOS Safari) so the camera scanner still reads CODE_128/CODE_39/EAN/UPC.
+  useZxingScanner({
+    enabled: cameraActive && cameraReady && !barcodeSupported,
+    videoRef,
+    onDetect: (code) => {
+      const now = Date.now()
+      if (now - lastScanTimeRef.current < 2000) return
+      lastScanTimeRef.current = now
+      setLast({ code, ok: true, msg: `Scanned: ${code}` })
+      void selection.resolve(code)
+      onSelectLot()
+    },
+  })
 
   useEffect(() => {
     return () => {
@@ -701,6 +723,22 @@ function ScannerPanel({ show, lots, onSelectLot, onStartLot, auctioneerId }: { s
     return () => cancelAnimationFrame(animFrame)
   }, [testScanMode, cameraActive, cameraReady, emitTestScan, stopCamera])
 
+  // ZXing fallback decoder for test-scan mode (when native BarcodeDetector is absent).
+  useZxingScanner({
+    enabled: testScanMode && cameraActive && cameraReady && !barcodeSupported,
+    videoRef,
+    onDetect: async (code) => {
+      const now = Date.now()
+      if (now - lastScanTimeRef.current < 2000) return
+      lastScanTimeRef.current = now
+      if (!code) return
+      setTestScanStatus('Scanned — sending to Auction Studio…')
+      await emitTestScan(code)
+      stopCamera()
+      setTestScanMode(false)
+    },
+  })
+
   const isDraft = show.status === 'draft'
 
   return (
@@ -722,9 +760,15 @@ function ScannerPanel({ show, lots, onSelectLot, onStartLot, auctioneerId }: { s
           ) : (
             <div className="space-y-2">
               <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
-                <video ref={videoRef} className="h-64 w-full object-cover" playsInline muted />
+                <video ref={videoRef} className="h-64 w-full object-cover" playsInline muted autoPlay />
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="h-40 w-40 rounded-2xl border-2 border-cyan-400/80 shadow-[0_0_24px_rgba(34,211,238,0.35)]" />
+                  <div className="relative h-[64px] w-[80%] rounded-lg border-2 border-cyan-400/90 shadow-[0_0_24px_rgba(34,211,238,0.35)]">
+                    <span className="absolute left-1 top-1 h-4 w-4 rounded-tl-md border-l-2 border-t-2 border-cyan-400" />
+                    <span className="absolute right-1 top-1 h-4 w-4 rounded-tr-md border-r-2 border-t-2 border-cyan-400" />
+                    <span className="absolute bottom-1 left-1 h-4 w-4 rounded-bl-md border-b-2 border-l-2 border-cyan-400" />
+                    <span className="absolute bottom-1 right-1 h-4 w-4 rounded-br-md border-b-2 border-r-2 border-cyan-400" />
+                    <span className="barcode-scanner-line absolute left-1 right-1 top-0 h-0.5 rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent" />
+                  </div>
                 </div>
               </div>
               <button onClick={() => { stopCamera(); setTestScanMode(false) }} className="rounded-xl border border-red-300/30 bg-red-500/10 px-4 py-2.5 font-bold text-red-100">Cancel</button>

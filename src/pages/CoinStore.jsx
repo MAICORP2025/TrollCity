@@ -1871,6 +1871,7 @@ useEffect(() => {
 
 
               {selectedPackage && (manualPaymentModalOpen || paypalPaymentModalOpen) ? null : (
+                <>
                 <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {coinPackages.map((pkg) => {
                     return (
@@ -1881,10 +1882,11 @@ useEffect(() => {
                           </div>
                         )}
                         <div className="flex flex-col items-center text-center p-1">
-                          <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
-                          <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
-                          <div className="text-lg font-semibold text-green-400 mb-1">{pkg.price}</div>
-                          <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
+                           <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{pkg.emoji}</div>
+                           <div className="font-bold text-2xl text-white mb-1">{formatCoins(pkg.coins)}</div>
+                           <div className="text-[10px] font-semibold text-emerald-400 mb-1">+10% bonus</div>
+                           <div className="text-lg font-semibold text-green-400 mb-1">{pkg.price}</div>
+                           <div className="text-sm text-gray-400 mb-4">Troll Coins</div>
 
                           <button
                             onClick={() => {
@@ -1899,6 +1901,10 @@ useEffect(() => {
                     );
                   })}
                 </div>
+                <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-200 text-center">
+                  Secure payments processed via PayPal. All coin packs include 10% extra coins.
+                </div>
+              </>
               )}
             </>
           )}

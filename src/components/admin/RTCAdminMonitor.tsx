@@ -1210,6 +1210,63 @@ const openAction = useCallback((user: UserListItem, action: string) => {
     return () => clearInterval(interval);
   }, [isStaff]);
 
+  // Realtime broadcast-end handling: combine the database (postgres_changes) and
+  // the explicit broadcast_ended event so the active list drops the broadcaster
+  // the instant the shutdown sequence fires — no polling delay.
+  useEffect(() => {
+    if (!isStaff) return;
+
+    const removeStreamFromActive = (streamId: string) => {
+      setStats((prev) => {
+        const nextDetails = prev.liveStreamDetails.filter((s) => s.id !== streamId);
+        if (nextDetails.length === prev.liveStreamDetails.length) return prev;
+        return {
+          ...prev,
+          liveStreamDetails: nextDetails,
+          liveStreams: nextDetails.length,
+        };
+      });
+    };
+
+    const channel = supabase
+      .channel('rtc-admin-monitor')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streams',
+        },
+        ({ new: updatedStream }: { new: any }) => {
+          if (
+            updatedStream.status === 'ended' ||
+            updatedStream.is_live === false ||
+            updatedStream.rtc_connected === false
+          ) {
+            removeStreamFromActive(updatedStream.id);
+            return;
+          }
+
+          setStats((prev) => ({
+            ...prev,
+            liveStreamDetails: prev.liveStreamDetails.map((s) =>
+              s.id === updatedStream.id ? { ...s, isLive: Boolean(updatedStream.is_live || updatedStream.status === 'live') } : s,
+            ),
+          }));
+        },
+      )
+      .on('broadcast', { event: 'broadcast_ended' }, ({ payload }: { payload: any }) => {
+        if (payload?.stream_id) {
+          removeStreamFromActive(payload.stream_id);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [isStaff]);
+
   // Monitor for new live streams to trigger black ring flash
   useEffect(() => {
     if (!isStaff) return;

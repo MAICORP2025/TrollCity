@@ -22,7 +22,7 @@ const platformLinks = [
 ]
 
 const creatorLinks = [
-  { path: '/careers', label: 'Careers', icon: DollarSign, description: 'Make money online' },
+  { path: '/jobs', label: 'Jobs', icon: DollarSign, description: 'Make money online' },
   { path: '/sell', label: 'Sell on Troll City', icon: ShoppingCart, description: 'Become a seller' },
   { path: '/creators', label: 'Become a Creator', icon: Trophy, description: 'Start your journey' },
   { path: '/go-live', label: 'Go Live', icon: Radio, description: 'Start streaming now' },
@@ -175,7 +175,7 @@ export function SEOFooter() {
               <li><Link to="/creators" className="text-slate-400 hover:text-purple-300 transition-colors text-sm">Become a Creator</Link></li>
               <li><Link to="/go-live" className="text-slate-400 hover:text-purple-300 transition-colors text-sm">Go Live</Link></li>
               <li><Link to="/sell" className="text-slate-400 hover:text-purple-300 transition-colors text-sm">Sell on Troll City</Link></li>
-              <li><Link to="/careers" className="text-slate-400 hover:text-purple-300 transition-colors text-sm">Careers</Link></li>
+              <li><Link to="/jobs" className="text-slate-400 hover:text-purple-300 transition-colors text-sm">Jobs</Link></li>
               <li><Link to="/legal/creator-earnings" className="text-slate-400 hover:text-purple-300 transition-colors text-sm">Earnings</Link></li>
             </ul>
           </div>

@@ -46,7 +46,7 @@ import MobileTreelzSettings from "./pages/MobileTreelzSettings";
 import MobileTreelzSaved from "./pages/MobileTreelzSaved";
 import MobilePrideChallenges from "./pages/MobilePrideChallenges";
 import MobilePodcastPage from "./pages/MobilePodcastPage";
-import HowToVideosPage from "../pages/HowToVideosPage";
+import HowToVideosPage from "../pages/JobsHowToPage";
 
 import MobilePlaceholder from "./components/MobilePlaceholder";
 import AuctioneerScanner from "../pages/auction/AuctioneerScanner";
@@ -161,10 +161,11 @@ export const mobileRoutes: MobileRouteItem[] = [
     showInBottomBubble: true,
   },
   {
-    key: "how-to-videos",
-    label: "How-To Videos",
-    path: "/how-to-videos",
+    key: "jobs",
+    label: "Jobs",
+    path: "/jobs",
     element: <HowToVideosPage />,
+    // NOTE: HowToVideosPage is now the Jobs how-to page
     icon: PlayCircle,
     priority: 55,
     regular: true,

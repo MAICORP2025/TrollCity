@@ -1,0 +1,416 @@
+/* ============================================================================
+   Feed the Troll — animation system
+   Layered, realistic troll movement. Uses transform/opacity only for perf.
+   State is driven by data-stage / data-state classes set from the FE state.
+   ============================================================================ */
+
+.troll-live-anchor {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  z-index: 24;
+  pointer-events: none;
+  --reaction-intensity: 1;
+  --reaction-duration: 800ms;
+  --troll-scale: 1;
+}
+
+.troll-live-anchor .troll-character {
+  pointer-events: auto;
+}
+
+/* Distinct default spots per surface so the troll doesn't sit in the exact
+   same place on the broadcast and viewer pages before the user drags it.
+   Once dragged, an inline left/top overrides these. */
+.troll-live-anchor.troll-surface-viewer {
+  bottom: calc(148px + env(safe-area-inset-bottom));
+}
+@media (max-width: 640px) {
+  .troll-live-anchor.troll-surface-viewer {
+    bottom: calc(132px + env(safe-area-inset-bottom));
+  }
+}
+
+/* While dragging, disable the entrance/idle transitions for 1:1 tracking. */
+.troll-live-anchor.troll-dragging {
+  transition: none !important;
+}
+
+@media (max-width: 640px) {
+  .troll-live-anchor {
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+  .troll-live-anchor .troll-character {
+    width: 74px;
+  }
+}
+
+/* Battle layout: smaller, sits near each broadcaster's video. */
+.troll-live-anchor.troll-battle {
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 22;
+}
+.troll-live-anchor.troll-battle .troll-character {
+  width: clamp(52px, 6vw, 86px);
+}
+@media (max-width: 640px) {
+  .troll-live-anchor.troll-battle .troll-character {
+    width: 56px;
+  }
+}
+
+/* ---- Character root ---- */
+.troll-character {
+  position: relative;
+  width: clamp(72px, 8vw, 130px);
+  aspect-ratio: 1 / 1.25;
+  transform: scale(var(--troll-scale));
+  transform-origin: center bottom;
+  will-change: transform;
+  contain: layout paint style;
+  isolation: isolate;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.troll-body {
+  position: absolute;
+  inset: 0;
+  transform-origin: center bottom;
+  animation: troll-breathe 3.6s ease-in-out infinite;
+}
+
+.troll-head {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 2%;
+  height: 42%;
+  transform-origin: center bottom;
+  animation: troll-head-idle 5.2s ease-in-out infinite;
+  z-index: 3;
+}
+
+.troll-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 1%;
+  width: 58%;
+  height: 10%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  transform: translateX(-50%);
+  filter: blur(4px);
+  opacity: 0.35;
+  animation: troll-shadow-breathe 3.6s ease-in-out infinite;
+  z-index: 0;
+}
+
+.troll-eye {
+  position: absolute;
+  top: 38%;
+  width: 16%;
+  height: 20%;
+  background: #fff;
+  border-radius: 50%;
+  z-index: 4;
+}
+.troll-eye.left { left: 22%; }
+.troll-eye.right { right: 22%; }
+.troll-eye::after {
+  content: "";
+  position: absolute;
+  left: 28%;
+  top: 34%;
+  width: 46%;
+  height: 46%;
+  background: #111;
+  border-radius: 50%;
+}
+.troll-eyelid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--troll-skin, #6b8e23);
+  border-radius: 50%;
+  transform: scaleY(0);
+  transform-origin: top;
+  z-index: 5;
+  animation: troll-blink 5.5s infinite;
+}
+.troll-mouth {
+  position: absolute;
+  left: 34%;
+  right: 34%;
+  top: 64%;
+  height: 12%;
+  background: #3a1010;
+  border-radius: 0 0 60% 60%;
+  z-index: 4;
+}
+.troll-arm {
+  position: absolute;
+  bottom: 28%;
+  width: 16%;
+  height: 34%;
+  background: var(--troll-skin, #6b8e23);
+  border-radius: 40% 40% 50% 50%;
+  transform-origin: top center;
+  z-index: 2;
+}
+.troll-arm.left { left: 6%; animation: troll-arm-idle-l 4.1s ease-in-out infinite; }
+.troll-arm.right { right: 6%; animation: troll-arm-idle-r 4.6s ease-in-out infinite; }
+.troll-hand {
+  position: absolute;
+  bottom: -8%;
+  left: 10%;
+  width: 80%;
+  height: 30%;
+  background: var(--troll-skin, #6b8e23);
+  border-radius: 50%;
+  z-index: 2;
+}
+.troll-leg {
+  position: absolute;
+  bottom: 0;
+  width: 20%;
+  height: 26%;
+  background: var(--troll-skin, #6b8e23);
+  border-radius: 40% 40% 45% 45%;
+  transform-origin: top center;
+  z-index: 1;
+}
+.troll-leg.left { left: 26%; }
+.troll-leg.right { right: 26%; }
+.troll-outfit {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 12%;
+  height: 50%;
+  z-index: 2;
+  pointer-events: none;
+}
+.troll-crown, .troll-hat {
+  position: absolute;
+  left: 50%;
+  top: -10%;
+  transform: translateX(-50%);
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* ---- Idle keyframes ---- */
+@keyframes troll-breathe {
+  0%, 100% { transform: translate3d(0, 0, 0) scaleY(1); }
+  50% { transform: translate3d(0, -1.5%, 0) scaleY(1.015); }
+}
+@keyframes troll-head-idle {
+  0%, 100% { transform: rotate(0deg) translate3d(0, 0, 0); }
+  35% { transform: rotate(-1.5deg) translate3d(-1px, 0, 0); }
+  70% { transform: rotate(1.2deg) translate3d(1px, -1px, 0); }
+}
+@keyframes troll-shadow-breathe {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.35; }
+  50% { transform: translateX(-50%) scale(1.04); opacity: 0.28; }
+}
+@keyframes troll-arm-idle-l {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(4deg); }
+}
+@keyframes troll-arm-idle-r {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-4deg); }
+}
+@keyframes troll-blink {
+  0%, 92%, 100% { transform: scaleY(0); }
+  95% { transform: scaleY(1); }
+}
+
+/* ---- Eating (happy reaction) ---- */
+.troll-state-eating .troll-head {
+  animation: troll-head-eat 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.troll-state-eating .troll-arm.right {
+  animation: troll-arm-reach 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.troll-state-eating .troll-mouth { animation: troll-mouth-eat 0.9s ease-in-out both; }
+@keyframes troll-head-eat {
+  0% { transform: rotate(0); }
+  35% { transform: rotate(-8deg) translateY(4%); }
+  70% { transform: rotate(4deg) translateY(-2%); }
+  100% { transform: rotate(0); }
+}
+@keyframes troll-arm-reach {
+  0% { transform: rotate(0); }
+  40% { transform: rotate(-55deg) translateY(-10%); }
+  100% { transform: rotate(0); }
+}
+@keyframes troll-mouth-eat {
+  0%, 100% { height: 12%; }
+  45% { height: 26%; }
+}
+
+/* ---- Dancing (gift train) ---- */
+.troll-state-dancing .troll-body {
+  animation: troll-dance 0.6s ease-in-out infinite;
+}
+.troll-state-dancing .troll-arm.left { animation: troll-arm-wave 0.5s ease-in-out infinite; }
+.troll-state-dancing .troll-arm.right { animation: troll-arm-wave 0.5s ease-in-out infinite reverse; }
+@keyframes troll-dance {
+  0% { transform: translate3d(0, 0, 0) rotate(-3deg); }
+  50% { transform: translate3d(0, -6%, 0) rotate(3deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(-3deg); }
+}
+@keyframes troll-arm-wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-70deg); }
+}
+
+/* ---- Sleeping ---- */
+.troll-state-sleeping .troll-body { animation: troll-sleep-breathe 4.4s ease-in-out infinite; }
+.troll-state-sleeping .troll-eyelid { transform: scaleY(1); animation: none; }
+.troll-state-sleeping .troll-head { transform: rotate(6deg) translateY(8%); animation: none; }
+.troll-state-sleeping .troll-arm.left,
+.troll-state-sleeping .troll-arm.right { animation: none; transform: rotate(8deg); }
+@keyframes troll-sleep-breathe {
+  0%, 100% { transform: translate3d(0, 0, 0) scaleY(1); }
+  50% { transform: translate3d(0, 1%, 0) scaleY(1.02); }
+}
+.troll-zzz {
+  position: absolute;
+  right: 6%;
+  top: 4%;
+  font-size: 0.7rem;
+  color: #cbd5e1;
+  opacity: 0;
+  z-index: 7;
+}
+.troll-state-sleeping .troll-zzz { animation: troll-zzz 3s ease-in-out infinite; }
+@keyframes troll-zzz {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  40% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(-18px) scale(1); }
+}
+
+/* ---- Cheering / excited ---- */
+.troll-state-cheering .troll-body {
+  animation: troll-cheer 0.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+.troll-state-cheering .troll-arm.left,
+.troll-state-cheering .troll-arm.right { animation: troll-arm-cheer 0.5s ease-in-out infinite; }
+@keyframes troll-cheer {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -10%, 0); }
+}
+@keyframes troll-arm-cheer {
+  0%, 100% { transform: rotate(-20deg); }
+  50% { transform: rotate(-75deg); }
+}
+
+/* ---- Surprised (legendary) ---- */
+.troll-state-surprised .troll-head { animation: troll-surprise 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.troll-state-surprised .troll-eye::after { width: 60%; height: 60%; }
+@keyframes troll-surprise {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-8%) scale(1.12); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* ---- Evolving ---- */
+.troll-state-evolving .troll-body {
+  animation: troll-evolve 1.8s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+.troll-state-evolving .troll-glow {
+  position: absolute;
+  inset: -20%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(250, 204, 21, 0.55), transparent 70%);
+  z-index: 8;
+  animation: troll-glow 1.8s ease-in-out both;
+  pointer-events: none;
+}
+@keyframes troll-evolve {
+  0% { transform: scale(1) translateY(0); }
+  30% { transform: scale(0.92) translateY(8%); }
+  70% { transform: scale(1.25) translateY(-6%); filter: brightness(1.4); }
+  100% { transform: scale(1) translateY(0); }
+}
+@keyframes troll-glow {
+  0% { opacity: 0; transform: scale(0.6); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+/* ---- Winning / losing (battle) ---- */
+.troll-state-winning .troll-body { animation: troll-cheer 0.45s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.troll-state-losing .troll-body { animation: troll-lose 2.4s ease-in-out both; }
+.troll-state-losing .troll-head { transform: rotate(10deg) translateY(6%); animation: none; }
+@keyframes troll-lose {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(6%); }
+  55% { transform: translateY(10%) rotate(-3deg); }
+  70% { transform: translateY(0); }
+}
+
+/* ---- Evolution stage theming (body size + outfit color) ---- */
+.troll-baby    { --troll-scale: 0.82; --troll-skin: #7cb342; }
+.troll-young   { --troll-scale: 0.94; --troll-skin: #689f38; }
+.troll-warrior { --troll-scale: 1.04; --troll-skin: #558b2f; }
+.troll-king    { --troll-scale: 1.12; --troll-skin: #4e7a2b; }
+
+.troll-baby .troll-outfit { background: rgba(255,255,255,0.12); border-radius: 40% 40% 20% 20%; }
+.troll-young .troll-outfit { background: #8d6e63; border-radius: 30% 30% 12% 12%; }
+.troll-warrior .troll-outfit { background: #455a64; border-radius: 25% 25% 8% 8%; box-shadow: inset 0 0 0 3px #90a4ae; }
+.troll-king .troll-outfit { background: #6a1b9a; border-radius: 25% 25% 8% 8%; box-shadow: inset 0 0 0 3px #ffd54f; }
+
+/* ---- Floating contribution indicator ---- */
+.troll-float-indicator {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  transform: translateX(-50%);
+  font-weight: 800;
+  font-size: 0.72rem;
+  color: #fde047;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  animation: troll-float-up 1.4s ease-out forwards;
+  z-index: 9;
+  pointer-events: none;
+  white-space: nowrap;
+}
+@keyframes troll-float-up {
+  0% { opacity: 0; transform: translate(-50%, 6px); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -34px); }
+}
+
+/* ---- Particles ---- */
+.troll-particle {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 7;
+  animation: troll-particle-fly 0.9s ease-out forwards;
+}
+@keyframes troll-particle-fly {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--px, 0), var(--py, -40px)) scale(0.4); }
+}
+
+/* ---- Reduced motion support ---- */
+@media (prefers-reduced-motion: reduce) {
+  .troll-character *,
+  .troll-character::before,
+  .troll-character::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

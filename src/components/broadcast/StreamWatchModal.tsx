@@ -9,6 +9,7 @@ import LiveKitViewerPlayer from './LiveKitViewerPlayer';
 export interface WatchableStream {
   id: string;
   room_name?: string;
+  livekit_room_name?: string;
   streamChannel: string;
   title?: string;
   broadcaster_id?: string;
@@ -141,7 +142,11 @@ export default function StreamWatchModal({ stream, onClose }: StreamWatchModalPr
   // Prefer HLS playback if available (for lower latency and better scalability for viewing)
   // Fall back to LiveKit for real-time interaction if needed
   const hlsUrl = stream.hls_url;
-  const livekitRoomName = stream.room_name || stream.id;
+  // Real-time audience playback via LiveKit. The broadcaster publishes to a room
+  // named `livekit_room_name` (falls back to the stream id), so mirror that exact
+  // resolution order here — otherwise the viewer joins an empty/wrong room and
+  // nothing ever plays.
+  const livekitRoomName = stream.room_name || stream.livekit_room_name || stream.id;
 
   if (hlsUrl) {
     console.log('[StreamWatchModal] Using HLS playback, URL:', hlsUrl);

@@ -32,9 +32,9 @@ function generateAgoraToken(params: {
   appCertificate: string;
   channelName: string;
   uid: string | number;
-  role?: 'publisher' | 'subscriber';
+  role?: 'publisher' | 'subscriber' | 'audience';
   expiration?: number;
-}): string {
+}): { token: string; uid: string | number } {
   const {
     appId,
     appCertificate,
@@ -44,18 +44,36 @@ function generateAgoraToken(params: {
     expiration = 3600
   } = params;
 
+  // CRITICAL: Agora requires the token UID to match the type used when joining
+  // the channel. The auction clients join with a NUMERIC uid (makeAgoraUid),
+  // so we must build the token with a numeric uid. Mismatched uid types cause
+  // "CAN_NOT_GET_GATEWAY_SERVER" / permanent "Waiting for Agora".
+  // If no valid numeric uid is provided, use the 0 (UINT) special value which
+  // Agora treats as "any uid" for token generation.
+  let numericUid: number
+  if (typeof uid === 'number' && Number.isFinite(uid)) {
+    numericUid = Math.max(0, Math.min(Math.floor(uid), 4294967294))
+  } else {
+    const parsed = Number(uid)
+    numericUid = Number.isFinite(parsed) && String(uid).trim() !== '' ? Math.max(0, Math.min(Math.floor(parsed), 4294967294)) : 0
+  }
+
+  // Map the client-facing role onto an Agora RtcRole. Both 'subscriber' and
+  // 'audience' mean a viewer that may only receive media.
+  const agoraRole =
+    role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER
+
   try {
-    const agoraRole = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER
     const token = RtcTokenBuilder.buildTokenWithUid(
       appId,
       appCertificate,
       channelName,
-      uid,
+      numericUid,
       agoraRole,
       expiration
     );
 
-    return token;
+    return { token, uid: numericUid }
   } catch (error) {
     console.error('[agora-token] Error generating token:', error);
     throw error;
@@ -74,7 +92,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const channelName = body.channelName || body.channel || 'staff_meeting';
     const userIdStr = String(body.userId || body.user_id || body.uid || '0');
     const uid = userIdStr;
-    const role = body.role || 'subscriber';
+    // Accept 'audience' (auction viewer) and map it to subscriber.
+    const role: 'publisher' | 'subscriber' | 'audience' =
+      body.role === 'publisher' ? 'publisher' : 'subscriber';
     const podcastId = body.podcastId || null;
 
     const appId = Deno.env.get('VITE_AGORA_APP_ID') || Deno.env.get('AGORA_APP_ID');
@@ -103,7 +123,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       podcastId: podcastId ? podcastId.substring(0, 8) + '...' : null
     });
 
-    const token = generateAgoraToken({
+    const { token, uid: resolvedUid } = generateAgoraToken({
       appId,
       appCertificate,
       channelName,
@@ -120,15 +140,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       token,
       appId,
       channelName,
-      uid,
+      uid: resolvedUid,
       expiresAt,
       podcastId
     }, 200, req);
-  } catch (error) {
+  } catch (error: any) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[agora-token] ❌ Error:', message);
+    // Surface a clear, actionable error instead of an opaque failure that leaves
+    // viewers stuck on "Waiting for Agora".
+    const isConfig = /app id|app certificate|certificate|invalid signing|token/i.test(message);
     return withCors({
-      error: 'Failed to generate token',
+      error: isConfig ? 'Agora token service misconfigured' : 'Failed to generate Agora token',
       details: message
     }, 500, req);
   }

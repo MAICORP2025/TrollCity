@@ -61,6 +61,7 @@ import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '../../hooks/useStreamAudiencePresence'
+import FeedTheTroll from '../../components/feed-the-troll/FeedTheTroll'
 import { AudienceBubbleTicker } from '../../components/broadcast/AudienceBubbleTicker'
 import MobileAudienceTicker from '../../components/broadcast/MobileAudienceTicker'
 import { TopSubscribersBar } from '../../components/broadcast/TopSubscribersBar'
@@ -91,7 +92,6 @@ const theme = trollCityBroadcastTheme
 
 function getDisplayName(profile: any, fallback = 'Troll City') {
   return (
-    profile?.display_name ||
     profile?.username ||
     profile?.email?.split?.('@')?.[0] ||
     fallback
@@ -832,12 +832,11 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
         // Resolve blocked user IDs to usernames
         const { data: profiles } = await supabase
           .from('user_profiles')
-          .select('username, display_name')
+          .select('username, email')
           .in('id', ids)
         const names = new Set<string>()
         profiles?.forEach((p: any) => {
           if (p.username) names.add(p.username.toLowerCase())
-          if (p.display_name) names.add(p.display_name.toLowerCase())
         })
         setBlockedUsernames(names)
       }).catch(() => {})
@@ -1629,7 +1628,7 @@ const isActive = isStreamActive(stream)
 
   const audienceName = useMemo(() => {
     return user
-      ? ((user as any).username || (user as any).display_name || user.email || 'Viewer')
+      ? ((user as any).username || user.email || 'Viewer')
       : 'Viewer'
   }, [user])
 
@@ -2023,7 +2022,7 @@ const isActive = isStreamActive(stream)
   }, [])
 
   const pushFloatingSystemMessage = useCallback((content: string) => {
-    const activeUsername = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+    const activeUsername = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
     const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     setFloatingMessages((prev) => [{ id: msgId, username: activeUsername, content, createdAt: Date.now() }, ...prev].slice(0, 50))
@@ -2038,12 +2037,12 @@ const isActive = isStreamActive(stream)
       event: 'floating_chat',
       payload: { username: activeUsername, content },
     }).catch(() => {})
-  }, [profile?.username, profile?.display_name, user?.email])
+  }, [profile?.username, user?.email])
 
   const handleFollowBroadcaster = useCallback((targetLabel: string) => {
     const broadcasterLabel = targetLabel || hostName || 'the broadcaster'
-    pushFloatingSystemMessage(`${profile?.username || (profile as any)?.display_name || 'A viewer'} followed ${broadcasterLabel}`)
-  }, [hostName, profile?.display_name, profile?.username, pushFloatingSystemMessage])
+    pushFloatingSystemMessage(`${profile?.username || 'A viewer'} followed ${broadcasterLabel}`)
+    }, [hostName, profile?.username, pushFloatingSystemMessage])
 
    const handleOpenFloatingChatUsername = useCallback(async (username: string) => {
      if (!username) return
@@ -2389,7 +2388,7 @@ const handleLeaveSeat = useCallback(async () => {
       if ((data as any).user_id) {
         const { data: hostProfile, error: hostProfileError } = await supabase
           .from('user_profiles')
-          .select('id, username, display_name, email, avatar_url, troll_coins, paid_coin_balance, free_coin_balance, total_earned_coins, is_verified')
+           .select('id, username, email, avatar_url, troll_coins, paid_coin_balance, free_coin_balance, total_earned_coins, is_verified')
           .eq('id', (data as any).user_id)
           .maybeSingle()
 
@@ -3128,6 +3127,16 @@ const heartbeat = window.setInterval(() => {
 
             <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} />
 
+              {/* Feed the Troll — persistent companion for the broadcaster's troll */}
+              {stream?.user_id && (
+                <FeedTheTroll
+                  broadcasterId={stream.user_id}
+                  streamId={streamId}
+                  compact={isMobileViewer}
+                  positionKey="viewer"
+                />
+              )}
+
             {isMobileViewer && (
               <div className="absolute left-3 top-3 z-40 flex items-center gap-2">
                 <button
@@ -3172,7 +3181,7 @@ const heartbeat = window.setInterval(() => {
                    ? {
                      username: broadcasterProfile.username,
                      avatar_url: broadcasterProfile.avatar_url,
-                     display_name: broadcasterProfile.display_name,
+                      username: broadcasterProfile.username,
                    }
                    : null}
                  isHost={false}
@@ -4102,7 +4111,7 @@ const heartbeat = window.setInterval(() => {
                           return
                         }
 
-                        const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+                         const username = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                         const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                         setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))
@@ -4375,7 +4384,7 @@ const heartbeat = window.setInterval(() => {
                         return
                       }
 
-                      const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+                      const username = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                       const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                       setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))
@@ -4588,7 +4597,7 @@ const heartbeat = window.setInterval(() => {
                     return
                   }
 
-                const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+                const username = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                 const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                 setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(0, 50))

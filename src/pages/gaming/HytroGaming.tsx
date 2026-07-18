@@ -349,15 +349,21 @@ export default function HytroGaming() {
           return;
         }
 
-        // Check if user has a pending agency application
-        const { data: pendingApp } = await supabase
+        // Check the latest agency application status
+        const { data: latestApp } = await supabase
           .from('agency_applications')
           .select('id, status')
           .eq('user_id', user.id)
-          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
 
-        if (pendingApp) {
+        if (latestApp?.status === 'approved') {
+          setAgencyStatus('approved');
+          return;
+        }
+
+        if (latestApp?.status === 'pending') {
           setAgencyStatus('pending');
           return;
         }

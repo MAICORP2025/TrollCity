@@ -398,7 +398,7 @@ export default function Sidebar() {
       expandGroup('Government Sector')
     } else if (path.startsWith('/city-registry')) {
       expandGroup('City Registry')
-    } else if (path.startsWith('/career')) {
+    } else if (path.startsWith('/jobs')) {
       expandGroup('Talent Offices')
     } else if (path.startsWith('/agencies') || path.startsWith('/agency-dashboard')) {
       expandGroup('Talent Offices')
@@ -692,7 +692,7 @@ export default function Sidebar() {
               <SectionTitle title="Talent Offices" collapsed={isSidebarCollapsed} />
               <GridItem collapsed={isSidebarCollapsed} icon={Building2} label="Agencies" to="/agencies" active={isActive('/agencies')} highlight={isUpdated('/agencies')} onClick={() => markAsViewed('/agencies')} className="text-cyan-400" tone="cyan" />
               <GridItem collapsed={isSidebarCollapsed} icon={Users} label="My Agency" to="/agency-dashboard" active={isActive('/agency-dashboard')} highlight={isUpdated('/agency-dashboard')} onClick={() => markAsViewed('/agency-dashboard')} className="text-cyan-400" tone="cyan" />
-              <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Careers" to="/career" active={isActive('/career')} highlight={isUpdated('/career')} onClick={() => markAsViewed('/career')} className="text-purple-400" tone="purple" />
+              <GridItem collapsed={isSidebarCollapsed} icon={Briefcase} label="Jobs" to="/jobs" active={isActive('/jobs')} highlight={isUpdated('/jobs')} onClick={() => markAsViewed('/jobs')} className="text-purple-400" tone="purple" />
               {canSeeAttorneyDashboard && (
                 <GridItem
                   collapsed={isSidebarCollapsed}

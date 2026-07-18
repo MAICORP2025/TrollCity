@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DollarSign,
@@ -6,14 +6,12 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Lock,
   User,
   Building,
   Wallet as WalletIcon,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { useXPStore } from '../stores/useXPStore';
 import { toast } from 'sonner';
 import type {
   CashoutRequest,
@@ -21,19 +19,11 @@ import type {
   RequestCashoutResponse,
 } from '../types/cashout';
 import {
-  calculateFeeCoins,
-  calculateNetCoins,
-  isCashoutWindowOpen,
-  CASHOUT_TIERS as TIERS,
-  getFastPayTierInfo,
+  TIERS,
+  DAILY_CASHOUT_LIMIT,
+  MIN_CASHOUT_COINS,
   type CashoutTier,
 } from '../config/coinConfig';
-import {
-  getFastPayTier,
-  getFastPayTierLabel,
-  getFastPayTierDescription,
-  getFastPayProcessingTime,
-} from '../types/cashout';
 
 const PAYOUT_METHODS: { value: PayoutMethod; label: string; icon: React.ReactNode }[] = [
   {
@@ -78,13 +68,10 @@ function getPreferredPayoutMethod(rawProfile: any): PayoutMethod {
   return 'cash_app';
 }
 
-const MAX_MONTHLY_CASHOUTS = 4;
-
 export default function CashoutRequestPage() {
   const authStore = useAuthStore() as any;
   const profile = authStore.profile as any;
   const refreshProfile = authStore.refreshProfile as any;
-  const xpStore = useXPStore();
   const navigate = useNavigate();
 
   // State
@@ -97,41 +84,26 @@ export default function CashoutRequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [recentRequests, setRecentRequests] = useState<CashoutRequest[]>([]);
-  const [monthlyCashoutCount, setMonthlyCashoutCount] = useState(0);
-  const [activeGamingLoan, setActiveGamingLoan] = useState<any>(null);
-  const [checkingLoan, setCheckingLoan] = useState(true);
+  const [dailyCashoutCount, setDailyCashoutCount] = useState(0);
   const [fastPayApproved, setFastPayApproved] = useState(false);
-
-  const fastPayLevel = Number(xpStore.level || 1);
-  const fastPayTier = getFastPayTier(fastPayLevel);
-  const fastPayTierInfo = getFastPayTierInfo(fastPayLevel);
-  const fastPayTierLabel = getFastPayTierLabel(fastPayTier);
-  const fastPayTierDescription = getFastPayTierDescription(fastPayTier);
-  const fastPayProcessingTime = getFastPayProcessingTime(fastPayTier);
-
-  const hasRecentApprovedPayout = useMemo(() => {
-    if (!lastApprovedAt) return false;
-    return new Date(lastApprovedAt).getTime() >= Date.now() - 30 * 24 * 60 * 60 * 1000;
-  }, [lastApprovedAt]);
+  const [isMaiPayPlus, setIsMaiPayPlus] = useState(false);
 
    // Derived state for display
-   const feeCoins = selectedTier ? calculateFeeCoins(selectedTier.coins) : 0;
-   const netCoins = selectedTier ? calculateNetCoins(selectedTier.coins, feeCoins) : 0;
+   const dailyLimit = isMaiPayPlus ? 20 : DAILY_CASHOUT_LIMIT;
    const usdAmount = selectedTier ? selectedTier.usd : 0;
-   // Total required = payout coins + fee (both deducted from escrow)
-   const totalRequired = (selectedTier?.coins || 0) + feeCoins;
-
-     const isCashoutWindow = isCashoutWindowOpen();
-     const isStandardTierRestricted = fastPayTier === 'standard' && !isCashoutWindow;
-     const monthlyCapReached = monthlyCashoutCount >= MAX_MONTHLY_CASHOUTS;
-     const hasActiveGamingLoan = activeGamingLoan?.has_active_loan === true;
-     // Must have enough escrow coins to cover BOTH the payout amount AND the fee
-     const canRequest = (!isStandardTierRestricted || fastPayApproved) && eligibleCoins >= totalRequired && providerUsername.trim() && userTag.trim() && !monthlyCapReached && !hasActiveGamingLoan;
+   const dailyLimitReached = dailyCashoutCount >= dailyLimit;
+   const canRequest = eligibleCoins >= (selectedTier?.coins || 0) && providerUsername.trim() && userTag.trim() && !dailyLimitReached;
 
   // Load user's troll_coins balance and recent payout requests
   const getSavedPayoutUsername = useCallback((method: PayoutMethod) => {
     return getSavedPayoutUsernameForProfile(profile, method);
   }, [profile]);
+
+  // MAI Pay Plus users require double the standard coin amount per tier.
+  const plusMultiplier = isMaiPayPlus ? 2 : 1;
+  const displayTiers = TIERS.map(
+    (t) => ({ ...t, coins: t.coins * plusMultiplier } as CashoutTier)
+  );
 
   useEffect(() => {
     if (!profile) return;
@@ -160,6 +132,8 @@ export default function CashoutRequestPage() {
         // Use cashout escrow balance only; free or non-cashout coins do not qualify.
         const eligibleTotal = Math.max(0, (profile.cashout_coins || 0) - (profile.cashout_reserved_coins || 0));
         setEligibleCoins(eligibleTotal);
+
+        setIsMaiPayPlus(profile.mai_pay_plus === true);
 
         // Load recent payout requests
         const { data: requestsData, error: requestsError } = await supabase
@@ -194,36 +168,31 @@ export default function CashoutRequestPage() {
         if (approvedApplicationError) throw approvedApplicationError;
         setFastPayApproved(Boolean(profile.cashout_approved || approvedApplicationData?.id));
 
-        // Count this month's cashouts (non-rejected)
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const { count: monthCount, error: monthCountError } = await supabase
+        // Count cashouts in the last 24h (rolling daily limit) — matches backend enforcement.
+        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { count: dayCount, error: dayCountError } = await supabase
           .from('payout_requests')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', profile.id)
-          .not('status', 'in', '("rejected")')
-          .gte('created_at', monthStart);
+          .in('status', ['approved', 'paid', 'completed'])
+          .gte('created_at', dayAgo);
 
-        if (monthCountError) throw monthCountError;
-        setMonthlyCashoutCount(monthCount || 0);
+        if (dayCountError) throw dayCountError;
+        setDailyCashoutCount(dayCount || 0);
 
-        // Auto-select highest eligible tier based on the loaded balance
-        const eligibleTier = [...TIERS].reverse().find(t => t.coins <= eligibleTotal) || TIERS[0];
+        // Auto-select highest eligible tier based on the loaded balance.
+        // MAI Pay Plus users require double the standard coin amount per tier.
+        const plusMultiplier = profile.mai_pay_plus === true ? 2 : 1;
+        const adjustedTiers = TIERS.map(
+          (t) => ({ ...t, coins: t.coins * plusMultiplier } as CashoutTier)
+        );
+        const eligibleTier = [...adjustedTiers].reverse().find(t => t.coins <= eligibleTotal) || adjustedTiers[0];
         if (eligibleTier) setSelectedTier(eligibleTier);
-
-        // Check for active gaming loan
-        const { data: loanData } = await supabase.rpc('has_active_gaming_loan');
-        if (loanData?.has_active_loan) {
-          setActiveGamingLoan(loanData);
-        } else {
-          setActiveGamingLoan(null);
-        }
       } catch (err: any) {
         console.error('Failed to load cashout data:', err);
         toast.error('Failed to load data');
       } finally {
         setLoading(false);
-        setCheckingLoan(false);
       }
     }
 
@@ -272,23 +241,13 @@ export default function CashoutRequestPage() {
       return;
     }
 
-    if (isStandardTierRestricted) {
-      toast.error('Standard payout requests may only be submitted during the weekend payout window.');
+    if (eligibleCoins < (selectedTier?.coins || 0)) {
+      toast.error(`Insufficient eligible cashout coins. You need ${selectedTier.coins.toLocaleString()} coins but only have ${eligibleCoins.toLocaleString()}.`);
       return;
     }
 
-    if (eligibleCoins < totalRequired) {
-      toast.error(`Insufficient eligible cashout coins. You need ${totalRequired.toLocaleString()} coins (including ${feeCoins.toLocaleString()} fee) but only have ${eligibleCoins.toLocaleString()}.`);
-      return;
-    }
-
-    if (monthlyCapReached) {
-      toast.error(`Monthly cashout limit reached. You have used ${monthlyCashoutCount} of ${MAX_MONTHLY_CASHOUTS} cashouts this month.`);
-      return;
-    }
-
-    if (activeGamingLoan?.has_active_loan) {
-      toast.error('Cashouts are blocked while you have an active gaming agency loan. Please pay off your loan first.');
+    if (dailyLimitReached) {
+      toast.error(`Daily cashout limit reached. You have used ${dailyCashoutCount} of ${DAILY_CASHOUT_LIMIT} cashouts in the last 24 hours.`);
       return;
     }
 
@@ -315,7 +274,7 @@ export default function CashoutRequestPage() {
         throw new Error(data.error || 'Cashout request failed');
       }
 
-      toast.success('Cashout request submitted! It will be reviewed by CEO Assistant and Noah Assistant before admin processing.');
+      toast.success('Cashout request submitted! It will be reviewed and processed by the team.');
 
       // Refresh profile to update balances
       await refreshProfile();
@@ -354,58 +313,36 @@ export default function CashoutRequestPage() {
             <div className="flex-1">
               <h1 className="text-3xl font-extrabold text-white mb-2">Request Cashout</h1>
               <p className="text-gray-300">
-                Convert your eligible cashout coins into real payout requests. Only coins moved into Cashout Escrow are eligible for payout; free or non-cashout coins are excluded.
-                Eligible cashout coins are added on Thursdays, and cashout requests are processed on weekends by the CEO Assistant and Noah Assistant before admin payout.
+                 Convert your eligible cashout coins into real payout requests. Only coins moved into Cashout Escrow are eligible for payout; free or non-cashout coins are excluded.
+                 You can request up to {dailyLimit} cashouts per rolling 24-hour period with no fees.
               </p>
             </div>
           </div>
 
-          {/* Friday Gating Warning */}
-           {fastPayTier === 'standard' && !isCashoutWindow && !fastPayApproved && (
-             <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
-               <Lock className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-               <div>
-                 <h4 className="font-bold text-red-400">Standard Payout Window Closed</h4>
-                 <p className="text-sm text-red-300/80">
-                   Standard payout requests are only accepted on Friday, Saturday, and Sunday between 1:00 AM - 7:00 PM Mountain Time.
-                   Fast Pay and Instant Pay can still be requested any day.
-                 </p>
-               </div>
-             </div>
-           )}
-
-            {/* Monthly Cashout Cap */}
-            {monthlyCapReached && (
-              <div className="mt-4 bg-amber-900/30 border border-amber-700 rounded-lg p-4 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
-                <div>
-                  <h4 className="font-bold text-amber-400">Monthly Cashout Limit Reached</h4>
-                  <p className="text-sm text-amber-300/80">
-                    You have used {monthlyCashoutCount} of {MAX_MONTHLY_CASHOUTS} cashouts this month.
-                    Your cap resets on the 1st of each month.
-                  </p>
-                </div>
+          {dailyLimitReached && (
+            <div className="mt-4 bg-amber-900/30 border border-amber-700 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="font-bold text-amber-400">Daily Cashout Limit Reached</h4>
+                <p className="text-sm text-amber-300/80">
+                   You have used {dailyCashoutCount} of {dailyLimit} cashouts in the last 24 hours.
+                   Your limit resets 24 hours after your first cashout of the day.
+                </p>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Gaming Loan Block */}
-            {activeGamingLoan?.has_active_loan && (
-              <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
-                <Lock className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-                <div>
-                  <h4 className="font-bold text-red-400">Cashouts Blocked — Active Gaming Loan</h4>
-                  <p className="text-sm text-red-300/80">
-                    You have an active gaming agency loan with a remaining balance of{' '}
-                    <strong>{activeGamingLoan.balance?.toLocaleString()} TC</strong>.
-                    All cashouts are disabled until the loan is fully paid off.
-                    Principal: {activeGamingLoan.principal?.toLocaleString()} TC.
-                  </p>
-                  <p className="mt-2 text-xs text-red-400/70">
-                    Pay off your loan through the Gaming Dashboard to unlock cashouts.
-                  </p>
-                </div>
+          {selectedTier && eligibleCoins < selectedTier.coins && (
+            <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="font-bold text-red-400">Insufficient Cashout Coins</h4>
+                <p className="text-sm text-red-300/80">
+                  You need {selectedTier.coins.toLocaleString()} eligible cashout coins for this tier but only have {eligibleCoins.toLocaleString()}.
+                </p>
               </div>
-            )}
+            </div>
+          )}
 
            </div>
 
@@ -418,14 +355,19 @@ export default function CashoutRequestPage() {
 
           {/* Tier Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Select Cashout Tier
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {TIERS.map((tier) => {
-                const isDisabled = eligibleCoins < tier.coins;
-                const isSelected = selectedTier?.coins === tier.coins;
-                return (
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Select Cashout Tier
+                {isMaiPayPlus && (
+                  <span className="ml-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-300">
+                    MAI Pay Plus · 2× coins
+                  </span>
+                )}
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {displayTiers.map((tier) => {
+                  const isDisabled = eligibleCoins < tier.coins;
+                  const isSelected = selectedTier?.coins === tier.coins;
+                  return (
                   <button
                     key={tier.coins}
                     onClick={() => setSelectedTier(tier)}
@@ -448,26 +390,33 @@ export default function CashoutRequestPage() {
               })}
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              * Cashout amounts are based on your eligible cashout escrow balance.
+              * Cashout amounts are based on your eligible cashout escrow balance. Minimum cashout is {MIN_CASHOUT_COINS.toLocaleString()} coins.
             </p>
           </div>
 
-          {/* Fee Summary */}
+          {/* No Fees Notice */}
+          <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-4 flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-green-300">No Cashout Fees</h3>
+              <p className="text-sm text-green-200/80">
+                Troll City does not charge users to cash out their earnings. The full USD value of your selected tier is paid out.
+              </p>
+            </div>
+          </div>
+
+          {/* Selected Tier Summary */}
           {selectedTier && (
             <div className="bg-purple-900/20 border border-purple-700/50 rounded-lg p-4">
-              <h3 className="text-sm font-bold text-white mb-3">Fee Calculation</h3>
+              <h3 className="text-sm font-bold text-white mb-3">Cashout Summary</h3>
               <div className="space-y-2 text-sm">
                  <div className="flex justify-between">
                    <span className="text-gray-400">Requested Amount</span>
                    <span className="text-white font-mono">{selectedTier.coins.toLocaleString()} coins</span>
                  </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Processing Fee (2.9%)</span>
-                  <span className="text-red-300 font-mono">-{feeCoins.toLocaleString()} coins</span>
-                </div>
                 <div className="flex justify-between text-troll-gold font-bold pt-2 border-t border-purple-700/30">
-                  <span>Net Amount</span>
-                  <span>{netCoins.toLocaleString()} coins (${usdAmount.toFixed(2)})</span>
+                  <span>You Receive</span>
+                  <span>{selectedTier.coins.toLocaleString()} coins (${usdAmount.toFixed(2)})</span>
                 </div>
               </div>
             </div>
@@ -512,7 +461,6 @@ export default function CashoutRequestPage() {
                 onChange={(e) => setProviderUsername(e.target.value)}
                 placeholder={getPayoutPlaceholder(payoutMethod)}
                 className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-troll-gold"
-                disabled={isStandardTierRestricted}
               />
               {providerUsername.trim() && (
                 <CheckCircle className="absolute right-3 top-3 w-5 h-5 text-green-400" />
@@ -535,7 +483,6 @@ export default function CashoutRequestPage() {
                 onChange={(e) => setUserTag(e.target.value)}
                 placeholder="$Cashtag, @handle, or email"
                 className="w-full bg-[#171427] border border-purple-500/40 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-troll-gold"
-                disabled={isStandardTierRestricted}
               />
               {userTag.trim() && (
                 <CheckCircle className="absolute right-3 top-3 w-5 h-5 text-green-400" />
@@ -572,20 +519,10 @@ export default function CashoutRequestPage() {
                   <div className="w-5 h-5 border-2 border-t-troll-purple-900 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
                   Submitting...
                 </>
-              ) : fastPayTier === 'standard' && !isCashoutWindow && !fastPayApproved ? (
-                <>
-                  <Clock className="w-5 h-5" />
-                  Standard Payout Window Closed
-                </>
-              ) : monthlyCapReached ? (
+              ) : dailyLimitReached ? (
                 <>
                   <AlertCircle className="w-5 h-5" />
-                  Monthly Limit Reached ({monthlyCashoutCount}/{MAX_MONTHLY_CASHOUTS})
-                </>
-              ) : activeGamingLoan?.has_active_loan ? (
-                <>
-                  <Lock className="w-5 h-5" />
-                  Cashouts Blocked — Gaming Loan Active
+                  Daily Limit Reached ({dailyCashoutCount}/{DAILY_CASHOUT_LIMIT})
                 </>
               ) : eligibleCoins < (selectedTier?.coins || 0) ? (
                <>
@@ -607,7 +544,7 @@ export default function CashoutRequestPage() {
 
           <p className="text-xs text-gray-500 text-center">
             By requesting a cashout, you confirm that the payout information is correct.
-            Cashout requests are manually reviewed by our admin team. Processing time: 30 minutes
+            Cashout requests are manually reviewed by our admin team. Troll City does not charge any cashout fees.
           </p>
         </div>
 

@@ -29,6 +29,8 @@ import ErrorBoundary from '../../components/ErrorBoundary'
 import { useAdminFinanceRealtime } from '../../hooks/useAdminFinanceRealtime'
 import { useAdminDashboardMetrics } from '../../hooks/useAdminDashboardMetrics'
 import PresidentialOversightPanel from './components/PresidentialOversightPanel'
+import BetaCapacityMonitor from './components/BetaCapacityMonitor'
+import MaiPayPlusManager from './components/MaiPayPlusManager'
 
 
 
@@ -1307,6 +1309,14 @@ export default function AdminDashboard() {
 />
 
         <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
+          <ErrorBoundary>
+            <BetaCapacityMonitor />
+          </ErrorBoundary>
+
+          <ErrorBoundary>
+            <MaiPayPlusManager />
+          </ErrorBoundary>
+
           <CoinSalesPanel purchases={coinPurchases} loading={coinPurchasesLoading} onRefresh={loadCoinPurchases} />
 
            <ErrorBoundary>

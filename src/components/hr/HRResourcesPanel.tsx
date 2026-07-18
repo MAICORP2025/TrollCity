@@ -70,7 +70,7 @@ const RESOURCES: ResourceItem[] = [
 
 const RESOURCE_CONTENT: Record<string, string[]> = {
   'role-expectations': [
-    'Fulfill the duties outlined in your role description on the Careers page.',
+    'Fulfill the duties outlined in your role description on the Jobs page.',
     'Maintain regular availability as expected by your department or agency.',
     'Follow all Troll City rules, safety guidelines, and code of conduct.',
     'Participate in required training, meetings, or briefings.',

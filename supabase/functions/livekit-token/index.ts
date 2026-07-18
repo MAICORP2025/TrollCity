@@ -159,6 +159,35 @@ Deno.serve(async (req: Request): Promise<Response> => {
     let isGhost = false;
     let ghostMetadata: { role: string; hidden: boolean } | undefined;
 
+    // Enforce viewer capacity limit for audience members (beta: 20 max per broadcast)
+    if (mode === 'audience' && roomName && supabaseUrl && supabaseServiceKey) {
+      try {
+        const { createClient } = await import('npm:@supabase/supabase-js@2');
+        const db = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+        const { data: streamRow } = await db
+          .from('streams')
+          .select('current_viewers, viewer_count, is_live, status')
+          .eq('id', roomName)
+          .maybeSingle();
+
+        const viewerCount = Number(streamRow?.current_viewers || streamRow?.viewer_count || 0);
+        const isStreamLive = streamRow?.is_live === true && streamRow?.status === 'live';
+
+        if (isStreamLive && viewerCount >= 20) {
+          console.warn('[livekit-token] Viewer capacity limit reached:', { roomName, viewerCount, max: 20 });
+          return withCors({
+            success: false,
+            error: 'This broadcast has reached maximum viewer capacity.',
+            code: 'viewer_limit_reached',
+            viewerCount,
+            maxViewers: 20,
+          }, 403, req);
+        }
+      } catch (viewerErr) {
+        console.warn('[livekit-token] Viewer capacity check failed:', viewerErr);
+      }
+    }
+
     // XTrollz-specific modes
     const isXtrPreview = mode === 'xtrollz-preview';
     const isXtrViewer = mode === 'xtrollz-viewer';

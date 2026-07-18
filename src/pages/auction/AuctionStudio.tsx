@@ -390,32 +390,53 @@ export default function AuctionStudio() {
     if (!qty || qty < 1) return toast.error('Choose at least 1 item')
     const source = inventory.find((i) => i.id === sourceLotId)
     if (!source) return toast.error('Inventory item not found')
-    if (qty > (source.quantity || 0)) return toast.error('Not enough stock in inventory')
+    // Validate against authoritative available quantity (not just legacy `quantity`).
+    const available = Number((source as any).quantity_available ?? source.quantity ?? 0)
+    if (qty > available) return toast.error('Not enough available stock in inventory')
 
     try {
       const maxPosition = lots.reduce((max, lot) => Math.max(max, Number(lot.queue_position || 0)), 0)
-      const { error: insertError } = await supabase.from('auction_lots').insert({
-        auction_show_id: selectedShow.id,
-        title: source.title,
-        description: source.description,
-        image_url: source.image_url,
-        starting_bid: Number(source.starting_bid || 100),
-        reserve_price: Number(source.reserve_price || 0) > 0 ? Number(source.reserve_price) : null,
-        bid_increment: Number(source.bid_increment || 500),
-        buy_now_price: Number(source.buy_now_price || 0) > 0 ? Number(source.buy_now_price) : null,
-        quantity: qty,
-        condition: source.condition,
-        status: 'queued',
-        queue_position: maxPosition + 1,
-      })
+      const { data: inserted, error: insertError } = await supabase
+        .from('auction_lots')
+        .insert({
+          auction_show_id: selectedShow.id,
+          title: source.title,
+          description: source.description,
+          image_url: source.image_url,
+          starting_bid: Number(source.starting_bid || 100),
+          reserve_price: Number(source.reserve_price || 0) > 0 ? Number(source.reserve_price) : null,
+          bid_increment: Number(source.bid_increment || 500),
+          buy_now_price: Number(source.buy_now_price || 0) > 0 ? Number(source.buy_now_price) : null,
+          quantity: qty,
+          quantity_total: qty,
+          quantity_available: qty,
+          condition: source.condition,
+          status: 'queued',
+          queue_position: maxPosition + 1,
+        })
+        .select('id')
+        .single()
       if (insertError) throw insertError
 
-      const remaining = (source.quantity || 0) - qty
-      const { error: updateError } = await supabase
-        .from('auction_lots')
-        .update({ quantity: remaining })
-        .eq('id', sourceLotId)
-      if (updateError) throw updateError
+      // Atomically reserve the units on the source inventory. This prevents the
+      // same units from being reserved for two shows and updates availability
+      // immediately. The DB is the source of truth.
+      const { data: reserveResult, error: reserveError } = await supabase.rpc(
+        'reserve_auction_inventory',
+        {
+          p_source_lot_id: sourceLotId,
+          p_dest_lot_id: inserted.id,
+          p_show_id: selectedShow.id,
+          p_qty: qty,
+        }
+      )
+      if (reserveError) throw reserveError
+      if ((reserveResult as any)?.success === false) {
+        // Reservation failed (e.g. race with another reservation). Roll back the
+        // just-inserted lot so the queue stays consistent.
+        await supabase.from('auction_lots').delete().eq('id', inserted.id)
+        throw new Error((reserveResult as any)?.error || 'Reservation failed')
+      }
 
       toast.success(`Added ${qty} × ${source.title} to queue`)
       await fetchInventory()

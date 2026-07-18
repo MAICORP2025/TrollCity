@@ -208,6 +208,33 @@ async function startStreaming(req, res) {
       });
     }
 
+    // ── STEP 0b: Enforce broadcaster capacity limit (beta: 25 max) ───────────
+    console.log(`[startStreaming] STEP 0b: Checking broadcaster capacity...`);
+    try {
+      const { count: activeBroadcasterCount, error: countError } = await supabase
+        .from("streams")
+        .select("*", { count: 'exact', head: true })
+        .eq("is_live", true)
+        .eq("status", "live");
+
+      if (countError) {
+        console.warn(`[startStreaming] ⚠️  Broadcaster count check failed:`, countError.message);
+      } else if ((activeBroadcasterCount || 0) >= 25) {
+        console.error(`[startStreaming] ❌ STEP 0b FAILED - Broadcaster limit reached: ${activeBroadcasterCount}/25`);
+        return safeJson(429, {
+          success: false,
+          step: "broadcaster_capacity",
+          error: "All broadcasting slots are currently in use. Please try again later.",
+          code: 'broadcaster_limit_reached',
+          activeBroadcasters: activeBroadcasterCount,
+          maxBroadcasters: 25,
+        });
+      }
+      console.log(`[startStreaming] ✅ STEP 0b SUCCESS - Broadcasters: ${activeBroadcasterCount || 0}/25`);
+    } catch (error) {
+      console.error(`[startStreaming] ❌ STEP 0b FAILED - Broadcaster capacity check:`, error.message);
+    }
+
     // ── STEP 1: Verify stream exists (created by frontend) ────────────────────
     console.log(`[startStreaming] STEP 1: Verifying stream exists...`);
     let existingStream;

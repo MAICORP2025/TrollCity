@@ -1142,7 +1142,7 @@ Logic:
   1. Query classroom_rewards for user + week
   2. Group by reward_type
   3. Sum coins per type
-  4. Calculate remaining: 200 - total_coins (max per week)
+  4. Calculate remaining: 200 - total_coins (70 Max Per Week/280 Per Month)
   5. Return breakdown
 
 Permissions: Student (own), CEO/Admin/Org (all)

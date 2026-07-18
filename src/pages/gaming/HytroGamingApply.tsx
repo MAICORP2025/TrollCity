@@ -115,7 +115,12 @@ export default function HytroGamingApply() {
     }
 
     const balance = profile?.troll_coins ?? 0;
-    if (balance < REQUIRED_COINS) {
+    // If the user requested a loan (either inline or via the loan modal),
+    // they don't need to meet the balance requirement up front — the loan
+    // covers the startup fee. Only block when they have no loan and can't pay.
+    const usingLoan = applyForLoan || hasLoan;
+
+    if (!usingLoan && balance < REQUIRED_COINS) {
       setInsufficientBalance(true);
       setShowLoanModal(true);
       return;
@@ -147,14 +152,15 @@ export default function HytroGamingApply() {
         motivation: motivation.trim() || null,
         experience: experience.trim() || null,
         referral_code: referralCode.trim() || null,
-        apply_for_loan: applyForLoan,
+        apply_for_loan: usingLoan,
         loan_amount: applyForLoan ? (parseFloat(loanAmount) || 0) : 0,
-        status: 'pending',
+        // Auto-approve instantly so applicants can start game sharing right away.
+        status: 'approved',
       });
 
       if (error) throw error;
 
-      toast.success('Application submitted! Agency HR will review it soon.');
+      toast.success('Application approved! You can start game sharing now.');
       navigate('/hytrogaming');
     } catch (err: any) {
       console.error('HytroGaming application error:', err);
@@ -205,10 +211,10 @@ export default function HytroGamingApply() {
             Your HytroGaming agency application has been approved.
           </p>
           <button
-            onClick={() => navigate('/agency-dashboard')}
+            onClick={() => navigate('/hytrogaming')}
             className="mt-6 rounded-xl bg-cyan-500/20 px-6 py-3 font-bold text-cyan-50 hover:bg-cyan-500/30"
           >
-            Go to Dashboard
+            Start Game Sharing
           </button>
         </div>
       </div>

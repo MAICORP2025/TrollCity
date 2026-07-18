@@ -3,6 +3,7 @@ import { useCoins } from '@/lib/hooks/useCoins'
 import { toast } from 'sonner'
 import { X, AlertTriangle, Coins, Trophy } from 'lucide-react'
 import { STORE_USD_PER_COIN } from '@/lib/coinMath'
+import { TIERS } from '@/config/coinConfig'
 
 interface CashoutDepositModalProps {
   isOpen: boolean
@@ -10,14 +11,10 @@ interface CashoutDepositModalProps {
   autoTierPrompt?: boolean
 }
 
-const CASHOUT_TIERS = [
-  { coins: 7500, label: '$25 Cashout Tier' },
-  { coins: 15000, label: '$50 Cashout Tier' },
-  { coins: 30000, label: '$150 Cashout Tier' },
-  { coins: 60000, label: '$300 Cashout Tier' },
-  { coins: 120000, label: '$600 Cashout Tier' },
-  { coins: 200000, label: '$1,000 Cashout Tier' },
-]
+const CASHOUT_TIERS = TIERS.map((tier) => ({
+  coins: tier.coins,
+  label: `$${tier.usd} Cashout Tier`,
+}))
 
 export default function CashoutDepositModal({
   isOpen,
@@ -93,8 +90,8 @@ export default function CashoutDepositModal({
       return
     }
 
-    if (numAmount < 5000) {
-      toast.error('Minimum 5,000 earned coins required for cashout.')
+    if (numAmount < 2000) {
+      toast.error('Minimum 2,000 earned coins required for cashout.')
       return
     }
 
@@ -147,7 +144,7 @@ return (
               {autoTierPrompt && unlockedTier ? 'New Cashout Tier Unlocked' : 'Add Earned Coins to Cashout'}
             </h2>
             <p className="text-xs text-zinc-400">
-              Only coins earned from gifts and creator activity can be cashed out. Add enough coins so your chosen payout tier covers the cashout fee.
+              Only coins earned from gifts and creator activity can be cashed out. Add enough coins so your chosen payout tier meets the cashout minimum.
             </p>
           </div>
         </div>
@@ -187,7 +184,7 @@ return (
             </div>
 
             <p className="mt-3 text-xs text-zinc-500">
-              Purchased coins cannot be deposited to cashout. Cashouts are processed Fridays.
+              Purchased coins cannot be deposited to cashout. Cashouts have no platform fees.
             </p>
           </div>
 
@@ -214,22 +211,22 @@ return (
               type="number"
               value={amount}
               onChange={(e) => handleAmountChange(e.target.value)}
-              placeholder="Minimum 5,000"
+              placeholder="Minimum 2,000"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-white outline-none focus:border-green-400"
               max={availableEarnedCoins}
             />
           </div>
 
-          {availableEarnedCoins < 5000 && (
+          {availableEarnedCoins < 2000 && (
             <div className="flex items-start gap-2 text-sm text-amber-300">
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <span>
-                You need at least 5,000 earned coins to start a cashout. Keep earning gifts.
+                You need at least 2,000 earned coins to start a cashout. Keep earning gifts.
               </span>
             </div>
           )}
 
-          {nextTier && availableEarnedCoins >= 5000 && (
+          {nextTier && availableEarnedCoins >= 2000 && (
             <p className="text-center text-xs text-zinc-500">
               Next tier: {nextTier.coins.toLocaleString()} earned coins.
             </p>
@@ -237,7 +234,7 @@ return (
 
           <button
             onClick={handleDeposit}
-            disabled={loading || !amount || availableEarnedCoins < 5000}
+            disabled={loading || !amount || availableEarnedCoins < 2000}
             className="w-full rounded-xl bg-green-600 py-3 font-black text-white hover:bg-green-500 disabled:bg-zinc-800 disabled:text-zinc-500"
           >
             {loading ? 'Adding...' : 'Add to Cashout Coins'}

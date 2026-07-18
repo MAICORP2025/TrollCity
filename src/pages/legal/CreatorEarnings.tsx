@@ -42,7 +42,7 @@ export default function CreatorEarnings() {
           <section>
             <h2 className="text-2xl font-semibold mb-4">Platform Fees</h2>
             <p className="text-gray-300 leading-relaxed">
-              Platform commission: 5% per gift. Payment processing fees: 2.9% + $0.30 per payout transaction.
+              Platform commission: 5% per gift. Payment processing fees: 0%+ $0.30 per payout transaction.
             </p>
           </section>
         </div>

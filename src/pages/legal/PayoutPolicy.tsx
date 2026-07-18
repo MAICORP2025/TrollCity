@@ -284,7 +284,7 @@ export default function PayoutPolicy() {
         <h2>12. Payout Timeline</h2>
         <p>
           Payouts are reviewed and processed on Fridays when the payout window is
-          active. After admin processing, funds may arrive within 24 hours, but
+          active. After admin processing, funds may arrive Within 5 Minutes, but
           timing can vary based on PayPal, payment processor review, account limits,
           holidays, weekends, or additional platform review.
         </p>

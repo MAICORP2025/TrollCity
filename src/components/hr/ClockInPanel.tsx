@@ -184,7 +184,7 @@ export default function ClockInPanel({ isHRAdmin, currentUserId, hasApprovedRole
             <div>
               <p className="text-sm font-bold text-amber-100">Role Approval Required</p>
               <p className="mt-1 text-xs text-amber-200/80">
-                You do not currently have an approved role. Apply for a role through the Applications tab or the Careers page to access time tracking.
+                 You do not currently have an approved role. Apply for a role through the Applications tab or the Jobs page to access time tracking.
               </p>
             </div>
           </div>

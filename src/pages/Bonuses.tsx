@@ -1,11 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
-import { COINS_PER_USD, calculateFeeCoins } from '../config/coinConfig'
+import { COINS_PER_USD } from '../config/coinConfig'
 
 export default function BonusesPage() {
   const { profile } = useAuthStore()
-  const cashoutExample = 10000
-  const cashoutFee = calculateFeeCoins(cashoutExample)
 
   return (
     <div className="min-h-screen bg-slate-950 text-white px-4 py-6 lg:px-10">
@@ -31,10 +29,10 @@ export default function BonusesPage() {
           <section className="rounded-3xl border border-slate-700/80 bg-slate-900/80 p-6 shadow-lg">
             <h2 className="text-2xl font-semibold text-cyan-200">Cashout Fees</h2>
             <p className="mt-4 text-slate-300">
-              Cashing out coins carries a platform fee of <span className="font-semibold text-white">5%</span> of the requested coins.
+              Troll City does not charge any fees to cash out your earnings.
             </p>
             <p className="mt-2 text-slate-400">
-              Example: withdrawing {cashoutExample.toLocaleString()} coins uses <span className="font-semibold text-white">{cashoutFee.toLocaleString()}</span> coins as the fee.
+              The full USD value of your selected cashout tier is paid out. Minimum cashout is 2,000 coins.
             </p>
           </section>
         </div>
@@ -49,7 +47,7 @@ export default function BonusesPage() {
               <span className="font-semibold text-white">Agency monthly subscription fee:</span> 10,000 Troll Coins.
             </li>
             <li>
-              <span className="font-semibold text-white">Cashout requests:</span> subject to the 5% coin fee plus any review hold time.
+              <span className="font-semibold text-white">Cashout requests:</span> no platform fees; the full selected tier value is paid out.
             </li>
           </ul>
           <p className="mt-4 text-slate-400">

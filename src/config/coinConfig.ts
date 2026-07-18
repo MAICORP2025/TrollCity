@@ -3,10 +3,10 @@
  * 
  * This is the single source of truth for all coin pack and cashout tier values.
  * 
- * Last Updated: 2026-03-21
+ * Last Updated: 2026-07-17
  */
 
-// Type for cashout tiers (matches payoutTiers.ts)
+// Type for cashout tiers
 export interface CashoutTierConfig {
   coins: number;
   usd: number;
@@ -26,18 +26,18 @@ export interface CoinPackage {
 }
 
 export const COIN_PACKAGES: CoinPackage[] = [
-  { id: 'pkg-100', coins: 100, usdPrice: 1.00, label: 'Micro Pack', description: '100 Coins' },
-  { id: 'pkg-300', coins: 300, usdPrice: 3.00, label: 'Starter Pack', description: '300 Coins' },
-  { id: 'pkg-500', coins: 500, usdPrice: 5.00, label: 'Small Boost', description: '500 Coins' },
-  { id: 'pkg-1000', coins: 1000, usdPrice: 10.00, label: 'Casual Pack', description: '1,000 Coins' },
-  { id: 'pkg-2500', coins: 2500, usdPrice: 25.00, label: 'Bronze Pack', description: '2,500 Coins' },
-  { id: 'pkg-5000', coins: 5000, usdPrice: 50.00, label: 'Silver Pack', description: '5,000 Coins' },
-  { id: 'pkg-10000', coins: 10000, usdPrice: 100.00, label: 'Gold Pack', description: '10,000 Coins' },
-  { id: 'pkg-15000', coins: 15000, usdPrice: 150.00, label: 'Platinum Pack', description: '15,000 Coins' },
-  { id: 'pkg-25000', coins: 25000, usdPrice: 250.00, label: 'Diamond Pack', description: '25,000 Coins' },
-  { id: 'pkg-50000', coins: 50000, usdPrice: 500.00, label: 'Legendary Pack', description: '50,000 Coins' },
-  { id: 'pkg-100000', coins: 100000, usdPrice: 1000.00, label: 'Titan Pack', description: '100,000 Coins' },
-  { id: 'pkg-250000', coins: 250000, usdPrice: 2500.00, label: 'Immortal Pack', description: '250,000 Coins' },
+  { id: 'pkg-100', coins: 110, usdPrice: 1.00, label: 'Micro Pack', description: '110 Coins' },
+  { id: 'pkg-300', coins: 330, usdPrice: 3.00, label: 'Starter Pack', description: '330 Coins' },
+  { id: 'pkg-500', coins: 550, usdPrice: 5.00, label: 'Small Boost', description: '550 Coins' },
+  { id: 'pkg-1000', coins: 1100, usdPrice: 10.00, label: 'Casual Pack', description: '1,100 Coins' },
+  { id: 'pkg-2500', coins: 2750, usdPrice: 25.00, label: 'Bronze Pack', description: '2,750 Coins' },
+  { id: 'pkg-5000', coins: 5500, usdPrice: 50.00, label: 'Silver Pack', description: '5,500 Coins' },
+  { id: 'pkg-10000', coins: 11000, usdPrice: 100.00, label: 'Gold Pack', description: '11,000 Coins' },
+  { id: 'pkg-15000', coins: 16500, usdPrice: 150.00, label: 'Platinum Pack', description: '16,500 Coins' },
+  { id: 'pkg-25000', coins: 27500, usdPrice: 250.00, label: 'Diamond Pack', description: '27,500 Coins' },
+  { id: 'pkg-50000', coins: 55000, usdPrice: 500.00, label: 'Legendary Pack', description: '55,000 Coins' },
+  { id: 'pkg-100000', coins: 110000, usdPrice: 1000.00, label: 'Titan Pack', description: '110,000 Coins' },
+  { id: 'pkg-250000', coins: 275000, usdPrice: 2500.00, label: 'Immortal Pack', description: '275,000 Coins' },
 ];
 
 // Exchange rate: 100 coins per $1 (all packages)
@@ -47,18 +47,19 @@ export const COINS_PER_USD = 100;
 // CASHOUT TIERS (Single Source of Truth)
 // ============================================================================
 export const CASHOUT_TIERS = [
-  { coins: 9000, usd: 25, manualReview: false, name: 'Tier 1', color: '#cd7f32', label: '' },
-  { coins: 16500, usd: 50, manualReview: false, name: 'Tier 2', color: '#c0c0c0', label: '' },
-  { coins: 31500, usd: 150, manualReview: false, name: 'Tier 3', color: '#ffd700', label: '' },
-  { coins: 61500, usd: 300, manualReview: false, name: 'Tier 4', color: '#ff4dd2', label: '' },
-  { coins: 121500, usd: 600, manualReview: false, name: 'Tier 5', color: '#00ff00', label: '' },
-  { coins: 201500, usd: 1000, manualReview: true, name: 'Tier 6', color: '#ff0000', label: 'Manual Review' },
-  { coins: 401500, usd: 2000, manualReview: true, name: 'Tier 7', color: '#ff0000', label: 'Manual Review' },
-  { coins: 601500, usd: 3000, manualReview: true, name: 'Tier 8', color: '#ff0000', label: 'Manual Review' },
-  { coins: 1001500, usd: 5000, manualReview: true, name: 'Tier 9', color: '#ff0000', label: 'Manual Review' },
-  { coins: 1501500, usd: 7500, manualReview: true, name: 'Tier 10', color: '#ff0000', label: 'Manual Review' },
-  { coins: 2001500, usd: 10000, manualReview: true, name: 'Tier 11', color: '#ff0000', label: 'Manual Review' },
-  { coins: 3001500, usd: 15000, manualReview: true, name: 'Tier 12', color: '#ff0000', label: 'Manual Review' },
+  { coins: 2000, usd: 5, manualReview: false, name: 'Tier 1', color: '#cd7f32', label: '' },
+  { coins: 7000, usd: 10, manualReview: false, name: 'Tier 2', color: '#c0c0c0', label: '' },
+  { coins: 12000, usd: 30, manualReview: false, name: 'Tier 3', color: '#ffd700', label: '' },
+  { coins: 18000, usd: 50, manualReview: false, name: 'Tier 4', color: '#ff4dd2', label: '' },
+  { coins: 23000, usd: 85, manualReview: false, name: 'Tier 5', color: '#00ff00', label: '' },
+  { coins: 34000, usd: 115, manualReview: false, name: 'Tier 6', color: '#ff0000', label: '' },
+  { coins: 42000, usd: 150, manualReview: false, name: 'Tier 7', color: '#ff0000', label: '' },
+  { coins: 56000, usd: 215, manualReview: false, name: 'Tier 8', color: '#ff0000', label: '' },
+  { coins: 69000, usd: 300, manualReview: false, name: 'Tier 9', color: '#ff0000', label: '' },
+  { coins: 77000, usd: 350, manualReview: false, name: 'Tier 10', color: '#ff0000', label: '' },
+  { coins: 88000, usd: 415, manualReview: false, name: 'Tier 11', color: '#ff0000', label: '' },
+  { coins: 96000, usd: 475, manualReview: false, name: 'Tier 12', color: '#ff0000', label: '' },
+  { coins: 106000, usd: 600, manualReview: false, name: 'Tier 13', color: '#ff0000', label: '' },
 ] as const;
 
 // Alias exports for backward compatibility with old payoutTiers imports
@@ -66,16 +67,23 @@ export const TIERS = CASHOUT_TIERS;
 
 // Type for individual cashout tier
 export type CashoutTier = typeof CASHOUT_TIERS[number];
-export const FIXED_FEE_USD = 3;
 
 // Minimum coins required for any cashout
-export const MIN_CASHOUT_COINS = 9000;
+export const MIN_CASHOUT_COINS = 2000;
 
-// Coins amount that requires manual admin review
-export const MANUAL_REVIEW_THRESHOLD = 200000;
+// ============================================================================
+// PLATFORM CAPACITY LIMITS (Beta)
+// ============================================================================
 
-// Maximum coins for auto-approval (tiers below this are auto-processed)
-export const AUTO_APPROVAL_MAX_COINS = 120000;
+export const MAX_BROADCASTERS = 25;
+export const MAX_VIEWERS_PER_BROADCAST = 20;
+export const MAX_CONCURRENT_CONNECTIONS = 675;
+export const DAILY_CASHOUT_LIMIT = 10;
+
+// MAI Pay Plus — one-time paid upgrade users can select when applying for cashout.
+// Grants 20 rolling cashouts (vs 10) and double coin requirements per tier.
+export const MAI_PAY_PLUS_PRICE_USD = 9.99;
+export const MAI_PAY_PLUS_ITEM_KEY = 'mai_pay_plus';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -85,18 +93,19 @@ export const AUTO_APPROVAL_MAX_COINS = 120000;
  * Get cashout rate (USD per coin) for a given coin amount
  */
 export function getRateForCoins(coins: number): number {
-  if (coins >= 3000000) return 15000 / 3000000;
-  if (coins >= 2000000) return 10000 / 2000000;
-  if (coins >= 1500000) return 7500 / 1500000;
-  if (coins >= 1000000) return 5000 / 1000000;
-  if (coins >= 600000) return 3000 / 600000;
-  if (coins >= 400000) return 2000 / 400000;
-  if (coins >= 200000) return 1000 / 200000;
-  if (coins >= 120000) return 600 / 120000;
-  if (coins >= 60000) return 300 / 60000;
-  if (coins >= 30000) return 150 / 30000;
-  if (coins >= 15000) return 50 / 15000;
-  if (coins >= 7500) return 25 / 7500;
+  if (coins >= 106000) return 600 / 106000;
+  if (coins >= 96000) return 475 / 96000;
+  if (coins >= 88000) return 415 / 88000;
+  if (coins >= 77000) return 350 / 77000;
+  if (coins >= 69000) return 300 / 69000;
+  if (coins >= 56000) return 215 / 56000;
+  if (coins >= 42000) return 150 / 42000;
+  if (coins >= 34000) return 115 / 34000;
+  if (coins >= 23000) return 85 / 23000;
+  if (coins >= 18000) return 50 / 18000;
+  if (coins >= 12000) return 30 / 12000;
+  if (coins >= 7000) return 10 / 7000;
+  if (coins >= 2000) return 5 / 2000;
   return 0;
 }
 
@@ -117,13 +126,6 @@ export function calculateCashoutUsd(coinAmount: number): number {
 }
 
 /**
- * Check if a cashout requires manual review
- */
-export function requiresManualReview(coinAmount: number): boolean {
-  return coinAmount >= MANUAL_REVIEW_THRESHOLD;
-}
-
-/**
  * Get all available coin packages
  */
 export function getCoinPackages(): CoinPackage[] {
@@ -141,130 +143,5 @@ export function isValidCashoutAmount(coinAmount: number): boolean {
  * Check if user is admin or secretary
  */
 export function isAdminOrSecretary(userId: string): boolean {
-  // This is a placeholder - in a real implementation, you'd check the user's role
-  // For now, we'll return false since we don't have the profile context here
-  // The actual check should be done in the component using the profile from useAuthStore
   return false;
-}
-
-/**
- * Calculate fee coins for a cashout
- * Fee is 2.9% of the requested amount
- */
-export function calculateFeeCoins(coinAmount: number): number {
-  return Math.ceil(coinAmount * 0.029);
-}
-
-/**
- * Calculate net coins after fee
- */
-export function calculateNetCoins(coinAmount: number, feeCoins: number): number {
-  return coinAmount - feeCoins;
-}
-
-/**
- * Check if cashout window is open (Friday/Saturday/Sunday 1 AM - 7 PM Mountain Time)
- */
-export function isCashoutWindowOpen(): boolean {
-  const now = new Date();
-  
-  // Convert to Mountain Time (UTC-7 or UTC-6 depending on DST)
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Denver',
-    weekday: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-  
-  const parts = formatter.formatToParts(now);
-  const weekday = parts.find(p => p.type === 'weekday')?.value;
-  const hour = parts.find(p => p.type === 'hour')?.value;
-  
-  // Weekend payout window: Friday, Saturday, or Sunday between 01:00 and 19:00 MT
-  return ['Friday', 'Saturday', 'Sunday'].includes(weekday || '') && Number(hour) >= 1 && Number(hour) < 19;
-}
-
-// ============================================================================
-// FAST PAY PROGRAM CONFIGURATION
-// ============================================================================
-
-/** Fast Pay tier thresholds */
-export const FAST_PAY_TIERS = {
-  standard: { minLevel: 1, maxLevel: 499, label: 'Standard', payoutDay: 'Friday only', processingTime: 'Every Friday (1AM-7PM MT)', cooldownHours: 168 },
-  fast_pay: { minLevel: 500, maxLevel: 999, label: 'Fast Pay', payoutDay: 'Any day', processingTime: 'Every 24 hours', cooldownHours: 24 },
-  instant: { minLevel: 1000, maxLevel: Infinity, label: 'Instant Pay', payoutDay: 'Any day', processingTime: 'Every 30 minutes', cooldownHours: 0.5 },
-} as const;
-
-/** Fast Pay cashout fee percentage (all tiers) */
-export const FAST_PAY_FEE_PERCENT = 2.9;
-
-/** Safety requirements for Fast Pay */
-export const FAST_PAY_REQUIREMENTS = [
-  { key: 'verified_identity', label: 'Verified Identity', description: 'Government-issued ID verified' },
-  { key: 'no_violations', label: 'No Active Violations', description: 'No active community violations' },
-  { key: 'account_age', label: 'Account Older Than 30 Days', description: 'Account must be at least 30 days old' },
-  { key: 'good_standing', label: 'Good Standing', description: 'Good standing in the community' },
-  { key: 'no_fraud', label: 'No Fraud or Chargeback History', description: 'Clean payment history' },
-] as const;
-
-/**
- * Get Fast Pay tier info for a given user level
- */
-export function getFastPayTierInfo(level: number) {
-  if (level >= 1000) return FAST_PAY_TIERS.instant;
-  if (level >= 500) return FAST_PAY_TIERS.fast_pay;
-  return FAST_PAY_TIERS.standard;
-}
-
-/**
- * Calculate Fast Pay fee for a coin amount
- */
-export function calculateFastPayFee(coinAmount: number): number {
-  return Math.ceil(coinAmount * (FAST_PAY_FEE_PERCENT / 100));
-}
-
-/**
- * Calculate net coins after Fast Pay fee
- */
-export function calculateFastPayNet(coinAmount: number): number {
-  const fee = calculateFastPayFee(coinAmount);
-  return coinAmount - fee;
-}
-
-/**
- * Get the cashout cooldown interval in hours for a given user level
- * - Level 1-499:    Every Friday (168 hours)
- * - Level 500-999:  Every 24 hours
- * - Level 1000+:    Every 60 minutes (1 hour)
- */
-export function getCashoutCooldownHours(level: number): number {
-  if (level >= 1000) return 0.5; // 30 minutes
-  if (level >= 500) return 24;
-  return 168; // 7 days (Friday to Friday)
-}
-
-/**
- * Get a human-readable label for cashout frequency based on level
- */
-export function getCashoutFrequencyLabel(level: number): string {
-  if (level >= 1000) return 'Every 30 minutes';
-  if (level >= 500) return 'Every 24 hours';
-  return 'Fridays only (1AM-7PM MT)';
-}
-
-/**
- * Check if a user level allows cashout on any day (not just Friday)
- */
-export function canCashoutAnyDay(level: number): boolean {
-  return level >= 500;
-}
-
-/**
- * Get the cashout cooldown interval in minutes for a given user level
- */
-export function getCashoutCooldownMinutes(level: number): number {
-  if (level >= 1000) return 30;
-  if (level >= 500) return 1440; // 24 hours
-  return 10080; // 7 days
 }

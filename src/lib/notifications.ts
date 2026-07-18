@@ -1100,7 +1100,77 @@ export async function notifyCareerApplicationSubmitted(
     {
       position_id: positionId,
       position_title: positionTitle,
-      action_url: '/careers'
+      action_url: '/jobs'
+    }
+  )
+}
+
+// ==========================================
+// INTERVIEW NOTIFICATIONS
+// ==========================================
+
+export async function notifyInterviewScheduled(
+  applicantId: string,
+  interviewerId: string,
+  scheduledAtIso: string,
+  roomName: string
+): Promise<void> {
+  const when = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(scheduledAtIso))
+
+  await createNotification(
+    applicantId,
+    'interview_scheduled',
+    '📅 Interview Scheduled',
+    `Your interview is scheduled for ${when}.`,
+    {
+      scheduled_at: scheduledAtIso,
+      room_name: roomName,
+      interviewer_id: interviewerId,
+      action_url: `/interview/by-room/${roomName}`,
+    }
+  )
+
+  await createNotification(
+    interviewerId,
+    'interview_scheduled_staff',
+    '🗓️ Interview to Conduct',
+    `You are scheduled to interview an applicant on ${when}.`,
+    {
+      scheduled_at: scheduledAtIso,
+      room_name: roomName,
+      applicant_id: applicantId,
+      action_url: '/Employees?tab=hiring',
+    }
+  )
+}
+
+export async function notifyInterviewStarted(
+  applicantId: string,
+  interviewerId: string
+): Promise<void> {
+  await createNotification(
+    applicantId,
+    'interview_started',
+    '🔴 Interview Starting Now',
+    'Your interview is starting now. Join the live room.',
+    {
+      action_url: '/jobs',
+    }
+  )
+
+  await createNotification(
+    interviewerId,
+    'interview_started',
+    '🔴 Interview Starting Now',
+    'The interview room is now active.',
+    {
+      action_url: '/Employees?tab=hiring',
     }
   )
 }

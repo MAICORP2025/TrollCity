@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { useProfileFrameStore } from '@/stores/useProfileFrameStore';
 import type { ProfileFrame } from '@/config/profileFrames';
+import { COIN_PACKAGES } from '@/config/coinConfig';
 import PayPalPaymentModal from './PayPalPaymentModal'
 
   interface CoinPackage {
@@ -48,22 +49,17 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
   const paymentInProgressRef = useRef(false);
 
    const fetchCoinPacks = async () => {
-     setLoading(true);
-     
-    const basePacks = [
-      { id: '1', coins: 100, price: '$1.00' },
-      { id: '2', coins: 300, price: '$3.00' },
-      { id: '3', coins: 500, price: '$5.00' },
-      { id: '4', coins: 1000, price: '$10.00', popular: true },
-      { id: '5', coins: 2500, price: '$25.00' },
-      { id: '6', coins: 5000, price: '$50.00' },
-      { id: '7', coins: 10000, price: '$100.00' },
-      { id: '8', coins: 75000, price: '$750.00' },
-      { id: '9', coins: 100000, price: '$1000.00' },
-    ];
-    setPackages(basePacks);
-    setLoading(false);
-  };
+      setLoading(true);
+      
+     const basePacks: CoinPackage[] = COIN_PACKAGES.map((pkg) => ({
+       id: pkg.id,
+       coins: pkg.coins,
+       price: `$${pkg.usdPrice.toFixed(2)}`,
+       popular: pkg.id === 'pkg-1000',
+     }));
+     setPackages(basePacks);
+     setLoading(false);
+   };
 
   useEffect(() => {
     if (isOpen && !user?.id) {
@@ -234,29 +230,37 @@ export default function CoinStoreModal({ isOpen, onClose, embedded = false, allo
                  ) : (
                    <div className="grid grid-cols-1 gap-3">
                      {packages.map((pkg) => (
-                       <button
-                         key={pkg.id}
-                         onClick={() => handlePackageSelect(pkg)}
-                         className={`group relative flex items-center justify-between p-4 rounded-lg border transition-all duration-200
-                           ${selectedPack?.id === pkg.id 
-                             ? 'bg-yellow-500/10 border-yellow-500/50' 
-                             : 'bg-zinc-800/50 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600'
-                           }
-                         `}
-                       >
-                         {pkg.popular && (
-                           <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-                             BEST VALUE
-                           </div>
-                         )}
-                         
-                         <div className="flex items-center gap-3">
+                        <button
+                          key={pkg.id}
+                          onClick={() => handlePackageSelect(pkg)}
+                          className={`group relative flex items-center justify-between p-4 rounded-lg border transition-all duration-200
+                            ${selectedPack?.id === pkg.id 
+                              ? 'bg-yellow-500/10 border-yellow-500/50' 
+                              : 'bg-zinc-800/50 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600'
+                            }
+                          `}
+                        >
+                          {pkg.popular && (
+                            <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                              BEST VALUE
+                            </div>
+                          )}
+                          
+                          <div className="absolute -top-2 right-4 bg-emerald-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                            +10%
+                          </div>
+                          
+                          <div className="flex items-center gap-3">
                            <div className={`p-2 rounded-full ${selectedPack?.id === pkg.id ? 'bg-yellow-500/20' : 'bg-zinc-700'}`}>
                              <Coins className={`w-5 h-5 ${selectedPack?.id === pkg.id ? 'text-yellow-400' : 'text-zinc-400 group-hover:text-yellow-400'}`} />
                            </div>
                            <div className="text-left">
-                             <div className="font-bold text-white text-lg">{pkg.coins.toLocaleString()} Coins</div>
-                           </div>
+                               <div className="text-zinc-500 text-sm line-through">{Math.round(pkg.coins / 1.1).toLocaleString()} Coins</div>
+                               <div className="flex items-center gap-2">
+                                 <span className="font-bold text-white text-lg">{pkg.coins.toLocaleString()} Coins</span>
+                                 <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">+10%</span>
+                               </div>
+                             </div>
                          </div>
 
                          <div className="flex flex-col items-end gap-1">

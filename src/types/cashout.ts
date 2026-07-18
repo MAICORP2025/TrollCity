@@ -1,101 +1,6 @@
 // Types for Enhanced Cashout System
 import { UserProfile } from '../lib/supabase';
 
-// ============================================================================
-// FAST PAY PROGRAM TYPES
-// ============================================================================
-
-/** Fast Pay tier levels based on user level */
-export type FastPayTier = 'standard' | 'fast_pay' | 'instant';
-
-/** Fast Pay program requirements status */
-export interface FastPayRequirements {
-  verifiedIdentity: boolean;
-  noActiveViolations: boolean;
-  accountOlderThan30Days: boolean;
-  goodStanding: boolean;
-  noFraudChargeback: boolean;
-}
-
-/** Full Fast Pay eligibility result */
-export interface FastPayEligibility {
-  tier: FastPayTier;
-  eligible: boolean;
-  requirements: FastPayRequirements;
-  unmetRequirements: string[];
-  /** Level 1-499: Standard payout schedule */
-  isStandard: boolean;
-  /** Level 500-999: Fast Pay - request any day, processed within 24h */
-  isFastPay: boolean;
-  /** Level 1000+: Instant payout, multiple per week, priority support */
-  isInstant: boolean;
-  /** Cashout fee percentage (2.9% for all tiers) */
-  feePercent: number;
-  /** Max cashouts per week (for instant tier) */
-  maxCashoutsPerWeek: number;
-  /** Estimated processing time description */
-  processingTime: string;
-}
-
-/** Get the Fast Pay tier for a given user level */
-export function getFastPayTier(level: number | string): FastPayTier {
-  const numericLevel = Number(level || 0)
-  if (numericLevel >= 1000) return 'instant'
-  if (numericLevel >= 500) return 'fast_pay'
-  return 'standard'
-}
-
-/** Get human-readable tier label */
-export function getFastPayTierLabel(tier: FastPayTier): string {
-  switch (tier) {
-    case 'instant': return 'Instant Pay';
-    case 'fast_pay': return 'Fast Pay';
-    case 'standard': return 'Standard Payout';
-  }
-}
-
-/** Get tier description */
-export function getFastPayTierDescription(tier: FastPayTier): string {
-  switch (tier) {
-    case 'instant':
-      return 'Instant payout requests • Multiple cashouts per week • Priority support';
-    case 'fast_pay':
-      return 'Request payouts any day • Processed within 24 hours';
-    case 'standard':
-      return 'Standard payout schedule • Paid every Friday';
-  }
-}
-
-/** Get processing time description */
-export function getFastPayProcessingTime(tier: FastPayTier): string {
-  switch (tier) {
-    case 'instant': return 'Instant';
-    case 'fast_pay': return 'Within 24 hours';
-    case 'standard': return 'Every Friday';
-  }
-}
-
-/** Get max cashouts per week */
-export function getFastPayMaxCashouts(tier: FastPayTier): number {
-  switch (tier) {
-    case 'instant': return 5;
-    case 'fast_pay': return 3;
-    case 'standard': return 1;
-  }
-}
-
-/** Fast Pay fee percentage (same for all tiers) */
-export const FAST_PAY_FEE_PERCENT = 2.9;
-
-/** Minimum level for Fast Pay eligibility */
-export const FAST_PAY_MIN_LEVEL = 500;
-
-/** Minimum level for Instant Pay eligibility */
-export const INSTANT_PAY_MIN_LEVEL = 1000;
-
-/** Minimum account age in days for Fast Pay */
-export const FAST_PAY_MIN_ACCOUNT_AGE_DAYS = 30;
-
 export type PayoutMethod = 'cash_app' | 'paypal' | 'venmo' | 'ach' | 'check';
 
 export type CashoutStatus = 'pending' | 'processing' | 'approved' | 'completed' | 'denied' | 'submitted';
@@ -103,15 +8,15 @@ export type CashoutStatus = 'pending' | 'processing' | 'approved' | 'completed' 
 export interface CashoutRequest {
   id: string;
   user_id: string;
-  coins_reserved: number;          // total coins committed (including fee)
-  eligible_gift_coins_used: number; // actual eligible coins being cashed out
+  coins_reserved: number;
+  eligible_gift_coins_used: number;
   fee_percentage: number;
   fee_coins: number;
   net_coins: number;
   usd_amount: number;
   status: CashoutStatus;
   payout_method: PayoutMethod | null;
-  payout_details: string | null;   // provider username/handle/email
+  payout_details: string | null;
   id_verification_url: string | null;
   id_verification_uploaded_at: string | null;
   receipt_url: string | null;
@@ -235,20 +140,103 @@ export interface CashoutTier {
   updated_at: string;
 }
 
-// Fee calculation utility
-export function calculateFeeCoins(coinAmount: number, feePercentage: number = 2.9): number {
-  return Math.ceil(coinAmount * (feePercentage / 100));
-}
-
-export function calculateNetCoins(coinAmount: number, feeCoins: number): number {
-  return coinAmount - feeCoins;
-}
-
 export function isFriday(): boolean {
   const now = new Date();
   const mtDateString = now.toLocaleString("en-US", { timeZone: "America/Denver" });
   const mtDate = new Date(mtDateString);
-  return mtDate.getDay() === 5; // 0=Sun, 5=Fri
+  return mtDate.getDay() === 5;
+}
+
+export const FAST_PAY_FEE_PERCENT = 5;
+
+export const FAST_PAY_MIN_LEVEL = 500;
+export const INSTANT_PAY_MIN_LEVEL = 1000;
+export const FAST_PAY_MIN_ACCOUNT_AGE_DAYS = 30;
+
+export const FAST_PAY_REQUIREMENTS = [
+  {
+    key: 'verified_identity',
+    label: 'Verified identity',
+    description: 'You must verify your identity to use Fast Pay/Instant Pay.',
+  },
+  {
+    key: 'no_violations',
+    label: 'No active violations',
+    description: 'Your account must not have active violations.',
+  },
+  {
+    key: 'account_age',
+    label: 'Account aged',
+    description: 'Your account must be at least 30 days old.',
+  },
+  {
+    key: 'good_standing',
+    label: 'Good standing',
+    description: 'Maintain good community standing.',
+  },
+  {
+    key: 'no_fraud',
+    label: 'No fraud/chargeback',
+    description: 'Resolve any fraud/chargeback issues.',
+  },
+] as const;
+
+export type FastPayTier = 'standard' | 'fast_pay' | 'instant';
+
+export function getFastPayTier(userLevel: number): FastPayTier {
+  if (userLevel >= INSTANT_PAY_MIN_LEVEL) return 'instant';
+  if (userLevel >= FAST_PAY_MIN_LEVEL) return 'fast_pay';
+  return 'standard';
+}
+
+export function getFastPayTierLabel(tier: FastPayTier): string {
+  switch (tier) {
+    case 'instant':
+      return 'Instant Pay';
+    case 'fast_pay':
+      return 'Fast Pay';
+    default:
+      return 'Friday Payout';
+  }
+}
+
+export function getFastPayTierDescription(tier: FastPayTier): string {
+  switch (tier) {
+    case 'instant':
+      return 'Instant • Every 60 Minutes • Priority';
+    case 'fast_pay':
+      return 'Fast Pay • Every 24 Hrs • Within 24h';
+    default:
+      return 'Standard • Paid every Friday';
+  }
+}
+
+export function getFastPayProcessingTime(tier: FastPayTier): string {
+  switch (tier) {
+    case 'instant':
+      return 'Instant';
+    case 'fast_pay':
+      return 'Within 24h';
+    default:
+      return 'Every Friday';
+  }
+}
+
+export function getFastPayMaxCashouts(tier: FastPayTier): number {
+  switch (tier) {
+    case 'instant':
+      return 6;
+    case 'fast_pay':
+      return 3;
+    default:
+      return 1;
+  }
+}
+
+export function getFastPayTierInfo(_userLevel: number): {
+  tier: FastPayTier;
+} {
+  return { tier: getFastPayTier(_userLevel) };
 }
 
 export function isCashoutWindowOpen(): boolean {
@@ -258,6 +246,6 @@ export function isCashoutWindowOpen(): boolean {
   const day = mtDate.getDay();
   const hour = mtDate.getHours();
 
-  // Weekend payout window: Friday, Saturday, or Sunday between 1 AM and 7 PM Mountain Time
   return [5, 6, 0].includes(day) && hour >= 1 && hour < 19;
 }
+

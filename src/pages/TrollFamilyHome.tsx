@@ -459,144 +459,142 @@ export default function TrollFamilyHome() {
   const displayMembers = showAllMembers ? members : members.slice(0, 10);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header with Refresh */}
-        <div className="flex justify-end mb-4">
+    <div className="relative min-h-screen overflow-hidden bg-[#040107] text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-40 -top-40 h-[34rem] w-[34rem] rounded-full bg-fuchsia-700/20 blur-[150px]" />
+        <div className="absolute -right-48 top-52 h-[38rem] w-[38rem] rounded-full bg-lime-400/10 blur-[170px]" />
+        <div className="absolute bottom-[-18rem] left-[35%] h-[40rem] w-[40rem] rounded-full bg-violet-700/15 blur-[180px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:42px_42px]" />
+      </div>
+
+      <main className="relative z-10 mx-auto w-full max-w-[1500px] px-4 pb-20 pt-5 sm:px-6 lg:px-8">
+        <div className="mb-4 flex justify-end">
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-700 rounded-lg text-gray-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.045] px-3.5 py-2 text-xs font-black uppercase tracking-[0.14em] text-white/55 transition hover:border-fuchsia-400/30 hover:bg-fuchsia-500/10 hover:text-white disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="text-sm">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing' : 'Refresh'}
           </button>
         </div>
 
-        {/* Family Header */}
-        <FamilyHeader 
-          family={family} 
+        <FamilyHeader
+          family={family}
           memberCount={heartbeat?.total_members || members.length}
           streak={heartbeat?.current_streak || 0}
           vaultCoins={vault?.total_coins || 0}
           onSettings={() => setShowSettingsModal(true)}
         />
 
-        {/* Family Heartbeat Alert */}
-        {heartbeat && (
-          <FamilyHeartbeatAlert heartbeat={heartbeat} />
-        )}
+        {heartbeat && <FamilyHeartbeatAlert heartbeat={heartbeat} />}
 
-        {/* Tab Navigation */}
-        <TabNavigation 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab}
-          notificationCount={heartbeat?.unread_notifications || 0}
-        />
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <section className="min-w-0">
+            <TabNavigation
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              notificationCount={heartbeat?.unread_notifications || 0}
+            />
 
-        {/* Tab Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            {activeTab === 'home' && (
-              <HomeTab 
-                goals={goals}
-                notifications={notifications}
-                onViewAllGoals={() => setActiveTab('goals')}
-                onNotificationClick={(notif) => {
-                  // Mark as read
-                  supabase.from('family_notifications').update({ is_read: true }).eq('id', notif.id).then();
-                  // Navigate based on notification type
-                  if (notif.notification_type === 'member_join' || notif.notification_type === 'member_kick' || notif.notification_type === 'member_promote') {
-                    navigate('/family/members');
-                  } else if (notif.notification_type === 'goal_completed') {
-                    navigate('/family/goals');
-                  } else if (notif.notification_type === 'broadcast' || notif.notification_type === 'member_broadcast') {
-                    navigate('/live');
-                  }
-                }}
-              />
-            )}
-            {activeTab === 'goals' && (
-              <GoalsTab goals={goals} isLeader={isLeader} />
-            )}
-            {activeTab === 'achievements' && (
-              <AchievementsTab achievements={achievements} />
-            )}
-            {activeTab === 'members' && (
-              <MembersTab 
-                members={displayMembers}
-                totalCount={heartbeat?.total_members || members.length}
-                showAll={showAllMembers}
-                onToggleShowAll={() => setShowAllMembers(!showAllMembers)}
-                isLeader={isLeader}
-                familyId={family.id}
-                onKick={handleKickMember}
-                onPromote={handlePromoteMember}
-                onBan={handleBanMember}
-                onModerated={() => { if (user) familyCache.delete(user.id); fetchFamilyData(true); }}
-              />
-            )}
-            {activeTab === 'vault' && (
-              <VaultTab vault={vault} familyLevel={family.level} />
-            )}
-          </div>
+            <div className="mt-5">
+              {activeTab === 'home' && (
+                <HomeTab
+                  goals={goals}
+                  notifications={notifications}
+                  onViewAllGoals={() => setActiveTab('goals')}
+                  onNotificationClick={(notif) => {
+                    supabase.from('family_notifications').update({ is_read: true }).eq('id', notif.id).then();
+                    if (notif.notification_type === 'member_join' || notif.notification_type === 'member_kick' || notif.notification_type === 'member_promote') {
+                      navigate('/family/members');
+                    } else if (notif.notification_type === 'goal_completed') {
+                      navigate('/family/goals');
+                    } else if (notif.notification_type === 'broadcast' || notif.notification_type === 'member_broadcast') {
+                      navigate('/live');
+                    }
+                  }}
+                />
+              )}
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <QuickActions 
-              isLeader={isLeader} 
+              {activeTab === 'goals' && <GoalsTab goals={goals} isLeader={isLeader} />}
+              {activeTab === 'achievements' && <AchievementsTab achievements={achievements} />}
+              {activeTab === 'members' && (
+                <MembersTab
+                  members={displayMembers}
+                  totalCount={heartbeat?.total_members || members.length}
+                  showAll={showAllMembers}
+                  onToggleShowAll={() => setShowAllMembers(!showAllMembers)}
+                  isLeader={isLeader}
+                  familyId={family.id}
+                  onKick={handleKickMember}
+                  onPromote={handlePromoteMember}
+                  onBan={handleBanMember}
+                  onModerated={() => {
+                    if (user) familyCache.delete(user.id);
+                    fetchFamilyData(true);
+                  }}
+                />
+              )}
+              {activeTab === 'vault' && <VaultTab vault={vault} familyLevel={family.level} />}
+            </div>
+          </section>
+
+          <aside className="space-y-4 xl:sticky xl:top-5 xl:self-start">
+            <QuickActions
+              isLeader={isLeader}
               onChat={() => navigate(`/family/chat/${family.id}`)}
               onBroadcast={() => handleStartBroadcast(family.id, user?.id || '', user?.display_name || 'A member')}
               onInvite={() => navigate('/family/invite')}
             />
             <LeaderboardPreview weeklyContribution={vault?.weekly_contribution || 0} />
-            <FamilyStats 
+            <FamilyStats
               legacyScore={family.legacy_score}
               reputation={family.reputation}
               xp={family.xp}
             />
-          </div>
+          </aside>
         </div>
-      </div>
+      </main>
 
-      {/* Settings Modal */}
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 rounded-2xl border border-white/10 max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Family Settings</h2>
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-                >
-                  <span className="text-gray-400 hover:text-white">✕</span>
-                </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md overflow-hidden rounded-[26px] border border-white/10 bg-[#0a0710] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fuchsia-300">Family Control</p>
+                <h2 className="mt-1 text-xl font-black">Family Settings</h2>
               </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-white/45 transition hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
-              <div className="space-y-4">
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <LogOut className="w-5 h-5 text-red-400 mt-0.5" />
-                    <div>
-                      <h3 className="text-red-400 font-semibold mb-2">Leave Family</h3>
-                      <p className="text-gray-300 text-sm mb-3">
-                        Leaving the family requires paying 10% of the family's total earnings as an exit fee. 
-                        This amount will be distributed equally among all remaining family members.
-                      </p>
-                      {familyData?.vault?.total_coins && (
-                        <p className="text-yellow-400 text-sm font-semibold mb-3">
-                          Exit Fee: {Math.floor(familyData.vault.total_coins * 0.1).toLocaleString()} Troll Coins
-                        </p>
-                      )}
-                      <button
-                        onClick={handleLeaveFamily}
-                        disabled={leavingFamily}
-                        className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                      >
-                        {leavingFamily ? 'Leaving...' : 'Leave Family'}
-                      </button>
-                    </div>
+            <div className="p-6">
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/8 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-red-500/10 p-2.5 text-red-400">
+                    <LogOut className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-black text-red-300">Leave Family</h3>
+                    <p className="mt-2 text-sm leading-6 text-white/48">
+                      Leaving requires paying 10% of the family&apos;s total earnings. The fee is distributed among remaining members.
+                    </p>
+                    {familyData?.vault?.total_coins && (
+                      <div className="mt-3 rounded-xl border border-amber-400/15 bg-amber-400/8 px-3 py-2 text-sm font-black text-amber-300">
+                        Exit Fee: {Math.floor(familyData.vault.total_coins * 0.1).toLocaleString()} Troll Coins
+                      </div>
+                    )}
+                    <button
+                      onClick={handleLeaveFamily}
+                      disabled={leavingFamily}
+                      className="mt-4 w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {leavingFamily ? 'Leaving...' : 'Leave Family'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -613,117 +611,133 @@ export default function TrollFamilyHome() {
 // =============================================================================
 
 // Family Header Component
-function FamilyHeader({ 
-  family, 
-  memberCount, 
-  streak, 
+function FamilyHeader({
+  family,
+  memberCount,
+  streak,
   vaultCoins,
   onSettings
-}: { 
+}: {
   family: FamilyData;
   memberCount: number;
   streak: number;
   vaultCoins: number;
   onSettings?: () => void;
 }) {
-  const badgeEmoji = family.crest_url ? null : '👑';
-  
   return (
-    <div className="bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur rounded-2xl border border-white/10 overflow-hidden mb-6">
-      <div 
-        className="h-32 md:h-48 bg-cover bg-center relative"
+    <section className="relative overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(31,8,43,0.96),rgba(7,5,13,0.96))] shadow-[0_30px_100px_rgba(0,0,0,0.48)]">
+      <div
+        className="relative min-h-[240px] bg-cover bg-center"
         style={{ backgroundImage: family.banner_url ? `url(${family.banner_url})` : undefined }}
       >
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent" />
-      </div>
-      
-      <div className="px-6 pb-6 -mt-16 relative">
-        <div className="flex flex-col md:flex-row md:items-end gap-4">
-          <div className="w-24 h-24 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg border-4 border-slate-900">
-            {family.crest_url ? (
-              <img src={family.crest_url} alt={family.name} className="w-16 h-16 object-contain" />
-            ) : (
-              <span className="text-4xl">{badgeEmoji}</span>
-            )}
-          </div>
-          
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-1 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-bold text-white">{family.name}</h1>
-              <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded text-sm font-semibold">
-                [{family.tag}]
-              </span>
-              <span className="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded text-sm">
-                Level {family.level || 1}
-              </span>
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,1,7,0.94),rgba(4,1,7,0.55),rgba(4,1,7,0.82))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(217,70,239,0.24),transparent_34%),radial-gradient(circle_at_82%_30%,rgba(163,230,53,0.12),transparent_28%)]" />
+
+        <div className="relative z-10 flex min-h-[240px] flex-col justify-between gap-8 p-5 sm:p-7 lg:flex-row lg:items-end lg:p-9">
+          <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-end">
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[24px] border-4 border-[#09050d] bg-gradient-to-br from-fuchsia-600 to-violet-700 shadow-[0_0_45px_rgba(217,70,239,0.28)]">
+              {family.crest_url ? (
+                <img src={family.crest_url} alt={family.name} className="h-full w-full object-cover" />
+              ) : (
+                <Crown className="h-11 w-11 text-amber-300" />
+              )}
             </div>
-            {family.slogan && (
-              <p className="text-gray-400 italic">"{family.slogan}"</p>
-            )}
-          </div>
-          
-          <div className="flex gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-white">{memberCount}</p>
-              <p className="text-gray-400 text-xs">Members</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-400">{streak}</p>
-              <p className="text-gray-400 text-xs">Streak</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-yellow-400">{vaultCoins.toLocaleString()}</p>
-              <p className="text-gray-400 text-xs">Vault</p>
+
+            <div className="min-w-0 pb-1">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-lime-400/20 bg-lime-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-lime-300">
+                  Level {family.level || 1}
+                </span>
+                <span className="rounded-full border border-fuchsia-300/20 bg-fuchsia-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-200">
+                  [{family.tag}]
+                </span>
+              </div>
+              <h1 className="truncate text-3xl font-black tracking-[-0.03em] sm:text-4xl lg:text-5xl">{family.name}</h1>
+              {family.slogan && <p className="mt-2 max-w-2xl text-sm italic text-white/50 sm:text-base">“{family.slogan}”</p>}
             </div>
           </div>
-          
+
+          <div className="grid grid-cols-3 gap-2 sm:min-w-[360px]">
+            <HeaderStat label="Members" value={memberCount} tone="text-white" />
+            <HeaderStat label="Streak" value={streak} tone="text-lime-300" />
+            <HeaderStat label="Vault" value={vaultCoins.toLocaleString()} tone="text-amber-300" />
+          </div>
+
           {onSettings && (
             <button
               onClick={onSettings}
-              className="p-2 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-colors"
+              className="absolute right-4 top-4 rounded-xl border border-white/10 bg-black/30 p-2.5 text-white/55 backdrop-blur-xl transition hover:border-fuchsia-400/30 hover:bg-fuchsia-500/10 hover:text-white"
               title="Family Settings"
             >
-              <Settings className="w-5 h-5 text-gray-400 hover:text-white" />
+              <Settings className="h-5 w-5" />
             </button>
           )}
         </div>
       </div>
+    </section>
+  );
+}
+
+function HeaderStat({ label, value, tone }: { label: string; value: string | number; tone: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-3 text-center backdrop-blur-xl">
+      <p className={`truncate text-xl font-black sm:text-2xl ${tone}`}>{value}</p>
+      <p className="mt-1 text-[9px] font-black uppercase tracking-[0.16em] text-white/35">{label}</p>
     </div>
   );
 }
 
 // Family Heartbeat Alert
 function FamilyHeartbeatAlert({ heartbeat }: { heartbeat: FamilyHeartbeat }) {
-  const healthColors = {
-    thriving: 'bg-green-500/10 border-green-500/30',
-    stable: 'bg-yellow-500/10 border-yellow-500/30',
-    struggling: 'bg-red-500/10 border-red-500/30',
-    unknown: 'bg-gray-500/10 border-gray-500/30',
+  const styles = {
+    thriving: {
+      wrap: 'border-lime-400/20 bg-lime-400/8',
+      icon: 'text-lime-300',
+      badge: 'bg-lime-400/10 text-lime-300 border-lime-400/20'
+    },
+    stable: {
+      wrap: 'border-amber-400/20 bg-amber-400/8',
+      icon: 'text-amber-300',
+      badge: 'bg-amber-400/10 text-amber-300 border-amber-400/20'
+    },
+    struggling: {
+      wrap: 'border-red-400/20 bg-red-400/8',
+      icon: 'text-red-300',
+      badge: 'bg-red-400/10 text-red-300 border-red-400/20'
+    },
+    unknown: {
+      wrap: 'border-white/10 bg-white/[0.035]',
+      icon: 'text-white/45',
+      badge: 'bg-white/[0.05] text-white/50 border-white/10'
+    }
   };
 
-  const iconColors = {
-    thriving: 'text-green-400',
-    stable: 'text-yellow-400',
-    struggling: 'text-red-400',
-    unknown: 'text-gray-400',
-  };
+  const theme = styles[heartbeat.health as keyof typeof styles] || styles.unknown;
 
   return (
-    <div className={`mb-6 rounded-xl p-4 border ${healthColors[heartbeat.health as keyof typeof healthColors] || healthColors.unknown}`}>
-      <div className="flex items-center justify-between">
+    <div className={`mt-4 rounded-2xl border p-4 ${theme.wrap}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <Activity className={`w-6 h-6 ${iconColors[heartbeat.health as keyof typeof iconColors] || iconColors.unknown}`} />
+          <div className={`rounded-xl border border-white/10 bg-black/20 p-2.5 ${theme.icon}`}>
+            <Activity className="h-5 w-5" />
+          </div>
           <div>
-            <p className="text-white font-semibold capitalize">{heartbeat.health}</p>
-            <p className="text-gray-400 text-sm">
-              {heartbeat.active_members}/{heartbeat.total_members} active • {heartbeat.goals_completed}/{heartbeat.goals_active} goals complete
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-black">Family Heartbeat</p>
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] ${theme.badge}`}>
+                {heartbeat.health}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-white/45">
+              {heartbeat.active_members}/{heartbeat.total_members} active members · {heartbeat.goals_completed}/{heartbeat.goals_active} goals complete
             </p>
           </div>
         </div>
+
         {heartbeat.at_risk_members > 0 && (
-          <div className="flex items-center gap-2 text-amber-400">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="text-sm">{heartbeat.at_risk_members} need support</span>
+          <div className="inline-flex items-center gap-2 rounded-xl border border-amber-400/15 bg-amber-400/8 px-3 py-2 text-xs font-bold text-amber-300">
+            <AlertTriangle className="h-4 w-4" />
+            {heartbeat.at_risk_members} need support
           </div>
         )}
       </div>
@@ -732,11 +746,11 @@ function FamilyHeartbeatAlert({ heartbeat }: { heartbeat: FamilyHeartbeat }) {
 }
 
 // Tab Navigation
-function TabNavigation({ 
-  activeTab, 
-  onTabChange, 
-  notificationCount 
-}: { 
+function TabNavigation({
+  activeTab,
+  onTabChange,
+  notificationCount
+}: {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   notificationCount: number;
@@ -750,26 +764,33 @@ function TabNavigation({
   ];
 
   return (
-    <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-      {tabs.map(tab => (
-        <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id as TabType)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all whitespace-nowrap ${
-            activeTab === tab.id
-              ? 'bg-purple-600 text-white'
-              : 'bg-slate-800/50 text-gray-400 hover:text-white hover:bg-slate-700'
-          }`}
-        >
-          <tab.icon className="w-4 h-4" />
-          {tab.label}
-          {tab.id === 'home' && notificationCount > 0 && (
-            <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-              {notificationCount}
-            </span>
-          )}
-        </button>
-      ))}
+    <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-2">
+      <div className="flex min-w-max gap-2">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onTabChange(tab.id as TabType)}
+              className={`relative inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-black transition ${
+                active
+                  ? 'bg-gradient-to-r from-fuchsia-600 to-violet-600 text-white shadow-[0_10px_30px_rgba(168,85,247,0.25)]'
+                  : 'text-white/45 hover:bg-white/[0.06] hover:text-white'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+              {tab.id === 'home' && notificationCount > 0 && (
+                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-black text-white">
+                  {notificationCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -789,7 +810,7 @@ function HomeTab({
   return (
     <div className="space-y-6">
       {/* Active Goals Preview */}
-      <div className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+      <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Target className="w-5 h-5 text-purple-400" />
@@ -817,7 +838,7 @@ function HomeTab({
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+      <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Activity className="w-5 h-5 text-blue-400" />
@@ -979,12 +1000,12 @@ function VaultTab({ vault, familyLevel }: { vault: FamilyVault | null | undefine
         </div>
       </div>
 
-      <div className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+      <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
         <h3 className="text-white font-semibold mb-3">Weekly Reward Cap</h3>
         <p className="text-gray-400 text-sm mb-4">
           Families can earn up to {weeklyCap.toLocaleString()} Troll Coins per week from goals and achievements.
         </p>
-        <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+        <div className="h-3 bg-white/10 rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full"
             style={{ width: `${Math.min(weeklyProgress, 100)}%` }}
@@ -1011,7 +1032,7 @@ function QuickActions({
   onInvite: () => void;
 }) {
   return (
-    <div className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
       <h3 className="text-white font-semibold mb-3">Quick Actions</h3>
       <div className="space-y-2">
         <ActionButton icon={MessageSquare} label="Family Chat" color="text-purple-400" onClick={onChat} />
@@ -1027,7 +1048,7 @@ function QuickActions({
 // Leaderboard Preview
 function LeaderboardPreview({ weeklyContribution }: { weeklyContribution: number }) {
   return (
-    <div className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
       <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
         <TrendingUp className="w-4 h-4 text-green-400" />
         Weekly Competition
@@ -1049,7 +1070,7 @@ function LeaderboardPreview({ weeklyContribution }: { weeklyContribution: number
 // Family Stats
 function FamilyStats({ legacyScore, reputation, xp }: { legacyScore: number; reputation: number; xp: number }) {
   return (
-    <div className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
       <h3 className="text-white font-semibold mb-3">Family Stats</h3>
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
@@ -1087,7 +1108,7 @@ function GoalCard({ goal, expanded = false }: { goal: FamilyGoal; expanded?: boo
   };
 
   return (
-    <div className="bg-slate-700/30 rounded-lg border border-white/5 p-3 hover:border-purple-500/30 transition-colors">
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:border-fuchsia-400/25 hover:bg-fuchsia-500/[0.04]">
       <div className="flex items-start justify-between mb-2">
         <div>
           <h4 className="text-white font-medium">{goal.title}</h4>
@@ -1105,7 +1126,7 @@ function GoalCard({ goal, expanded = false }: { goal: FamilyGoal; expanded?: boo
           <span>{goal.current_value.toLocaleString()} / {goal.target_value.toLocaleString()}</span>
           <span>{Math.round(progress)}%</span>
         </div>
-        <div className="h-2 bg-slate-600 rounded-full overflow-hidden">
+        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
             style={{ width: `${progress}%` }}
@@ -1138,7 +1159,7 @@ function AchievementCard({ achievement }: { achievement: FamilyAchievement }) {
   };
 
   return (
-    <div className="bg-slate-700/30 rounded-lg border border-white/5 p-4 hover:border-yellow-500/30 transition-colors">
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:border-amber-400/25 hover:bg-amber-500/[0.04]">
       <div className="flex items-start gap-3">
         <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${rarityGradients[achievement.rarity] || rarityGradients.common} flex items-center justify-center flex-shrink-0`}>
           {achievement.icon ? (
@@ -1383,7 +1404,7 @@ function ActionButton({
   return (
     <button 
       onClick={onClick}
-      className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-gray-300 hover:text-white transition-colors"
+      className="w-full flex items-center gap-3 p-3 rounded-lg bg-white/[0.045] hover:bg-white/[0.08] text-gray-300 hover:text-white transition-colors"
     >
       <Icon className={`w-4 h-4 ${color}`} />
       {label}
@@ -1394,7 +1415,7 @@ function ActionButton({
 // Stat Card
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="bg-slate-800/50 rounded-lg p-4">
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
       <p className="text-gray-400 text-sm">{label}</p>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
     </div>
@@ -1536,7 +1557,7 @@ function FamilyHomeSkeleton() {
         </div>
 
         {/* Heartbeat Skeleton */}
-        <div className="bg-slate-800/50 rounded-xl border border-white/10 p-4 mb-6">
+        <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)] mb-6">
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 bg-slate-700 rounded animate-pulse" />
             <div className="space-y-2">
@@ -1557,7 +1578,7 @@ function FamilyHomeSkeleton() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             {[...Array(2)].map((_, i) => (
-              <div key={i} className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+              <div key={i} className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
                 <div className="h-6 bg-slate-700 rounded w-32 mb-4 animate-pulse" />
                 <div className="space-y-3">
                   {[...Array(3)].map((_, j) => (
@@ -1569,7 +1590,7 @@ function FamilyHomeSkeleton() {
           </div>
           <div className="space-y-6">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-slate-800/50 rounded-xl border border-white/10 p-4">
+              <div key={i} className="rounded-[22px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
                 <div className="h-5 bg-slate-700 rounded w-24 mb-3 animate-pulse" />
                 <div className="space-y-2">
                   {[...Array(2)].map((_, j) => (

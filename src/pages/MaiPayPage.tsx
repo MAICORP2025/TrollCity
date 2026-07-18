@@ -101,10 +101,6 @@ export default function MaiPayPage() {
   const [cashoutReservedCoins, setCashoutReservedCoins] = useState(0);
   const [battleCrowns, setBattleCrowns] = useState(0);
 
-  // User level (for cashout timing rules)
-  const [userLevel, setUserLevel] = useState(1);
-  const [cashoutApproved, setCashoutApproved] = useState(false);
-
   // Crown redemption
   const [crownRedemptions, setCrownRedemptions] = useState<RedemptionRecord[]>([]);
   const [crownConvertAmount, setCrownConvertAmount] = useState('');
@@ -122,6 +118,9 @@ export default function MaiPayPage() {
   const [providerUsername, setProviderUsername] = useState('');
   const [submittingCashout, setSubmittingCashout] = useState(false);
   const [cashoutRequests, setCashoutRequests] = useState<CashoutRequest[]>([]);
+  const [isMaiPayPlus, setIsMaiPayPlus] = useState(false);
+  const [successfulCashoutsLast24Hours, setSuccessfulCashoutsLast24Hours] = useState(0);
+  const [nextCashoutAvailableAt, setNextCashoutAvailableAt] = useState<string | null>(null);
 
   // Transactions
   const [transactions, setTransactions] = useState<CoinTransaction[]>([]);
@@ -133,25 +132,19 @@ export default function MaiPayPage() {
   const eligibleCashoutCoins = Math.max(0, cashoutCoins - cashoutReservedCoins);
   const canConvertHype = hypeCoins > 0;
 
-  // Fee is 2.9% of the tier coins, deducted upfront from escrow balance
-  const feeForSelectedTier = selectedTier
-    ? Math.ceil(selectedTier.coins * 0.029)
-    : 0;
-  const totalRequiredForTier = selectedTier
-    ? selectedTier.coins + feeForSelectedTier
-    : 0;
-  // User must have enough escrow coins to cover BOTH the payout amount AND the fee
-  const canAffordTier = eligibleCashoutCoins >= totalRequiredForTier;
-  const canRequestCashout = selectedTier
-    ? canAffordTier && providerUsername.trim().length > 0 && cashoutApproved
-    : false;
+  const cashoutTiers = useMemo<CashoutTier[]>(
+    () =>
+      TIERS.map((tier) =>
+        ({ ...tier, coins: isMaiPayPlus ? tier.coins * 2 : tier.coins } as CashoutTier)
+      ),
+    [isMaiPayPlus]
+  );
 
-  // Level-based cashout frequency label
-  const cashoutFrequencyLabel = useMemo(() => {
-    if (userLevel >= 1000) return 'Every 30 minutes';
-    if (userLevel >= 500) return 'Every 24 hours';
-    return 'Fridays only (1AM-7PM MT)';
-  }, [userLevel]);
+  const cashoutLimit = isMaiPayPlus ? 20 : 10;
+
+  const canRequestCashout = selectedTier
+    ? eligibleCashoutCoins >= selectedTier.coins && providerUsername.trim().length > 0
+    : false;
 
   const filteredGiftedUsers = useMemo(() => {
     if (!giftedSearch.trim()) return giftedUsers;
@@ -172,7 +165,7 @@ export default function MaiPayPage() {
       // Load profile balances
       const { data: profileData } = await supabase
         .from('user_profiles')
-        .select('troll_coins, paid_coins, hype_coins, cashout_coins, cashout_reserved_coins, battle_crowns, paypal_email, cashapp_handle, venmo_handle, preferred_payout_method, cashout_approved')
+        .select('troll_coins, paid_coins, hype_coins, cashout_coins, cashout_reserved_coins, battle_crowns, paypal_email, cashapp_handle, venmo_handle, preferred_payout_method, mai_pay_plus')
         .eq('id', user.id)
         .single();
 
@@ -183,7 +176,7 @@ export default function MaiPayPage() {
         setCashoutCoins(profileData.cashout_coins ?? 0);
         setCashoutReservedCoins(profileData.cashout_reserved_coins ?? 0);
         setBattleCrowns(profileData.battle_crowns ?? 0);
-        setCashoutApproved(profileData.cashout_approved ?? false);
+        setIsMaiPayPlus(profileData.mai_pay_plus === true);
 
         // Pre-fill provider username
         const preferred = profileData.preferred_payout_method as PayoutMethod | null;
@@ -193,42 +186,6 @@ export default function MaiPayPage() {
         else if (profileData.venmo_handle) setProviderUsername(profileData.venmo_handle);
       }
 
-      // Load user level for cashout timing
-      const { data: statsData } = await supabase
-        .from('user_stats')
-        .select('level')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (statsData) {
-        setUserLevel(statsData.level ?? 1);
-      }
-
-      // Load crown redemptions
-      const { data: crownData } = await supabase
-        .from('crown_redemptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      setCrownRedemptions(crownData || []);
-
-      // Load cashout requests
-      const { data: cashoutData } = await supabase
-        .from('payout_requests')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      setCashoutRequests((cashoutData || []) as CashoutRequest[]);
-
-      // Load transactions
-      const { data: txData } = await supabase
-        .from('coin_transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setTransactions((txData || []) as CoinTransaction[]);
     } catch (err) {
       console.error('[MaiPay] Failed to load data:', err);
       toast.error('Failed to load MAI Pay data');
@@ -240,6 +197,49 @@ export default function MaiPayPage() {
   useEffect(() => {
     loadAllData();
   }, [loadAllData]);
+
+  // ── Rolling 24h cashout count ──────────────────────────────────────────
+  // Server-validated count of successful cashouts in the last 24h, used to
+  // drive the MAI Pay Plus / standard rolling-limit progress in FastPayProgram.
+  const loadCashoutLimit = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('payout_requests')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .in('status', ['approved', 'paid', 'completed'])
+        .gte('created_at', since)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const rows = (data || []) as { created_at: string }[];
+      setSuccessfulCashoutsLast24Hours(rows.length);
+
+      // Earliest successful cashout determines when a slot frees up (24h later).
+      const limit = isMaiPayPlus ? 20 : 10;
+      if (rows.length >= limit && rows[0]) {
+        setNextCashoutAvailableAt(
+          new Date(new Date(rows[0].created_at).getTime() + 24 * 60 * 60 * 1000).toISOString()
+        );
+      } else {
+        setNextCashoutAvailableAt(null);
+      }
+    } catch (err) {
+      console.error('[MaiPay] Failed to load cashout limit:', err);
+    }
+  }, [user?.id, isMaiPayPlus]);
+
+  useEffect(() => {
+    loadCashoutLimit();
+  }, [loadCashoutLimit]);
+
+  // Refresh the rolling limit after a successful cashout request.
+  const refreshCashoutLimit = useCallback(() => {
+    loadCashoutLimit();
+  }, [loadCashoutLimit]);
 
   // ── Gifted Users Loading ─────────────────────────────────────────────────
 
@@ -360,7 +360,7 @@ export default function MaiPayPage() {
 
     setSubmittingCashout(true);
     try {
-      // The RPC now handles fee deduction upfront from escrow balance
+      // The RPC now handles no-fee cashouts with a 10/24h rolling limit
       const { data, error } = await supabase.rpc('request_friday_cashout', {
         p_user_id: user?.id,
         p_coins_to_redeem: selectedTier.coins,
@@ -376,6 +376,7 @@ export default function MaiPayPage() {
       setSelectedTier(null);
       setProviderUsername('');
       await loadAllData();
+      refreshCashoutLimit();
       setActiveTab('requests');
     } catch (err: any) {
       toast.error(err.message || 'Failed to submit cashout request');
@@ -755,7 +756,11 @@ export default function MaiPayPage() {
         {/* ─── Cash Out Tab ─────────────────────────────────────────────── */}
         {activeTab === 'cashout' && (
           <>
-            <FastPayProgram onNavigateToCashout={() => setActiveTab('cashout')} />
+            <FastPayProgram
+              isMaiPayPlus={isMaiPayPlus}
+              successfulCashoutsLast24Hours={successfulCashoutsLast24Hours}
+              nextCashoutAvailableAt={nextCashoutAvailableAt}
+            />
 
             {/* Eligible Balance */}
             <div className="bg-gradient-to-br from-green-900/30 to-[#0E0A1A] rounded-xl border border-green-500/30 p-6">
@@ -767,45 +772,31 @@ export default function MaiPayPage() {
               <p className="text-xs text-gray-500 mt-1">From purchased coins (excludes gifted & bonus coins)</p>
             </div>
 
-            {/* Payout Tier Levels */}
-            <div className="bg-[#0E0A1A] rounded-xl border border-purple-500/20 p-6">
-              <h3 className="text-lg font-bold mb-4">Payout Tiers</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-2 w-2 rounded-full bg-cyan-400" />
-                    <span className="text-sm font-bold text-white">Level 1–499</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-1">Standard • Paid every Friday</p>
-                  <p className="text-xs text-gray-500">2.9% fee</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-2 w-2 rounded-full bg-yellow-400" />
-                    <span className="text-sm font-bold text-white">Level 500–999</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-1">Fast Pay • Any day • Within 24h</p>
-                  <p className="text-xs text-gray-500">2.9% fee</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-2 w-2 rounded-full bg-green-400" />
-                    <span className="text-sm font-bold text-white">Level 1000+</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-1">Instant • Every 60 Minutes • Priority</p>
-                  <p className="text-xs text-gray-500">2.9% fee</p>
-                </div>
+            {/* No Fees Notice */}
+            <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4 flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="text-sm font-bold text-green-300">No Cashout Fees</h3>
+                <p className="text-sm text-green-200/80">
+                  Troll City does not charge users to cash out their earnings. Select any tier and request up to {cashoutLimit} cashouts per rolling 24-hour period.{isMaiPayPlus ? ' MAI Pay Plus uses double coin requirements for the same cash payout.' : ''}
+                </p>
               </div>
             </div>
 
             {/* Cashout Tiers */}
             <div className="bg-[#0E0A1A] rounded-xl border border-purple-500/20 p-6">
-              <h3 className="text-lg font-bold mb-4">Select Cashout Tier</h3>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h3 className="text-lg font-bold">Select Cashout Tier</h3>
+                {isMaiPayPlus && (
+                  <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-300">
+                    MAI Pay Plus
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {TIERS.map((tier) => {
+                {cashoutTiers.map((tier) => {
                   const isEligible = eligibleCashoutCoins >= tier.coins;
                   const isSelected = selectedTier?.coins === tier.coins;
-                  const fee = Math.ceil(tier.coins * 0.029);
                   return (
                     <button
                       key={tier.coins}
@@ -824,7 +815,6 @@ export default function MaiPayPage() {
                         {isSelected && <CheckCircle className="w-5 h-5 text-green-400" />}
                       </div>
                       <div className="text-sm font-bold text-green-400">${tier.usd.toFixed(2)}</div>
-                      <div className="text-xs text-gray-500 mt-1">Fee: {fee.toLocaleString()} coins</div>
                       {tier.manualReview && (
                         <div className="text-xs text-amber-400 mt-1 font-semibold">* Manual Review</div>
                       )}
@@ -837,7 +827,7 @@ export default function MaiPayPage() {
             {/* Fee & Provider Selection */}
             {selectedTier && (
               <div className="bg-[#0E0A1A] rounded-xl border border-purple-500/20 p-6 space-y-5">
-                {/* Fee Summary */}
+                {/* Cashout Summary */}
                 <div className="bg-black/20 rounded-xl p-4">
                   <h4 className="font-bold text-white mb-3">Cashout Summary</h4>
                   <div className="space-y-2 text-sm">
@@ -845,29 +835,11 @@ export default function MaiPayPage() {
                       <span className="text-gray-400">Cashout Amount</span>
                       <span className="text-white font-mono">{selectedTier.coins.toLocaleString()} coins</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Processing Fee (2.9%)</span>
-                      <span className="text-red-400 font-mono">-{feeForSelectedTier.toLocaleString()} coins</span>
-                    </div>
                     <div className="flex justify-between pt-2 border-t border-purple-500/20">
                       <span className="text-white font-bold">You Receive</span>
                       <span className="text-green-400 font-bold">${selectedTier.usd.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Fee deducted from</span>
-                      <span className={`font-mono ${canAffordFee ? 'text-yellow-400' : 'text-red-400'}`}>
-                        Troll Coins ({trollCoins.toLocaleString()} available)
-                      </span>
-                    </div>
                   </div>
-                  {!canAffordFee && (
-                    <div className="mt-3 p-2 bg-red-900/20 border border-red-500/30 rounded-lg flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                      <p className="text-xs text-red-300">
-                        You need {feeForSelectedTier.toLocaleString()} Troll Coins to cover the fee. You have {trollCoins.toLocaleString()}.
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 {/* Payout Provider */}
@@ -930,10 +902,10 @@ export default function MaiPayPage() {
                       <Loader2 className="w-5 h-5 animate-spin" />
                       Submitting...
                     </>
-                  ) : !canAffordFee ? (
+                  ) : eligibleCashoutCoins < (selectedTier?.coins || 0) ? (
                     <>
                       <AlertCircle className="w-5 h-5" />
-                      Insufficient Coins for Fee
+                      Insufficient Coins
                     </>
                   ) : (
                     <>
@@ -984,7 +956,7 @@ export default function MaiPayPage() {
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Fee</p>
-                        <p className="font-mono text-red-400">{req.fee_coins?.toLocaleString() || '—'}</p>
+                        <p className="font-mono text-green-400">None</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Provider</p>

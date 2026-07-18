@@ -11,9 +11,9 @@
  * - Always allow critical channels (auth, arrests, presence)
  */
 
-const MAX_CONNECTIONS = 500;
-const WARN_THRESHOLD = 400;
-const BLOCK_THRESHOLD = 450;
+const MAX_CONNECTIONS = 675;
+const WARN_THRESHOLD = 540;
+const BLOCK_THRESHOLD = 650;
 
 // Critical channel patterns that are always allowed
 const CRITICAL_PATTERNS = [

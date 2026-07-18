@@ -10,7 +10,7 @@ Unify the cashout/payout system to use only the **Fast Pay / MAI Pay** flow (`pa
 ## New Rules
 
 ### Fee Structure
-- **2.9% fee** deducted **upfront** when cashout request is made
+- **0% fee** deducted **upfront** when cashout request is made
 - User must have enough escrow coins to cover **both** the payout amount AND the fee
 - Fee is reserved from `cashout_coins` alongside the payout amount
 
@@ -61,7 +61,7 @@ Unify the cashout/payout system to use only the **Fast Pay / MAI Pay** flow (`pa
 | `src/pages/admin/components/shared/CashoutRequestsList.tsx` | Uses `payout_requests` directly |
 | `src/pages/admin/components/shared/GiftCardFulfillmentList.tsx` | Rewritten for `payout_requests` |
 | `src/lib/payoutWindow.ts` | Deprecated; always returns true (backend handles gating) |
-| `src/config/coinConfig.ts` | Fixed fee to 2.9%; added level-based timing helpers |
+| `src/config/coinConfig.ts` | Fixed fee to 0%; added level-based timing helpers |
 | `src/lib/hooks/useCoins.ts` | `depositToCashout` is now a no-op (auto-deposit) |
 | `src/hooks/useAdminFinanceRealtime.ts` | Uses `payout_requests` |
 | `src/pages/CEOAssistantDashboard.tsx` | Uses `admin_process_payout` instead of `forward_payout_to_admin` |
@@ -154,7 +154,7 @@ Unify the cashout/payout system to use only the **Fast Pay / MAI Pay** flow (`pa
 - [ ] User with level 1-499 can only cashout on Friday 1AM-7PM MT
 - [ ] User with level 500-999 can cashout every 24 hours
 - [ ] User with level 1000+ can cashout every 60 minutes
-- [ ] Fee (2.9%) is deducted upfront from escrow balance
+- [ ] Fee (0%) is deducted upfront from escrow balance
 - [ ] User must have `cashout_approved = true` to cashout
 - [ ] ID verification required first time or after 30 days
 - [ ] Admin can approve/pay/reject via `admin_process_payout`

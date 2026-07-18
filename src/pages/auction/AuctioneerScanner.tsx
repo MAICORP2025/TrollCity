@@ -29,6 +29,7 @@ import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { generateUUID } from '@/lib/uuid'
 import { useIsMobile } from '@/hooks/useIsMobile'
+import { useZxingScanner } from '@/hooks/useZxingScanner'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ export default function AuctioneerScanner() {
   const [cameraReady, setCameraReady] = useState(false)
   const [flashOn, setFlashOn] = useState(false)
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
+  const [barcodeSupported, setBarcodeSupported] = useState<boolean>(true)
   const [lastScan, setLastScan] = useState<ScanResult | null>(null)
   const [scanHistory, setScanHistory] = useState<ScanResult[]>([])
   const [scanCount, setScanCount] = useState(0)
@@ -135,15 +137,22 @@ export default function AuctioneerScanner() {
   // ── Barcode Detection API support check ───────────────────────────────────
 
   useEffect(() => {
-    // Check if BarcodeDetector is available (Chrome on Android, Edge)
+    // Check if BarcodeDetector is available (Chrome on Android, Edge).
+    // When it is NOT supported (e.g. iOS Safari), we surface a clear notice
+    // and fall back to manual / HID scanner entry instead of failing silently.
     if ('BarcodeDetector' in window) {
       try {
         barcodeDetectorRef.current = new (window as any).BarcodeDetector({
           formats: ['qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'],
         })
+        setBarcodeSupported(true)
       } catch (err) {
         console.warn('[Scanner] BarcodeDetector init failed:', err)
+        setBarcodeSupported(false)
       }
+    } else {
+      console.warn('[Scanner] BarcodeDetector API not available in this browser')
+      setBarcodeSupported(false)
     }
   }, [])
 
@@ -279,6 +288,34 @@ export default function AuctioneerScanner() {
     animFrame = requestAnimationFrame(detectFrame)
     return () => cancelAnimationFrame(animFrame)
   }, [cameraActive, cameraReady, connectionState, session])
+
+  // ── Fallback decoder (ZXing) when the native BarcodeDetector is unavailable ──
+  // Runs only when the native API is not supported (e.g. iOS Safari) so iPhone
+  // camera scanning still works. Debounces like the native loop above.
+  useZxingScanner({
+    enabled: cameraActive && cameraReady && !barcodeSupported,
+    videoRef,
+    onDetect: (code, format) => {
+      const now = Date.now()
+      if (now - lastScanTimeRef.current < 2000) return
+      lastScanTimeRef.current = now
+
+      const result: ScanResult = {
+        id: generateUUID(),
+        barcode: code,
+        barcodeType: format,
+        timestamp: now,
+        synced: false,
+      }
+      setLastScan(result)
+      setScanHistory((prev) => [result, ...prev].slice(0, 50))
+      setScanCount((c) => c + 1)
+      if (connectionState === 'connected' && session) {
+        void sendScanToDesktop(result)
+      }
+      if (navigator.vibrate) navigator.vibrate(100)
+    },
+  })
 
   // ── Send scan to desktop via Supabase realtime ────────────────────────────
 
@@ -653,22 +690,28 @@ export default function AuctioneerScanner() {
 
             <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.3)_55%,rgba(0,0,0,0.72)_100%)]" />
 
-            <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center px-6">
-              <div className="w-full max-w-[360px]">
-                <div className="relative mx-auto aspect-[4/5] w-full max-w-[320px] rounded-[2rem] border border-white/15 bg-black/20 shadow-[0_0_0_9999px_rgba(0,0,0,0.32)] backdrop-blur-sm">
-                  <div className="absolute inset-3 rounded-[1.45rem] border border-cyan-300/30" />
-                  <div className="absolute inset-6 rounded-[1.2rem] border-[2px] border-cyan-400/90 shadow-[0_0_24px_rgba(34,211,238,0.25)]" />
-                  <div className="absolute left-5 top-5 h-8 w-8 rounded-tl-2xl border-l-2 border-t-2 border-cyan-400" />
-                  <div className="absolute right-5 top-5 h-8 w-8 rounded-tr-2xl border-r-2 border-t-2 border-cyan-400" />
-                  <div className="absolute bottom-5 left-5 h-8 w-8 rounded-bl-2xl border-b-2 border-l-2 border-cyan-400" />
-                  <div className="absolute bottom-5 right-5 h-8 w-8 rounded-br-2xl border-b-2 border-r-2 border-cyan-400" />
-                  <div className="absolute left-0 right-0 top-[50%] h-0.5 -translate-y-1/2 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse" />
+              <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center px-6">
+                <div className="w-full max-w-[440px]">
+                  {/* Wide horizontal barcode capture target */}
+                  <div className="relative mx-auto w-full max-w-[420px] rounded-[1.4rem] border border-white/15 bg-black/20 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] backdrop-blur-[2px]">
+                    <div className="relative mx-auto h-[150px] w-[88%] translate-y-[18px] rounded-xl border-[2px] border-cyan-400/90 shadow-[0_0_28px_rgba(34,211,238,0.3)]">
+                      {/* Corner brackets */}
+                      <span className="absolute left-2 top-2 h-7 w-7 rounded-tl-lg border-l-2 border-t-2 border-cyan-400" />
+                      <span className="absolute right-2 top-2 h-7 w-7 rounded-tr-lg border-r-2 border-t-2 border-cyan-400" />
+                      <span className="absolute bottom-2 left-2 h-7 w-7 rounded-bl-lg border-b-2 border-l-2 border-cyan-400" />
+                      <span className="absolute bottom-2 right-2 h-7 w-7 rounded-br-lg border-b-2 border-r-2 border-cyan-400" />
+                      {/* Thin scan line moving vertically inside the rectangle */}
+                      <span className="barcode-scanner-line absolute left-2 right-2 top-0 h-0.5 rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_12px_rgba(34,211,238,0.8)]" />
+                    </div>
+                    <p className="mx-auto pb-3 pt-[34px] text-center text-[11px] font-black uppercase tracking-[0.3em] text-cyan-100/90">
+                      Align barcode inside frame
+                    </p>
+                  </div>
+                  <p className="mt-4 text-center text-[11px] font-black uppercase tracking-[0.35em] text-cyan-100/90">
+                    Scanning…
+                  </p>
                 </div>
-                <p className="mt-4 text-center text-[11px] font-black uppercase tracking-[0.35em] text-cyan-100/90">
-                  Align the barcode inside the frame
-                </p>
               </div>
-            </div>
 
             <div className="absolute left-4 top-4 z-30 rounded-full border border-cyan-400/30 bg-black/55 px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-cyan-200 backdrop-blur-xl">
               {cameraReady ? 'Live Camera' : 'Starting Camera'}
@@ -931,11 +974,19 @@ export default function AuctioneerScanner() {
                   </div>
                 )}
 
-                {error && (
-                  <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-                    {error}
-                  </div>
-                )}
+            {error && (
+              <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-2 text-xs text-red-200">
+                {error}
+              </div>
+            )}
+
+            {!barcodeSupported && (
+              <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+                Native camera barcode detection isn’t available in this browser — using the
+                built-in decoder fallback (slightly slower). Manual entry and USB/Bluetooth HID
+                scanners also work.
+              </div>
+            )}
               </div>
             ) : (
               <div className="mt-4 text-center">

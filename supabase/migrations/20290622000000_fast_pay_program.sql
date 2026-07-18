@@ -255,7 +255,7 @@ BEGIN
     'cashoutsThisWeek', COALESCE(v_profile.fast_pay_cashouts_this_week, 0),
     'processingTime', CASE
       WHEN v_profile.fast_pay_tier = 'instant' THEN 'Instant'
-      WHEN v_profile.fast_pay_tier = 'fast_pay' THEN 'Within 24 hours'
+      WHEN v_profile.fast_pay_tier = 'fast_pay' THEN 'Within 5 Minutes'
       ELSE 'Every Friday'
     END
   );

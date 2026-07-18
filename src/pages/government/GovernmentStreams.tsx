@@ -183,6 +183,11 @@ export default function GovernmentStreams() {
           ...stream,
           streamChannel: stream.agora_channel,
           livekit_room_name: stream.livekit_room_name,
+          // Canonical LiveKit room name used by the broadcaster is
+          // `livekit_room_name` (falls back to the stream id). The watch modal
+          // reads `room_name`, so populate it here or audience playback connects
+          // to the wrong/empty room and never plays.
+          room_name: stream.livekit_room_name || stream.id,
           broadcaster: Array.isArray(stream.broadcaster)
             ? stream.broadcaster[0]
             : stream.broadcaster,

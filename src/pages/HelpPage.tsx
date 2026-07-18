@@ -35,7 +35,7 @@ const PAGE_GUIDE: Record<string, { label: string; icon: any; desc: string; roles
   '/church': { label: 'Church', icon: BookOpen, desc: 'Troll Church events and community.' },
   '/safety': { label: 'Safety', icon: Shield, desc: 'Safety guidelines, policies, and help.' },
   '/ktauto': { label: 'Cars', icon: Car, desc: 'KTAuto dealership and vehicles.' },
-  '/careers': { label: 'Careers', icon: Briefcase, desc: 'Jobs, applications, and career tools.' },
+  '/jobs': { label: 'Jobs', icon: Briefcase, desc: 'Jobs, applications, and career tools.' },
   '/troll-wheel': { label: 'Troll Wheel', icon: Shuffle, desc: 'Spin the wheel for rewards.' },
   '/match': { label: 'Troll Match', icon: Heart, desc: 'Match with other users.' },
   '/government': { label: 'Government', icon: Landmark, desc: 'Government feeds, elections, and officials.', roles: ['admin', 'secretary', 'officer', 'president'] },
@@ -85,7 +85,7 @@ export default function HelpPage() {
     { title: 'General', paths: ['/home', '/search', '/explore', '/notifications', '/profile', '/safety'] },
     { title: 'Media & Social', paths: ['/broadcast/setup', '/treelz', '/podcast', '/utromail', '/family/home', '/match'] },
     { title: 'Economy', paths: ['/store', '/mai-pay', '/leaderboard', '/marketplace', '/inventory', '/auctions', '/troll-wheel'] },
-    { title: 'Games & Learning', paths: ['/hytrogaming', '/academy', '/ktauto', '/careers'] },
+    { title: 'Games & Learning', paths: ['/hytrogaming', '/academy', '/ktauto', '/jobs'] },
     { title: 'City & Government', paths: ['/neighborhood-map', '/church', '/troll-court', '/government'] },
     { title: 'Staff & Admin', paths: ['/admin', '/admin/chat-moderation', '/admin/jail-management', '/admin/reports-queue', '/admin/stream-monitor', '/officer/dashboard', '/lead-officer', '/secretary', '/president'] },
   ]

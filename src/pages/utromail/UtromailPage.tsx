@@ -2,10 +2,10 @@
 // UTROMAIL - MESSENGER PAGE (Conversation List + Chat Panel)
 // ============================================================
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useAuthStore } from '@/lib/store';
-import { supabase } from '@/lib/supabase';
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useAuthStore } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
 import {
   Search,
   PenSquare,
@@ -16,13 +16,12 @@ import {
   Loader2,
   Phone,
   Video,
-  X,
   CheckCheck,
   Check,
   Ban,
   Flag,
   Trash2,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   getThreads,
   getMessageRequests,
@@ -30,30 +29,38 @@ import {
   getThreadMessages,
   sendMessage,
   markThreadAsRead,
-  markAsRead,
   deleteThread,
   getUtromailAccount,
   blockUser,
   reportMessage,
-} from '@/services/utromailService';
-import type { UtromailThread, UtromailRequest, UtromailMessage } from '@/types/mail';
-import UtromailCompose from './UtromailCompose';
-import { toast } from 'sonner';
+} from "@/services/utromailService";
+import type {
+  UtromailThread,
+  UtromailRequest,
+  UtromailMessage,
+} from "@/types/mail";
+import UtromailCompose from "./UtromailCompose";
+import { toast } from "sonner";
 
-const glass = 'border border-white/10 bg-[#070b19]/70 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]';
+const glass =
+  "border border-white/10 bg-[#070b19]/70 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]";
 
 function formatTime(dateStr: string): string {
   const d = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - d.getTime();
-  if (diff < 60000) return 'Just now';
+  if (diff < 60000) return "Just now";
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  if (diff < 86400000)
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function formatMessageTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(dateStr).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function getOtherParticipant(thread: UtromailThread, userId: string) {
@@ -61,8 +68,9 @@ function getOtherParticipant(thread: UtromailThread, userId: string) {
   if (thread.other_user_id) {
     return {
       user_id: thread.other_user_id,
-      username: thread.other_username || 'Unknown',
-      display_name: thread.other_display_name || thread.other_username || 'Unknown',
+      username: thread.other_username || "Unknown",
+      display_name:
+        thread.other_display_name || thread.other_username || "Unknown",
       avatar_url: thread.other_avatar_url || null,
       utromail_address: thread.other_utromail_address || null,
     };
@@ -72,12 +80,12 @@ function getOtherParticipant(thread: UtromailThread, userId: string) {
   const members = thread.members || [];
   if (members.length === 0) return null;
   const seen = new Set<string>();
-  const uniqueMembers = members.filter(m => {
+  const uniqueMembers = members.filter((m) => {
     if (seen.has(m.user_id)) return false;
     seen.add(m.user_id);
     return true;
   });
-  const other = uniqueMembers.find(m => m.user_id !== userId);
+  const other = uniqueMembers.find((m) => m.user_id !== userId);
   return other || uniqueMembers[0] || null;
 }
 
@@ -88,22 +96,32 @@ export default function UtromailPage() {
   const { user, profile } = useAuthStore();
   const [threads, setThreads] = useState<UtromailThread[]>([]);
   const [requests, setRequests] = useState<UtromailRequest[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [showCompose, setShowCompose] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [userMailAddress, setUserMailAddress] = useState<string>('');
-  const [contextMenu, setContextMenu] = useState<{ threadId: string; otherUserId: string; otherUsername: string; x: number; y: number } | null>(null);
+  const [userMailAddress, setUserMailAddress] = useState<string>("");
+  const [contextMenu, setContextMenu] = useState<{
+    threadId: string;
+    otherUserId: string;
+    otherUsername: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<UtromailMessage[]>([]);
   const [msgLoading, setMsgLoading] = useState(false);
-  const [replyText, setReplyText] = useState('');
+  const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -114,7 +132,7 @@ export default function UtromailPage() {
   // Fetch user's utromail address
   useEffect(() => {
     if (user?.id) {
-      getUtromailAccount(user.id).then(account => {
+      getUtromailAccount(user.id).then((account) => {
         if (account) {
           setUserMailAddress(account.mail_address);
         }
@@ -122,7 +140,8 @@ export default function UtromailPage() {
     }
   }, [user?.id]);
 
-  const senderMail = userMailAddress || `${profile?.username || 'user'}@utromail`;
+  const senderMail =
+    userMailAddress || `${profile?.username || "user"}@utromail`;
 
   const fetchThreadsRef = useRef<() => Promise<void>>();
 
@@ -130,7 +149,7 @@ export default function UtromailPage() {
     if (!user?.id) return;
     try {
       const [threadsData, requestsData, countData] = await Promise.all([
-        getThreads(user.id, 'inbox'),
+        getThreads(user.id, "inbox"),
         getMessageRequests(user.id),
         getUnreadCount(user.id),
       ]);
@@ -138,7 +157,7 @@ export default function UtromailPage() {
       setRequests(requestsData);
       setUnreadCount(countData);
     } catch (err) {
-      console.error('Error fetching threads:', err);
+      console.error("Error fetching threads:", err);
     } finally {
       setLoading(false);
     }
@@ -163,19 +182,21 @@ export default function UtromailPage() {
       try {
         const msgs = await getThreadMessages(activeConversationId);
         // Fetch read status for these messages from utromail_read_status
-        const msgIds = msgs.map(m => m.id);
+        const msgIds = msgs.map((m) => m.id);
         let readMap: Record<string, boolean> = {};
         if (msgIds.length > 0) {
           const { data: readRows } = await supabase
-            .from('utromail_read_status')
-            .select('message_id')
-            .in('message_id', msgIds)
-            .eq('user_id', user.id);
+            .from("utromail_read_status")
+            .select("message_id")
+            .in("message_id", msgIds)
+            .eq("user_id", user.id);
           if (readRows) {
-            readMap = Object.fromEntries(readRows.map(r => [r.message_id, true]));
+            readMap = Object.fromEntries(
+              readRows.map((r) => [r.message_id, true]),
+            );
           }
         }
-        const msgsWithRead = msgs.map(m => ({
+        const msgsWithRead = msgs.map((m) => ({
           ...m,
           is_read: !!readMap[m.id] || !!m.is_read,
         }));
@@ -183,21 +204,21 @@ export default function UtromailPage() {
         await markThreadAsRead(activeConversationId, user.id);
         // Mark unread messages from other user as read
         const unreadFromOther = msgs.filter(
-          m => m.sender_id !== user.id && !readMap[m.id]
+          (m) => m.sender_id !== user.id && !readMap[m.id],
         );
         if (unreadFromOther.length > 0) {
-          await supabase.from('utromail_read_status').upsert(
-            unreadFromOther.map(m => ({
+          await supabase.from("utromail_read_status").upsert(
+            unreadFromOther.map((m) => ({
               message_id: m.id,
               user_id: user.id,
               read_at: new Date().toISOString(),
             })),
-            { onConflict: 'message_id,user_id' }
+            { onConflict: "message_id,user_id" },
           );
         }
         fetchThreads();
       } catch (err) {
-        console.error('Error fetching messages:', err);
+        console.error("Error fetching messages:", err);
       } finally {
         setMsgLoading(false);
       }
@@ -207,7 +228,7 @@ export default function UtromailPage() {
   }, [activeConversationId, user?.id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   // Polling fallback: refresh active conversation messages every 30 seconds (reduced frequency)
@@ -217,14 +238,14 @@ export default function UtromailPage() {
     const pollInterval = setInterval(async () => {
       try {
         const msgs = await getThreadMessages(activeConversationId);
-        setMessages(prev => {
+        setMessages((prev) => {
           if (msgs.length !== prev.length) return msgs;
-          const prevIds = new Set(prev.map(m => m.id));
-          const hasNew = msgs.some(m => !prevIds.has(m.id));
+          const prevIds = new Set(prev.map((m) => m.id));
+          const hasNew = msgs.some((m) => !prevIds.has(m.id));
           return hasNew ? msgs : prev;
         });
       } catch (err) {
-        console.error('Poll fetch error:', err);
+        console.error("Poll fetch error:", err);
       }
     }, 30000);
 
@@ -244,24 +265,30 @@ export default function UtromailPage() {
 
   const handleSend = async () => {
     if (!replyText.trim() || !activeConversationId || !user) return;
-    const activeThread = threads.find(t => t.id === activeConversationId);
+    const activeThread = threads.find((t) => t.id === activeConversationId);
     if (!activeThread) return;
 
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg) return;
 
     const body = replyText.trim();
-    setReplyText('');
+    setReplyText("");
     setSending(true);
     try {
-      const recipientId = lastMsg.sender_id === user.id ? lastMsg.recipient_id! : lastMsg.sender_id;
-      const recipientMail = lastMsg.sender_id === user.id ? lastMsg.recipient_mail_address! : lastMsg.sender_mail_address;
+      const recipientId =
+        lastMsg.sender_id === user.id
+          ? lastMsg.recipient_id!
+          : lastMsg.sender_id;
+      const recipientMail =
+        lastMsg.sender_id === user.id
+          ? lastMsg.recipient_mail_address!
+          : lastMsg.sender_mail_address;
       const sentMsg = await sendMessage({
         senderId: user.id,
         senderMail,
         recipientId,
         recipientMail,
-        subject: 'Direct Message',
+        subject: "Direct Message",
         body,
         parentMessageId: lastMsg.id,
       });
@@ -273,7 +300,7 @@ export default function UtromailPage() {
       }
       fetchThreadsRef.current?.();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to send');
+      toast.error(err.message || "Failed to send");
       // Restore the text so user doesn't lose it
       setReplyText(body);
     } finally {
@@ -283,7 +310,7 @@ export default function UtromailPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -306,11 +333,11 @@ export default function UtromailPage() {
     const notifChannel = supabase
       .channel(`utromail-notifs:${user.id}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'utromail_notifications',
+          event: "INSERT",
+          schema: "public",
+          table: "utromail_notifications",
           filter: `user_id=eq.${user.id}`,
         },
         async (payload) => {
@@ -322,19 +349,26 @@ export default function UtromailPage() {
           if (notif?.message_id && notif.message_id !== activeConversationId) {
             try {
               const { data: msg } = await supabase
-                .from('utromail_messages')
-                .select('thread_id, sender_id')
-                .eq('id', notif.message_id)
+                .from("utromail_messages")
+                .select("thread_id, sender_id")
+                .eq("id", notif.message_id)
                 .maybeSingle();
-              if (msg && msg.sender_id !== user.id && msg.thread_id !== activeConversationId) {
+              if (
+                msg &&
+                msg.sender_id !== user.id &&
+                msg.thread_id !== activeConversationId
+              ) {
                 setActiveConversationId(msg.thread_id);
                 setShowMobileChat(true);
               }
             } catch (err) {
-              console.error('[UtromailPage] Error auto-opening conversation:', err);
+              console.error(
+                "[UtromailPage] Error auto-opening conversation:",
+                err,
+              );
             }
           }
-        }
+        },
       )
       .subscribe();
 
@@ -352,11 +386,11 @@ export default function UtromailPage() {
     const msgChannel = supabase
       .channel(`utromail-thread:${activeConversationId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'utromail_messages',
+          event: "INSERT",
+          schema: "public",
+          table: "utromail_messages",
           filter: `thread_id=eq.${activeConversationId}`,
         },
         async (payload) => {
@@ -370,9 +404,9 @@ export default function UtromailPage() {
 
             // Fetch full message with all fields (realtime payload may not include all columns)
             const { data: fullMsg } = await supabase
-              .from('utromail_messages')
-              .select('*')
-              .eq('id', newMsg.id)
+              .from("utromail_messages")
+              .select("*")
+              .eq("id", newMsg.id)
               .maybeSingle();
 
             const msgData = fullMsg || newMsg;
@@ -380,8 +414,8 @@ export default function UtromailPage() {
             // Skip if this message was just sent by us and is already tracked
             if (isOwnMessage && sentMessageIdsRef.current.has(msgData.id)) {
               // Still add it to the messages list if not already there
-              setMessages(prev => {
-                if (prev.some(m => m.id === msgData.id)) return prev;
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === msgData.id)) return prev;
                 const mappedMsg: UtromailMessage = {
                   id: msgData.id,
                   thread_id: msgData.thread_id,
@@ -399,7 +433,8 @@ export default function UtromailPage() {
                   sent_at: msgData.sent_at,
                   created_at: msgData.created_at,
                   updated_at: msgData.updated_at,
-                  sender_name: profile?.display_name || profile?.username || null,
+                  sender_name:
+                    profile?.display_name || profile?.username || null,
                   sender_username: profile?.username || null,
                   sender_avatar: profile?.avatar_url || null,
                   is_read: false,
@@ -414,9 +449,9 @@ export default function UtromailPage() {
             if (isOwnMessage) return;
 
             const { data: senderProfile } = await supabase
-              .from('user_profiles')
-              .select('username, display_name, avatar_url')
-              .eq('id', msgData.sender_id)
+              .from("user_profiles")
+              .select("username, display_name, avatar_url")
+              .eq("id", msgData.sender_id)
               .maybeSingle();
 
             const mappedMsg: UtromailMessage = {
@@ -436,23 +471,29 @@ export default function UtromailPage() {
               sent_at: msgData.sent_at,
               created_at: msgData.created_at,
               updated_at: msgData.updated_at,
-              sender_name: (senderProfile as any)?.display_name || (senderProfile as any)?.username || null,
+              sender_name:
+                (senderProfile as any)?.display_name ||
+                (senderProfile as any)?.username ||
+                null,
               sender_username: (senderProfile as any)?.username || null,
               sender_avatar: (senderProfile as any)?.avatar_url || null,
               is_read: false,
             };
 
-            setMessages(prev => {
-              if (prev.some(m => m.id === mappedMsg.id)) return prev;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === mappedMsg.id)) return prev;
               return [...prev, mappedMsg];
             });
 
             await markThreadAsRead(activeConversationId, user.id);
             fetchThreadsRef.current?.();
           } catch (err) {
-            console.error('[UtromailPage] Realtime message handler error:', err);
+            console.error(
+              "[UtromailPage] Realtime message handler error:",
+              err,
+            );
           }
-        }
+        },
       )
       .subscribe();
 
@@ -466,16 +507,19 @@ export default function UtromailPage() {
   // Typing indicator: broadcast when user types
   const broadcastTyping = () => {
     if (!activeConversationId || !user?.id) return;
-    const thread = threads.find(t => t.id === activeConversationId);
+    const thread = threads.find((t) => t.id === activeConversationId);
     if (!thread?.other_user_id) return;
-    const typingCh = supabase.channel(`utromail-typing:${activeConversationId}`, {
-      config: { broadcast: { self: false } },
-    });
+    const typingCh = supabase.channel(
+      `utromail-typing:${activeConversationId}`,
+      {
+        config: { broadcast: { self: false } },
+      },
+    );
     typingCh.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
+      if (status === "SUBSCRIBED") {
         await typingCh.send({
-          type: 'broadcast',
-          event: 'typing',
+          type: "broadcast",
+          event: "typing",
           payload: { userId: user.id, isTyping: true },
         });
       }
@@ -485,20 +529,29 @@ export default function UtromailPage() {
   // Typing indicator: listen for other user typing
   useEffect(() => {
     if (!activeConversationId || !user?.id) return;
-    const thread = threads.find(t => t.id === activeConversationId);
+    const thread = threads.find((t) => t.id === activeConversationId);
     const otherUserId = thread?.other_user_id;
     if (!otherUserId) return;
 
-    const typingChannel = supabase.channel(`utromail-typing:${activeConversationId}`, {
-      config: { broadcast: { self: false } },
-    });
+    const typingChannel = supabase.channel(
+      `utromail-typing:${activeConversationId}`,
+      {
+        config: { broadcast: { self: false } },
+      },
+    );
 
-    typingChannel.on('broadcast', { event: 'typing' }, (payload: any) => {
-      const { userId: typingUserId, isTyping } = payload.payload || {};
-      if (typingUserId && typingUserId !== user.id && typingUserId === otherUserId) {
-        setIsOtherTyping(!!isTyping);
-      }
-    }).subscribe();
+    typingChannel
+      .on("broadcast", { event: "typing" }, (payload: any) => {
+        const { userId: typingUserId, isTyping } = payload.payload || {};
+        if (
+          typingUserId &&
+          typingUserId !== user.id &&
+          typingUserId === otherUserId
+        ) {
+          setIsOtherTyping(!!isTyping);
+        }
+      })
+      .subscribe();
 
     return () => {
       if (typingChannel) {
@@ -523,7 +576,7 @@ export default function UtromailPage() {
 
     // Find unread messages from the other user
     const unreadFromOther = messages.filter(
-      m => m.sender_id !== user.id && !m.is_read
+      (m) => m.sender_id !== user.id && !m.is_read,
     );
 
     if (unreadFromOther.length === 0) return;
@@ -531,24 +584,24 @@ export default function UtromailPage() {
     // Mark them as read using utromail_read_status (no realtime trigger on utromail_messages)
     const markRead = async () => {
       try {
-        const readStatusRows = unreadFromOther.map(m => ({
+        const readStatusRows = unreadFromOther.map((m) => ({
           message_id: m.id,
           user_id: user.id,
           read_at: new Date().toISOString(),
         }));
-        await supabase.from('utromail_read_status').upsert(readStatusRows, {
-          onConflict: 'message_id,user_id',
+        await supabase.from("utromail_read_status").upsert(readStatusRows, {
+          onConflict: "message_id,user_id",
         });
         // Update local state to reflect read status
-        const readIds = new Set(unreadFromOther.map(m => m.id));
-        setMessages(prev =>
-          prev.map(m => readIds.has(m.id) ? { ...m, is_read: true } : m)
+        const readIds = new Set(unreadFromOther.map((m) => m.id));
+        setMessages((prev) =>
+          prev.map((m) => (readIds.has(m.id) ? { ...m, is_read: true } : m)),
         );
         // Also update thread read status in sidebar
         await markThreadAsRead(activeConversationId, user.id);
         fetchThreadsRef.current?.();
       } catch (err) {
-        console.error('[UtromailPage] Error marking messages as read:', err);
+        console.error("[UtromailPage] Error marking messages as read:", err);
       }
     };
     markRead();
@@ -557,19 +610,25 @@ export default function UtromailPage() {
   const deleteThreads = async (threadIds: string[]) => {
     if (!user?.id || threadIds.length === 0) return;
 
-    const confirmed = window.confirm(`Delete ${threadIds.length} conversation${threadIds.length === 1 ? '' : 's'}?`);
+    const confirmed = window.confirm(
+      `Delete ${threadIds.length} conversation${threadIds.length === 1 ? "" : "s"}?`,
+    );
     if (!confirmed) return;
 
     try {
-      await Promise.all(threadIds.map(threadId => deleteThread(threadId, user.id)));
-      toast.success('Conversation deleted');
-      setThreads(prev => prev.filter(thread => !threadIds.includes(thread.id)));
+      await Promise.all(
+        threadIds.map((threadId) => deleteThread(threadId, user.id)),
+      );
+      toast.success("Conversation deleted");
+      setThreads((prev) =>
+        prev.filter((thread) => !threadIds.includes(thread.id)),
+      );
       if (activeConversationId && threadIds.includes(activeConversationId)) {
         closeMobileChat();
       }
       fetchThreadsRef.current?.();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to delete');
+      toast.error(err?.message || "Failed to delete");
     }
   };
 
@@ -578,24 +637,31 @@ export default function UtromailPage() {
     void deleteThreads([activeConversationId]);
   };
 
-  const activeThread = threads.find(t => t.id === activeConversationId);
+  const activeThread = threads.find((t) => t.id === activeConversationId);
 
-  const filteredThreads = threads.filter(t => {
+  const filteredThreads = threads.filter((t) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    const lastMsgPreview = t.last_message?.body?.toLowerCase() || '';
-    const participant = getOtherParticipant(t, user?.id || '');
-    const nameMatch = participant?.display_name?.toLowerCase().includes(q) ||
-                      participant?.username?.toLowerCase().includes(q) ||
-                      false;
-    return lastMsgPreview.includes(q) || nameMatch || t.subject?.toLowerCase().includes(q);
+    const lastMsgPreview = t.last_message?.body?.toLowerCase() || "";
+    const participant = getOtherParticipant(t, user?.id || "");
+    const nameMatch =
+      participant?.display_name?.toLowerCase().includes(q) ||
+      participant?.username?.toLowerCase().includes(q) ||
+      false;
+    return (
+      lastMsgPreview.includes(q) ||
+      nameMatch ||
+      t.subject?.toLowerCase().includes(q)
+    );
   });
 
-  const filteredThreadIds = filteredThreads.map(thread => thread.id);
-  const allFilteredThreadsSelected = filteredThreadIds.length > 0 && filteredThreadIds.every(threadId => selectedThreadIds.has(threadId));
+  const filteredThreadIds = filteredThreads.map((thread) => thread.id);
+  const allFilteredThreadsSelected =
+    filteredThreadIds.length > 0 &&
+    filteredThreadIds.every((threadId) => selectedThreadIds.has(threadId));
 
   const toggleThreadSelection = (threadId: string) => {
-    setSelectedThreadIds(prev => {
+    setSelectedThreadIds((prev) => {
       const next = new Set(prev);
       if (next.has(threadId)) {
         next.delete(threadId);
@@ -607,8 +673,11 @@ export default function UtromailPage() {
   };
 
   const toggleAllFilteredThreads = () => {
-    setSelectedThreadIds(prev => {
-      if (prev.size === filteredThreadIds.length && allFilteredThreadsSelected) {
+    setSelectedThreadIds((prev) => {
+      if (
+        prev.size === filteredThreadIds.length &&
+        allFilteredThreadsSelected
+      ) {
         return new Set();
       }
       return new Set(filteredThreadIds);
@@ -626,8 +695,12 @@ export default function UtromailPage() {
   };
 
   // Auto-open compose when navigating from marketplace or other external links
-  const recipientId = searchParams.get('recipientId') || searchParams.get('recipient') || searchParams.get('user') || undefined;
-  const subject = searchParams.get('subject') || undefined;
+  const recipientId =
+    searchParams.get("recipientId") ||
+    searchParams.get("recipient") ||
+    searchParams.get("user") ||
+    undefined;
+  const subject = searchParams.get("subject") || undefined;
   const autoCompose = !!(recipientId && threadId === undefined);
 
   // Full-screen compose
@@ -638,415 +711,782 @@ export default function UtromailPage() {
     return (
       <UtromailCompose
         replyTo={replyTo}
-        onSent={() => { setShowCompose(false); setRefreshKey(k => k + 1); }}
-        onCancel={() => { setShowCompose(false); navigate('/utromail'); }}
+        onSent={() => {
+          setShowCompose(false);
+          setRefreshKey((k) => k + 1);
+        }}
+        onCancel={() => {
+          setShowCompose(false);
+          navigate("/utromail");
+        }}
       />
     );
   }
 
+  const activeParticipant = activeThread
+    ? getOtherParticipant(activeThread, user?.id || "")
+    : null;
+
   const chatPanel = activeConversationId ? (
-    <div className="flex h-full flex-col">
-      {/* Chat Header */}
-      <div className={`${glass} flex items-center justify-between border-b border-white/10 px-4 py-3`}>
-        <div className="flex items-center gap-3">
+    <div className="flex h-full min-h-0 flex-col bg-[#050713]">
+      {/* Conversation header */}
+      <header className="relative z-20 flex min-h-[76px] items-center justify-between border-b border-fuchsia-500/15 bg-[#080a18]/95 px-3 py-3 backdrop-blur-2xl sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
           <button
+            type="button"
             onClick={closeMobileChat}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-fuchsia-400/40 hover:bg-fuchsia-500/10 hover:text-white lg:hidden"
+            aria-label="Back to conversations"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
+
           {activeThread && (
             <>
-              <div className="relative">
+              <div className="relative shrink-0">
+                <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-fuchsia-500 via-purple-500 to-lime-400 opacity-80 blur-[2px]" />
                 {activeThread.other_avatar_url ? (
-                  <img src={activeThread.other_avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
+                  <img
+                    src={activeThread.other_avatar_url}
+                    alt=""
+                    className="relative h-12 w-12 rounded-full border-2 border-[#080a18] object-cover"
+                  />
                 ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-black text-white">
-                    {(activeThread.other_username || '?')[0].toUpperCase()}
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#080a18] bg-gradient-to-br from-fuchsia-500 to-purple-700 text-base font-black text-white">
+                    {(activeThread.other_username || "?")[0].toUpperCase()}
                   </div>
                 )}
+                <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[3px] border-[#080a18] bg-lime-400" />
               </div>
-              <div>
-                <p className="text-sm font-bold text-white">
-                  {activeThread.other_username || 'Unknown'}
-                </p>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="truncate text-sm font-black tracking-wide text-white sm:text-base">
+                    {activeThread.other_display_name ||
+                      activeThread.other_username ||
+                      "Unknown"}
+                  </h2>
+                  <span className="hidden rounded-full border border-fuchsia-400/25 bg-fuchsia-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-fuchsia-300 sm:inline-flex">
+                    City member
+                  </span>
+                </div>
                 {isOtherTyping ? (
-                  <p className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
-                    <span className="inline-flex gap-0.5">
-                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '0ms' }} />
-                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '150ms' }} />
-                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-emerald-400" style={{ animationDelay: '300ms' }} />
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[11px] font-bold text-lime-400">
+                    <span className="inline-flex gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-lime-400" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-lime-400 [animation-delay:120ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-lime-400 [animation-delay:240ms]" />
                     </span>
-                    typing…
+                    typing now
                   </p>
                 ) : (
-                  <p className="text-[10px] text-slate-500">{activeThread.other_utromail_address || 'UTroMail'}</p>
+                  <p className="truncate text-[11px] text-slate-500">
+                    {activeThread.other_utromail_address ||
+                      "Active in Troll City"}
+                  </p>
                 )}
               </div>
             </>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <button className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white">
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-lime-400/40 hover:bg-lime-400/10 hover:text-lime-300"
+            aria-label="Start voice call"
+          >
             <Phone className="h-4 w-4" />
           </button>
-          <button className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white">
+          <button
+            type="button"
+            className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-fuchsia-400/40 hover:bg-fuchsia-500/10 hover:text-fuchsia-300"
+            aria-label="Start video call"
+          >
             <Video className="h-4 w-4" />
           </button>
           <button
+            type="button"
             onClick={handleDeleteConversation}
-            className="rounded-lg p-2 text-slate-400 hover:bg-red-500/20 hover:text-red-400"
+            className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-400 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
+            aria-label="Delete conversation"
           >
-            <X className="h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto bg-gradient-to-b from-[#050810] to-[#070b19] p-4">
-        {msgLoading ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {messages.map((msg, idx) => {
-              const isOwn = msg.sender_id === user?.id;
-              const showAvatar = !isOwn && (idx === 0 || messages[idx - 1].sender_id !== msg.sender_id);
-              const isLast = idx === messages.length - 1 || messages[idx + 1].sender_id !== msg.sender_id;
+      {/* Message stage */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_5%,rgba(168,85,247,0.13),transparent_32%),radial-gradient(circle_at_80%_80%,rgba(132,204,22,0.06),transparent_28%),linear-gradient(180deg,#060816_0%,#04050d_100%)]" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.035] [background-image:linear-gradient(rgba(255,255,255,.45)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.45)_1px,transparent_1px)] [background-size:32px_32px]" />
 
-              return (
-                <div key={msg.id} className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
-                  {!isOwn && (
-                    <div className="w-8 shrink-0">
-                      {showAvatar && (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-black text-white">
-                          {(msg.sender_name || '?')[0].toUpperCase()}
+        <div className="relative h-full overflow-y-auto px-3 py-5 sm:px-6 sm:py-7">
+          {msgLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-7 w-7 animate-spin text-fuchsia-400" />
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+                  Loading street chat
+                </span>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-center">
+              <div className="max-w-sm rounded-3xl border border-white/10 bg-white/[0.035] p-8 backdrop-blur-xl">
+                <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl border border-fuchsia-400/25 bg-fuchsia-500/10 shadow-[0_0_35px_rgba(217,70,239,0.12)]">
+                  <Send className="h-7 w-7 text-fuchsia-300" />
+                </div>
+                <h3 className="mt-5 text-lg font-black text-white">
+                  Start the conversation
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-400">
+                  Send the first message and build your city connection.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto flex w-full max-w-4xl flex-col gap-1.5">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-white/5" />
+                <span className="rounded-full border border-white/10 bg-[#0b0d1d]/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  Today
+                </span>
+                <div className="h-px flex-1 bg-gradient-to-l from-transparent via-white/10 to-white/5" />
+              </div>
+
+              {messages.map((msg, idx) => {
+                const isOwn = msg.sender_id === user?.id;
+                const previous = messages[idx - 1];
+                const next = messages[idx + 1];
+                const startsGroup =
+                  !previous || previous.sender_id !== msg.sender_id;
+                const endsGroup = !next || next.sender_id !== msg.sender_id;
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex items-end gap-2.5 ${isOwn ? "justify-end" : "justify-start"} ${startsGroup && idx > 0 ? "mt-4" : ""}`}
+                  >
+                    {!isOwn && (
+                      <div className="w-9 shrink-0 self-end">
+                        {endsGroup &&
+                          (msg.sender_avatar ? (
+                            <img
+                              src={msg.sender_avatar}
+                              alt=""
+                              className="h-9 w-9 rounded-full border border-fuchsia-400/25 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-500 to-purple-700 text-xs font-black text-white">
+                              {(msg.sender_name ||
+                                msg.sender_username ||
+                                "?")[0].toUpperCase()}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    <div
+                      className={`flex max-w-[82%] flex-col sm:max-w-[72%] ${isOwn ? "items-end" : "items-start"}`}
+                    >
+                      {startsGroup && !isOwn && (
+                        <span className="mb-1.5 ml-1 text-[10px] font-black uppercase tracking-[0.14em] text-fuchsia-300/80">
+                          {msg.sender_name ||
+                            msg.sender_username ||
+                            activeThread?.other_username ||
+                            "City member"}
+                        </span>
+                      )}
+
+                      <div
+                        className={`relative px-4 py-3 text-sm leading-6 shadow-xl ${
+                          isOwn
+                            ? `border border-fuchsia-400/35 bg-gradient-to-br from-fuchsia-600/90 to-purple-700/90 text-white shadow-fuchsia-950/30 ${startsGroup ? "rounded-t-2xl" : "rounded-t-lg"} ${endsGroup ? "rounded-bl-2xl rounded-br-md" : "rounded-b-lg"}`
+                            : `border border-white/10 bg-[#111426]/95 text-slate-100 shadow-black/30 ${startsGroup ? "rounded-t-2xl" : "rounded-t-lg"} ${endsGroup ? "rounded-br-2xl rounded-bl-md" : "rounded-b-lg"}`
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words">
+                          {msg.body}
+                        </p>
+                      </div>
+
+                      {endsGroup && (
+                        <div
+                          className={`mt-1.5 flex items-center gap-1.5 px-1 text-[10px] text-slate-600 ${isOwn ? "justify-end" : "justify-start"}`}
+                        >
+                          <span>{formatMessageTime(msg.sent_at)}</span>
+                          {isOwn &&
+                            (msg.is_read ? (
+                              <CheckCheck
+                                className="h-3.5 w-3.5 text-lime-400"
+                                aria-label="Read"
+                              />
+                            ) : (
+                              <Check
+                                className="h-3.5 w-3.5 text-slate-500"
+                                aria-label="Sent"
+                              />
+                            ))}
                         </div>
                       )}
                     </div>
-                  )}
-                  <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'}`}>
-                    <div
-                      className={`rounded-2xl px-4 py-2.5 ${
-                        isOwn
-                          ? 'rounded-br-md bg-emerald-500/20 text-white'
-                          : 'rounded-bl-md bg-white/5 text-white'
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.body}</p>
-                    </div>
-                    {isLast && (
-                      <p className={`mt-1 flex items-center gap-1 text-[9px] text-slate-500 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                        <span>{formatMessageTime(msg.sent_at)}</span>
-                        {isOwn && msg.is_read && (
-                          <CheckCheck className="inline h-3 w-3 text-emerald-400" title="Read" />
-                        )}
-                        {isOwn && !msg.is_read && (
-                          <Check className="inline h-3 w-3 text-slate-500" title="Sent" />
-                        )}
-                      </p>
-                    )}
+                  </div>
+                );
+              })}
+
+              {isOtherTyping && (
+                <div className="mt-3 flex items-end gap-2.5">
+                  <div className="h-9 w-9" />
+                  <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-white/10 bg-[#111426] px-4 py-3">
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-fuchsia-400" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-fuchsia-400 [animation-delay:120ms]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-fuchsia-400 [animation-delay:240ms]" />
                   </div>
                 </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Input Area */}
-      <div className={`${glass} border-t border-white/10 p-3`}>
-        <div className="flex items-end gap-2">
-          <button className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white">
+      {/* Composer */}
+      <footer className="relative z-20 border-t border-fuchsia-500/15 bg-[#080a18]/95 p-3 backdrop-blur-2xl sm:p-4">
+        <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-2 shadow-[0_14px_40px_rgba(0,0,0,0.28)] focus-within:border-fuchsia-400/40 focus-within:shadow-[0_0_28px_rgba(217,70,239,0.10)]">
+          <button
+            type="button"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-fuchsia-500/10 hover:text-fuchsia-300"
+            aria-label="Attach image"
+          >
             <Image className="h-5 w-5" />
           </button>
-          <button className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white">
+          <button
+            type="button"
+            className="hidden h-10 w-10 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-lime-400/10 hover:text-lime-300 sm:grid"
+            aria-label="Add emoji"
+          >
             <Smile className="h-5 w-5" />
           </button>
           <textarea
             ref={inputRef}
             value={replyText}
-            onChange={e => {
-              setReplyText(e.target.value);
-              // Broadcast typing indicator
-              if (e.target.value.length > 0) broadcastTyping();
+            onChange={(event) => {
+              setReplyText(event.target.value);
+              if (event.target.value.length > 0) broadcastTyping();
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
+            placeholder={`Message ${activeThread?.other_username || "city member"}...`}
             rows={1}
-            className="max-h-32 min-h-[40px] flex-1 resize-none rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-sm text-white outline-none placeholder-slate-500 focus:border-emerald-400/50"
+            className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2.5 text-sm leading-5 text-white outline-none placeholder:text-slate-600"
           />
           <button
+            type="button"
             onClick={handleSend}
             disabled={sending || !replyText.trim()}
-            className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 p-2.5 text-white transition hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-fuchsia-300/30 bg-gradient-to-br from-fuchsia-500 to-purple-700 text-white shadow-[0_0_22px_rgba(217,70,239,0.28)] transition hover:scale-[1.04] hover:shadow-[0_0_30px_rgba(217,70,239,0.4)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+            aria-label="Send message"
           >
-            {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+            {sending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
           </button>
         </div>
-      </div>
+        <p className="mt-2 hidden text-center text-[9px] font-bold uppercase tracking-[0.18em] text-slate-700 sm:block">
+          Enter to send · Shift + Enter for a new line
+        </p>
+      </footer>
     </div>
   ) : (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-600/20">
-        <Send className="h-8 w-8 text-emerald-400" />
+    <div className="relative flex h-full min-h-[520px] items-center justify-center overflow-hidden bg-[#050713] p-6 text-center">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(217,70,239,0.16),transparent_25%),radial-gradient(circle_at_50%_60%,rgba(132,204,22,0.06),transparent_30%)]" />
+      <div className="relative max-w-md">
+        <div className="mx-auto grid h-24 w-24 place-items-center rounded-[28px] border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-500/15 to-purple-700/10 shadow-[0_0_60px_rgba(217,70,239,0.15)]">
+          <Send className="h-10 w-10 text-fuchsia-300" />
+        </div>
+        <p className="mt-6 text-[10px] font-black uppercase tracking-[0.3em] text-lime-400">
+          Troll City communication grid
+        </p>
+        <h2 className="mt-3 text-3xl font-black tracking-tight text-white">
+          Your city conversations live here.
+        </h2>
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">
+          Choose a street on the left or start a new message to connect with
+          someone across the city.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowCompose(true)}
+          className="mt-7 inline-flex items-center gap-2 rounded-xl border border-lime-400/35 bg-lime-400/10 px-5 py-3 text-sm font-black text-lime-300 transition hover:bg-lime-400/15"
+        >
+          <PenSquare className="h-4 w-4" />
+          Start a new message
+        </button>
       </div>
-      <h2 className="text-lg font-bold text-white">Your Messages</h2>
-      <p className="mt-1 max-w-xs text-sm text-slate-400">
-        Select a conversation to start chatting
-      </p>
     </div>
   );
 
   return (
-    <div className="mx-auto flex h-full max-w-7xl flex-col p-4 lg:p-4">
-      <div className="flex flex-1 gap-4 min-h-0">
-        {/* Left Sidebar - Conversation List */}
-        <div className={`${glass} flex w-full shrink-0 flex-col rounded-2xl lg:w-[350px] min-h-0 ${showMobileChat ? 'hidden lg:flex' : 'flex'}`}>
-          {/* Sidebar Header */}
-          <div className="flex items-center justify-between border-b border-white/10 p-4">
-            <h1 className="text-lg font-black text-white">Messages</h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  setSelectMode(value => !value);
-                  setSelectedThreadIds(new Set());
-                }}
-                className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
-              >
-                {selectMode ? 'Done' : 'Select'}
-              </button>
-              <button
-                onClick={() => setShowCompose(true)}
-                className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 p-2 text-white shadow-[0_0_15px_rgba(16,185,129,0.25)] transition hover:scale-105"
-              >
-                <PenSquare className="h-4 w-4" />
-              </button>
+    <div className="relative h-full min-h-0 overflow-hidden bg-[#03040a] text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_5%,rgba(132,204,22,0.08),transparent_22%),radial-gradient(circle_at_80%_0%,rgba(217,70,239,0.12),transparent_27%)]" />
+
+      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[1680px] flex-col px-2 py-2 sm:px-3 sm:py-3 lg:px-4">
+        {/* Page title strip */}
+        <div className="mb-3 hidden shrink-0 items-end justify-between px-1 lg:flex">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-black italic tracking-tight text-white">
+                CITY <span className="text-lime-400">MESSAGES</span>
+              </h1>
+              <span className="rounded-full border border-fuchsia-400/25 bg-fuchsia-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-300">
+                Live network
+              </span>
             </div>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              Talk trash. Build up. Rule the city.
+            </p>
           </div>
-
-          {/* Search */}
-          <div className="px-4 py-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search conversations..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/[0.05] py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-400/50"
-              />
-            </div>
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span>
+              <strong className="text-white">{threads.length}</strong> streets
+            </span>
+            <span className="h-4 w-px bg-white/10" />
+            <span>
+              <strong className="text-lime-400">{unreadCount}</strong> unread
+            </span>
           </div>
+        </div>
 
-          {selectMode && (
-            <div className="px-4 pb-3">
-              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-2">
-                <span className="text-xs font-bold text-red-200">{selectedThreadIds.size} selected</span>
-                <button
-                  onClick={toggleAllFilteredThreads}
-                  className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-white/15"
-                >
-                  {allFilteredThreadsSelected ? 'Unselect All' : 'Select All'}
-                </button>
-                <button
-                  onClick={handleDeleteFilteredThreads}
-                  disabled={selectedThreadIds.size === 0}
-                  className="rounded-lg bg-red-500 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Delete Selected
-                </button>
-                <button
-                  onClick={handleDeleteAllFilteredThreads}
-                  disabled={filteredThreadIds.length === 0}
-                  className="rounded-lg bg-red-500/20 px-2.5 py-1.5 text-xs font-bold text-red-200 transition hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Delete All
-                </button>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[330px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_280px]">
+          {/* Conversation rail */}
+          <aside
+            className={`${glass} min-h-0 overflow-hidden rounded-2xl border-white/[0.08] bg-[#070913]/95 ${showMobileChat ? "hidden lg:flex" : "flex"} flex-col`}
+          >
+            <div className="border-b border-white/[0.08] p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-lime-400">
+                    My streets
+                  </p>
+                  <h2 className="mt-1 text-xl font-black text-white">
+                    Messages
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectMode((value) => !value);
+                      setSelectedThreadIds(new Set());
+                    }}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-black text-slate-300 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+                  >
+                    {selectMode ? "Done" : "Select"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompose(true)}
+                    className="grid h-10 w-10 place-items-center rounded-xl border border-lime-400/35 bg-lime-400/10 text-lime-300 transition hover:bg-lime-400/20"
+                    aria-label="New message"
+                  >
+                    <PenSquare className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative mt-4">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="search"
+                  placeholder="Search streets..."
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-white/10 bg-[#03050d]/80 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-fuchsia-400/40 focus:ring-2 focus:ring-fuchsia-500/10"
+                />
               </div>
             </div>
-          )}
 
-          {/* Message Requests Banner */}
-          {requests.length > 0 && (
-            <div className="px-4 pb-2">
-              <button
-                onClick={() => navigate('/utromail/requests')}
-                className="flex w-full items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-left transition hover:bg-amber-500/20"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 text-sm font-black text-amber-300">
-                  !
+            {selectMode && (
+              <div className="border-b border-red-500/15 bg-red-500/[0.06] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-black text-red-200">
+                    {selectedThreadIds.size} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleAllFilteredThreads}
+                    className="text-[10px] font-black uppercase tracking-wider text-slate-300 hover:text-white"
+                  >
+                    {allFilteredThreadsSelected ? "Clear all" : "Select all"}
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <p className="text-xs font-bold text-amber-300">Message Requests</p>
-                  <p className="text-[10px] text-amber-400/70">{requests.length} pending</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDeleteFilteredThreads}
+                    disabled={selectedThreadIds.size === 0}
+                    className="rounded-lg bg-red-500 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-white disabled:opacity-40"
+                  >
+                    Delete selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllFilteredThreads}
+                    disabled={filteredThreadIds.length === 0}
+                    className="rounded-lg border border-red-400/25 bg-red-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-red-200 disabled:opacity-40"
+                  >
+                    Delete all
+                  </button>
                 </div>
-                <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white">
-                  {requests.length}
-                </span>
-              </button>
-            </div>
-          )}
-
-          {/* Conversation List */}
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
               </div>
-            ) : filteredThreads.length === 0 ? (
-              <div className="p-8 text-center">
-                <p className="text-sm text-slate-400">No conversations yet</p>
+            )}
+
+            {requests.length > 0 && (
+              <div className="border-b border-white/[0.06] p-3">
                 <button
-                  onClick={() => setShowCompose(true)}
-                  className="mt-3 text-xs font-bold text-emerald-400 hover:text-emerald-300"
+                  type="button"
+                  onClick={() => navigate("/utromail/requests")}
+                  className="flex w-full items-center gap-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.07] p-3 text-left transition hover:bg-amber-400/10"
                 >
-                  Start a new conversation
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-400/15 text-sm font-black text-amber-300">
+                    !
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-black text-amber-200">
+                      Message requests
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-amber-300/60">
+                      Review people outside your streets
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-black text-[#251400]">
+                    {requests.length}
+                  </span>
                 </button>
               </div>
-            ) : (
-              <div className="space-y-0.5 p-2">
-                {filteredThreads.map(thread => {
-                  const lastMsg = thread.last_message;
-                  const isActive = activeConversationId === thread.id;
-                  const isUnread = thread.unread_count ? thread.unread_count > 0 : false;
-                  // Use flat fields from getThreads
-                  const displayName = thread.other_username || 'Unknown';
-                  const avatarUrl = thread.other_avatar_url;
-                  const avatarLetter = displayName !== 'Unknown' ? displayName[0].toUpperCase() : '?';
-                  return (
-                    <button
-                      key={thread.id}
-                      onClick={() => {
-                        if (selectMode) {
-                          toggleThreadSelection(thread.id);
-                          return;
-                        }
-                        openConversation(thread.id);
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        if (thread.other_user_id) {
-                          setContextMenu({
-                            threadId: thread.id,
-                            otherUserId: thread.other_user_id,
-                            otherUsername: thread.other_username || 'Unknown',
-                            x: e.clientX,
-                            y: e.clientY,
-                          });
-                        }
-                      }}
-                      onTouchStart={(e) => {
-                        // Long-press detection for mobile
-                        const touch = e.touches[0];
-                        const timer = setTimeout(() => {
+            )}
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              {loading ? (
+                <div className="flex h-40 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-fuchsia-400" />
+                </div>
+              ) : filteredThreads.length === 0 ? (
+                <div className="px-6 py-14 text-center">
+                  <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.04]">
+                    <Search className="h-5 w-5 text-slate-600" />
+                  </div>
+                  <p className="mt-4 text-sm font-bold text-slate-300">
+                    No streets found
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompose(true)}
+                    className="mt-2 text-xs font-black text-lime-400 hover:text-lime-300"
+                  >
+                    Start a conversation
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {filteredThreads.map((thread) => {
+                    const lastMsg = thread.last_message;
+                    const isActive = activeConversationId === thread.id;
+                    const isUnread = (thread.unread_count || 0) > 0;
+                    const displayName =
+                      thread.other_display_name ||
+                      thread.other_username ||
+                      "Unknown";
+                    const avatarUrl = thread.other_avatar_url;
+                    const avatarLetter =
+                      displayName !== "Unknown"
+                        ? displayName[0].toUpperCase()
+                        : "?";
+
+                    return (
+                      <button
+                        key={thread.id}
+                        type="button"
+                        onClick={() => {
+                          if (selectMode) {
+                            toggleThreadSelection(thread.id);
+                            return;
+                          }
+                          openConversation(thread.id);
+                        }}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
                           if (thread.other_user_id) {
                             setContextMenu({
                               threadId: thread.id,
                               otherUserId: thread.other_user_id,
-                              otherUsername: thread.other_username || 'Unknown',
-                              x: touch.clientX,
-                              y: touch.clientY,
+                              otherUsername: thread.other_username || "Unknown",
+                              x: event.clientX,
+                              y: event.clientY,
                             });
                           }
-                        }, 600);
-                        const cleanup = () => clearTimeout(timer);
-                        e.currentTarget.addEventListener('touchend', cleanup, { once: true });
-                        e.currentTarget.addEventListener('touchmove', cleanup, { once: true });
-                      }}
-                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
-                        selectedThreadIds.has(thread.id)
-                          ? 'border-red-400/50 bg-red-500/10'
-                          : isActive
-                            ? 'border-emerald-400/30 bg-emerald-500/15'
-                            : 'border-transparent hover:bg-white/[0.04]'
-                      }`}
-                    >
-                      {selectMode && (
-                        <button
-                          type="button"
-                          onClick={event => {
-                            event.stopPropagation();
-                            toggleThreadSelection(thread.id);
-                          }}
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
-                            selectedThreadIds.has(thread.id)
-                              ? 'border-red-400 bg-red-500 text-white'
-                              : 'border-white/20 text-transparent hover:border-white/50'
-                          }`}
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                      )}
-                      <div className="shrink-0">
-                        {avatarUrl ? (
-                          <img src={avatarUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-black text-white">
-                            {avatarLetter}
-                          </div>
+                        }}
+                        onTouchStart={(event) => {
+                          const touch = event.touches[0];
+                          const timer = setTimeout(() => {
+                            if (thread.other_user_id) {
+                              setContextMenu({
+                                threadId: thread.id,
+                                otherUserId: thread.other_user_id,
+                                otherUsername:
+                                  thread.other_username || "Unknown",
+                                x: touch.clientX,
+                                y: touch.clientY,
+                              });
+                            }
+                          }, 600);
+                          const cleanup = () => clearTimeout(timer);
+                          event.currentTarget.addEventListener(
+                            "touchend",
+                            cleanup,
+                            { once: true },
+                          );
+                          event.currentTarget.addEventListener(
+                            "touchmove",
+                            cleanup,
+                            { once: true },
+                          );
+                        }}
+                        className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition ${
+                          selectedThreadIds.has(thread.id)
+                            ? "border-red-400/45 bg-red-500/10"
+                            : isActive
+                              ? "border-fuchsia-400/45 bg-gradient-to-r from-fuchsia-500/15 to-purple-500/[0.06] shadow-[0_0_22px_rgba(217,70,239,0.08)]"
+                              : "border-transparent hover:border-white/10 hover:bg-white/[0.035]"
+                        }`}
+                      >
+                        {isActive && (
+                          <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.8)]" />
                         )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <p className={`truncate text-sm ${isUnread ? 'font-black text-white' : 'font-bold text-slate-200'}`}>
-                            {displayName}
-                          </p>
-                          <span className="shrink-0 text-[10px] text-slate-500">
-                            {thread.last_message_at ? formatTime(thread.last_message_at) : ''}
+                        {selectMode && (
+                          <span
+                            className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${selectedThreadIds.has(thread.id) ? "border-red-400 bg-red-500 text-white" : "border-white/20 text-transparent"}`}
+                          >
+                            <Check className="h-4 w-4" />
                           </span>
-                        </div>
-                        <div className="mt-0.5 flex items-center justify-between">
-                          <p className="truncate text-xs text-slate-400">
-                            {lastMsg?.body || 'No messages yet'}
-                          </p>
-                          {isUnread && (
-                            <span className="ml-2 shrink-0 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-black text-white">
-                              {thread.unread_count}
-                            </span>
+                        )}
+                        <div className="relative shrink-0">
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt=""
+                              className={`h-12 w-12 rounded-full object-cover ${isActive ? "ring-2 ring-fuchsia-400 ring-offset-2 ring-offset-[#080a16]" : "ring-1 ring-white/10"}`}
+                            />
+                          ) : (
+                            <div
+                              className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-700 text-sm font-black text-white ${isActive ? "ring-2 ring-fuchsia-400 ring-offset-2 ring-offset-[#080a16]" : ""}`}
+                            >
+                              {avatarLetter}
+                            </div>
                           )}
+                          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#080a16] bg-lime-400" />
                         </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p
+                              className={`truncate text-sm ${isUnread ? "font-black text-white" : "font-bold text-slate-200"}`}
+                            >
+                              {displayName}
+                            </p>
+                            <span
+                              className={`shrink-0 text-[10px] ${isUnread ? "font-bold text-fuchsia-300" : "text-slate-600"}`}
+                            >
+                              {thread.last_message_at
+                                ? formatTime(thread.last_message_at)
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <p
+                              className={`min-w-0 flex-1 truncate text-xs ${isUnread ? "font-semibold text-slate-200" : "text-slate-500"}`}
+                            >
+                              {lastMsg?.body || "No messages yet"}
+                            </p>
+                            {isUnread && (
+                              <span className="grid min-w-5 place-items-center rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-[9px] font-black text-white shadow-[0_0_12px_rgba(217,70,239,0.35)]">
+                                {thread.unread_count}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-white/[0.08] p-3">
+              <button
+                type="button"
+                onClick={() => setShowCompose(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-fuchsia-200 transition hover:bg-fuchsia-500/15"
+              >
+                <PenSquare className="h-4 w-4" /> New message
+              </button>
+            </div>
+          </aside>
+
+          {/* Main chat */}
+          <main
+            className={`${glass} min-h-0 overflow-hidden rounded-2xl border-white/[0.08] bg-[#050713]/95 ${showMobileChat ? "flex" : "hidden lg:flex"} flex-col`}
+          >
+            {chatPanel}
+          </main>
+
+          {/* Profile rail */}
+          <aside
+            className={`${glass} hidden min-h-0 overflow-hidden rounded-2xl border-white/[0.08] bg-[#070913]/95 xl:flex xl:flex-col`}
+          >
+            {activeThread && activeParticipant ? (
+              <>
+                <div className="relative overflow-hidden border-b border-white/[0.08] px-5 pb-6 pt-7 text-center">
+                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(217,70,239,0.22),transparent_45%)]" />
+                  <div className="relative mx-auto w-fit">
+                    <div className="absolute -inset-2 rounded-full bg-gradient-to-br from-fuchsia-500 via-purple-500 to-lime-400 opacity-70 blur" />
+                    {activeThread.other_avatar_url ? (
+                      <img
+                        src={activeThread.other_avatar_url}
+                        alt=""
+                        className="relative h-24 w-24 rounded-full border-[3px] border-[#090b18] object-cover"
+                      />
+                    ) : (
+                      <div className="relative flex h-24 w-24 items-center justify-center rounded-full border-[3px] border-[#090b18] bg-gradient-to-br from-fuchsia-500 to-purple-700 text-3xl font-black text-white">
+                        {(activeParticipant.display_name ||
+                          activeParticipant.username ||
+                          "?")[0].toUpperCase()}
                       </div>
-                    </button>
-                  );
-                })}
+                    )}
+                    <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-4 border-[#090b18] bg-lime-400" />
+                  </div>
+                  <h3 className="relative mt-5 truncate text-xl font-black text-white">
+                    {activeParticipant.display_name ||
+                      activeParticipant.username}
+                  </h3>
+                  <p className="relative mt-1 truncate text-xs text-fuchsia-300">
+                    @{activeParticipant.username}
+                  </p>
+                  <span className="relative mt-4 inline-flex rounded-full border border-lime-400/25 bg-lime-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-lime-300">
+                    Active in the city
+                  </span>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-lime-400">
+                      Connection
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs text-slate-500">Status</span>
+                        <span className="text-xs font-bold text-white">
+                          Online
+                        </span>
+                      </div>
+                      <div className="h-px bg-white/[0.06]" />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs text-slate-500">Mail</span>
+                        <span className="max-w-[150px] truncate text-xs font-bold text-fuchsia-300">
+                          {activeParticipant.utromail_address || "UTroMail"}
+                        </span>
+                      </div>
+                      <div className="h-px bg-white/[0.06]" />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs text-slate-500">Messages</span>
+                        <span className="text-xs font-bold text-white">
+                          {messages.length}
+                        </span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="mt-4 rounded-2xl border border-fuchsia-400/15 bg-fuchsia-500/[0.045] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fuchsia-300">
+                      Quick actions
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        className="flex flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-xs font-bold text-slate-300 transition hover:border-lime-400/30 hover:text-lime-300"
+                      >
+                        <Phone className="h-4 w-4" />
+                        Call
+                      </button>
+                      <button
+                        type="button"
+                        className="flex flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] p-3 text-xs font-bold text-slate-300 transition hover:border-fuchsia-400/30 hover:text-fuchsia-300"
+                      >
+                        <Video className="h-4 w-4" />
+                        Video
+                      </button>
+                    </div>
+                  </section>
+                </div>
+
+                <div className="border-t border-white/[0.08] p-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/profile/${activeParticipant.username}`)
+                    }
+                    className="w-full rounded-xl border border-lime-400/35 bg-lime-400/10 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-lime-300 transition hover:bg-lime-400/15"
+                  >
+                    View full profile
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex h-full items-center justify-center p-6 text-center">
+                <div>
+                  <p className="text-sm font-black text-white">City profile</p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Open a conversation to see connection details.
+                  </p>
+                </div>
               </div>
             )}
-          </div>
+          </aside>
         </div>
-
-        {/* Right Chat Panel */}
-        <div className={`${glass} flex flex-1 flex-col overflow-hidden rounded-2xl min-h-0 ${showMobileChat ? 'flex' : 'hidden lg:flex'}`}>
-          {chatPanel}
-        </div>
-        {/* Mobile Chat Overlay - full screen on mobile PWA */}
-        {showMobileChat && (
-          <div className={`${glass} fixed inset-0 z-50 flex flex-col overflow-hidden rounded-none border-none lg:hidden`}>
-            {chatPanel}
-          </div>
-        )}
       </div>
 
-      {/* Thread Context Menu Modal */}
+      {/* Mobile chat overlay */}
+      {showMobileChat && (
+        <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#050713] lg:hidden">
+          {chatPanel}
+        </div>
+      )}
+
+      {/* Thread context menu */}
       {contextMenu && (
         <>
           <div
-            className="fixed inset-0 z-[999]"
+            className="fixed inset-0 z-[999] bg-black/20"
             onClick={() => setContextMenu(null)}
           />
           <div
-            className="fixed z-[1000] min-w-[200px] rounded-xl border border-white/10 bg-[#0d1117] py-1 shadow-2xl"
+            className="fixed z-[1000] min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0d19]/98 py-1 shadow-[0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl"
             style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 220),
-              top: Math.min(contextMenu.y, window.innerHeight - 200),
+              left: Math.min(contextMenu.x, window.innerWidth - 240),
+              top: Math.min(contextMenu.y, window.innerHeight - 210),
             }}
           >
-            <div className="border-b border-white/10 px-4 py-2">
-              <p className="text-xs font-bold text-slate-400">Thread with {contextMenu.otherUsername}</p>
+            <div className="border-b border-white/[0.08] px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Street with
+              </p>
+              <p className="mt-1 truncate text-sm font-black text-white">
+                {contextMenu.otherUsername}
+              </p>
             </div>
             <button
+              type="button"
               onClick={async () => {
                 try {
                   await blockUser(user!.id, contextMenu.otherUserId);
@@ -1054,36 +1494,40 @@ export default function UtromailPage() {
                   setContextMenu(null);
                   fetchThreadsRef.current?.();
                 } catch (err: any) {
-                  toast.error(err.message || 'Failed to block user');
+                  toast.error(err.message || "Failed to block user");
                 }
               }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/10"
             >
-              <Ban className="h-4 w-4" />
-              Block User
+              <Ban className="h-4 w-4" /> Block user
             </button>
             <button
+              type="button"
               onClick={async () => {
-                const reason = prompt('Report reason:');
+                const reason = prompt("Report reason:");
                 if (!reason?.trim()) return;
                 try {
-                  await reportMessage(contextMenu.otherUserId, contextMenu.threadId, reason.trim());
-                  toast.success('Report submitted');
+                  await reportMessage(
+                    contextMenu.otherUserId,
+                    contextMenu.threadId,
+                    reason.trim(),
+                  );
+                  toast.success("Report submitted");
                   setContextMenu(null);
                 } catch (err: any) {
-                  toast.error(err.message || 'Failed to submit report');
+                  toast.error(err.message || "Failed to submit report");
                 }
               }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-amber-400 transition hover:bg-amber-500/10"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-amber-300 transition hover:bg-amber-500/10"
             >
-              <Flag className="h-4 w-4" />
-              Report Thread
+              <Flag className="h-4 w-4" /> Report thread
             </button>
             <button
+              type="button"
               onClick={async () => {
                 try {
                   await deleteThread(contextMenu.threadId, user!.id);
-                  toast.success('Thread removed from inbox');
+                  toast.success("Thread removed from inbox");
                   setContextMenu(null);
                   if (activeConversationId === contextMenu.threadId) {
                     setActiveConversationId(null);
@@ -1091,13 +1535,12 @@ export default function UtromailPage() {
                   }
                   fetchThreadsRef.current?.();
                 } catch (err: any) {
-                  toast.error(err.message || 'Failed to remove thread');
+                  toast.error(err.message || "Failed to remove thread");
                 }
               }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-300 transition hover:bg-white/[0.05]"
             >
-              <Trash2 className="h-4 w-4" />
-              Remove from Inbox
+              <Trash2 className="h-4 w-4" /> Remove from inbox
             </button>
           </div>
         </>

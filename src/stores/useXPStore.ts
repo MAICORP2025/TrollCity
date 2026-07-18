@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '../supabaseClient'
 import { useAuthStore } from '../lib/store'
+import type { UserProfile } from '../lib/supabase'
 import { grantLevelPerksForUser } from '../lib/levelPerkSystem'
 
 interface XPState {
@@ -36,7 +37,7 @@ export const useXPStore = create<XPState>((set) => {
       xp: totalXp ?? auth.profile.xp ?? 0,
       total_xp: totalXp ?? auth.profile.total_xp,
       next_level_xp: nextLevelXp ?? auth.profile.next_level_xp,
-    })
+    } as UserProfile)
   }
 
   const _computeXpState = (data: {

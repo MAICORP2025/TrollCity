@@ -9,7 +9,7 @@ This file summarizes the changes made in the latest launch-readiness pass, inclu
 - `supabase/migrations/20280430000011_new_user_cashout_promo_enforcement.sql`
   - Enforces the new-user first cashout promo.
   - Applies only to users created on or after 2026-05-01 21:00 UTC.
-  - Adds the 2.9% cashout fee to Visa redemptions.
+  - Adds the 0%cashout fee to Visa redemptions.
   - Revokes anonymous function execution for cashout RPCs.
 
 - `supabase/migrations/20280430000012_court_dockets_auth_hard_delete_and_extend.sql`
@@ -19,7 +19,7 @@ This file summarizes the changes made in the latest launch-readiness pass, inclu
   - Grants access to authenticated users and staff roles where appropriate.
 
 - `supabase/migrations/20280430000013_paypal_payout_coin_fee.sql`
-  - Adds the 2.9% coin fee to PayPal payout handling.
+  - Adds the 0%coin fee to PayPal payout handling.
   - Keeps payout/cashout logic server-side.
   - Revokes anonymous execution.
 
@@ -166,7 +166,7 @@ This file summarizes the changes made in the latest launch-readiness pass, inclu
   - Deletes docket entries through hard-delete RPC.
 
 - `src/pages/PayoutRequest.tsx`
-  - Shows and enforces 2.9% payout fee in the frontend.
+  - Shows and enforces 0%payout fee in the frontend.
 
 ## Intentionally Left As Separate Feature Tracks
 

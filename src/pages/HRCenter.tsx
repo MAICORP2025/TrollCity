@@ -170,7 +170,7 @@ export default function HRCenter() {
               <div className="rounded-3xl border border-amber-300/20 bg-amber-500/5 p-5">
                 <h4 className="text-sm font-bold text-amber-100">Get Started</h4>
                 <p className="mt-1 text-xs text-amber-200/80">
-                  Apply for a role through the Careers page or the Applications tab. Once approved, you will gain access
+                  Apply for a role through the Jobs page or the Applications tab. Once approved, you will gain access
                   to clock-in, payroll, time off, and other HR features.
                 </p>
               </div>

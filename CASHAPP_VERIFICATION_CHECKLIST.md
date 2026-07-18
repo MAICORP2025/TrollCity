@@ -249,7 +249,7 @@ Complete end-to-end system where:
 8. Confirm in modal
 9. Open Cash App on phone
 10. Send payment with note included
-11. Admin will verify and approve within 24 hours
+11. Admin will verify and approve Within 5 Minutes
 12. Coins appear when approved ✅
 
 ### For Admin to Approve:

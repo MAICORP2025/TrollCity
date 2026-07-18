@@ -13,6 +13,7 @@ import useTrollFamilyActivity from '../../hooks/useTrollFamilyActivity';
 import { useBattleRealtime } from '../../hooks/useBattleRealtime';
 import { logActiveChannels } from '../../lib/realtimeChannelDiagnostics';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import FeedTheTroll from '../feed-the-troll/FeedTheTroll';
 import BattleChat from './BattleChat';
 import MuteHandler from './MuteHandler';
 import GiftTray from './GiftTray';
@@ -630,26 +631,45 @@ const JailTimeHostTile = ({
   side,
   isLosing,
   onJailLock,
-   onJailUnlock,
+  onJailUnlock,
+  broadcasterId,
+  streamId,
+  battleId,
+  battleResult,
 }: {
   children: React.ReactNode;
   side: 'challenger' | 'opponent';
   isLosing: boolean;
   onJailLock?: () => void;
   onJailUnlock?: () => void;
+  broadcasterId?: string;
+  streamId?: string;
+  battleId?: string | null;
+  battleResult?: 'win' | 'lose' | 'tie' | null;
 }) => {
-  if (!isLosing) return <>{children}</>;
   return (
     <div className="relative w-full h-full">
       {children}
-      <JailBarOverlay
-        side={side}
-        isLosing={true}
-        onBarsLocked={onJailLock}
-        onBarsFreed={onJailUnlock}
-        showWarningLights={true}
-        showTextBanner={true}
-      />
+      {broadcasterId && (
+        <FeedTheTroll
+          broadcasterId={broadcasterId}
+          streamId={streamId}
+          battleMode
+          battleId={battleId}
+          battleResult={battleResult}
+          positionKey="battle"
+        />
+      )}
+      {isLosing && (
+        <JailBarOverlay
+          side={side}
+          isLosing={true}
+          onBarsLocked={onJailLock}
+          onBarsFreed={onJailUnlock}
+          showWarningLights={true}
+          showTextBanner={true}
+        />
+      )}
     </div>
   );
 };
@@ -781,6 +801,17 @@ const BattleArena = ({
     soundEnabled: jailTimeSoundEnabled !== false,
     ambientEnabled: jailTimeAmbientEnabled !== false,
   });
+
+  // Derived battle result per side (drives winning/losing troll animations).
+  const battleResult: 'win' | 'lose' | 'tie' | null =
+    battleStatus === 'completed'
+      ? challengerScore === opponentScore
+        ? 'tie'
+        : challengerScore > opponentScore
+          ? 'win'
+          : 'lose'
+      : null;
+
   const lastKnownTrackRef = useRef<Record<string, { video?: RemoteVideoTrack; audio?: RemoteAudioTrack }>>({});
   const [preBattleCountdown, setPreBattleCountdown] = useState<number | null>(null);
   const [cameraCheckResults, setCameraCheckResults] = useState<Record<string, { hasParticipant: boolean; hasPublication: boolean; hasSubscription: boolean; hasVideo: boolean }>>({});
@@ -1527,15 +1558,64 @@ const BattleArena = ({
       opponent: { host: null as BattleParticipant | null, guests: [] as BattleParticipant[], boxCount: Math.max(1, Math.min(opponentBoxCount, 6)) }
     };
 
+    const normId = (v: string | null | undefined) => String(v || '').replace(/-/g, '').toLowerCase();
+    const challengerHostNorm = normId(challengerHostId);
+    const opponentHostNorm = normId(opponentHostId);
+
+    // Pick the single best host per team. A candidate is "better" when it has a
+    // real video/audio track. We anchor selection to the host user id so the
+    // opponent box can NEVER be filled with the challenger's (or the local
+    // user's) track just because identity mapping was missing.
+    const pickBetterHost = (current: BattleParticipant | null, next: BattleParticipant) => {
+      if (!current) return next;
+      const score = (p: BattleParticipant) => (p.videoTrack ? 2 : 0) + (p.audioTrack ? 1 : 0);
+      return score(next) > score(current) ? next : current;
+    };
+
     battleParticipants.forEach(p => {
-      if (p.team === 'challenger' || p.team === 'opponent') {
-        if (p.role === 'host') {
-          teams[p.team].host = p;
-        } else if (p.role === 'stage') {
+      if (p.role !== 'host') {
+        if ((p.team === 'challenger' || p.team === 'opponent') && p.role === 'stage') {
           teams[p.team].guests.push(p);
         }
+        return;
       }
+
+      // Determine the host's true team by matching its identity to a host id.
+      // Fall back to the participant's declared team only if identity is
+      // inconclusive. This prevents cross-assignment.
+      const pid = normId(p.identity);
+      let team: 'challenger' | 'opponent' | null = null;
+      if (pid && pid === challengerHostNorm && challengerHostNorm !== opponentHostNorm) {
+        team = 'challenger';
+      } else if (pid && pid === opponentHostNorm && challengerHostNorm !== opponentHostNorm) {
+        team = 'opponent';
+      } else if (p.team === 'challenger' || p.team === 'opponent') {
+        team = p.team;
+      }
+      if (!team) return;
+
+      teams[team].host = pickBetterHost(teams[team].host, p);
     });
+
+    // Collision guard: if both host slots somehow reference the same underlying
+    // participant/track (identity churn or an echoed local track), keep it only
+    // on the side whose host id it matches and clear the other so we never show
+    // one broadcaster in both boxes.
+    const cHost = teams.challenger.host;
+    const oHost = teams.opponent.host;
+    if (cHost && oHost) {
+      const sameIdentity = cHost.identity && oHost.identity && normId(cHost.identity) === normId(oHost.identity);
+      const sameTrack = cHost.videoTrack && oHost.videoTrack && cHost.videoTrack === oHost.videoTrack;
+      if (sameIdentity || sameTrack) {
+        const belongsToOpponent = normId(oHost.identity) === opponentHostNorm && opponentHostNorm !== challengerHostNorm;
+        if (belongsToOpponent) {
+          teams.challenger.host = null;
+        } else {
+          teams.opponent.host = null;
+        }
+        console.warn('[BattleArena] Cleared duplicate host from a battle box to prevent showing one broadcaster in both slots');
+      }
+    }
 
     const sortBySeat = (a: BattleParticipant, b: BattleParticipant) => {
       return (a.seatIndex || 0) - (b.seatIndex || 0);
@@ -1545,7 +1625,7 @@ const BattleArena = ({
     teams.opponent.guests.sort(sortBySeat);
 
     return teams;
-  }, [battleParticipants, challengerBoxCount, opponentBoxCount]);
+  }, [battleParticipants, challengerBoxCount, opponentBoxCount, challengerHostId, opponentHostId]);
 
   // â”€â”€ Seat management (broadcaster add / remove seats) â”€â”€
   // Empty seats are NOT rendered by default â€” only the broadcaster boxes show
@@ -1837,7 +1917,7 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock} broadcasterId={challengerHostId} streamId={challengerStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'win' ? 'win' : battleResult === 'lose' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="challenger"
@@ -1937,7 +2017,7 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock} broadcasterId={opponentHostId} streamId={opponentStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'lose' ? 'win' : battleResult === 'win' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="opponent"
@@ -2008,7 +2088,7 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock} broadcasterId={challengerHostId} streamId={challengerStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'win' ? 'win' : battleResult === 'lose' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="challenger"
@@ -2104,7 +2184,7 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock} broadcasterId={opponentHostId} streamId={opponentStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'lose' ? 'win' : battleResult === 'win' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="opponent"
@@ -2187,7 +2267,7 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock} broadcasterId={challengerHostId} streamId={challengerStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'win' ? 'win' : battleResult === 'lose' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="challenger"
@@ -2330,7 +2410,7 @@ return (
                       )}
                     >
                       {slot.participant ? (
-                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock} broadcasterId={opponentHostId} streamId={opponentStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'lose' ? 'win' : battleResult === 'win' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="opponent"
@@ -2443,7 +2523,7 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock}>
+                        <JailTimeHostTile side="challenger" isLosing={challengerLosing} onJailLock={onChallengerJailLock} onJailUnlock={onChallengerJailUnlock} broadcasterId={challengerHostId} streamId={challengerStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'win' ? 'win' : battleResult === 'lose' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="challenger"
@@ -2545,7 +2625,7 @@ return (
                       !slot.participant && "opacity-50"
                     )}>
                       {slot.participant ? (
-                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock}>
+                        <JailTimeHostTile side="opponent" isLosing={opponentLosing} onJailLock={onOpponentJailLock} onJailUnlock={onOpponentJailUnlock} broadcasterId={opponentHostId} streamId={opponentStreamId} battleId={battleId} battleResult={battleResult === 'tie' ? 'tie' : battleResult === 'lose' ? 'win' : battleResult === 'win' ? 'lose' : null}>
                           <BattleParticipantTile
                             {...slot.participant}
                             side="opponent"

@@ -170,8 +170,8 @@ export default function NavBubble() {
         title: 'Careers + Work',
         items: [
           {
-            label: 'Careers',
-            path: '/careers',
+            label: 'Jobs',
+            path: '/jobs',
             icon: Briefcase,
           },
           {

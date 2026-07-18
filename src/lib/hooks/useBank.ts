@@ -35,14 +35,18 @@ export function useBank() {
     if (!user) return
     setLoading(true)
     try {
-      // Fetch all active loans (Legacy)
-      const { data: activeLoans } = await supabase
+      // Fetch all loans for the user, then derive the active ones client-side
+      // so "active" loans come from the full loan set (not just a server status filter).
+      const { data: allLoans } = await supabase
         .from('loans')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'active')
         .order('created_at', { ascending: false })
-      setLoans(activeLoans || [])
+      const allLoanList = allLoans || []
+      const activeLoans = allLoanList.filter(
+        (loan) => (loan.status || 'active') === 'active' && Number(loan.remaining_balance ?? loan.balance ?? 0) > 0
+      )
+      setLoans(activeLoans)
 
       // Fetch ledger (recent 50) - explicitly select columns to avoid JSON coercion issues
       const { data: ledgers } = await supabase

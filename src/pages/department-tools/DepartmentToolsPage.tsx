@@ -80,6 +80,24 @@ export default function DepartmentToolsPage() {
     if (profile.is_ceo) roles.push('ceo')
     if (profile.is_owner) roles.push('owner')
     if (profile.is_troll_family) roles.push('troll_family')
+
+    // God-mode users (CEO / Owner / Admin / Superadmin) can switch into the
+    // executive support dashboards from the Active Role dropdown.
+    const isGodMode =
+      profile.is_admin === true ||
+      profile.is_superadmin === true ||
+      profile.is_owner === true ||
+      profile.is_ceo === true ||
+      profile.role === 'admin' ||
+      profile.role === 'superadmin' ||
+      profile.role === 'owner' ||
+      profile.role === 'ceo'
+    if (isGodMode) {
+      const executiveRoles = ['secretary', 'ceo_assistant', 'noah_assistant']
+      executiveRoles.forEach((r) => {
+        if (!roles.includes(r)) roles.push(r)
+      })
+    }
     return roles
   }, [profile])
 

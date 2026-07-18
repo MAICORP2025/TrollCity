@@ -187,7 +187,7 @@ export default function AdminRFC() {
                   • 100 coins = $1 USD<br />
                   • Minimum withdrawal: 12,000 coins (≈ $36)<br />
                   • Platform commission: 5% per gifted coin<br />
-                  • Finix / Square payout processing fee: 2.9% + $0.30<br />
+                  • Finix / Square payout processing fee: 0%+ $0.30<br />
                   • 1099-K issued for earnings over $600 per year (US law)<br />
                 </>
               )

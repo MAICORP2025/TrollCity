@@ -261,6 +261,7 @@ Deno.serve(async (req) => {
       status: typeof captureData?.status === "string"
         ? captureData.status
         : "COMPLETED",
+      purchaseType,
     })
 
     if (!fulfill.success) {

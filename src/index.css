@@ -1736,3 +1736,14 @@ button:focus-visible {
     margin: 0.65in;
   }
 }
+
+/* ── Barcode scanner — thin scan line moving vertically inside the target ── */
+@keyframes barcode-scan-move {
+  0% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(144px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 0.4; }
+}
+
+.barcode-scanner-line {
+  animation: barcode-scan-move 2s ease-in-out infinite;
+}

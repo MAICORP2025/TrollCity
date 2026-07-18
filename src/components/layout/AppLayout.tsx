@@ -84,7 +84,13 @@ export default function AppLayout({
    const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isTreelzPage && !isHytroGamingSetupLivePage;
    const effectiveShowBottomNav = false;
    const mainOverflowClass = isLivePage || isHytroGamingSetupLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
-   const mainPaddingClass = showNewBottomNavBar && !isLivePage && !isHytroGamingSetupLivePage ? 'pb-[calc(64px+env(safe-area-inset-bottom,0px))]' : '';
+   // The new bottom nav bar is ~64px tall on mobile (h-16) and ~144px tall on
+   // desktop (md:h-36) plus the safe-area inset. The old 64px bottom padding
+   // left the lower portion of every page hidden behind the fixed nav, so
+   // content could never be scrolled fully into view. Pad past the tallest bar.
+   const mainPaddingClass = showNewBottomNavBar && !isLivePage && !isHytroGamingSetupLivePage
+     ? 'pb-[calc(72px+env(safe-area-inset-bottom,0px))] md:pb-[calc(156px+env(safe-area-inset-bottom,0px))]'
+     : '';
   const appThemeClass = isThemeExemptPage ? 'tc-theme-exempt' : 'tc-app-shell';
 
   return (

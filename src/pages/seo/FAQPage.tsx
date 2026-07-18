@@ -102,7 +102,7 @@ const faqData = [
       },
       {
         question: 'What percentage do creators keep?',
-        answer: 'Creators keep 100% of gift earnings. A 2.9% payout processing fee applies when cashing out.'
+        answer: 'Creators keep 100% of gift earnings. A 0%payout processing fee applies when cashing out.'
       },
       {
         question: 'When do payouts happen?',
@@ -122,7 +122,7 @@ const faqData = [
       },
       {
         question: 'Are there payout fees?',
-        answer: 'Yes. A 2.9% payout processing fee applies.'
+        answer: 'Yes. A 0%payout processing fee applies.'
       },
       {
         question: 'Do I need verification to cash out?',

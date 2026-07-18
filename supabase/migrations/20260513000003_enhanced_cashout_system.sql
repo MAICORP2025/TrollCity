@@ -257,7 +257,7 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'Invalid cashout tier');
     END IF;
 
-    -- Calculate fee (2.9%)
+    -- Calculate fee (0%)
     v_fee_coins := CEIL(p_coins_to_redeem * 0.029);
     v_net_coins := p_coins_to_redeem - v_fee_coins;
 

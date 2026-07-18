@@ -122,10 +122,9 @@ export default function AuctioneerDashboard() {
   const [agoraDebugLog, setAgoraDebugLog] = useState<string[]>([])
   const MAX_DISPLAY_LENGTH = 5000
 
-  // Barcode scanning
-  const [scanInput, setScanInput] = useState('')
-  const [scanResult, setScanResult] = useState<any>(null)
-  const [scanLoading, setScanLoading] = useState(false)
+  // Live current-bid display for the auctioneer (issue #1).
+  const [currentBidderName, setCurrentBidderName] = useState<string | null>(null)
+  const [bidCount, setBidCount] = useState(0)
 
   const logAgora = useCallback((msg: string) => {
     console.log(msg)
@@ -274,7 +273,7 @@ export default function AuctioneerDashboard() {
       console.log('[Agora] Requesting camera + mic permissions...')
       const [micTrack, camTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
         { AEC: true, ANS: true, AGC: true },
-        { encoderConfig: '720p_2', facingMode: 'user' }
+        { encoderConfig: '720p_2', facingMode: { ideal: 'environment' } }
       )
       console.log('[Agora] Camera + mic tracks created')
 
@@ -335,6 +334,7 @@ export default function AuctioneerDashboard() {
         setDisplayTextDraft(text)
       }
       if (lotsRes.data) setLots(lotsRes.data)
+      await refreshCurrentBidMeta()
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -343,13 +343,66 @@ export default function AuctioneerDashboard() {
         isInitialLoadRef.current = false
       }
     }
-  }, [showId])
+  }, [showId, refreshCurrentBidMeta])
 
   useEffect(() => {
     fetchData()
     const interval = setInterval(fetchData, 3000)
     return () => clearInterval(interval)
   }, [fetchData])
+
+  // Resolve the current highest bidder's display name and the number of bids on
+  // the active lot so the auctioneer control room shows the live bid state.
+  const refreshCurrentBidMeta = useCallback(async () => {
+    const liveLot = lots.find((l) => l.status === 'live')
+    if (!liveLot) {
+      setCurrentBidderName(null)
+      setBidCount(0)
+      return
+    }
+    try {
+      const [{ count }, bidderRes] = await Promise.all([
+        supabase
+          .from('auction_bids')
+          .select('*', { count: 'exact', head: true })
+          .eq('lot_id', liveLot.id),
+        liveLot.current_highest_bidder_id
+          ? supabase
+              .from('user_profiles')
+              .select('username, display_name')
+              .eq('id', liveLot.current_highest_bidder_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ])
+      setBidCount(Number(count || 0))
+      const p = bidderRes?.data as any
+      setCurrentBidderName(p?.display_name || p?.username || null)
+    } catch {
+      /* best-effort */
+    }
+  }, [lots])
+
+  // Realtime: keep the auctioneer's current-bid display instant. The DB is the
+  // source of truth; subscriptions merely trigger a refresh of authoritative state.
+  useEffect(() => {
+    if (!showId) return
+    const channel = supabase
+      .channel(`auctioneer-bids:${showId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'auction_bids', filter: `auction_show_id=eq.${showId}` },
+        () => void refreshCurrentBidMeta()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'auction_lots', filter: `auction_show_id=eq.${showId}` },
+        () => void refreshCurrentBidMeta()
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [showId, refreshCurrentBidMeta])
 
   // Realtime subscription for display_text changes
   useEffect(() => {
@@ -421,8 +474,27 @@ export default function AuctioneerDashboard() {
   const startShow = async () => {
     setActionLoading(true)
     try {
-      const { error } = await supabase.from('auction_shows').update({ status: 'live', live_started_at: new Date().toISOString() }).eq('id', showId)
+      // Pick the first queued lot as the active item so viewers see it instantly.
+      const firstQueued = [...lots]
+        .filter((l) => l.status === 'queued' || l.status === 'upcoming')
+        .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0))[0]
+
+      const updates: any = {
+        status: 'live',
+        live_started_at: new Date().toISOString(),
+        current_lot_id: firstQueued?.id ?? null,
+      }
+      const { error } = await supabase.from('auction_shows').update(updates).eq('id', showId)
       if (error) throw error
+
+      // Mark the chosen lot live so the on-stage UI updates immediately.
+      if (firstQueued) {
+        await supabase.from('auction_lots').update({
+          status: 'live',
+          countdown_end_at: new Date(Date.now() + 30 * 1000).toISOString(),
+        }).eq('id', firstQueued.id)
+      }
+
       toast.success('Show is now live!')
       fetchData()
     } catch (error: any) {
@@ -475,7 +547,7 @@ export default function AuctioneerDashboard() {
     try {
       const currentLiveLot = lots.find((l) => l.status === 'live')
       if (currentLiveLot) {
-        await supabase.from('auction_lots').update({ status: 'pass' }).eq('id', currentLiveLot.id)
+        await supabase.from('auction_lots').update({ status: 'unsold' }).eq('id', currentLiveLot.id)
       }
       const { error } = await supabase.from('auction_lots').update({
         status: 'live',
@@ -811,6 +883,24 @@ export default function AuctioneerDashboard() {
                 <Stat label="Increment" value={`${formatCoins(currentLot.bid_increment)} TC`} />
                 <Stat label="Current Bid" value={`${formatCoins(currentLot.current_highest_bid || currentLot.starting_bid)} TC`} />
                 <Stat label="Reserve" value={currentLot.reserve_price ? `${formatCoins(currentLot.reserve_price)} TC` : 'None'} />
+              </div>
+
+              {/* Live current-bid summary: latest highest bid, bidder, and count.
+                  The main display shows only the current highest bid (not a
+                  scrolling history), per the auctioneer live-show spec. */}
+              <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-cyan-400/10 via-blue-500/10 to-purple-500/10 p-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Highest Bidder</p>
+                  <p className="truncate text-lg font-black text-white">{currentBidderName || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Current Bid</p>
+                  <p className="text-lg font-black text-yellow-300">{formatCoins(currentLot.current_highest_bid || currentLot.starting_bid)} TC</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Bids on Lot</p>
+                  <p className="text-lg font-black text-cyan-200">{bidCount}</p>
+                </div>
               </div>
 
               {/* Timer Controls */}

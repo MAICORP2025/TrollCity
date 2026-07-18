@@ -62,7 +62,7 @@ export const useGiftStore = create<GiftState>((set, get) => ({
       get().removeGift(newGift.id);
     }, giftData.duration + 500); // Add buffer for animation completion
     
-    console.log('Gift triggered:', newGift.name);
+    console.log('Gift triggered:', newGift.gift.name);
   },
   
   // Remove a specific gift

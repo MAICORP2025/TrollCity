@@ -41,7 +41,7 @@ import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import { useWallNotifications } from '@/hooks/useWallNotifications'
 import LeftNavSidebar from '@/components/home/LeftNavSidebar'
-import HowToVideosPage from '@/pages/HowToVideosPage'
+import HowToVideosPage from '@/pages/JobsHowToPage'
 import FeaturedBroadcastersRow from '@/components/home/FeaturedBroadcastersRow'
 import HyTroGamingRow from '@/components/home/HyTroGamingRow'
 import PodcastRow from '@/components/home/PodcastRow'
@@ -52,7 +52,7 @@ import PromoSlot from '@/components/promo/PromoSlot'
 import PodcastCentral from '@/pages/PodcastCentral'
 import { HOME_PAGE_PROMO_PLACEMENTS } from '@/types/cityAds'
 
-type TabType = 'home' | 'live' | 'universe' | 'how-to-videos' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'home' | 'live' | 'universe' | 'jobs' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
 
 const PWAInstallPrompt = lazyWithRetry(() => import('../components/PWAInstallPrompt'))
 const TCNNPopupWidget = lazyWithRetry(() => import('@/components/tcnn/TCNNPopupWidget'))
@@ -692,7 +692,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tabParam = params.get('tab')
-    if (tabParam && ['home', 'live', 'universe', 'how-to-videos', 'laws-fees', 'leagues', 'president', 'academy'].includes(tabParam)) {
+    if (tabParam && ['home', 'live', 'universe', 'jobs', 'laws-fees', 'leagues', 'president', 'academy'].includes(tabParam)) {
       setActiveTab(tabParam as TabType)
     }
   }, [])
@@ -980,7 +980,7 @@ export default function Home() {
             </div>
           )}
 
-         {activeTab === 'how-to-videos' && (
+         {activeTab === 'jobs' && (
             <div className="flex gap-4">
               <LeftNavSidebar
                 activeTab={activeTab}

@@ -787,7 +787,7 @@ function resolveNotificationDestination(
     case 'application_result':
     case 'trollg_application':
       return {
-        route: applicationId ? withQuery('/careers', { application: applicationId }) : '/careers',
+        route: applicationId ? withQuery('/jobs/status', { application: applicationId }) : '/jobs/status',
         label: 'Open application status',
       }
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
-import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone, X, Car, Home, ChevronDown, ChevronUp } from 'lucide-react'
+import { Package, Zap, Crown, Star, Palette, CheckCircle, XCircle, Sparkles, Shield, Phone, X, Car, Home, ChevronDown, ChevronUp, Gavel, Truck } from 'lucide-react'
 import { trollCityTheme } from '../styles/trollCityTheme'
 import { PERK_CONFIG } from '../lib/perkSystem'
 import { PERKS as LEVEL_PERKS } from '@/config/levelSystem'
@@ -24,7 +24,9 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
   const [loading, setLoading] = useState(true)
   const [activeItems, setActiveItems] = useState<Set<string>>(new Set())
   const [showColorPickerModal, setShowColorPickerModal] = useState(false)
-  const [activeTab, setActiveTab] = useState<'items' | 'titles' | 'deeds' | 'shop'>('items')
+  const [activeTab, setActiveTab] = useState<'items' | 'titles' | 'deeds' | 'shop' | 'auction'>('items')
+  const [wonAuctions, setWonAuctions] = useState<any[]>([])
+  const [loadingAuction, setLoadingAuction] = useState(false)
   const [userTitles, setUserTitles] = useState<any[]>([])
   const [userDeeds, setUserDeeds] = useState<any[]>([])
   const [selectedTitleDeed, setSelectedTitleDeed] = useState<any>(null)
@@ -211,6 +213,60 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
       setLoading(false)
     }
   }, [user])
+
+  // Fetch the signed-in user's won auction items from the authoritative
+  // auction_orders / auction_wins records (RLS restricts to the owner).
+  const loadWonAuctions = useCallback(async () => {
+    if (!user?.id) return
+    setLoadingAuction(true)
+    try {
+      const { data, error } = await supabase
+        .from('auction_orders')
+        .select(`
+          id,
+          order_number,
+          lot_id,
+          auction_show_id,
+          winner_user_id,
+          sale_amount,
+          shipping_cost,
+          payment_status,
+          fulfillment_status,
+          shipping_information_status,
+          shipping_method,
+          shipping_name,
+          shipping_line1,
+          shipping_line2,
+          shipping_city,
+          shipping_state,
+          shipping_zip,
+          shipping_carrier,
+          carrier_name,
+          carrier_code,
+          tracking_number,
+          estimated_delivery_at,
+          shipped_at,
+          delivered_at,
+          pickup_instructions,
+          created_at,
+          auction_lots ( title, image_url, image_urls, lot_number, barcode, quantity ),
+          auction_shows ( title )
+        `)
+        .eq('winner_user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setWonAuctions(data || [])
+    } catch (err) {
+      console.error('[UserInventory] Failed to load won auctions:', err)
+    } finally {
+      setLoadingAuction(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (activeTab === 'auction') void loadWonAuctions()
+  }, [activeTab, loadWonAuctions])
 
   // Delete all expired purchases, perks, and insurances
   const deleteAllExpiredPurchases = useCallback(async () => {
@@ -685,6 +741,16 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
             >
               Shop
             </button>
+            <button
+              onClick={() => setActiveTab('auction')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                activeTab === 'auction'
+                  ? `${trollCityTheme.interactive.active} ${trollCityTheme.text.highlight}`
+                  : `${trollCityTheme.text.muted} ${trollCityTheme.interactive.hover}`
+              }`}
+            >
+              Auction Items
+            </button>
           </div>
         </div>
 
@@ -699,6 +765,84 @@ export default function UserInventory({ embedded = false }: { embedded?: boolean
           </div>
         ) : activeTab === 'shop' ? (
           <ShopConsumablesSection />
+        ) : activeTab === 'auction' ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Gavel className="w-5 h-5 text-amber-400" />
+              <h2 className="text-2xl font-bold text-white">Won Auction Items</h2>
+            </div>
+            {loadingAuction ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[1,2].map(i => (
+                  <div key={i} className={`${trollCityTheme.backgrounds.card} rounded-xl p-6 border animate-pulse`}>
+                    <div className="h-4 bg-white/10 rounded w-1/2 mb-2" />
+                    <div className="h-8 bg-white/10 rounded w-3/4" />
+                  </div>
+                ))}
+              </div>
+            ) : wonAuctions.length === 0 ? (
+              <div className="text-center py-12">
+                <Gavel className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
+                <h2 className="text-2xl font-bold mb-2">No won auction items</h2>
+                <p className={`${trollCityTheme.text.muted} mb-6`}>Items you win at live auctions will appear here.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {wonAuctions.map((order: any) => {
+                  const lot = order.auction_lots || {}
+                  const show = order.auction_shows || {}
+                  const img = lot.image_url || (Array.isArray(lot.image_urls) ? lot.image_urls?.[0] : null)
+                  const status = order.fulfillment_status || order.shipping_information_status || 'pending'
+                  const isPickup = (order.shipping_method === 'local_pickup' || order.shipping_method === 'both') && !order.tracking_number
+                  return (
+                    <div key={order.id} className={`${trollCityTheme.components.card} border-amber-500/20 hover:border-amber-500/40 transition-all`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Gavel className="w-4 h-4 text-amber-400" />
+                        <span className="text-xs text-amber-400 font-bold uppercase tracking-wider">Won Item</span>
+                        <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          status === 'delivered' || status === 'completed'
+                            ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-100'
+                            : 'border-amber-300/30 bg-amber-400/10 text-amber-100'
+                        }`}>{status}</span>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                          {img ? <img src={img} alt={lot.title} className="h-full w-full object-cover" />
+                               : <div className="flex h-full w-full items-center justify-center"><Package className="h-8 w-8 text-zinc-600" /></div>}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-lg font-bold text-white truncate">{lot.title || 'Auction Item'}</h3>
+                          <p className="text-sm text-zinc-400">{show.title || 'Auction'}</p>
+                          <p className="text-sm mt-1">Winning bid: <span className="font-black text-amber-300">{Number(order.sale_amount || 0).toLocaleString()} TC</span></p>
+                          <p className="text-sm text-zinc-400">Qty: {Number(order.quantity || lot.quantity || 1)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-300">
+                        <div><span className="text-zinc-500">Payment:</span> {order.payment_status || 'pending'}</div>
+                        <div><span className="text-zinc-500">Order:</span> {order.order_number || order.id.slice(0, 8)}</div>
+                        <div className="col-span-2"><span className="text-zinc-500">Order date:</span> {order.created_at ? new Date(order.created_at).toLocaleString() : '—'}</div>
+                        {order.tracking_number ? (
+                          <div className="col-span-2"><span className="text-zinc-500">Tracking:</span> {order.tracking_number} ({order.carrier_name || order.shipping_carrier || order.carrier_code || 'carrier'})</div>
+                        ) : null}
+                        {order.estimated_delivery_at ? (
+                          <div className="col-span-2"><span className="text-zinc-500">Est. delivery:</span> {new Date(order.estimated_delivery_at).toLocaleDateString()}</div>
+                        ) : null}
+                        {isPickup && order.pickup_instructions ? (
+                          <div className="col-span-2"><span className="text-zinc-500">Pickup:</span> {order.pickup_instructions}</div>
+                        ) : null}
+                        {!isPickup && (order.shipping_name || order.shipping_line1) ? (
+                          <div className="col-span-2"><span className="text-zinc-500">Ship to:</span> {order.shipping_name}, {order.shipping_line1} {order.shipping_city} {order.shipping_state} {order.shipping_zip}</div>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
+                        <Truck className="w-4 h-4" /> {isPickup ? 'Local pickup' : (order.tracking_number ? 'Shipped' : 'Awaiting shipping info')}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         ) : activeTab === 'titles' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {userTitles.length === 0 ? (

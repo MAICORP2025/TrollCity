@@ -5,7 +5,7 @@
 -- (payout_requests + fast_pay_applications) remains active.
 -- 
 -- NEW RULES:
---   - Fee (2.9%) is deducted UPFRONT when request is made (coins + fee must be available)
+--   - Fee (0%) is deducted UPFRONT when request is made (coins + fee must be available)
 --   - Level 1-499:    Cashout every Friday only (1AM-7PM MT)
 --   - Level 500-999:  Cashout every 24 hours
 --   - Level 1000+:    Cashout every 30 minutes
@@ -176,7 +176,7 @@ BEGIN
         END IF;
     END IF;
 
-    -- Calculate fee (2.9%)
+    -- Calculate fee (0%)
     v_fee_coins := CEIL(p_coins_to_redeem * 0.029)::bigint;
     v_total_required := p_coins_to_redeem + v_fee_coins;
 

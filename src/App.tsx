@@ -139,12 +139,14 @@ const KickFee = lazyWithRetry(() => import("./pages/KickFee"));
 const CourtViewerPage = lazyWithRetry(() => import("./pages/CourtViewerPage"));
 
 const Call = lazyWithRetry(() => import("./pages/Call"));
+const InterviewPage = lazyWithRetry(() => import("./pages/InterviewPage"));
 const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
 const HytroGaming = lazyWithRetry(() => import("./pages/gaming/HytroGaming"));
 const HytroGamingViewer = lazyWithRetry(() => import("./pages/gaming/HytroGamingViewer"));
 const Trollifications = lazyWithRetry(() => import("./pages/Trollifications"));
 const Trollifieds = lazyWithRetry(() => import("./pages/Trollifieds"));
-const HowToVideosPage = lazyWithRetry(() => import("./pages/HowToVideosPage"));
+const HowToVideosPage = lazyWithRetry(() => import("./pages/JobsHowToPage"));
+const JobsPage = lazyWithRetry(() => import("./pages/Jobs"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
 const PolicyCenter = lazyWithRetry(() => import("./pages/PolicyCenter"));
 const UniverseEventPage = lazyWithRetry(() => import("./pages/UniverseEventPage"));
@@ -207,7 +209,7 @@ const ShareAThonSubmit = lazyWithRetry(() => import("./pages/shareathon/ShareATh
 const ShareAThonLeaderboard = lazyWithRetry(() => import("./pages/shareathon/ShareAThonLeaderboard"));
 const ShareAThonAdminDashboard = lazyWithRetry(() => import("./pages/shareathon/ShareAThonAdminDashboard"));
 const ShareAThonVerification = lazyWithRetry(() => import("./pages/shareathon/ShareAThonVerification"));
- const Career = lazyWithRetry(() => import("./pages/Career"));
+
  const TestDiagnosticsPage = lazyWithRetry(() => import("./pages/admin/TestDiagnosticsPage"));
 const ResetMaintenance = lazyWithRetry(() => import("./pages/admin/ResetMaintenance"));
 const Government = lazyWithRetry(() => import("./pages/Government"));
@@ -307,8 +309,8 @@ const isPublicRoute = (pathname: string) => {
   // Legal pages are public
   if (pathname.startsWith('/legal/')) return true
 
-  // How-To Videos library is public — published tutorials viewable by anyone
-  if (pathname === '/how-to-videos') return true
+  // Jobs page is public
+  if (pathname === '/jobs') return true
 
   // Profile pages are public - usernames and user IDs
   if (pathname.startsWith('/profile/')) return true
@@ -498,6 +500,8 @@ import HighBcastersPage from "./pages/HighBcasters";
 import ExploreSearchResults from "./pages/ExploreSearchResults.js";
 import StreamSwipePage from "./pages/StreamSwipePage.js";
 import ApplicationPage from "./pages/ApplicationPage.js";
+import JobsApplicationPage from "./pages/ApplicationPage.js";
+import JobsStatusPage from "./pages/Jobs.tsx";
 import SetupPage from "./pages/broadcast/SetupPage.js";
 import GamingSetupPage from "./pages/broadcast/GamingSetupPage.tsx";
 import GamingAnalytics from "./pages/broadcast/gaming/GamingAnalytics.tsx";
@@ -1306,6 +1310,8 @@ function AppContent() {
         // Supabase auto-retries, so we suppress it from Bug Center reporting.
         // LiveKit "Tried to add a track for a participant, that's not present" is a known non-fatal
         // race condition when a participant leaves while a track event is being processed.
+        // LiveKit "Unknown DataChannel error on reliable/lossy" is a non-fatal transport hiccup that
+        // fires during data-channel setup/teardown; LiveKit auto-recovers, so we suppress it.
         // Supabase auth errors like invalid refresh token and JWT user_not_found are transient
         // auth issues that are handled by the auth recovery logic and should not be reported as bugs.
         // Edge Function "Failed to send a request" errors are typically deployment/network issues
@@ -1316,6 +1322,7 @@ function AppContent() {
           fullMessage.includes('was released because another request stole it') ||
           (firstError && firstError.name === 'AbortError') ||
           fullMessage.includes('Tried to add a track for a participant, that\'s not present') ||
+          fullMessage.includes('Unknown DataChannel error') ||
           fullMessage.includes('Invalid Refresh Token') ||
           fullMessage.includes('Refresh Token Not Found') ||
           fullMessage.includes('User from sub claim in JWT does not exist') ||
@@ -1529,7 +1536,7 @@ const handleVisibilityChange = async () => {
                  <Route path="/high-bcasters" element={<HighBcastersPage />} />
                  <Route path="/live-swipe" element={<StreamSwipePage />} />
                 <Route path="/embed/:id" element={<EmbedPage />} />
-                <Route path="/how-to-videos" element={<HowToVideosPage />} />
+                <Route path="/jobs" element={<HowToVideosPage />} />
                 <Route path="/hytrogaming" element={<HytroGaming />} />
                 <Route path="/hytrogaming/apply" element={<HytroGamingApply />} />
                 <Route path="/hytrogaming/contract/:id" element={<HytroGamingContract />} />
@@ -1558,12 +1565,17 @@ const handleVisibilityChange = async () => {
                 <Route path="/agency/:agencyIdOrSlug/goals" element={<AgencyProfilePage />} />
                 <Route path="/agency-apply/:agencyIdOrSlug" element={<AgencyApplyPage />} />
 
+                {/* Jobs Routes */}
+                <Route path="/jobs" element={<HowToVideosPage />} />
+                <Route path="/jobs/apply" element={<JobsApplicationPage />} />
+                <Route path="/jobs/status" element={<JobsStatusPage />} />
+
                 {/* Application Routes */}
                 <Route path="/apply" element={<ApplicationPage />} />
 
-                {/* Careers */}
-                <Route path="/careers" element={<Career />} />
-                <Route path="/career" element={<Navigate to="/careers" replace />} />
+                {/* Careers → Jobs (Careers page retired in favor of Jobs) */}
+                <Route path="/careers" element={<Navigate to="/jobs" replace />} />
+                <Route path="/career" element={<Navigate to="/jobs" replace />} />
 
                 {/* 🏠 Home - Public with limited auth for interactions */}
                 <Route path="/home" element={<Navigate to="/" replace />} />
@@ -1820,6 +1832,7 @@ const handleVisibilityChange = async () => {
                 <Route path="/tcnn/viewer/:streamId" element={<TCNNViewerPage />} />
                 
                 <Route path="/call/:roomId/:type/:userId" element={<Call />} />
+                <Route path="/interview/:interviewId" element={<InterviewPage />} />
                   <Route path="/notifications" element={<Notifications />} />
                   <Route path="/following" element={<Following />} />
                   <Route path="/following/:userId" element={<Following />} />

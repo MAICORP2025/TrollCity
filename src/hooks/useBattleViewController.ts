@@ -2070,7 +2070,7 @@ export function useBattleViewController({
     });
   };
 
-  const resolveBoxUser = (streamUser?: string | null, liveKitIdentity?: string, isLocalBroadcaster: boolean) => {
+  const resolveBoxUser = (streamUser: string | null | undefined, liveKitIdentity: string | undefined, isLocalBroadcaster: boolean) => {
     if (isLocalBroadcaster) {
       return { videoTrack: battleLocalVideoTrack, audioTrack: battleLocalAudioTrack, isLocal: true };
     }
@@ -2081,8 +2081,34 @@ export function useBattleViewController({
   const isChallengerBroadcaster = challengerStream ? effectiveUserId === challengerStream.user_id : false;
   const isOpponentBroadcaster = opponentStream ? effectiveUserId === opponentStream.user_id : false;
 
-  const challengerUser = resolveBoxUser(challengerStream?.user_id, challengerLiveKitIdentity, isChallengerBroadcaster);
-  const opponentUser = resolveBoxUser(opponentStream?.user_id, opponentLiveKitIdentity, isOpponentBroadcaster);
+  // Guard against both sides resolving to the LOCAL track. This happens when the
+  // two battle streams belong to the same account (e.g. same-account testing, or
+  // a self-match) — then effectiveUserId equals BOTH host ids and every box
+  // would show the local camera. We only ever treat ONE side as local: the side
+  // whose host id matches, preferring challenger when both match.
+  const sameHostBothSides =
+    !!challengerStream?.user_id &&
+    challengerStream?.user_id === opponentStream?.user_id;
+  const localIsChallenger = isChallengerBroadcaster;
+  const localIsOpponent = isOpponentBroadcaster && !(sameHostBothSides && localIsChallenger);
+
+  const challengerUser = resolveBoxUser(challengerStream?.user_id, challengerLiveKitIdentity, localIsChallenger);
+  let opponentUser = resolveBoxUser(opponentStream?.user_id, opponentLiveKitIdentity, localIsOpponent);
+
+  // Final safety net: never render the SAME participant/track in both boxes.
+  // If the opponent resolved to the same identity as the challenger (identity
+  // mapping churn, echoed local track, etc.), drop it so the box shows a
+  // "waiting for opponent" state instead of duplicating the challenger.
+  const challengerResolvedId =
+    (challengerUser as any)?.identity ||
+    (challengerUser && (challengerUser as any).isLocal ? `local:${effectiveUserId}` : null);
+  const opponentResolvedId =
+    (opponentUser as any)?.identity ||
+    (opponentUser && (opponentUser as any).isLocal ? `local:${effectiveUserId}` : null);
+  if (challengerResolvedId && opponentResolvedId && challengerResolvedId === opponentResolvedId) {
+    console.warn('[BattleView] Prevented duplicate participant in both battle boxes:', challengerResolvedId);
+    opponentUser = null;
+  }
 
   if (import.meta.env.DEV) {
     const challengerIdentity = (challengerUser as any)?.identity;

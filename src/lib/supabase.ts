@@ -221,6 +221,7 @@ export interface UserProfile {
   ban_expires_at?: string | null
   has_active_warrant?: boolean
   terms_accepted?: boolean
+  mai_pay_plus?: boolean
   badge?: string | null
   title?: string | null
   has_insurance?: boolean

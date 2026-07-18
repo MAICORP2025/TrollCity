@@ -1,477 +1,731 @@
 import React, { useMemo } from 'react';
 import {
-  Zap,
-  Clock,
-  Shield,
-  CheckCircle2,
-  XCircle,
-  ArrowRight,
-  Star,
-  Crown,
   BadgeCheck,
-  AlertTriangle,
-  Lock,
+  CheckCircle2,
+  Clock3,
+  Crown,
+  Gauge,
+  ShieldCheck,
+  Sparkles,
+  WalletCards,
+  XCircle,
 } from 'lucide-react';
 import { useAuthStore } from '../lib/store';
-import { useXPStore } from '../stores/useXPStore';
 import { cn } from '../lib/utils';
-import {
-  getFastPayTier,
-  getFastPayTierLabel,
-  getFastPayTierDescription,
-  getFastPayProcessingTime,
-  getFastPayMaxCashouts,
-  FAST_PAY_FEE_PERCENT,
-  FAST_PAY_MIN_LEVEL,
-  INSTANT_PAY_MIN_LEVEL,
-  FAST_PAY_MIN_ACCOUNT_AGE_DAYS,
-  type FastPayTier,
-} from '../types/cashout';
-import {
-  FAST_PAY_REQUIREMENTS,
-  getFastPayTierInfo,
-} from '../config/coinConfig';
 
 interface FastPayProgramProps {
-  onNavigateToCashout?: () => void;
   compact?: boolean;
+
+  /**
+   * Whether the current user has an active MAI Pay Plus membership.
+   */
+  isMaiPayPlus?: boolean;
+
+  /**
+   * Successful cashouts made by the current user during the
+   * rolling previous 24 hours.
+   *
+   * This value must come from server-validated cashout data.
+   */
+  successfulCashoutsLast24Hours?: number;
+
+  /**
+   * Earliest time the user may submit another cashout after
+   * reaching the rolling 24-hour limit.
+   */
+  nextCashoutAvailableAt?: string | Date | null;
+
+  /**
+   * Loading state while cashout eligibility is retrieved.
+   */
+  loading?: boolean;
 }
 
-/**
- * Fast Pay Program Component
- *
- * Displays the user's current Fast Pay tier, benefits, requirements,
- * and eligibility status based on their level and account standing.
- *
- * Tier Structure:
- * - Level 1-499: Standard (Friday payouts)
- * - Level 500-999: Fast Pay (any day, 24h processing)
- * - Level 1000+: Instant Pay (instant, multiple/week, priority support)
- */
-export default function FastPayProgram({ onNavigateToCashout, compact = false }: FastPayProgramProps) {
+const STANDARD_CASHOUT_LIMIT = 10;
+const MAI_PAY_PLUS_CASHOUT_LIMIT = 20;
+
+export default function FastPayProgram({
+  compact = false,
+  isMaiPayPlus = false,
+  successfulCashoutsLast24Hours = 0,
+  nextCashoutAvailableAt = null,
+  loading = false,
+}: FastPayProgramProps) {
   const { profile } = useAuthStore();
-  const xpStore = useXPStore();
 
-  const userLevel = Number(xpStore.level || 1);
-  const tier = getFastPayTier(userLevel);
-  const tierInfo = getFastPayTierInfo(userLevel);
-  const processingTime = getFastPayProcessingTime(tier);
-  const maxCashouts = getFastPayMaxCashouts(tier);
-  const tierDescription = getFastPayTierDescription(tier);
-  const tierLabel = getFastPayTierLabel(tier);
+  const cashoutLimit = isMaiPayPlus
+    ? MAI_PAY_PLUS_CASHOUT_LIMIT
+    : STANDARD_CASHOUT_LIMIT;
 
-  // Calculate days until next tier
-  const levelsToNextTier = useMemo(() => {
-    if (tier === 'instant') return 0;
-    if (tier === 'fast_pay') return INSTANT_PAY_MIN_LEVEL - userLevel;
-    return FAST_PAY_MIN_LEVEL - userLevel;
-  }, [tier, userLevel]);
+  const completedCashouts = Math.min(
+    cashoutLimit,
+    Math.max(0, Math.floor(successfulCashoutsLast24Hours))
+  );
 
-  // Determine if user meets safety requirements
-  // In production, these would come from the backend
-  const requirements = useMemo(() => {
-    const accountAge = profile?.created_at
-      ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))
-      : 999;
+  const remainingCashouts = Math.max(
+    0,
+    cashoutLimit - completedCashouts
+  );
 
-    return {
-      verifiedIdentity: !!profile?.verified_since,
-      noActiveViolations: true, // Would check violations table
-      accountOlderThan30Days: accountAge >= FAST_PAY_MIN_ACCOUNT_AGE_DAYS,
-      goodStanding: true, // Would check community standing
-      noFraudChargeback: true, // Would check fraud/chargeback history
-    };
-  }, [profile]);
+  const hasReachedCashoutLimit =
+    completedCashouts >= cashoutLimit;
 
-  const unmetRequirements = useMemo(() => {
-    const unmet: string[] = [];
-    if (!requirements.verifiedIdentity) unmet.push('Verify your identity');
-    if (!requirements.noActiveViolations) unmet.push('Resolve active violations');
-    if (!requirements.accountOlderThan30Days) unmet.push(`Account must be ${FAST_PAY_MIN_ACCOUNT_AGE_DAYS} days old`);
-    if (!requirements.goodStanding) unmet.push('Maintain good community standing');
-    if (!requirements.noFraudChargeback) unmet.push('Resolve fraud/chargeback issues');
-    return unmet;
-  }, [requirements]);
+  const isVerified = Boolean(profile?.verified_since);
 
-  const meetsAllRequirements = unmetRequirements.length === 0;
-  const isEligible = tier !== 'standard' && meetsAllRequirements;
+  const mayCashOut =
+    isVerified &&
+    !hasReachedCashoutLimit &&
+    !loading;
 
-  // Tier-specific styling
-  const tierStyles = {
-    standard: {
-      gradient: 'from-slate-600 to-slate-700',
-      border: 'border-slate-500/30',
-      glow: '',
-      badge: 'bg-slate-700 text-slate-300',
-      icon: <Clock className="h-5 w-5 text-slate-400" />,
-      accentColor: 'text-slate-300',
-      progressColor: 'bg-slate-500',
-    },
-    fast_pay: {
-      gradient: 'from-cyan-500 to-blue-600',
-      border: 'border-cyan-400/30',
-      glow: 'shadow-[0_0_30px_rgba(34,211,238,0.15)]',
-      badge: 'bg-cyan-900/60 text-cyan-300 border-cyan-500/30',
-      icon: <Zap className="h-5 w-5 text-cyan-300" />,
-      accentColor: 'text-cyan-300',
-      progressColor: 'bg-cyan-500',
-    },
-    instant: {
-      gradient: 'from-amber-400 via-yellow-500 to-orange-500',
-      border: 'border-amber-400/30',
-      glow: 'shadow-[0_0_30px_rgba(255,215,0,0.2)]',
-      badge: 'bg-amber-900/60 text-amber-300 border-amber-500/30',
-      icon: <Crown className="h-5 w-5 text-amber-300" />,
-      accentColor: 'text-amber-300',
-      progressColor: 'bg-amber-500',
-    },
-  };
+  const nextCashoutWait = useMemo(
+    () => formatRemainingTime(nextCashoutAvailableAt),
+    [nextCashoutAvailableAt]
+  );
 
-  const style = tierStyles[tier];
-
-  // Progress to next tier (0-100)
-  const progressPercent = useMemo(() => {
-    if (tier === 'instant') return 100;
-    if (tier === 'fast_pay') {
-      const range = INSTANT_PAY_MIN_LEVEL - FAST_PAY_MIN_LEVEL;
-      const progress = userLevel - FAST_PAY_MIN_LEVEL;
-      return Math.min(100, Math.max(0, (progress / range) * 100));
-    }
-    const range = FAST_PAY_MIN_LEVEL - 1;
-    const progress = userLevel - 1;
-    return Math.min(100, Math.max(0, (progress / range) * 100));
-  }, [tier, userLevel]);
+  const progressPercent =
+    (completedCashouts / cashoutLimit) * 100;
 
   if (compact) {
     return (
       <div
         className={cn(
-          'rounded-2xl border bg-slate-950/65 backdrop-blur-xl p-4 transition-all',
-          style.border,
-          style.glow
+          'rounded-2xl border bg-slate-950/75 p-4 backdrop-blur-xl',
+          isMaiPayPlus
+            ? 'border-amber-400/25 shadow-[0_0_30px_rgba(251,191,36,0.1)]'
+            : 'border-cyan-400/20 shadow-[0_0_30px_rgba(34,211,238,0.08)]'
         )}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br', style.gradient)}>
-              {style.icon}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className={cn('text-sm font-bold', style.accentColor)}>{tierLabel}</span>
-                {isEligible && (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                )}
-              </div>
-              <p className="text-xs text-slate-500">{processingTime}</p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border',
+              isMaiPayPlus
+                ? 'border-amber-400/25 bg-amber-400/10 text-amber-300'
+                : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-300'
+            )}
+          >
+            {isMaiPayPlus ? (
+              <Crown className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <WalletCards className="h-5 w-5" aria-hidden="true" />
+            )}
           </div>
-          {onNavigateToCashout && tier !== 'standard' && (
-            <button
-              onClick={onNavigateToCashout}
-              className="flex items-center gap-1 text-xs font-bold text-cyan-300 hover:text-cyan-200 transition-colors"
-            >
-              Request <ArrowRight className="h-3 w-3" />
-            </button>
-          )}
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-black text-white">
+                {isMaiPayPlus
+                  ? 'MAI Pay Plus'
+                  : 'Troll City Cashouts'}
+              </p>
+
+              {!loading && mayCashOut && (
+                <CheckCircle2
+                  className="h-4 w-4 shrink-0 text-emerald-400"
+                  aria-label="Eligible to cash out"
+                />
+              )}
+            </div>
+
+            <p className="truncate text-xs text-slate-400">
+              {loading
+                ? 'Checking cashout access...'
+                : !isVerified
+                  ? 'Account verification required'
+                  : hasReachedCashoutLimit
+                    ? `Limit reached • ${nextCashoutWait}`
+                    : `${remainingCashouts} of ${cashoutLimit} cashouts remaining`}
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div
+    <section
       className={cn(
-        'rounded-[2rem] border bg-slate-950/70 backdrop-blur-2xl overflow-hidden transition-all',
-        style.border,
-        style.glow
+        'overflow-hidden rounded-[2rem] border bg-slate-950/80 shadow-2xl backdrop-blur-2xl',
+        isMaiPayPlus
+          ? 'border-amber-400/20'
+          : 'border-white/10'
       )}
     >
-      {/* Header */}
-      <div className={cn('bg-gradient-to-r p-5', style.gradient)}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
-              {style.icon}
+      <header
+        className={cn(
+          'relative overflow-hidden border-b px-5 py-6 sm:px-7',
+          isMaiPayPlus
+            ? 'border-amber-400/15 bg-gradient-to-r from-amber-950 via-slate-950 to-orange-950'
+            : 'border-white/10 bg-gradient-to-r from-cyan-950 via-slate-950 to-blue-950'
+        )}
+      >
+        <div
+          className={cn(
+            'pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full blur-3xl',
+            isMaiPayPlus
+              ? 'bg-amber-400/10'
+              : 'bg-cyan-400/10'
+          )}
+        />
+
+        <div
+          className={cn(
+            'pointer-events-none absolute -bottom-24 left-10 h-64 w-64 rounded-full blur-3xl',
+            isMaiPayPlus
+              ? 'bg-orange-500/10'
+              : 'bg-blue-500/10'
+          )}
+        />
+
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div
+              className={cn(
+                'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border',
+                isMaiPayPlus
+                  ? 'border-amber-300/20 bg-amber-400/10 text-amber-300 shadow-[0_0_24px_rgba(251,191,36,0.14)]'
+                  : 'border-cyan-300/20 bg-cyan-400/10 text-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.14)]'
+              )}
+            >
+              {isMaiPayPlus ? (
+                <Crown className="h-7 w-7" aria-hidden="true" />
+              ) : (
+                <WalletCards className="h-7 w-7" aria-hidden="true" />
+              )}
             </div>
+
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-black text-white">{tierLabel}</h3>
-                <span className={cn('rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider', style.badge)}>
-                  Level {userLevel}
-                </span>
+              <p
+                className={cn(
+                  'text-xs font-black uppercase tracking-[0.22em]',
+                  isMaiPayPlus
+                    ? 'text-amber-300'
+                    : 'text-cyan-300'
+                )}
+              >
+                Troll City Earnings
+              </p>
+
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h2 className="text-2xl font-black text-white sm:text-3xl">
+                  Cashout Program
+                </h2>
+
+                {isMaiPayPlus && (
+                  <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">
+                    MAI Pay Plus
+                  </span>
+                )}
               </div>
-              <p className="mt-0.5 text-sm text-white/70">{tierDescription}</p>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                {isMaiPayPlus
+                  ? 'MAI Pay Plus members receive double the daily cashout limit. Plus cashout tiers require double the standard coin amount.'
+                  : 'Verified users may cash out immediately after earning enough coins for a supported cashout amount.'}
+              </p>
             </div>
           </div>
-          {isEligible && (
-            <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-300">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Active
+
+          <CashoutStatus
+            loading={loading}
+            isVerified={isVerified}
+            hasReachedCashoutLimit={hasReachedCashoutLimit}
+            mayCashOut={mayCashOut}
+            remainingCashouts={remainingCashouts}
+            cashoutLimit={cashoutLimit}
+            nextCashoutWait={nextCashoutWait}
+            isMaiPayPlus={isMaiPayPlus}
+          />
+        </div>
+      </header>
+
+      <div className="space-y-7 p-5 sm:p-7">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <SummaryCard
+            icon={<ShieldCheck className="h-5 w-5" />}
+            label="Cashout Access"
+            value="No Levels"
+            description="User levels never restrict cashout eligibility."
+            accentClassName="text-emerald-300"
+            iconClassName="bg-emerald-400/10 text-emerald-300"
+          />
+
+          <SummaryCard
+            icon={<Sparkles className="h-5 w-5" />}
+            label="Cashout Fees"
+            value="$0"
+            description="Troll City absorbs all payout processing costs."
+            accentClassName="text-cyan-300"
+            iconClassName="bg-cyan-400/10 text-cyan-300"
+          />
+
+          <SummaryCard
+            icon={
+              isMaiPayPlus ? (
+                <Crown className="h-5 w-5" />
+              ) : (
+                <Gauge className="h-5 w-5" />
+              )
+            }
+            label="Rolling Limit"
+            value={`${cashoutLimit} per 24 hours`}
+            description={
+              isMaiPayPlus
+                ? 'MAI Pay Plus doubles the standard cashout limit.'
+                : 'Only successful cashouts count toward the limit.'
+            }
+            accentClassName={
+              isMaiPayPlus
+                ? 'text-amber-300'
+                : 'text-violet-300'
+            }
+            iconClassName={
+              isMaiPayPlus
+                ? 'bg-amber-400/10 text-amber-300'
+                : 'bg-violet-400/10 text-violet-300'
+            }
+          />
+        </div>
+
+        {isMaiPayPlus && (
+          <div className="rounded-2xl border border-amber-400/20 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent p-5">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                <Crown className="h-5 w-5" aria-hidden="true" />
+              </div>
+
+              <div>
+                <h3 className="text-base font-black text-amber-300">
+                  MAI Pay Plus Active
+                </h3>
+
+                <p className="mt-1 text-sm leading-6 text-slate-300">
+                  Your rolling cashout limit is increased from 10 to 20
+                  successful cashouts every 24 hours. Cashout options shown
+                  in the Select Cashout Tier section require double the
+                  standard coin amount while MAI Pay Plus is active.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500/10 via-cyan-500/5 to-transparent p-5">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
+              <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-emerald-300">
+                No Cashout Fees
+              </h3>
+
+              <p className="mt-1 text-sm leading-6 text-slate-300">
+                Troll City does not charge users to cash out their earnings.
+                The amount shown for the selected cashout tier is the exact
+                amount the user receives.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_0.9fr]">
+          <div className="rounded-2xl border border-white/10 bg-slate-900/45 p-5">
+            <div
+              className={cn(
+                'flex items-center gap-2',
+                isMaiPayPlus
+                  ? 'text-amber-300'
+                  : 'text-cyan-300'
+              )}
+            >
+              {isMaiPayPlus ? (
+                <Crown className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Gauge className="h-4 w-4" aria-hidden="true" />
+              )}
+
+              <h3 className="text-sm font-black uppercase tracking-[0.16em]">
+                Rolling 24-Hour Limit
+              </h3>
+            </div>
+
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              {isMaiPayPlus
+                ? 'A MAI Pay Plus member may complete up to 20 successful cashouts during any rolling 24-hour period.'
+                : 'A user may complete up to 10 successful cashouts during any rolling 24-hour period.'}
+            </p>
+
+            <div className="mt-5">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-3xl font-black text-white">
+                    {completedCashouts}
+
+                    <span className="text-lg text-slate-500">
+                      /{cashoutLimit}
+                    </span>
+                  </p>
+
+                  <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Successful cashouts
+                  </p>
+                </div>
+
+                <p
+                  className={cn(
+                    'text-right text-sm font-black',
+                    hasReachedCashoutLimit
+                      ? 'text-amber-300'
+                      : isMaiPayPlus
+                        ? 'text-amber-300'
+                        : 'text-cyan-300'
+                  )}
+                >
+                  {hasReachedCashoutLimit
+                    ? 'No cashouts remaining'
+                    : `${remainingCashouts} remaining`}
+                </p>
+              </div>
+
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-[width] duration-500',
+                    hasReachedCashoutLimit
+                      ? 'bg-gradient-to-r from-amber-400 to-orange-500'
+                      : isMaiPayPlus
+                        ? 'bg-gradient-to-r from-amber-300 to-orange-500'
+                        : 'bg-gradient-to-r from-cyan-400 to-blue-500'
+                  )}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(0, progressPercent)
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              <p className="mt-4 text-sm leading-6 text-slate-400">
+                Each successful cashout remains in the rolling count for
+                exactly 24 hours. Eligibility automatically returns as older
+                cashouts fall outside that window.
+              </p>
+            </div>
+          </div>
+
+          <EligibilityCard
+            loading={loading}
+            isVerified={isVerified}
+            hasReachedCashoutLimit={hasReachedCashoutLimit}
+            nextCashoutWait={nextCashoutWait}
+            isMaiPayPlus={isMaiPayPlus}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CashoutStatus({
+  loading,
+  isVerified,
+  hasReachedCashoutLimit,
+  mayCashOut,
+  remainingCashouts,
+  cashoutLimit,
+  nextCashoutWait,
+  isMaiPayPlus,
+}: {
+  loading: boolean;
+  isVerified: boolean;
+  hasReachedCashoutLimit: boolean;
+  mayCashOut: boolean;
+  remainingCashouts: number;
+  cashoutLimit: number;
+  nextCashoutWait: string;
+  isMaiPayPlus: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'w-full rounded-2xl border p-4 sm:w-auto sm:min-w-[245px]',
+        loading
+          ? 'border-slate-700/60 bg-slate-900/60'
+          : mayCashOut
+            ? isMaiPayPlus
+              ? 'border-amber-400/25 bg-amber-400/5'
+              : 'border-emerald-400/25 bg-emerald-400/5'
+            : 'border-amber-400/25 bg-amber-400/5'
+      )}
+    >
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+        Cashout status
+      </p>
+
+      <div className="mt-2 flex items-center gap-2">
+        {loading ? (
+          <Clock3
+            className="h-5 w-5 text-slate-400"
+            aria-hidden="true"
+          />
+        ) : mayCashOut ? (
+          isMaiPayPlus ? (
+            <Crown
+              className="h-5 w-5 text-amber-400"
+              aria-hidden="true"
+            />
+          ) : (
+            <BadgeCheck
+              className="h-5 w-5 text-emerald-400"
+              aria-hidden="true"
+            />
+          )
+        ) : (
+          <XCircle
+            className="h-5 w-5 text-amber-400"
+            aria-hidden="true"
+          />
+        )}
+
+        <p
+          className={cn(
+            'text-base font-black',
+            loading
+              ? 'text-slate-300'
+              : mayCashOut
+                ? isMaiPayPlus
+                  ? 'text-amber-300'
+                  : 'text-emerald-300'
+                : 'text-amber-300'
+          )}
+        >
+          {loading
+            ? 'Checking Access'
+            : !isVerified
+              ? 'Verification Required'
+              : hasReachedCashoutLimit
+                ? 'Daily Limit Reached'
+                : isMaiPayPlus
+                  ? 'MAI Pay Plus Active'
+                  : 'Eligible to Cash Out'}
+        </p>
+      </div>
+
+      <p className="mt-1 text-xs leading-5 text-slate-400">
+        {loading
+          ? 'Loading your current cashout status.'
+          : !isVerified
+            ? 'Complete account verification before requesting a cashout.'
+            : hasReachedCashoutLimit
+              ? nextCashoutWait
+              : `${remainingCashouts} of ${cashoutLimit} cashouts remain in your rolling 24-hour window.`}
+      </p>
+    </div>
+  );
+}
+
+function EligibilityCard({
+  loading,
+  isVerified,
+  hasReachedCashoutLimit,
+  nextCashoutWait,
+  isMaiPayPlus,
+}: {
+  loading: boolean;
+  isVerified: boolean;
+  hasReachedCashoutLimit: boolean;
+  nextCashoutWait: string;
+  isMaiPayPlus: boolean;
+}) {
+  const available =
+    !loading &&
+    isVerified &&
+    !hasReachedCashoutLimit;
+
+  return (
+    <div
+      className={cn(
+        'rounded-2xl border p-5',
+        loading
+          ? 'border-slate-700/60 bg-slate-900/45'
+          : !isVerified
+            ? 'border-amber-400/25 bg-amber-400/5'
+            : hasReachedCashoutLimit
+              ? 'border-red-400/25 bg-red-400/5'
+              : isMaiPayPlus
+                ? 'border-amber-400/25 bg-amber-400/5'
+                : 'border-emerald-400/25 bg-emerald-400/5'
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+            loading
+              ? 'bg-slate-700/40 text-slate-400'
+              : !isVerified
+                ? 'bg-amber-400/10 text-amber-300'
+                : hasReachedCashoutLimit
+                  ? 'bg-red-400/10 text-red-300'
+                  : isMaiPayPlus
+                    ? 'bg-amber-400/10 text-amber-300'
+                    : 'bg-emerald-400/10 text-emerald-300'
+          )}
+        >
+          {loading ? (
+            <Clock3 className="h-5 w-5" aria-hidden="true" />
+          ) : available ? (
+            isMaiPayPlus ? (
+              <Crown className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+            )
+          ) : (
+            <XCircle className="h-5 w-5" aria-hidden="true" />
+          )}
+        </div>
+
+        <div>
+          <h3
+            className={cn(
+              'text-base font-black',
+              loading
+                ? 'text-slate-300'
+                : !isVerified
+                  ? 'text-amber-300'
+                  : hasReachedCashoutLimit
+                    ? 'text-red-300'
+                    : isMaiPayPlus
+                      ? 'text-amber-300'
+                      : 'text-emerald-300'
+            )}
+          >
+            {loading
+              ? 'Checking Cashout Access'
+              : !isVerified
+                ? 'Verify Your Account'
+                : hasReachedCashoutLimit
+                  ? "You've reached today's cashout limit."
+                  : isMaiPayPlus
+                    ? 'MAI Pay Plus Cashout Access'
+                    : 'Cashout Access Available'}
+          </h3>
+
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            {loading
+              ? 'Your current cashout eligibility is being loaded.'
+              : !isVerified
+                ? 'Every verified user may cash out immediately after earning enough coins for a supported cashout tier.'
+                : hasReachedCashoutLimit
+                  ? 'You may cash out again after one of your previous cashouts becomes older than 24 hours.'
+                  : isMaiPayPlus
+                    ? 'Select a MAI Pay Plus cashout tier below. Plus tiers use double the standard coin requirement.'
+                    : 'Select a cashout tier below to continue.'}
+          </p>
+
+          {hasReachedCashoutLimit && (
+            <div className="mt-4 rounded-xl border border-red-400/15 bg-black/15 p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-300/70">
+                Next available cashout
+              </p>
+
+              <p className="mt-1 text-sm font-black text-red-200">
+                {nextCashoutWait}
+              </p>
             </div>
           )}
         </div>
       </div>
-
-      <div className="p-5 space-y-5">
-        {/* Benefits Grid */}
-        <div>
-          <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Your Benefits</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <BenefitCard
-              icon={<Clock className="h-4 w-4" />}
-              label="Processing"
-              value={processingTime}
-              active={true}
-            />
-            <BenefitCard
-              icon={<Zap className="h-4 w-4" />}
-              label="Cashout Fee"
-              value={`${FAST_PAY_FEE_PERCENT}%`}
-              active={true}
-            />
-            <BenefitCard
-              icon={<Star className="h-4 w-4" />}
-              label="Max Per Week"
-              value={`${maxCashouts}×`}
-              active={tier !== 'standard'}
-            />
-          </div>
-        </div>
-
-        {/* Tier Comparison */}
-        <div>
-          <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Payout Tiers</h4>
-          <div className="space-y-2">
-            <TierRow
-              label="Level 1–499"
-              description="Standard • Paid every Friday"
-              fee={`${FAST_PAY_FEE_PERCENT}%`}
-              active={tier === 'standard'}
-              current={tier === 'standard'}
-            />
-            <TierRow
-              label="Level 500–999"
-              description="Fast Pay • Every 24 Hrs • Within 24h"
-              fee={`${FAST_PAY_FEE_PERCENT}%`}
-              active={tier === 'fast_pay'}
-              current={tier === 'fast_pay'}
-              highlight
-            />
-            <TierRow
-              label="Level 1000+"
-              description="Instant • Every 60 Minutes • Priority"
-              fee={`${FAST_PAY_FEE_PERCENT}%`}
-              active={tier === 'instant'}
-              current={tier === 'instant'}
-              highlight
-            />
-          </div>
-        </div>
-
-        {/* Progress to Next Tier */}
-        {tier !== 'instant' && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-400">
-                Progress to {tier === 'standard' ? 'Fast Pay' : 'Instant Pay'}
-              </span>
-              <span className={cn('text-xs font-bold', style.accentColor)}>
-                {levelsToNextTier} level{levelsToNextTier !== 1 ? 's' : ''} to go
-              </span>
-            </div>
-            <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-              <div
-                className={cn('h-full rounded-full transition-all duration-500', style.progressColor)}
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Safety Requirements (only show for Fast Pay+ tiers) */}
-        {tier !== 'standard' && (
-          <div>
-            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              Safety Requirements
-            </h4>
-            <div className="space-y-2">
-              {FAST_PAY_REQUIREMENTS.map((req) => {
-                const met = (() => {
-                  switch (req.key) {
-                    case 'verified_identity': return requirements.verifiedIdentity;
-                    case 'no_violations': return requirements.noActiveViolations;
-                    case 'account_age': return requirements.accountOlderThan30Days;
-                    case 'good_standing': return requirements.goodStanding;
-                    case 'no_fraud': return requirements.noFraudChargeback;
-                    default: return false;
-                  }
-                })();
-
-                return (
-                  <div
-                    key={req.key}
-                    className={cn(
-                      'flex items-center gap-3 rounded-xl border p-3 transition-colors',
-                      met
-                        ? 'border-emerald-500/20 bg-emerald-500/5'
-                        : 'border-red-500/20 bg-red-500/5'
-                    )}
-                  >
-                    {met ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className={cn('text-sm font-semibold', met ? 'text-emerald-300' : 'text-red-300')}>
-                        {req.label}
-                      </p>
-                      <p className="text-xs text-slate-500">{req.description}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Locked State for Standard Tier */}
-        {tier === 'standard' && (
-          <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 p-4 text-center">
-            <Lock className="mx-auto h-8 w-8 text-slate-600 mb-2" />
-            <p className="text-sm font-bold text-slate-400">
-              Reach Level {FAST_PAY_MIN_LEVEL} to unlock Fast Pay
-            </p>
-            <p className="text-xs text-slate-600 mt-1">
-              Earn XP by streaming, receiving gifts, and participating in city activities.
-            </p>
-            {levelsToNextTier > 0 && (
-              <p className={cn('mt-2 text-sm font-bold', style.accentColor)}>
-                {levelsToNextTier} level{levelsToNextTier !== 1 ? 's' : ''} away
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Action Button */}
-        {isEligible && onNavigateToCashout && (
-          <button
-            onClick={onNavigateToCashout}
-            className={cn(
-              'w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-black transition-all',
-              tier === 'instant'
-                ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 hover:from-amber-300 hover:to-orange-400'
-                : 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 hover:from-cyan-300 hover:to-blue-400'
-            )}
-          >
-            <Zap className="h-4 w-4" />
-            Request {tierLabel} Payout
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        )}
-
-        {/* Unmet Requirements Warning */}
-        {tier !== 'standard' && !meetsAllRequirements && (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-bold text-amber-300">Requirements Not Met</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Complete the following to activate your {tierLabel} benefits:
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {unmetRequirements.map((req, i) => (
-                    <li key={i} className="text-xs text-amber-300/80 flex items-center gap-1.5">
-                      <span className="h-1 w-1 rounded-full bg-amber-400" />
-                      {req}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
-// ============================================================================
-// Sub-components
-// ============================================================================
-
-function BenefitCard({
+function SummaryCard({
   icon,
   label,
   value,
-  active,
+  description,
+  accentClassName,
+  iconClassName,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  active: boolean;
+  description: string;
+  accentClassName: string;
+  iconClassName: string;
 }) {
   return (
-    <div
-      className={cn(
-        'rounded-xl border p-3 text-center transition-colors',
-        active
-          ? 'border-cyan-500/20 bg-cyan-500/5'
-          : 'border-slate-700/30 bg-slate-900/50'
-      )}
-    >
-      <div className={cn('mx-auto mb-1.5', active ? 'text-cyan-300' : 'text-slate-600')}>
+    <article className="rounded-2xl border border-white/10 bg-slate-900/45 p-4">
+      <div
+        className={cn(
+          'flex h-10 w-10 items-center justify-center rounded-xl',
+          iconClassName
+        )}
+      >
         {icon}
       </div>
-      <p className={cn('text-lg font-black', active ? 'text-white' : 'text-slate-500')}>{value}</p>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-    </div>
+
+      <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </p>
+
+      <p className={cn('mt-1 text-xl font-black', accentClassName)}>
+        {value}
+      </p>
+
+      <p className="mt-2 text-xs leading-5 text-slate-500">
+        {description}
+      </p>
+    </article>
   );
 }
 
-function TierRow({
-  label,
-  description,
-  fee,
-  active,
-  current,
-  highlight,
-}: {
-  label: string;
-  description: string;
-  fee: string;
-  active: boolean;
-  current: boolean;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-between rounded-xl border p-3 transition-colors',
-        current
-          ? 'border-cyan-400/30 bg-cyan-400/10'
-          : highlight
-          ? 'border-slate-600/30 bg-slate-800/50'
-          : 'border-slate-700/20 bg-slate-900/30'
-      )}
-    >
-      <div className="flex items-center gap-3">
-        {current ? (
-          <BadgeCheck className="h-5 w-5 text-cyan-300" />
-        ) : (
-          <div className={cn('h-5 w-5 rounded-full border-2', active ? 'border-cyan-400 bg-cyan-400/20' : 'border-slate-600')} />
-        )}
-        <div>
-          <p className={cn('text-sm font-bold', current ? 'text-cyan-200' : 'text-slate-400')}>{label}</p>
-          <p className="text-xs text-slate-500">{description}</p>
-        </div>
-      </div>
-      <span className={cn('text-sm font-bold', current ? 'text-cyan-300' : 'text-slate-500')}>
-        {fee} fee
-      </span>
-    </div>
+function formatRemainingTime(
+  availableAt: string | Date | null
+): string {
+  if (!availableAt) {
+    return 'Available after the oldest cashout becomes 24 hours old.';
+  }
+
+  const targetTime =
+    availableAt instanceof Date
+      ? availableAt.getTime()
+      : new Date(availableAt).getTime();
+
+  if (Number.isNaN(targetTime)) {
+    return 'Available after the oldest cashout becomes 24 hours old.';
+  }
+
+  const remainingMilliseconds = targetTime - Date.now();
+
+  if (remainingMilliseconds <= 0) {
+    return 'You may cash out again now.';
+  }
+
+  const totalMinutes = Math.ceil(
+    remainingMilliseconds / (1000 * 60)
   );
-}
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours <= 0) {
+    return `You may cash out again in ${minutes} minute${
+      minutes === 1 ? '' : 's'
+    }.`;
+  }
+
+  if (minutes === 0) {
+    return `You may cash out again in ${hours} hour${
+      hours === 1 ? '' : 's'
+    }.`;
+  }
+
+  return `You may cash out again in ${hours} hour${
+    hours === 1 ? '' : 's'
+  } and ${minutes} minute${minutes === 1 ? '' : 's'}.`;
+}  

@@ -27,6 +27,7 @@ import { useUserLeagues } from '../../hooks/useUserLeagues'
 import { useTrollFamilyActivity } from '../../hooks/useTrollFamilyActivity'
 import { usePromoCardWatchReward } from '../../hooks/usePromoCardWatchReward'
 import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
+import FeedTheTroll from '../../components/feed-the-troll/FeedTheTroll'
 
 import { Stream } from '../../types/broadcast'
 import BroadcastBottomBar from '../../components/broadcast/BroadcastBottomBar'
@@ -392,11 +393,8 @@ function getParticipantLabel(participant: any, fallbackOrSeat: string | any = 'V
   const normalizedIdentity = normalizeIdentityToken(identity)
 
   return (
-    seatProfile?.display_name ||
     seatProfile?.username ||
-    seat?.display_name ||
     seat?.username ||
-    metadata?.display_name ||
     metadata?.username ||
     participant?.name ||
     (seat?.user_id ? `User ${String(seat.user_id).slice(0, 6)}` : '') ||
@@ -515,6 +513,7 @@ import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStreamSeats } from '@/hooks/useStreamSeats'
 import { useStreamAudiencePresence } from '@/hooks/useStreamAudiencePresence'
 import { useSubscriberUsernames } from '@/hooks/useCreatorSubscription'
+import { useBroadcastShutdown } from '@/hooks/useBroadcastShutdown'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
 import { emitEvent } from '@/lib/events'
 import { getGiftVisualConfig } from '@/lib/giftVisuals'
@@ -669,6 +668,11 @@ export function BroadcastPage() {
 const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats, removeSeat } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
     const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
 
+    // Latest active-audience count in a ref (see viewerCountRef note): read inside
+    // the LiveKit connect effect for the capacity check without re-triggering it.
+    const activeAudienceLenRef = useRef(0)
+    useEffect(() => { activeAudienceLenRef.current = activeAudience.length }, [activeAudience.length])
+
     // Broadcast frame - decorative border for host's stream
     const broadcastFrame = useBroadcastFrame(stream?.user_id)
 
@@ -734,7 +738,7 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
           (seat?.user_id || seat?.guest_id || seatUserId),
       )
       const displayName =
-        seat?.user_profile?.display_name ||
+        seat?.user_profile?.username ||
         seat?.user_profile?.username ||
         'Viewer'
       const avatarUrl = seat?.user_profile?.avatar_url || null
@@ -1131,20 +1135,66 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     livekitRoomDisconnectedCountRef.current += 1
   }, [detachLiveKitHandlers])
 
-  // Cleanup handler for page unload - full LiveKit teardown when browser closes
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (!isGoingLiveRef.current) {
-        disconnectLiveKitRoom()
+  // Shared shutdown sequence used by the manual End button, tab close, refresh,
+  // logout, component unmount, and unexpected disconnect. `stopRtc` performs the
+  // full LiveKit teardown (unpublish + disconnect + session end + PreflightStore reset),
+  // which is the LiveKit equivalent of the Agora setEnabled/stop/close + leave steps.
+  const { endBroadcast: endBroadcastShutdown, endingBroadcastRef } = useBroadcastShutdown({
+    streamId,
+    userId: user?.id,
+    isLive: stream?.status === 'live' && stream?.is_live === true,
+    stopRtc: async () => {
+      cleanupLocalMedia()
+      setRemoteParticipants(new Map())
+      disconnectLiveKitRoom()
+      PreflightStore.clear()
+
+      try {
+        await fetch('/api/broadcasts/stop-streaming', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ streamId: stream?.id }),
+        })
+      } catch (stopErr) {
+        console.warn('[BroadcastPage] stop-streaming error:', stopErr)
       }
-    }
 
-    window.addEventListener('beforeunload', handleBeforeUnload)
+      if (stream?.id) {
+        try {
+          const { data: session } = await supabase
+            .from('rtc_sessions')
+            .select('id, started_at')
+            .eq('room_name', `stream-${stream.id}`)
+            .eq('is_active', true)
+            .maybeSingle()
 
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [disconnectLiveKitRoom])
+          if (session) {
+            const endTime = new Date().toISOString()
+            const startTime = new Date(session.started_at)
+            const durationSeconds = Math.floor((new Date(endTime).getTime() - startTime.getTime()) / 1000)
+            await supabase
+              .from('rtc_sessions')
+              .update({ is_active: false, ended_at: endTime, duration_seconds: durationSeconds })
+              .eq('id', session.id)
+          }
+        } catch (endErr) {
+          console.warn('[BroadcastPage] rtc_sessions end failed:', endErr)
+        }
+      }
+    },
+    onEnded: (reason) => {
+      setStream((prev: any) => (prev ? { ...prev, status: 'ended', is_live: false } : prev))
+      // Manual/auto ends navigate; lifecycle (unload/disconnect) ends must not
+      // navigate away (the page is already gone) — they only need DB + realtime.
+      if (reason === 'manual' || reason === 'auto' || reason === 'admin') {
+        if (isStaff) {
+          navigate('/government/streams')
+        } else {
+          navigate(`/broadcast/summary/${stream?.id}`)
+        }
+      }
+    },
+  })
 
   // Check if screen share mode from sessionStorage (set by SetupPage for gaming category)
   const { storedScreenMode: initialScreenMode, storedCameraOverlay: initialCameraOverlay } = useMemo(() => {
@@ -1256,6 +1306,12 @@ useEffect(() => {
   const [isChatOpen, setIsChatOpen] = useState(true)
   const [canSwipe, setCanSwipe] = useState(false)
   const [viewerCount, setViewerCount] = useState(0)
+  // Latest audience/viewer counts kept in refs so the LiveKit connect effect can
+  // read them for the viewer capacity check WITHOUT depending on them. Depending
+  // on them caused the effect to tear down + reconnect (killing the host camera)
+  // every time a viewer joined or left.
+  const viewerCountRef = useRef(0)
+  useEffect(() => { viewerCountRef.current = viewerCount }, [viewerCount])
   const [activeViewerProfiles, setActiveViewerProfiles] = useState<Array<{
     user_id: string;
     username: string;
@@ -1602,7 +1658,7 @@ const ranked = senderIds
                 user_id: senderId,
                 sender_username:
                   profileRow?.username ||
-                  profileRow?.display_name ||
+                   profileRow?.username ||
                   profileRow?.email?.split('@')?.[0] ||
                   'Troll Citizen',
                 sender_avatar_url: profileRow?.avatar_url || null,
@@ -1994,7 +2050,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
               .filter((row: any) => row?.id)
               .map((row: any) => [
                 row.id,
-                row.username || row.display_name || row.email?.split('@')?.[0] || 'Troll Citizen'
+                row.username || row.email?.split('@')?.[0] || 'Troll Citizen'
               ])
           );
 
@@ -2127,9 +2183,11 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
 
   const [isPinProductModalOpen, setIsPinProductModalOpen] = useState(false)
 
-// Auto-end stream if broadcaster has been live for 10 minutes with no viewers and no chat messages
+// Auto-end stream if broadcaster has been live for 10 minutes with no viewers and no chat messages.
+// Staff/admin broadcasts are exempt (server-side auto_end_inactive_streams also exempts them).
 useEffect(() => {
   if (!stream || !isHost || stream.status !== 'live' || stream.is_live !== true) return
+  if (isStaffProfile(profile)) return // never auto-end staff/admin broadcasts
   if (autoEndCheckedRef.current) return // Only check once per stream
 
   // Set stream start time on first check
@@ -2178,7 +2236,7 @@ useEffect(() => {
   }, 30000) // Check every 30 seconds
 
   return () => clearInterval(checkInterval)
-}, [stream, isHost, viewerCount, hasReceivedChatMessage])
+}, [stream, isHost, viewerCount, hasReceivedChatMessage, profile])
 
   // Broadcast Text Popup
   const [isTextPopupComposerOpen, setIsTextPopupComposerOpen] = useState(false)
@@ -2200,6 +2258,10 @@ useEffect(() => {
     allRestrictionsDisabled,
     isStreamViewerCapped,
   } = useBroadcastViewerCap()
+
+  const BETA_MAX_VIEWERS_PER_BROADCAST = 20
+
+  const [viewerCapacityReached, setViewerCapacityReached] = useState(false)
 
    // Quick Coin Store
    const [isCoinStoreOpen, setIsCoinStoreOpen] = useState(false)
@@ -3015,7 +3077,7 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
           const userProfile = Array.isArray(row.user) ? row.user[0] : row.user;
           viewerMap.set(id, {
             user_id: id,
-            username: userProfile?.username || userProfile?.display_name || userProfile?.email?.split('@')?.[0] || 'Troll Citizen',
+            username: userProfile?.username || userProfile?.email?.split('@')?.[0] || 'Troll Citizen',
             avatar_url: userProfile?.avatar_url || null,
             role: userProfile?.role,
             troll_role: userProfile?.troll_role,
@@ -3046,7 +3108,7 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
           viewerIds.add(id);
           viewerMap.set(id, {
             user_id: id,
-            username: presence?.username || presence?.display_name || presence?.email?.split('@')?.[0] || 'Troll Citizen',
+            username: presence?.username || presence?.email?.split('@')?.[0] || 'Troll Citizen',
             avatar_url: presence?.avatar_url || null,
             role: presence?.role,
             troll_role: presence?.troll_role,
@@ -3144,12 +3206,11 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
             .then(({ data: effectData }) => {
           const currentProfile = profileRef.current;
            channel.track({
-                user_id: user?.id || 'viewer',
-                username: currentProfile?.username || (currentProfile as any)?.display_name || user?.email?.split('@')?.[0] || 'Troll Citizen',
-                display_name: (currentProfile as any)?.display_name,
-                email: user?.email,
-                is_host: isHost,
-                online_at: new Date().toISOString(),
+               user_id: user?.id || 'viewer',
+               username: currentProfile?.username || user?.email?.split('@')?.[0] || 'Troll Citizen',
+               email: user?.email,
+               is_host: isHost,
+               online_at: new Date().toISOString(),
                 avatar_url: currentProfile?.avatar_url || '',
                 role: currentProfile?.role,
                 troll_role: currentProfile?.troll_role,
@@ -3301,9 +3362,13 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
     // Allow anonymous viewers to watch without authentication.
     // Only publishers still require a real user or guest seat identity.
     const hasUserIdentity = !isHost || !!user?.id;
-    
+
     if (!stream || !stream.id || !hasUserIdentity) {
       return;
+    }
+
+    if (viewerCapacityReached && Math.max(activeAudienceLenRef.current, viewerCountRef.current) < BETA_MAX_VIEWERS_PER_BROADCAST) {
+      setViewerCapacityReached(false);
     }
 
     // Only connect to LiveKit if the stream is actually live
@@ -3371,6 +3436,13 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
 
     const initLiveKit = async () => {
       if (!shouldPublish) {
+        // Hard-enforced beta viewer capacity: do not join once 20 viewers are present
+        const currentViewers = Math.max(activeAudienceLenRef.current, viewerCountRef.current)
+        if (currentViewers >= BETA_MAX_VIEWERS_PER_BROADCAST) {
+          setViewerCapacityReached(true)
+          toast.error('This broadcast has reached maximum viewer capacity.')
+          return
+        }
         // OPTIMIZED: Don't block UI - connect in background without isJoining state
         try {
           const viewerIdentity = userIdentity
@@ -3773,19 +3845,39 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
 
          return () => {
            mounted = false
-           // Full teardown on unmount: unpublish, detach handlers, disconnect
-           disconnectLiveKitRoom()
+           // IMPORTANT: do NOT disconnect the LiveKit room here. This cleanup runs
+           // on every re-run of the effect (any dependency change), and
+           // disconnecting would kill the host's camera. Re-connection when the
+           // connection key actually changes is handled at the top of the effect
+           // (see the key-change teardown above). Final teardown on unmount is
+           // handled by the dedicated unmount-only effect below.
          }
-       }, [
-         stream?.id,
-         stream?.status,
-         stream?.is_live,
-         user?.id, // user.id is used for identity
-         isHost,
-         attachLiveKitHandlers,
-         detachLiveKitHandlers,
-         disconnectLiveKitRoom,
-       ])
+        }, [
+          stream?.id,
+          stream?.status,
+          stream?.is_live,
+          user?.id, // user.id is used for identity
+          isHost,
+          // NOTE: viewerCount / activeAudience.length are intentionally NOT deps.
+          // They change whenever a viewer joins/leaves, and this effect's cleanup
+          // disconnects the LiveKit room — including the HOST's camera. Reacting to
+          // them was tearing down the broadcaster's camera the moment anyone
+          // watched. Capacity checks read the latest values via refs instead.
+          attachLiveKitHandlers,
+          detachLiveKitHandlers,
+          disconnectLiveKitRoom,
+        ])
+
+  // Dedicated unmount-only teardown: fully disconnect the LiveKit room exactly
+  // once when the page is destroyed. This replaces the per-render teardown that
+  // used to live in the connect effect (which killed the host camera on viewer
+  // join/leave). Empty deps → runs only on unmount.
+  useEffect(() => {
+    return () => {
+      disconnectLiveKitRoom()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const toggleCamera = useCallback(async () => {
     const participant = roomRef.current?.localParticipant
@@ -4566,104 +4658,11 @@ const toggleMicrophone = useCallback(async () => {
       }
     }
 
-    // Stop local and published media first
-    cleanupLocalMedia()
-
-    // Clear remote participants immediately
-    setRemoteParticipants(new Map())
-
-    // Full LiveKit teardown: unpublish tracks, detach handlers, disconnect socket
-    disconnectLiveKitRoom()
-
-    // Clear PreflightStore to reset state for next broadcast
-    // This ensures clean state when starting a new stream (especially for gaming screen share)
-    PreflightStore.clear()
-    
-    let backendStopped = false
-
-    // Stop LiveKit egress through the backend. The endpoint is responsible for
-    // marking the stream ended after cleanup.
-    try {
-
-      const stopResponse = await fetch('/api/broadcasts/stop-streaming', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          streamId: stream.id
-        })
-      });
-
-      if (stopResponse.ok) {
-        backendStopped = true
-
-      } else {
-        const errorText = await stopResponse.text();
-
-      }
-    } catch (stopErr: any) {
-      console.warn('[BroadcastPage] stop-streaming error:', stopErr)
-    }
-
-    // Always hard-update the stream as ended in the database,
-    // regardless of whether the backend API call succeeded.
-    // The backend handles LiveKit egress cleanup; this ensures the
-    // stream is immediately marked as not live for all viewers.
-    try {
-      const { error: updateError } = await supabase
-        .from('streams')
-        .update({
-          is_live: false,
-          status: 'ended',
-          ended_at: new Date().toISOString()
-        })
-        .eq('id', stream.id);
-
-      if (updateError) {
-        console.warn('[handleStreamEnd] streams update error:', updateError);
-      }
-    } catch (updateErr) {
-      console.warn('[handleStreamEnd] streams update failed:', updateErr);
-    }
-
-    try {
-      // End RTC session
-      const endTime = new Date().toISOString();
-      const { data: session } = await supabase
-        .from('rtc_sessions')
-        .select('id, started_at')
-        .eq('room_name', `stream-${stream.id}`)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (session) {
-        const startTime = new Date(session.started_at);
-        const durationSeconds = Math.floor((new Date(endTime).getTime() - startTime.getTime()) / 1000);
-        
-        await supabase
-          .from('rtc_sessions')
-          .update({
-            is_active: false,
-            ended_at: endTime,
-            duration_seconds: durationSeconds
-          })
-          .eq('id', session.id);
-
-      }
-    } catch (endErr) {
-
-    }
-    
-    setStream((prev: any) => prev ? { ...prev, status: 'ended', is_live: false } : null);
-    
-    // For staff, don't show summary page - go to government streams instead
-    if (isStaff) {
-      navigate('/government/streams');
-    } else {
-      navigate(`/broadcast/summary/${stream?.id}`);
-    }
-  }, [cleanupLocalMedia, disconnectLiveKitRoom, isStaff, navigate, stream?.id, stream?.status, stream?.is_battle, stream?.battle_id, stream?.battle_mode, stream?.started_at, stream?.title, user?.id]);
+    // Delegate to the single shared shutdown sequence: stops browser media,
+    // tears down LiveKit, leaves the room, marks the stream ended, and emits
+    // the realtime broadcast_ended event. Navigation happens in onEnded.
+    await endBroadcastShutdown('manual');
+  }, [endBroadcastShutdown, isStaff, stream?.id, stream?.status, stream?.is_battle, stream?.battle_id, stream?.battle_mode, user?.id]);
 
   const handleStartBattle = useCallback(async () => {
     if (!stream || !isHost) return
@@ -6279,7 +6278,7 @@ const toggleMicrophone = useCallback(async () => {
                             return
                           }
 
-                          const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+                           const username = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                           const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                           setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
@@ -6582,7 +6581,7 @@ const toggleMicrophone = useCallback(async () => {
                             return
                           }
 
-                          const username = profile?.username || (profile as any)?.display_name || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+                           const username = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
                           const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
                           setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
@@ -7154,6 +7153,16 @@ const toggleMicrophone = useCallback(async () => {
 
             </div>
               <GiftVideoOverlay gifts={recentGifts} onFinish={handleRemoveGiftOverlay} nameMap={giftNameMap} />
+
+              {/* Feed the Troll — persistent companion for the broadcaster's troll */}
+              {stream?.user_id && (
+                <FeedTheTroll
+                  broadcasterId={stream.user_id}
+                  streamId={streamId}
+                  compact={isMobileHost}
+                  positionKey="broadcast"
+                />
+              )}
               
               {/* Ghost mode audio tracks - hidden audio elements for ghost participants whose audio must be heard */}
               {ghostAudioParticipants.map((participant: any) => {
@@ -7172,7 +7181,7 @@ const toggleMicrophone = useCallback(async () => {
                   onClose={handleCloseShareModal}
                   streamTitle={stream?.title || 'Untitled Stream'}
                   streamUrl={`${window.location.origin}/broadcast/${streamId}`}
-                  broadcasterName={(broadcasterProfile && (broadcasterProfile.display_name || broadcasterProfile.username)) || 'someone'}
+                  broadcasterName={(broadcasterProfile && broadcasterProfile.username) || 'someone'}
                 />
                 </div>
               )}

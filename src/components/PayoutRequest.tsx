@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAuthStore } from '../lib/store';
 import { toast } from 'sonner';
 import { DollarSign, CreditCard, Clock, CheckCircle, AlertTriangle, Loader2, Shield } from 'lucide-react';
-import { isPayoutWindowOpen, PAYOUT_WINDOW_LABEL } from '../lib/payoutWindow';
+import { CASHOUT_TIERS } from '../config/coinConfig';
 
 interface PayoutStats {
   total_earned: number;
@@ -27,10 +27,8 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
   const [paypalEmail, setPaypalEmail] = useState('');
   const [requestAmount, setRequestAmount] = useState<number>(0);
   const [showRequestForm, setShowRequestForm] = useState(false);
-  const [_hasReducedFees, setHasReducedFees] = useState(false);
   const [idVerificationStatus, setIdVerificationStatus] = useState<string>('not_submitted');
   const [idVerifiedAt, setIdVerifiedAt] = useState<string | null>(null);
-  const payoutWindowOpen = isPayoutWindowOpen();
 
   const checkReducedFees = React.useCallback(async () => {
     try {
@@ -46,7 +44,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
         const diffTime = Math.abs(now.getTime() - verifiedAt.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
         if (diffDays <= 30) {
-          setHasReducedFees(true);
+          // reduced fees flag retained for future use
         }
       }
     } catch (err) {
@@ -114,7 +112,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
           const reserved = profile.reserved_troll_coins || 0;
           s.available_for_payout = Math.max(0, raw - reserved);
         }
-        s.payout_threshold = 12000;
+        s.payout_threshold = CASHOUT_TIERS[0].coins;
         setStats(s);
       }
     } catch (error) {
@@ -200,11 +198,6 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
       return;
     }
 
-    if (!payoutWindowOpen) {
-      toast.error(PAYOUT_WINDOW_LABEL);
-      return;
-    }
-
     setRequesting(true);
     try {
       const { data, error } = await supabase.rpc('request_payout', {
@@ -237,27 +230,6 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     }
   };
 
-  const formatUSD = (coins: number) => {
-    const usd = coins * (25 / 12000);
-    return `$${usd.toFixed(2)}`;
-  };
-
-  const tierRate = (coins: number) => {
-    if (coins >= 120000) return 325 / 120000;
-    if (coins >= 60000) return 150 / 60000;
-    if (coins >= 30000) return 70 / 30000;
-    if (coins >= 12000) return 25 / 12000;
-    return 0;
-  };
-
-  const calculateFees = (coins: number) => {
-    const rate = tierRate(coins);
-    const gross = coins * rate;
-    const fee = 0;
-    const netAmount = gross;
-    return { gross, fee, net: netAmount };
-  };
-
   if (loading) {
     return (
       <div className="bg-gray-800 rounded-lg p-6 animate-pulse">
@@ -280,7 +252,13 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
     );
   }
 
-  const fees = calculateFees(requestAmount);
+  const estimateUsd = (coins: number) => {
+    let best = CASHOUT_TIERS[0];
+    for (const tier of CASHOUT_TIERS) {
+      if (coins >= tier.coins) best = tier;
+    }
+    return `$${(best.usd * (coins / best.coins)).toFixed(2)}`;
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg p-6">
@@ -326,7 +304,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             <span className="text-xs text-gray-400">Total Earned</span>
           </div>
           <div className="text-lg font-bold text-white">{stats.total_earned.toLocaleString()}</div>
-          <div className="text-xs text-gray-500">{formatUSD(stats.total_earned)}</div>
+          <div className="text-xs text-gray-500">{estimateUsd(stats.total_earned)}</div>
         </div>
 
         <div className="bg-gray-700 rounded-lg p-4">
@@ -335,7 +313,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             <span className="text-xs text-gray-400">Paid Out</span>
           </div>
           <div className="text-lg font-bold text-white">{stats.total_paid_out.toLocaleString()}</div>
-          <div className="text-xs text-gray-500">{formatUSD(stats.total_paid_out)}</div>
+          <div className="text-xs text-gray-500">{estimateUsd(stats.total_paid_out)}</div>
         </div>
 
         <div className="bg-gray-700 rounded-lg p-4">
@@ -344,7 +322,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             <span className="text-xs text-gray-400">Available</span>
           </div>
           <div className="text-lg font-bold text-white">{stats.available_for_payout.toLocaleString()}</div>
-          <div className="text-xs text-gray-500">{formatUSD(stats.available_for_payout)}</div>
+          <div className="text-xs text-gray-500">{estimateUsd(stats.available_for_payout)}</div>
         </div>
 
         <div className="bg-gray-700 rounded-lg p-4">
@@ -353,7 +331,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             <span className="text-xs text-gray-400">Threshold</span>
           </div>
           <div className="text-lg font-bold text-white">{stats.payout_threshold.toLocaleString()}</div>
-          <div className="text-xs text-gray-500">{formatUSD(stats.payout_threshold)}</div>
+          <div className="text-xs text-gray-500">{estimateUsd(stats.payout_threshold)}</div>
         </div>
       </div>
 
@@ -380,12 +358,6 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
         </p>
       </div>
 
-      {payoutWindowOpen && (
-        <div className="mb-6 rounded-lg border border-green-500/40 bg-green-900/20 px-3 py-2 text-xs text-green-200">
-          Payouts are currently OPEN! (Every Friday)
-        </div>
-      )}
-
       {/* Request Payout Button / ID Gate */}
       {!showRequestForm && (
         <div className="text-center">
@@ -409,7 +381,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
                 Upload ID to Cash Out
               </button>
             </div>
-          ) : stats.can_request_payout && payoutWindowOpen ? (
+          ) : stats.can_request_payout ? (
             <button
               onClick={() => setShowRequestForm(true)}
               className="px-6 py-3 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-200 flex items-center gap-2 mx-auto"
@@ -422,9 +394,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
               <AlertTriangle className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
               <p className="text-yellow-300 font-medium">Payout Not Available</p>
               <p className="text-yellow-400 text-sm">
-                {payoutWindowOpen
-                  ? `Need ${stats.payout_threshold.toLocaleString()} coins minimum. Currently have ${stats.available_for_payout.toLocaleString()} available.`
-                  : PAYOUT_WINDOW_LABEL}
+                {`Need ${stats.payout_threshold.toLocaleString()} coins minimum. Currently have ${stats.available_for_payout.toLocaleString()} available.`}
               </p>
             </div>
           )}
@@ -438,41 +408,20 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
 
           <div className="mb-4">
               <label className="block text-sm text-gray-300 mb-2">
-              Amount to Cash Out (Coins) — Minimum 12,000
+              Amount to Cash Out (Coins) — Minimum {CASHOUT_TIERS[0].coins.toLocaleString()}
               </label>
               <input
                 type="number"
                 value={requestAmount}
                 onChange={(e) => setRequestAmount(Math.max(0, parseInt(e.target.value) || 0))}
-              min={12000}
+              min={CASHOUT_TIERS[0].coins}
               max={stats.available_for_payout}
               className="w-full bg-gray-600 border border-gray-500 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <p className="text-xs text-gray-400 mt-1">
-              Min: {(12000).toLocaleString()} | Max: {stats.available_for_payout.toLocaleString()}
+              Min: {CASHOUT_TIERS[0].coins.toLocaleString()} | Max: {stats.available_for_payout.toLocaleString()}
               </p>
             </div>
-
-          {/* Fee Breakdown */}
-          {requestAmount > 0 && (
-            <div className="bg-gray-600 rounded p-3 mb-4">
-              <h5 className="text-sm font-medium text-white mb-2">Payout Breakdown</h5>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Gross Amount:</span>
-                  <span className="text-white">${fees.gross.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-300">Processing Fee:</span>
-                  <span className="text-red-400">-${fees.fee.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between border-t border-gray-500 pt-1">
-                  <span className="text-white font-medium">Net Payment:</span>
-                  <span className="text-green-400 font-bold">${fees.net.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="flex gap-2">
             <button
@@ -483,7 +432,7 @@ const PayoutRequest: React.FC<PayoutRequestProps> = ({ onRequestComplete }) => {
             </button>
             <button
               onClick={submitPayoutRequest}
-              disabled={requesting || requestAmount < 12000 || requestAmount > stats.available_for_payout || !payoutWindowOpen || !canCashOut}
+              disabled={requesting || requestAmount < CASHOUT_TIERS[0].coins || requestAmount > stats.available_for_payout || !canCashOut}
               className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded transition-colors flex items-center justify-center gap-2"
               >
               {requesting ? (

@@ -626,7 +626,7 @@ setProfile: (profile, options = {}) => {
             ...(prevProfile || {}),
             ...profile,
             ...mergeAgreementFields(prevProfile, profile),
-          },
+          } as unknown as Partial<UserProfile>,
           get()
         )
 
@@ -995,7 +995,30 @@ export function setupProfileRealtime(userId: string) {
           })
         }
 
-        useAuthStore.getState().setProfile(updatedProfile as UserProfile, { realtime: true, force: false } as any)
+        useAuthStore.getState().setProfile(updatedProfile as unknown as UserProfile, { realtime: true, force: false } as any)
+
+        // When a change affects employee/permission-bearing fields, force a
+        // full profile refresh so newly-hired users instantly unlock the
+        // Employee page (and other role-gated surfaces) without a manual
+        // refresh or re-login. refreshProfile is internally debounced and
+        // deduped, so this will not loop.
+        const PERMISSION_PATCH_KEYS = [
+          'role',
+          'troll_role',
+          'is_admin',
+          'is_troll_officer',
+          'is_officer_active',
+          'is_lead_officer',
+          'is_secretary',
+          'is_ceo_assistant',
+          'is_noah_assistant',
+          'is_pastor',
+          'employment_status',
+        ]
+
+        if (Object.keys(diffPatch).some((key) => PERMISSION_PATCH_KEYS.includes(key))) {
+          useAuthStore.getState().refreshProfile(true)
+        }
       }
     )
     .subscribe((status) => {

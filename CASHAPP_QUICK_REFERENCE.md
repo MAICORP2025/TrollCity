@@ -59,7 +59,7 @@
 4. Enter `$4.99` amount
 5. In memo/note field, paste: `USER123-500`
 6. Tap "Confirm" → "Send"
-7. Wait for admin verification (usually within 24 hours)
+7. Wait for admin verification (usually Within 5 Minutes)
 
 ### Step 6: Coins Appear ✅
 - Admin verifies payment in their Cash App account

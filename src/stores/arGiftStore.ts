@@ -1,8 +1,8 @@
 // AR Gift Store - Zustand store for managing AR gift state
 
 import { create } from 'zustand';
-import type { ARGiftEffect, ARGiftInstance, ARSettings } from '../../types/arGifts';
-import { DEFAULT_AR_SETTINGS } from '../../types/arGifts';
+import type { ARGiftEffect, ARGiftInstance, ARSettings } from '../types/arGifts';
+import { DEFAULT_AR_SETTINGS } from '../types/arGifts';
 
 export interface ARGiftState {
   // Settings

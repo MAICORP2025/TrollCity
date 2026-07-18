@@ -143,7 +143,7 @@ User clicks [Continue] button →
 │  7. Confirm and send                    │
 │                                         │
 │  ⏰ Wait for admin verification         │
-│     Usually within 24 hours             │
+│     Usually Within 5 Minutes             │
 │                                         │
 │  [← Go Back]    [Done - I'll Send] ✓   │
 │                                         │
@@ -181,7 +181,7 @@ User clicks [Done - I'll Send] button →
 │  4. Coins will appear when approved     │
 │                                         │
 │  💬 Note: Admin usually verifies        │
-│     within 24 hours                     │
+│     Within 5 Minutes                     │
 │                                         │
 │               [Close] ✓                 │
 │                                         │
@@ -396,7 +396,7 @@ Step 3 of 3: SUCCESS
 - No manual entry of amounts
 
 ✅ **Fast**
-- Payment approval typically within 24 hours
+- Payment approval typically Within 5 Minutes
 - One-click admin approval
 - Instant coin credit upon approval
 
