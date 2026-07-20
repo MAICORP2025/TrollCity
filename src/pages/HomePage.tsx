@@ -4,6 +4,7 @@ import type { Stream, Profile, TipPackage } from '../types/database'
 import { supabase } from '../lib/supabase'
 import { useLiveContent } from '../contexts/LiveContentContext'
 import { useAuth } from '../contexts/AuthContext'
+import HomeBroadcastBanner from '../components/HomeBroadcastBanner'
 
 const CATEGORY_ICONS: Record<string, string> = {
   Gaming: '🎮',
@@ -50,6 +51,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen text-white noise-overlay">
+      <HomeBroadcastBanner />
+
       {/* Ambient Background Orbs */}
       <div className="ambient-orb w-96 h-96 bg-velvet-purple top-0 left-0" />
       <div className="ambient-orb w-80 h-80 bg-velvet-pink top-1/3 right-0" />

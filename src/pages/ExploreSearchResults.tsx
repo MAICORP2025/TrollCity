@@ -58,7 +58,7 @@ export default function ExploreSearchResults() {
           supabase.from('troll_wall_posts').select('id, user_id, username, avatar_url, content, created_at, likes').ilike('content', like).order('created_at', { ascending: false }).limit(20),
           supabase.from('user_profiles').select('id, username, avatar_url, role, followers_count').ilike('username', like).neq('id', user?.id || '').order('followers_count', { ascending: false }).limit(20),
           supabase.from('streams').select('id, title, broadcaster_id, category, current_viewers, is_live, thumbnail_url').ilike('title', like).eq('is_live', true).order('current_viewers', { ascending: false }).limit(20),
-          supabase.from('shop_items').select('id, name, seller_id, price, thumbnail_url, created_at').ilike('name', like).order('created_at', { ascending: false }).limit(20),
+          supabase.from('shop_items').select('id, name, shop_id, price_coins, image_url, created_at').ilike('name', like).order('created_at', { ascending: false }).limit(20),
           supabase.from('broadcaster_stats').select('user_id, total_gifts_all_time').order('total_gifts_all_time', { ascending: false }).limit(20),
           supabase.from('auction_shows').select('id, title, status, thumbnail_url, created_at').ilike('title', like).order('created_at', { ascending: false }).limit(20),
           supabase.from('tcnn_articles').select('id, title, slug, excerpt, view_count, is_breaking, published_at, category').ilike('title', like).eq('status', 'published').order('view_count', { ascending: false }).limit(20),
@@ -192,8 +192,8 @@ export default function ExploreSearchResults() {
                 <Grid>
                   {stores.map((item) => (
                     <Link key={item.id} to={`/marketplace`} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 hover:bg-white/[0.07]">
-                      <p className="truncate text-sm font-bold">{item.title}</p>
-                      <p className="text-xs text-slate-400">{item.price} coins</p>
+                      <p className="truncate text-sm font-bold">{item.name}</p>
+                      <p className="text-xs text-slate-400">{item.price_coins} coins</p>
                     </Link>
                   ))}
                 </Grid>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store';
 import { UserRole } from '@/lib/supabase';
@@ -249,23 +249,34 @@ export function useBroadcastViewerCap() {
     [isAdmin],
   );
 
-  // Check if a specific stream is viewer-capped
+  // UI-only early-feedback helper. NOT a security boundary — the authoritative
+  // enforcement happens in the join_stream_as_viewer / start_broadcast_with_capacity_check
+  // RPCs. This is used to disable the join/start button when the known state is
+  // already at/over the configured cap, and to show the configured limit.
   const isStreamViewerCapped = useCallback(
-    (streamCreatedAt: string | null | undefined, currentViewers?: number): boolean => {
+    (currentViewers?: number): boolean => {
       if (state.allRestrictionsDisabled) return false;
-      if (currentViewers !== undefined && currentViewers >= BETA_VIEWER_CAP_MAX) return true;
       if (!state.viewerCapEnabled) return false;
-      if (!streamCreatedAt) return false;
-
-      const created = new Date(streamCreatedAt);
-      const capWindow = state.viewerCapHours * 60 * 60 * 1000;
-      return Date.now() - created.getTime() < capWindow;
+      if (typeof currentViewers === 'number' && currentViewers >= state.viewerCapMax) {
+        return true;
+      }
+      return false;
     },
-    [state.allRestrictionsDisabled, state.viewerCapEnabled, state.viewerCapHours],
+    [state.allRestrictionsDisabled, state.viewerCapEnabled, state.viewerCapMax],
+  );
+
+  // Structured view of the start cap for UI display/early feedback.
+  const startCap = useMemo(
+    () => ({
+      enabled: state.startCapEnabled && !state.allRestrictionsDisabled,
+      max: state.startCapMax,
+    }),
+    [state.startCapEnabled, state.allRestrictionsDisabled, state.startCapMax],
   );
 
   return {
     ...state,
+    startCap,
     isAdmin,
     setViewerCapEnabled,
     setViewerCapMax,

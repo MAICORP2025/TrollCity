@@ -56,6 +56,7 @@ import {
   Receipt,
   Sparkles,
   Radio,
+  RefreshCw,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
@@ -384,8 +385,9 @@ interface MorePagesPanelProps {
 interface PageEntry {
   label: string;
   icon: React.ElementType;
-  path: string;
+  path?: string;
   show?: boolean;
+  onClick?: () => void;
 }
 
 function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
@@ -533,6 +535,7 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           category: 'Tools & Help',
           items: [
             { label: 'Beta Feedback', icon: ClipboardList, path: '/beta-feedback' },
+            { label: 'Refresh', icon: RefreshCw, path: '#', onClick: () => window.location.reload() },
             { label: 'Stats', icon: Activity, path: '/stats' },
             { label: 'Support', icon: Heart, path: '/support' },
             { label: 'Safety', icon: Shield, path: '/safety' },
@@ -718,8 +721,8 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
                         const ItemIcon = item.icon;
                         return (
                           <button
-                            key={`${cat.category}-${item.path}-${item.label}`}
-                            onClick={() => handleNavigate(item.path)}
+                            key={`${cat.category}-${item.label}`}
+                            onClick={() => item.onClick ? item.onClick() : handleNavigate(item.path!)}
                             className="flex flex-col items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center transition hover:border-cyan-400/30 hover:bg-white/[0.08]"
                           >
                             <ItemIcon className="h-5 w-5 text-slate-300" />

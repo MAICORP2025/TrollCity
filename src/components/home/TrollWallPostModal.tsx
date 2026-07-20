@@ -25,6 +25,7 @@ import { trackPrideWallAction } from '@/services/prideChallengeTracker'
 import WallShareModal from '@/components/trollWall/WallShareModal'
 import ProfileFrame from '@/components/profile/ProfileFrame'
 import { useUserFrame } from '@/hooks/useUserFrame'
+import { notifySomeoneMentioned } from '@/lib/notifications'
 
 /** Small avatar component for reply items — extracts useUserFrame out of .map() */
 function ReplyAvatar({ userId, avatarUrl, username }: { userId?: string; avatarUrl: string; username: string }) {
@@ -54,7 +55,7 @@ export default function TrollWallPostModal({
   onClose,
   onRequireAuth,
 }: TrollWallPostModalProps) {
-  const { user, isAdmin } = useAuthStore()
+  const { user, profile, isAdmin } = useAuthStore()
   const navigate = useNavigate()
   const [replies, setReplies] = useState<WallPost[]>([])
   const [replyText, setReplyText] = useState('')
@@ -216,6 +217,28 @@ export default function TrollWallPostModal({
         p_content: replyText.trim(),
       })
       if (error) throw error
+
+      const mentionedUsernames = new Set<string>()
+      const mentionRegex = /#([A-Za-z0-9_]+)/g
+      let mentionMatch
+      while ((mentionMatch = mentionRegex.exec(replyText)) !== null) {
+        mentionedUsernames.add(mentionMatch[1])
+      }
+
+      if (mentionedUsernames.size > 0 && user?.id) {
+        for (const username of mentionedUsernames) {
+          const { data: mentionedUser } = await supabase
+            .from('user_profiles')
+            .select('id')
+            .ilike('username', username)
+            .maybeSingle()
+
+          if (mentionedUser?.id && mentionedUser.id !== user.id) {
+            await notifySomeoneMentioned(mentionedUser.id, profile?.username || 'Someone', 'a Troll Wall reply')
+          }
+        }
+      }
+
       toast.success('Reply posted')
       setReplyText('')
       if (user?.id) {

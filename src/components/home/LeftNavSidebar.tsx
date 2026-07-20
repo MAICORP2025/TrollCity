@@ -66,7 +66,7 @@ export default function LeftNavSidebar({
     { id: 'home', label: 'Home', icon: MessageCircle, activeGradient: 'from-pink-500 to-purple-600' },
     { label: 'Wall', icon: PenSquare, activeGradient: 'from-purple-500 to-pink-600', count: wallNotificationCount, isExternal: true, path: '/wall' },
     { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount + battleCount },
-    { id: 'universe', label: 'Universe', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
+    { id: 'universe', label: 'Universe Battles', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
     { id: 'jobs', label: 'Jobs', icon: PlayCircle, activeGradient: 'from-cyan-500 to-blue-600' },
     { id: 'podcast', label: 'Podcast', icon: Mic, activeGradient: 'from-purple-500 to-fuchsia-600' },
     { id: 'laws-fees', label: 'City Laws', icon: FileText, activeGradient: 'from-cyan-500 to-blue-600' },

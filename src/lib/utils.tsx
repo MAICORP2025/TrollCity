@@ -56,11 +56,11 @@ export function parseTextWithLinks(text: string | null | undefined): React.React
       parts.push(
         <Link
           key={`tag-${matchIndex}`}
-          to={`/explore?q=${encodeURIComponent(tag)}&tab=posts`}
+          to={`/profile/${encodeURIComponent(tag)}`}
           className="text-cyan-400 font-semibold hover:text-cyan-300"
           onClick={(e) => e.stopPropagation()}
         >
-          {tag}
+          #{tag}
         </Link>
       );
       lastIndex = matchIndex + match[0].length;

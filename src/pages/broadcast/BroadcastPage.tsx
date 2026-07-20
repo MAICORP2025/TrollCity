@@ -511,7 +511,7 @@ import BroadcastTextPopupComposer from '@/components/broadcast/BroadcastTextPopu
 import RandomBattleBanner from '@/components/broadcast/RandomBattleBanner'
 import { useStreamRealtime } from '@/hooks/useStreamRealtime'
 import { useStreamSeats } from '@/hooks/useStreamSeats'
-import { useStreamAudiencePresence } from '@/hooks/useStreamAudiencePresence'
+import { useStreamAudiencePresence, StreamAudienceMember } from '@/hooks/useStreamAudiencePresence'
 import { useSubscriberUsernames } from '@/hooks/useCreatorSubscription'
 import { useBroadcastShutdown } from '@/hooks/useBroadcastShutdown'
 import { DEFAULT_BATTLE_THEME_ID, normalizeBattleTheme } from '@/lib/battleThemes'
@@ -667,6 +667,68 @@ export function BroadcastPage() {
 
 const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats, removeSeat } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
     const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
+
+    const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
+    const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
+
+    // Anonymous viewers watch via LiveKit but are NOT written to
+    // stream_audience_presence (user_id is an FK to user_profiles). They appear in
+    // the LiveKit room as remote participants. Inject a synthetic audience member
+    // per anonymous participant so the host's ticker shows them as an anon profile
+    // pic without polluting the real presence table.
+    const audienceWithAnon = useMemo(() => {
+      if (!remoteUsers?.length) return audience
+
+      const hostId = String(stream?.user_id || '').trim()
+      const anonMembers: StreamAudienceMember[] = remoteUsers
+        .filter((participant: any) => {
+          if (!participant?.identity) return false
+          if (isGhostParticipant(participant)) return false
+
+          const metadata = getRemoteParticipantMetadata(participant)
+          // Skip the host and anyone sitting in a seat (they have their own tiles).
+          if (metadata?.role === 'broadcaster') return false
+          if (metadata?.seat_index || metadata?.seatIndex) return false
+          if (metadata?.user_id === hostId || metadata?.userId === hostId) return false
+
+          const username = String(metadata?.username || participant?.name || '')
+          const identity = getRemoteParticipantIdentity(participant)
+          if (isAnonymousDisplayName(username)) return true
+          return (
+            identity.includes('guest-viewer:') ||
+            identity.includes('anon-viewer:')
+          )
+        })
+        .map((participant: any) => {
+          const metadata = getRemoteParticipantMetadata(participant)
+          const identity = getRemoteParticipantIdentity(participant)
+          const userId = String(metadata?.user_id || metadata?.userId || identity)
+          const username = String(metadata?.username || participant?.name || 'anon')
+          return {
+            id: `anon:${userId}`,
+            stream_id: streamId || '',
+            user_id: userId,
+            username,
+            avatar_url: metadata?.avatar_url ?? null,
+            joined_at: new Date().toISOString(),
+            left_at: null,
+            is_active: true,
+            is_present: true,
+            gift_total: 0,
+            gift_score: 0,
+            seat_id: null,
+            seat_status: 'audience',
+            role: 'audience',
+            last_seen_at: new Date().toISOString(),
+            is_ghost_mode: false,
+          }
+        })
+
+      if (anonMembers.length === 0) return audience
+      const existingIds = new Set(audience.map((m) => m.user_id))
+      const filtered = anonMembers.filter((m) => !existingIds.has(m.user_id))
+      return [...filtered, ...audience]
+    }, [audience, remoteUsers, stream?.user_id, streamId])
 
     // Latest active-audience count in a ref (see viewerCountRef note): read inside
     // the LiveKit connect effect for the capacity check without re-triggering it.
@@ -1203,13 +1265,11 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     console.log('[BroadcastPage] Initial screen state:', { storedScreenMode, storedCameraOverlay })
     return { storedScreenMode, storedCameraOverlay }
   }, []) // Empty deps - only run once
-  const [isScreenSharing, setIsScreenSharing] = useState(initialScreenMode)
-  const [cameraOverlayEnabled, setCameraOverlayEnabled] = useState(initialCameraOverlay)
-  const [cameraOverlayTrackState, setCameraOverlayTrackState] = useState<LocalVideoTrack | null>(null)
-const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
-   const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
+   const [isScreenSharing, setIsScreenSharing] = useState(initialScreenMode)
+   const [cameraOverlayEnabled, setCameraOverlayEnabled] = useState(initialCameraOverlay)
+   const [cameraOverlayTrackState, setCameraOverlayTrackState] = useState<LocalVideoTrack | null>(null)
 
-    // Ghost participants - separate collection for ghost mode (not merged with remoteParticipants)
+     // Ghost participants - separate collection for ghost mode (not merged with remoteParticipants)
    const [ghostParticipants, setGhostParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
    const ghostUsers = useMemo(() => Array.from(ghostParticipants.values()), [ghostParticipants])
    
@@ -5314,11 +5374,11 @@ const toggleMicrophone = useCallback(async () => {
              {/* --- AUDIENCE TICKER: full-width, neon style, always visible --- */}
              <div className="w-full z-20 px-0 pt-1 pb-2 flex items-center justify-center bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 backdrop-blur-xl border-b border-cyan-400/10 shadow-[0_2px_32px_0_rgba(34,211,238,0.10)]">
                <div className="w-full max-w-7xl mx-auto">
-                  <AudienceBubbleTicker
-                    streamId={streamId || ''}
-                    audience={audience}
-                    currentUserId={user?.id}
-                    hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
+                   <AudienceBubbleTicker
+                     streamId={streamId || ''}
+                     audience={audienceWithAnon}
+                     currentUserId={user?.id}
+                     hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
                     maxVisible={8}
                     className="relative z-0 hidden sm:flex pointer-events-none"
                     onGiftUser={onGift}
@@ -7637,5 +7697,3 @@ function TrackAttach({ track }: { track: LocalVideoTrack | RemoteVideoTrack | nu
     />
   );
 }
-
-

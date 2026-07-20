@@ -166,10 +166,13 @@ export type NotificationType =
    | 'career_application_submitted'
    | 'application_submitted'
 
-   // INTERVIEWS
-   | 'interview_scheduled'
-   | 'interview_scheduled_staff'
-   | 'interview_started';
+  // INTERVIEWS
+  | 'interview_scheduled'
+  | 'interview_scheduled_staff'
+  | 'interview_started'
+
+  // NEW USER SIGNUP (admin alerts)
+  | 'new_user_signup';
 
 export interface Notification {
   id: string

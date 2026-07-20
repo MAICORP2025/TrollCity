@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
 import { toast } from 'sonner'
+import { useStreamRealtime } from './useStreamRealtime'
+import { sendStreamBroadcast } from '../lib/realtime/streamRealtimeManager'
 
 export interface SeatSession {
   id: string
@@ -38,26 +40,6 @@ type SeatEventName = 'seat_joined' | 'seat_live' | 'seat_left' | 'seat_refreshed
 const SUBSCRIBER_DISCOUNT_PERCENT = 0.10
 
 const ACTIVE_SEAT_STATUSES = new Set(['reserved', 'camera_starting', 'active', 'live'])
-
-const seatEventSendChannels = new Map<string, ReturnType<typeof supabase.channel>>()
-
-function getSeatEventSendChannel(streamId: string) {
-  if (!streamId) return null
-  const existing = seatEventSendChannels.get(streamId)
-  if (existing) return existing
-  const channel = supabase.channel(`stream-seat-events:${streamId}`)
-  channel.subscribe()
-  seatEventSendChannels.set(streamId, channel)
-  return channel
-}
-
-function cleanupSeatEventSendChannel(streamId: string) {
-  const channel = seatEventSendChannels.get(streamId)
-  if (channel) {
-    supabase.removeChannel(channel)
-    seatEventSendChannels.delete(streamId)
-  }
-}
 
 function normalizeSeatStatus(status?: string | null) {
   return String(status || '').trim().toLowerCase()
@@ -318,7 +300,6 @@ export function useStreamSeats(
     [streamId, applySeatRows],
   )
 
-  // Dedupe guard: skip duplicate refreshes within 500ms window
   const lastRefreshAtRef = useRef(0)
   const pendingRefreshTimerRef = useRef<number | null>(null)
 
@@ -328,7 +309,6 @@ export function useStreamSeats(
 
       const now = Date.now()
       if (now - lastRefreshAtRef.current < 300) {
-        // Already refreshed recently — schedule one debounced refresh if not already pending
         if (pendingRefreshTimerRef.current !== null) {
           window.clearTimeout(pendingRefreshTimerRef.current)
         }
@@ -349,28 +329,11 @@ export function useStreamSeats(
   const sendSeatEvent = useCallback(
     async (event: SeatEventName, payload: Record<string, any>) => {
       if (!streamId) return
-
-      try {
-        const channel = getSeatEventSendChannel(streamId)
-        if (!channel) return
-
-        await channel.send({
-          type: 'broadcast',
-          event,
-          payload: {
-            stream_id: streamId,
-            ...payload,
-            sent_at: new Date().toISOString(),
-          },
-        })
-      } catch (err) {
-        console.warn('[useStreamSeats] seat broadcast event failed:', {
-          event,
-          streamId,
-          payload,
-          err,
-        })
-      }
+      await sendStreamBroadcast(streamId, event, {
+        stream_id: streamId,
+        ...payload,
+        sent_at: new Date().toISOString(),
+      })
     },
     [streamId],
   )
@@ -382,7 +345,6 @@ export function useStreamSeats(
         return false
       }
 
-      // A user already seated in a stage seat cannot join another seat until they leave it.
       const existing = mySeatRef.current
       if (
         existing &&
@@ -418,7 +380,6 @@ export function useStreamSeats(
         }
       }
 
-      // Optimistic update: show seat immediately before RPC completes
       const optimisticSeat: SeatSession = {
         id: `optimistic-${Date.now()}`,
         stream_id: streamId,
@@ -501,13 +462,11 @@ export function useStreamSeats(
           price_paid: finalPrice,
         })
 
-        // Single debounced refresh to sync state
         scheduleRefresh('joinSeat:post-event')
 
         return true
       } catch (err) {
         console.warn('[useStreamSeats] joinSeat failed:', err)
-        // Rollback optimistic update on exception
         setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
         setMySeat(null)
         seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
@@ -672,7 +631,6 @@ export function useStreamSeats(
     await fetchSeats('refreshSeats')
   }, [fetchSeats])
 
-  // Immediately remove a seat from local state (used when broadcaster/officer kicks a user)
   const removeSeat = useCallback((seatIndex: number) => {
     const idx = Number(seatIndex)
     if (!Number.isFinite(idx)) return
@@ -765,141 +723,115 @@ export function useStreamSeats(
     [fetchSeats],
   )
 
-   useEffect(() => {
-     mountedRef.current = true
-
-     return () => {
-       mountedRef.current = false
-       clearRefreshTimers()
-     }
-   }, [clearRefreshTimers])
-
-   useEffect(() => {
-     if (!streamId) {
-       cleanupSeatEventSendChannel(streamId)
-       setSeats({})
-       setMySeat(null)
-       seatsRef.current = {}
-       mySeatRef.current = null
-       setSeatVersion((v) => v + 1)
-       return
-     }
-
-     void fetchSeats('mount')
-   }, [streamId])
-
   useEffect(() => {
-    if (!streamId) return
-
-    const channel = supabase
-      .channel(`stream-seats:${streamId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'stream_seat_sessions',
-          filter: `stream_id=eq.${streamId}`,
-        },
-         (payload) => {
-           // Handle DELETE: remove seat locally
-           if (payload.eventType === 'DELETE') {
-            const oldRow = payload.old as any
-            const seatIndex = Number(oldRow?.seat_index)
-            if (Number.isFinite(seatIndex)) {
-              setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
-              setMySeat(prev => prev?.seat_index === seatIndex ? null : prev)
-              seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
-              if (mySeatRef.current?.seat_index === seatIndex) mySeatRef.current = null
-              setSeatVersion(v => v + 1)
-            }
-            return
-          }
-
-          // Handle INSERT: add/update seat locally from payload
-          if (payload.eventType === 'INSERT') {
-            const newRow = payload.new as any
-            const session = normalizeSeatSession(newRow)
-            if (session && isActiveSeatStatus(session.status)) {
-              setSeats(prev => ({ ...prev, [session.seat_index]: session }))
-              seatsRef.current = { ...seatsRef.current, [session.seat_index]: session }
-              if (effectiveUserId && (session.user_id === effectiveUserId || session.guest_id === effectiveUserId)) {
-                setMySeat(session)
-                mySeatRef.current = session
-              }
-              setSeatVersion(v => v + 1)
-            }
-            return
-          }
-
-          // Handle UPDATE: update seat locally from payload
-           if (payload.eventType === 'UPDATE') {
-             const newRow = payload.new as any
-             const oldRow = payload.old as any
-             const newStatus = newRow?.status
-
-             if (newStatus === 'left' || newStatus === 'kicked') {
-               const seatIndex = Number(oldRow?.seat_index ?? newRow?.seat_index)
-               if (Number.isFinite(seatIndex)) {
-                 setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
-                 setMySeat(prev => prev?.seat_index === seatIndex ? null : prev)
-                 seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
-                 if (mySeatRef.current?.seat_index === seatIndex) mySeatRef.current = null
-                 setSeatVersion(v => v + 1)
-               }
-             } else {
-               // Update seat data in place
-               const session = normalizeSeatSession(newRow)
-               if (session) {
-                 setSeats(prev => ({ ...prev, [session.seat_index]: session }))
-                 seatsRef.current = { ...seatsRef.current, [session.seat_index]: session }
-                 if (effectiveUserId && (session.user_id === effectiveUserId || session.guest_id === effectiveUserId)) {
-                   setMySeat(session)
-                   mySeatRef.current = session
-                 }
-                 setSeatVersion(v => v + 1)
-               }
-             }
-             return
-           }
-        },
-      )
-      .subscribe((status) => {
-        console.log('[useStreamSeats] postgres realtime status:', status)
-      })
+    mountedRef.current = true
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
-      }
+      mountedRef.current = false
+      clearRefreshTimers()
     }
+  }, [clearRefreshTimers])
+
+  useEffect(() => {
+    if (!streamId) {
+      setSeats({})
+      setMySeat(null)
+      seatsRef.current = {}
+      mySeatRef.current = null
+      setSeatVersion((v) => v + 1)
+      return
+    }
+
+    void fetchSeats('mount')
   }, [streamId])
 
-  useEffect(() => {
-    if (!streamId) return
+  const handleSeatSession = useCallback((event: any) => {
+    if (event.eventType === 'DELETE') {
+      const oldRow = event.old
+      const seatIndex = Number(oldRow?.seat_index)
+      if (Number.isFinite(seatIndex)) {
+        setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+        setMySeat(prev => prev?.seat_index === seatIndex ? null : prev)
+        seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+        if (mySeatRef.current?.seat_index === seatIndex) mySeatRef.current = null
+        setSeatVersion(v => v + 1)
+      }
+      return
+    }
 
-    const channel = supabase
-      .channel(`stream-seat-events:${streamId}`)
-       .on('broadcast', { event: 'seat_joined' }, () => {
-         // Postgres changes handler already updates state — just do a single sync refresh
-         scheduleRefresh('broadcast-seat_joined')
-       })
-       .on('broadcast', { event: 'seat_live' }, () => {
-         scheduleRefresh('broadcast-seat_live')
-       })
-       .on('broadcast', { event: 'seat_left' }, () => {
-         scheduleRefresh('broadcast-seat_left')
-       })
-        .on('broadcast', { event: 'seat_refreshed' }, () => {
-          scheduleRefresh('broadcast-seat_refreshed')
-        })
-        .subscribe()
+    if (event.eventType === 'INSERT') {
+      const newRow = event.new
+      const session = normalizeSeatSession(newRow)
+      if (session && isActiveSeatStatus(session.status)) {
+        setSeats(prev => ({ ...prev, [session.seat_index]: session }))
+        seatsRef.current = { ...seatsRef.current, [session.seat_index]: session }
+        if (effectiveUserId && (session.user_id === effectiveUserId || session.guest_id === effectiveUserId)) {
+          setMySeat(session)
+          mySeatRef.current = session
+        }
+        setSeatVersion(v => v + 1)
+      }
+      return
+    }
 
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
+    if (event.eventType === 'UPDATE') {
+      const newRow = event.new
+      const oldRow = event.old
+      const newStatus = newRow?.status
+
+      if (newStatus === 'left' || newStatus === 'kicked') {
+        const seatIndex = Number(oldRow?.seat_index ?? newRow?.seat_index)
+        if (Number.isFinite(seatIndex)) {
+          setSeats(prev => { const n = { ...prev }; delete n[seatIndex]; return n })
+          setMySeat(prev => prev?.seat_index === seatIndex ? null : prev)
+          seatsRef.current = { ...seatsRef.current }; delete seatsRef.current[seatIndex]
+          if (mySeatRef.current?.seat_index === seatIndex) mySeatRef.current = null
+          setSeatVersion(v => v + 1)
+        }
+      } else {
+        const session = normalizeSeatSession(newRow)
+        if (session) {
+          setSeats(prev => ({ ...prev, [session.seat_index]: session }))
+          seatsRef.current = { ...seatsRef.current, [session.seat_index]: session }
+          if (effectiveUserId && (session.user_id === effectiveUserId || session.guest_id === effectiveUserId)) {
+            setMySeat(session)
+            mySeatRef.current = session
+          }
+          setSeatVersion(v => v + 1)
+        }
       }
     }
+  }, [effectiveUserId])
+
+  const handleSeatEvent = useCallback(() => {
+    scheduleRefresh('broadcast-seat-event')
+  }, [scheduleRefresh])
+
+  useStreamRealtime(streamId, {
+    onSeatSession: handleSeatSession,
+    onSeatEvent: handleSeatEvent,
+  })
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      clearRefreshTimers()
+    }
+  }, [clearRefreshTimers])
+
+  useEffect(() => {
+    if (!streamId) {
+      setSeats({})
+      setMySeat(null)
+      seatsRef.current = {}
+      mySeatRef.current = null
+      setSeatVersion((v) => v + 1)
+      return
+    }
+
+    void fetchSeats('mount')
   }, [streamId])
 
   const pendingSeatRequests: any[] = []

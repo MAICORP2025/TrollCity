@@ -11,6 +11,7 @@ import { trackPrideWallAction } from '@/services/prideChallengeTracker'
 import HorizontalScrollRow from './HorizontalScrollRow'
 import TrollWallPostModal from './TrollWallPostModal'
 import MentionTextarea from '../MentionTextarea'
+import { notifySomeoneMentioned } from '@/lib/notifications'
 
 const EMOJI_OPTIONS = [':)', ':D', '<3', ':-)', ';)', ':P']
 
@@ -201,6 +202,27 @@ export default function TrollWallFeed({ onRequireAuth, feedClassName }: TrollWal
         .single()
 
       if (error) throw error
+
+      const mentionedUsernames = new Set<string>()
+      const mentionRegex = /#([A-Za-z0-9_]+)/g
+      let mentionMatch
+      while ((mentionMatch = mentionRegex.exec(content)) !== null) {
+        mentionedUsernames.add(mentionMatch[1])
+      }
+
+      if (mentionedUsernames.size > 0 && user?.id) {
+        for (const username of mentionedUsernames) {
+          const { data: mentionedUser } = await supabase
+            .from('user_profiles')
+            .select('id')
+            .ilike('username', username)
+            .maybeSingle()
+
+          if (mentionedUser?.id && mentionedUser.id !== user.id) {
+            await notifySomeoneMentioned(mentionedUser.id, profile?.username || 'Someone', 'the Troll Wall')
+          }
+        }
+      }
 
       const optimisticPost: WallPost = {
         ...(data as WallPost),

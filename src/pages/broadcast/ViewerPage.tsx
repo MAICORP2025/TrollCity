@@ -60,7 +60,7 @@ import LeagueProgressPanel from '../../components/broadcast/LeagueProgressPanel'
 import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import { useStreamRealtime } from '../../hooks/useStreamRealtime'
 import { useStreamSeats } from '../../hooks/useStreamSeats'
-import { useStreamAudiencePresence } from '../../hooks/useStreamAudiencePresence'
+import { useStreamAudiencePresence, StreamAudienceMember } from '../../hooks/useStreamAudiencePresence'
 import FeedTheTroll from '../../components/feed-the-troll/FeedTheTroll'
 import { AudienceBubbleTicker } from '../../components/broadcast/AudienceBubbleTicker'
 import MobileAudienceTicker from '../../components/broadcast/MobileAudienceTicker'
@@ -84,6 +84,7 @@ import SeatCityStatusOrb from '../../components/broadcast/SeatCityStatusOrb'
 import { useGhostMode } from '../../hooks/useGhostMode'
 import { useChatBlockStatus } from '../../hooks/useChatBlockStatus'
 import { sendChatThroughGate } from '../../lib/sendChatThroughGate'
+import { admitViewerToStream, releaseViewerSlot } from '@/lib/streamCapacity'
 
 // Import theme constants
 import { trollCityBroadcastTheme } from '../../styles/broadcastTheme'
@@ -556,6 +557,42 @@ function ViewerPage() {
   const params = useParams()
   const streamId = params.streamId || params.id || ''
 
+  // Stable anonymous viewer identity — never use "undefined" in identity.
+  // Uses sessionStorage so the same guest gets the same identity for the
+  // browser session and stream. Format: guest-viewer:<streamId>:<uuid>
+  const anonViewerId = useMemo(() => {
+    if (typeof window === 'undefined' || !streamId) return '';
+    const storageKey = `guest-viewer:${streamId}`;
+    try {
+      let anonId = window.sessionStorage.getItem(storageKey);
+      if (anonId) return anonId;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cryptoObj = (window as any).crypto;
+      if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+        anonId = `guest-viewer:${streamId}:${cryptoObj.randomUUID()}`;
+      } else {
+        // Fallback UUID v4 for non-secure contexts (HTTP, older browsers)
+        const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          const v = c === 'x' ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+        anonId = `guest-viewer:${streamId}:${uuid}`;
+      }
+      window.sessionStorage.setItem(storageKey, anonId);
+      return anonId;
+    } catch {
+      // sessionStorage may be unavailable in some PWA/iframe contexts
+      return `guest-viewer:${streamId}:${Math.random().toString(36).slice(2, 10)}`;
+    }
+  }, [streamId])
+
+  const anonDisplayName = useMemo(
+    () => (streamId ? getAnonymousDisplayName() : ''),
+    [streamId],
+  )
+
   // Startup log to confirm route resolution (important for PWA/mobile)
   useEffect(() => {
     try {
@@ -905,6 +942,23 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
   } | null>(null)
   const [selectedSeatUserId, setSelectedSeatUserId] = useState<string | null>(null)
   const [viewerError, setViewerError] = useState<string | null>(null)
+  // When the authoritative viewer-cap admission rejects the join, we surface a
+  // clear message and expose a manual retry (no tight auto-retry loop). The
+  // retry re-runs the whole admission process.
+  const [viewerCapacityReached, setViewerCapacityReached] = useState(false)
+  const [retryAdmissionKey, setRetryAdmissionKey] = useState(0)
+
+  // UI-only early feedback: when the known configured cap is already met by the
+  // locally-tracked viewer count, pre-flag capacity so the user sees the limit
+  // before attempting. This is NOT a security boundary — the join_stream_as_viewer
+  // RPC remains the authoritative enforcement at the database boundary.
+  useEffect(() => {
+    if (viewerCapacityReached) return
+    if (isStreamViewerCapped(viewerCount) && !allRestrictionsDisabled) {
+      setViewerCapacityReached(true)
+      setViewerError(`This broadcast has reached its viewer capacity (${viewerCapMax}). Please try again shortly.`)
+    }
+  }, [viewerCount, viewerCapEnabled, viewerCapMax, allRestrictionsDisabled, isStreamViewerCapped, viewerCapacityReached])
   // Stream-scoped broadofficer status (authoritative for current stream, realtime)
   const [isStreamBroadofficer, setIsStreamBroadofficer] = useState(false)
   // Server-authoritative moderation context (staff role + clock-in), realtime
@@ -1583,38 +1637,39 @@ const isActive = isStreamActive(stream)
      return String(getLiveKitRoomName(stream as Stream | null, streamId) || '')
    }, [stream?.livekit_room_name, stream?.id, streamId])
 
-    // Stable anonymous viewer identity — never use "undefined" in identity.
-    // Uses sessionStorage so the same guest gets the same identity for the
-    // browser session and stream. Format: guest-viewer:<streamId>:<uuid>
-    const stableAnonId = useMemo(() => {
-      if (typeof window === 'undefined') return '';
-      const storageKey = streamId ? `guest-viewer:${streamId}` : '';
-      if (!storageKey) return '';
+    const stableAnonId = anonViewerId;
 
-      try {
-        let anonId = sessionStorage.getItem(storageKey);
-        if (anonId) return anonId;
+    const currentViewerId = user?.id || stableAnonId;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const cryptoObj = (window as any).crypto;
-        if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
-          anonId = `guest-viewer:${streamId}:${cryptoObj.randomUUID()}`;
-        } else {
-          // Fallback UUID v4 for non-secure contexts (HTTP, older browsers)
-          const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-          });
-          anonId = `guest-viewer:${streamId}:${uuid}`;
-        }
-        sessionStorage.setItem(storageKey, anonId);
-        return anonId;
-      } catch {
-        // sessionStorage may be unavailable in some PWA/iframe contexts
-        return `guest-viewer:${streamId}:${Math.random().toString(36).slice(2, 10)}`;
+    // Anonymous viewers cannot be written to stream_audience_presence (the
+    // user_id column is a FK to user_profiles), but they DO watch the stream via
+    // LiveKit. Inject a synthetic audience member so the broadcaster's ticker
+    // (and this viewer's own "you" pill) shows the anonymous watcher as an
+    // anon profile pic without touching the real presence table.
+    const audienceWithAnon = useMemo(() => {
+      if (user?.id || !stableAnonId) return audience
+
+      const anonMember: StreamAudienceMember = {
+        id: `anon:${stableAnonId}`,
+        stream_id: streamId,
+        user_id: stableAnonId,
+        username: anonDisplayName || 'anon',
+        avatar_url: null,
+        joined_at: new Date().toISOString(),
+        left_at: null,
+        is_active: true,
+        is_present: true,
+        gift_total: 0,
+        gift_score: 0,
+        seat_id: null,
+        seat_status: 'audience',
+        role: 'audience',
+        last_seen_at: new Date().toISOString(),
+        is_ghost_mode: false,
       }
-    }, [streamId]);
+
+      return [anonMember, ...audience]
+    }, [audience, user?.id, stableAnonId, anonDisplayName, streamId])
 
     const viewerIdentity = useMemo(() => {
       const effectiveUserId = user?.id || stableAnonId;
@@ -1629,8 +1684,8 @@ const isActive = isStreamActive(stream)
   const audienceName = useMemo(() => {
     return user
       ? ((user as any).username || user.email || 'Viewer')
-      : 'Viewer'
-  }, [user])
+      : (anonDisplayName || 'Viewer')
+  }, [user, anonDisplayName])
 
   const handleLiveKitError = useCallback((err: any) => {
     const errorDetail = err?.message || err?.statusText || String(err) || 'Unknown LiveKit audience error'
@@ -2758,7 +2813,7 @@ useStreamRealtime(
        hasJoinedStreamAudienceRef.current = true
      }
 
-const heartbeat = window.setInterval(() => {
+ const heartbeat = window.setInterval(() => {
         if (document.visibilityState !== 'visible') return
         void heartbeatAudienceRef.current?.()
       }, 90_000) // 90 second heartbeat to reduce Supabase load for likes
@@ -2888,35 +2943,73 @@ const heartbeat = window.setInterval(() => {
 
     let cancelled = false
 
-     Promise.resolve()
-       .then(() => joinAsAudience({ userId: identityToUse, streamId, roomName: roomId, viewerIdentity: identityToUse, publishCapable: true }))
-      .then((res: any) => {
+    // 1) Authoritative viewer-cap admission via the database. Must pass before
+    //    connecting to LiveKit. Frontend state is never trusted for capacity.
+    Promise.resolve()
+      .then(() => admitViewerToStream(
+        streamId,
+        user?.id ?? null,
+        stableAnonId || null,
+      ))
+      .then((admission) => {
         if (cancelled) return
-        if (res && typeof res !== 'string') {
-          hasJoinedAudienceRef.current = true
-          setViewerError(null)
-          console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId })
-        } else {
-          const errorDetail = typeof res === 'string'
-            ? res
-            : 'LiveKit audience join failed'
-          console.warn(`[ViewerPage] joinAsAudience failed for stream ${streamId}: ${errorDetail}`)
-          setViewerError(errorDetail)
-          audienceFailedUntilRef.current = Date.now() + 60000
+        if (!admission.allowed) {
+          if (admission.reason === 'viewer_cap_reached') {
+            setViewerCapacityReached(true)
+            setViewerError('This broadcast has reached its viewer capacity. Please try again shortly.')
+          } else {
+            setViewerError('Unable to join this broadcast right now. Please try again shortly.')
+          }
+          audienceFailedUntilRef.current = Date.now() + 30000
+          return
         }
+
+        // 2) Admitted — connect to LiveKit as audience.
+        return joinAsAudience({ userId: identityToUse, streamId, roomName: roomId, viewerIdentity: identityToUse, publishCapable: true })
+          .then((res: any) => {
+            if (cancelled) {
+              // Joined then immediately unmounted — release the reserved slot.
+              void releaseViewerSlot(streamId, user?.id ?? null, stableAnonId || null)
+              return
+            }
+            if (res && typeof res !== 'string') {
+              hasJoinedAudienceRef.current = true
+              setViewerError(null)
+              setViewerCapacityReached(false)
+              console.log('[ViewerPage] LiveKit audience joined:', { streamId, roomId })
+            } else {
+              const errorDetail = typeof res === 'string'
+                ? res
+                : 'LiveKit audience join failed'
+              console.warn(`[ViewerPage] joinAsAudience failed for stream ${streamId}: ${errorDetail}`)
+              setViewerError(errorDetail)
+              // LiveKit failed after the slot was reserved — release it so the
+              // capacity count does not stay artificially inflated.
+              void releaseViewerSlot(streamId, user?.id ?? null, stableAnonId || null)
+              audienceFailedUntilRef.current = Date.now() + 60000
+            }
+          })
+          .catch((err: any) => {
+            const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
+            console.warn(`[ViewerPage] joinAsAudience threw for stream ${streamId}: ${errorDetail}`)
+            setViewerError(errorDetail)
+            void releaseViewerSlot(streamId, user?.id ?? null, stableAnonId || null)
+            audienceFailedUntilRef.current = Date.now() + 60000
+          })
       })
       .catch((err: any) => {
-        const errorDetail = err?.message || err?.statusText || String(err) || 'LiveKit connection failed'
-        console.warn(`[ViewerPage] joinAsAudience threw for stream ${streamId}: ${errorDetail}`)
+        // Admission RPC itself failed — fail closed, do not connect.
+        const errorDetail = err?.message || err?.statusText || String(err) || 'Unable to join broadcast'
+        console.warn(`[ViewerPage] admitViewerToStream failed for stream ${streamId}: ${errorDetail}`)
         setViewerError(errorDetail)
-        audienceFailedUntilRef.current = Date.now() + 60000
+        audienceFailedUntilRef.current = Date.now() + 30000
       })
       .finally(() => {
         joiningAudienceRef.current = false
       })
 
     return () => { cancelled = true }
-  }, [streamId, stream?.id, stream?.status, stream?.is_live, roomId, user?.id, joinAsAudience])
+  }, [streamId, stream?.id, stream?.status, stream?.is_live, roomId, user?.id, joinAsAudience, stableAnonId, retryAdmissionKey])
 
   const stageSlots = useMemo(() => {
     const liveSeats = activeSeats.slice(0, Math.max(0, effectiveBoxCount - 1))
@@ -3154,8 +3247,8 @@ const heartbeat = window.setInterval(() => {
               <div className="absolute inset-x-0 top-0 z-30 flex items-center px-3 pt-[52px] pointer-events-none">
                 <div className="pointer-events-auto w-full rounded-2xl border border-cyan-400/10 bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 px-2 py-1.5 backdrop-blur-xl shadow-[0_2px_24px_0_rgba(34,211,238,0.10)]">
                   <MobileAudienceTicker
-                    audience={audience}
-                    currentUserId={user?.id}
+                    audience={audienceWithAnon}
+                    currentUserId={currentViewerId}
                     hostUserId={hostId || undefined}
                     viewerCount={viewerCount}
                     maxVisible={7}
@@ -3181,7 +3274,6 @@ const heartbeat = window.setInterval(() => {
                    ? {
                      username: broadcasterProfile.username,
                      avatar_url: broadcasterProfile.avatar_url,
-                      username: broadcasterProfile.username,
                    }
                    : null}
                  isHost={false}
@@ -3199,8 +3291,8 @@ const heartbeat = window.setInterval(() => {
                   <div className="w-full max-w-7xl mx-auto flex items-center gap-3 px-4 sm:px-0">
                     <AudienceBubbleTicker
                       streamId={streamId}
-                      audience={audience}
-                      currentUserId={user?.id}
+                      audience={audienceWithAnon}
+                      currentUserId={currentViewerId}
                       hostUserId={hostId || undefined}
                       maxVisible={8}
                       className="relative z-0 hidden sm:flex pointer-events-none"
@@ -3495,7 +3587,26 @@ const heartbeat = window.setInterval(() => {
 
               {viewerError && (
                 <div className="absolute inset-x-4 top-16 z-30 rounded-2xl border border-red-400/35 bg-gradient-to-r from-red-950/90 to-red-900/80 px-4 py-3 text-sm font-bold text-red-100 shadow-[0_0_30px_rgba(239,68,68,0.25)] backdrop-blur-2xl">
-                  {viewerError}
+                  <div>{viewerError}</div>
+                  {viewerCapacityReached && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Manual retry: reset local error/flags and re-run the
+                        // authoritative admission + join flow. No tight loop.
+                        setViewerError(null)
+                        setViewerCapacityReached(false)
+                        hasJoinedAudienceRef.current = false
+                        joiningAudienceRef.current = false
+                        audienceJoinAttemptedKeyRef.current = null
+                        audienceFailedUntilRef.current = 0
+                        setRetryAdmissionKey((k) => k + 1)
+                      }}
+                      className="mt-2 inline-flex items-center gap-1 rounded-lg bg-red-500/90 px-3 py-1 text-xs font-black text-white hover:bg-red-500"
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               )}
 

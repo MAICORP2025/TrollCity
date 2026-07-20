@@ -150,6 +150,11 @@ const JobsPage = lazyWithRetry(() => import("./pages/Jobs"));
 const OfficerScheduling = lazyWithRetry(() => import("./pages/OfficerScheduling"));
 const PolicyCenter = lazyWithRetry(() => import("./pages/PolicyCenter"));
 const UniverseEventPage = lazyWithRetry(() => import("./pages/UniverseEventPage"));
+const UniverseBattlesPage = lazyWithRetry(() => import("./pages/UniverseBattlesPage"));
+const UniverseLiveArenaPage = lazyWithRetry(() => import("./pages/UniverseLiveArenaPage"));
+const UniverseArenaDevPreview = lazyWithRetry(() => import("./pages/UniverseArenaDevPreview"));
+const UniverseRegisterPage = lazyWithRetry(() => import("./pages/UniverseRegisterPage"));
+const UniverseCalendarPage = lazyWithRetry(() => import("./pages/UniverseCalendarPage"));
 const TermsOfServiceLegal = lazyWithRetry(() => import("./pages/legal/TermsOfService"));
 const PrivacyPolicyLegal = lazyWithRetry(() => import("./pages/legal/PrivacyPolicy"));
 const RefundPolicyLegal = lazyWithRetry(() => import("./pages/legal/RefundPolicy"));
@@ -1660,6 +1665,9 @@ const handleVisibilityChange = async () => {
                  <Route path="/troll-court" element={<TrollCourt />} />
                  <Route path="/troll-court/watch/:sessionId" element={<CourtViewerPage />} />
 
+                 {/* 🛰️ Universe Arena Dev Preview — public, fake data, no auth */}
+                 <Route path="/universe/dev-preview" element={<UniverseArenaDevPreview />} />
+
                  {/* 🔐 Protected Routes */}
                  <Route element={<RequireAuth />}>
                   
@@ -1792,7 +1800,15 @@ const handleVisibilityChange = async () => {
                    <Route path="/appeals" element={<Navigate to="/city-registry" replace />} />
                    <Route path="/city-registry/advertise" element={<AdvertisePage />} />
                 <Route path="/universe-event" element={<UniverseEventPage />} />
-                <Route path="/events/universe" element={<Navigate to="/universe-event" replace />} />
+                <Route path="/universe" element={<UniverseBattlesPage />} />
+                <Route path="/universe/home" element={<UniverseBattlesPage />} />
+                <Route path="/universe/register" element={<UniverseRegisterPage />} />
+                <Route path="/universe/my-battles" element={<UniverseRegisterPage />} />
+                <Route path="/universe/calendar" element={<UniverseCalendarPage />} />
+                <Route path="/universe/live" element={<UniverseLiveArenaPage />} />
+                <Route path="/universe/history" element={<UniverseBattlesPage />} />
+                <Route path="/universe/champions" element={<UniverseBattlesPage />} />
+                <Route path="/events/universe" element={<Navigate to="/universe" replace />} />
                 
                 {/* 📺 TCNN - Troll City News Network */}
                 <Route path="/tcnn" element={<TCNNMainPage />} />

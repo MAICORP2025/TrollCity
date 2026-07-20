@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useBroadcastLockdown } from '@/hooks/useBroadcastLockdown';
 import { useBroadcastViewerCap } from '@/hooks/useBroadcastViewerCap';
 import { issuePromoCard } from '@/lib/issuePromoCard';
+import { startBroadcastWithCapacityCheck } from '@/lib/streamCapacity';
 import { generateUUID } from '../../lib/uuid';
 import { RANDOM_BATTLE_ENABLED } from '../../config/featureFlags';
 import { US_STATES, getStateName } from '../../config/usStates';
@@ -50,6 +51,7 @@ type BroadcastStartStage =
   | 'connecting LiveKit room'
   | 'LiveKit connected'
   | 'publishing LiveKit tracks'
+  | 'start capacity reached'
   | 'stream live verification'
   | 'redirecting/opening broadcast room'
 
@@ -1787,26 +1789,43 @@ livekit_room_name: roomName,
           });
          await publishSetupTracksToRoom(room, livekitTracksRef.current, screenTrack, isScreenShareMode);
 
+           // Authoritative start-capacity check. Counts currently active
+           // broadcasts under a row lock and atomically transitions this owned
+           // stream to live when allowed. Reconnecting to an already-live owned
+           // stream returns allowed=true (reason 'already_live') and is NOT
+           // blocked. This is the single source of truth for the start cap.
+           const startCap = await startBroadcastWithCapacityCheck(data.id)
+           if (!startCap.allowed) {
+             console.warn('[SetupPage] Broadcast start rejected by capacity check:', startCap.reason, {
+               active_broadcasts: startCap.active_broadcasts,
+               start_cap: startCap.start_cap,
+             })
+             toast.error('The platform has reached its current live broadcast capacity. Please try starting your broadcast again shortly.')
+             await markBroadcastStartFailed(data.id, 'start capacity reached', startCap.reason)
+             setLoading(false)
+             return
+           }
+
            // Mark stream as live now that LiveKit is connected and tracks are published
-          const { error: updateError } = await supabase
-           .from('streams')
-           .update({
-             status: 'live',
-             is_live: true,
-             started_at: new Date().toISOString(),
-             // Seed activity so the inactivity auto-end grace window starts now,
-             // not from a NULL that would make the stream eligible to end early.
-             last_activity_at: new Date().toISOString(),
-             ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? {
-               random_battle_queued_at: new Date().toISOString(),
-               battle_mode: 'random_queue',
-               ...(battleMode === 'state' ? {
-                 state_battle_mode: 'state',
-                 state_battle_state_code: userState,
-               } : {}),
-             } : {}),
-           })
-           .eq('id', data.id);
+           const { error: updateError } = await supabase
+            .from('streams')
+            .update({
+              status: 'live',
+              is_live: true,
+              started_at: new Date().toISOString(),
+              // Seed activity so the inactivity auto-end grace window starts now,
+              // not from a NULL that would make the stream eligible to end early.
+              last_activity_at: new Date().toISOString(),
+              ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? {
+                random_battle_queued_at: new Date().toISOString(),
+                battle_mode: 'random_queue',
+                ...(battleMode === 'state' ? {
+                  state_battle_mode: 'state',
+                  state_battle_state_code: userState,
+                } : {}),
+              } : {}),
+            })
+            .eq('id', data.id);
 
         // Create smoke event if enabled
         if (smokeEventEnabled) {

@@ -267,10 +267,9 @@ useEffect(() => {
      startPolling()
 
     // Consolidated single channel for home page (replaces 3 separate channels)
-    // OPTIMIZED: Only listen to UPDATE events on live streams to reduce event volume
     const homeChannel = supabase.channel('home:global')
     homeChannel
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams', filter: 'is_live=eq.true' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams' }, (payload) => {
         try {
           const oldRow = (payload.old || null) as any
           const newRow = (payload.new || null) as any

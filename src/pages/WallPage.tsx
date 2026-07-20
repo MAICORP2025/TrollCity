@@ -20,6 +20,8 @@ import { WallPost } from '@/types/trollWall'
 import { trackPrideWallAction } from '@/services/prideChallengeTracker'
 import MentionTextarea from '@/components/MentionTextarea'
 import TrollWallPostModal from '@/components/home/TrollWallPostModal'
+import { parseTextWithLinks } from '@/lib/utils'
+import { notifySomeoneMentioned } from '@/lib/notifications'
 
 const EMOJI_OPTIONS = [':)', ':D', '<3', ':-)', ';)', ':P']
 
@@ -140,8 +142,8 @@ function WallPostCard({
 
       {/* Post Content */}
       <div className="px-4 pt-3">
-        <p className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
-          {displayContent}
+        <p className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap break-words">
+          {parseTextWithLinks(displayContent)}
         </p>
         {isLongPost && (
           <button
@@ -396,6 +398,27 @@ export default function WallPage() {
         .single()
 
       if (error) throw error
+
+      const mentionedUsernames = new Set<string>()
+      const mentionRegex = /#([A-Za-z0-9_]+)/g
+      let mentionMatch
+      while ((mentionMatch = mentionRegex.exec(content)) !== null) {
+        mentionedUsernames.add(mentionMatch[1])
+      }
+
+      if (mentionedUsernames.size > 0 && user?.id) {
+        for (const username of mentionedUsernames) {
+          const { data: mentionedUser } = await supabase
+            .from('user_profiles')
+            .select('id')
+            .ilike('username', username)
+            .maybeSingle()
+
+          if (mentionedUser?.id && mentionedUser.id !== user.id) {
+            await notifySomeoneMentioned(mentionedUser.id, profile?.username || 'Someone', 'the Troll Wall')
+          }
+        }
+      }
 
       const optimisticPost: WallPost = {
         ...(data as WallPost),

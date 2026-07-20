@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CityAd, AdPlacement, CampaignType, AD_PLACEMENTS, HOME_PAGE_PROMO_PLACEMENTS } from '../../../types/cityAds';
 import { supabase } from '../../../lib/supabase';
 import { uploadCityAdImage, deleteCityAdImage } from '../../../lib/uploadCityAdImage';
+import { compressAdImage } from '../../../lib/uploadCityAdImage';
 import { toast } from 'sonner';
 
 interface CityAdsManagerProps {}
@@ -34,9 +35,12 @@ export default function CityAdsManager() {
   const [userAds, setUserAds] = useState<UserAdvertisement[]>([]);
   const [userAdsLoading, setUserAdsLoading] = useState(false);
   const [editingAd, setEditingAd] = useState<CityAd | null>(null);
-  const [formData, setFormData] = useState<Partial<CityAd>>({});
+  const [formData, setFormData] = useState<Partial<CityAd>>({
+    placement: HOME_PAGE_PROMO_PLACEMENTS[0],
+    is_active: true,
+    label: 'Troll City Promo'
+  });
   const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [placementFilter, setPlacementFilter] = useState<AdPlacement | ''>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [userAdTab, setUserAdTab] = useState<'all' | 'pending' | 'queued' | 'active'>('all');
@@ -165,7 +169,6 @@ export default function CityAdsManager() {
       background_style: undefined
     });
     setEditingAd(null);
-    setPreviewUrl(null);
   };
 
   // Handle form change
@@ -188,37 +191,20 @@ export default function CityAdsManager() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No authenticated user');
 
-      // Compress image
-      const compressedFile = await new Promise<Blob>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 800;
-            const scale = MAX_WIDTH / img.width;
-            const width = img.width * scale;
-            const height = img.height * scale;
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, width, height);
-              canvas.toBlob((blob) => {
-                if (blob) resolve(blob);
-              }, 'image/jpeg', 0.8);
-            }
-          };
-          img.src = event.target?.result as string;
-        };
-        reader.readAsDataURL(file);
-      });
 
+      // Compress image (fall back to original file if compression fails)
+      let compressedFile: Blob = file;
+      try {
+        compressedFile = await compressAdImage(file, 800, 0.8);
+      } catch (compressError) {
+        console.warn('Image compression skipped, using original file:', compressError);
+        compressedFile = file;
+      }
       // Upload to storage
       const result = await uploadCityAdImage(compressedFile, user.id);
       if (result.success && result.url) {
         setFormData(prev => ({ ...prev, image_url: result.url }));
-        setPreviewUrl(result.url);
+        e.target.value = "";
         toast.success('Image uploaded successfully');
       } else {
         throw new Error(result.error || 'Upload failed');
@@ -309,7 +295,6 @@ export default function CityAdsManager() {
       campaign_type: ad.campaign_type as CampaignType | undefined,
       background_style: ad.background_style
     });
-    setPreviewUrl(ad.image_url);
   };
 
   // Handle delete ad
@@ -450,10 +435,10 @@ export default function CityAdsManager() {
                     <span className="text-xs text-purple-400">Uploading...</span>
                   </div>
                 )}
-                {previewUrl && (
+                {formData.image_url && (
                   <div className="mt-2">
                     <img
-                      src={previewUrl}
+                      src={formData.image_url}
                       alt="Preview"
                       className="max-w-xs rounded border border-slate-700"
                     />

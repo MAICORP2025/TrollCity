@@ -7,6 +7,11 @@ interface UseStreamRealtimeHandlers {
   onGift?: (event: StreamRealtimeEvent) => void
   onParticipant?: (event: StreamRealtimeEvent) => void
   onBattle?: (event: StreamRealtimeEvent) => void
+  onAudiencePresence?: (event: StreamRealtimeEvent) => void
+  onSeatSession?: (event: StreamRealtimeEvent) => void
+  onSeatEvent?: (event: StreamRealtimeEvent) => void
+  onFloatingChat?: (event: StreamRealtimeEvent) => void
+  onPresenceBroadcast?: (event: StreamRealtimeEvent) => void
 }
 
 export function useStreamRealtime(streamId?: string | null, handlers: UseStreamRealtimeHandlers = {}, battleId?: string | null) {
@@ -36,6 +41,26 @@ export function useStreamRealtime(streamId?: string | null, handlers: UseStreamR
           break
         case 'battle_sessions':
           current.onBattle?.(event)
+          break
+        case 'stream_audience_presence':
+          current.onAudiencePresence?.(event)
+          break
+        case 'stream_seat_sessions':
+          current.onSeatSession?.(event)
+          break
+        case 'broadcast:floating_chat':
+          current.onFloatingChat?.(event)
+          break
+        case 'broadcast:seat_joined':
+        case 'broadcast:seat_live':
+        case 'broadcast:seat_left':
+        case 'broadcast:seat_refreshed':
+          current.onSeatEvent?.(event)
+          break
+        case 'broadcast:box_count_changed':
+        case 'broadcast:like_sent':
+        case 'broadcast:ping':
+          current.onPresenceBroadcast?.(event)
           break
       }
     }, battleId)

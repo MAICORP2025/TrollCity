@@ -1174,3 +1174,24 @@ export async function notifyInterviewStarted(
     }
   )
 }
+
+// ==========================================
+// NEW USER SIGNUP (admin alerts)
+// ==========================================
+
+export async function notifyNewUserSignup(
+  username: string,
+  userId: string
+): Promise<void> {
+  await notifyAdmins(
+    '🆕 New User Signup',
+    `@${username} just created an account.`,
+    'new_user_signup',
+    {
+      signup_user_id: userId,
+      signup_username: username,
+      action_url: `/profile/${username}`,
+      audience: 'admin',
+    }
+  )
+}

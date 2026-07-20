@@ -39,6 +39,7 @@ import type {
   UtromailRequest,
   UtromailMessage,
 } from "@/types/mail";
+import { usePresenceStore } from "@/lib/presenceStore";
 import UtromailCompose from "./UtromailCompose";
 import { toast } from "sonner";
 
@@ -94,6 +95,7 @@ export default function UtromailPage() {
   const { threadId } = useParams();
   const [searchParams] = useSearchParams();
   const { user, profile } = useAuthStore();
+  const onlineUserIds = usePresenceStore(s => s.onlineUserIds);
   const [threads, setThreads] = useState<UtromailThread[]>([]);
   const [requests, setRequests] = useState<UtromailRequest[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
@@ -726,6 +728,12 @@ export default function UtromailPage() {
   const activeParticipant = activeThread
     ? getOtherParticipant(activeThread, user?.id || "")
     : null;
+  const isActiveUserOnline =
+    activeThread?.other_user_id != null &&
+    onlineUserIds.has(activeThread.other_user_id);
+  const isActiveParticipantOnline =
+    activeParticipant?.user_id != null &&
+    onlineUserIds.has(activeParticipant.user_id);
 
   const chatPanel = activeConversationId ? (
     <div className="flex h-full min-h-0 flex-col bg-[#050713]">
@@ -756,7 +764,9 @@ export default function UtromailPage() {
                     {(activeThread.other_username || "?")[0].toUpperCase()}
                   </div>
                 )}
-                <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[3px] border-[#080a18] bg-lime-400" />
+                  {isActiveUserOnline && (
+                    <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[3px] border-[#080a18] bg-lime-400" />
+                  )}
               </div>
 
               <div className="min-w-0">
@@ -1200,12 +1210,15 @@ export default function UtromailPage() {
                       thread.other_username ||
                       "Unknown";
                     const avatarUrl = thread.other_avatar_url;
-                    const avatarLetter =
-                      displayName !== "Unknown"
-                        ? displayName[0].toUpperCase()
-                        : "?";
+                     const avatarLetter =
+                       displayName !== "Unknown"
+                         ? displayName[0].toUpperCase()
+                         : "?";
+                     const isOtherOnline =
+                       thread.other_user_id != null &&
+                       onlineUserIds.has(thread.other_user_id);
 
-                    return (
+                     return (
                       <button
                         key={thread.id}
                         type="button"
@@ -1286,7 +1299,9 @@ export default function UtromailPage() {
                               {avatarLetter}
                             </div>
                           )}
-                          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#080a16] bg-lime-400" />
+                          {isOtherOnline && (
+                            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#080a16] bg-lime-400" />
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
@@ -1364,7 +1379,9 @@ export default function UtromailPage() {
                           "?")[0].toUpperCase()}
                       </div>
                     )}
-                    <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-4 border-[#090b18] bg-lime-400" />
+                    {isActiveParticipantOnline && (
+                      <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-4 border-[#090b18] bg-lime-400" />
+                    )}
                   </div>
                   <h3 className="relative mt-5 truncate text-xl font-black text-white">
                     {activeParticipant.display_name ||
@@ -1373,9 +1390,11 @@ export default function UtromailPage() {
                   <p className="relative mt-1 truncate text-xs text-fuchsia-300">
                     @{activeParticipant.username}
                   </p>
-                  <span className="relative mt-4 inline-flex rounded-full border border-lime-400/25 bg-lime-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-lime-300">
-                    Active in the city
-                  </span>
+                  {isActiveParticipantOnline && (
+                    <span className="relative mt-4 inline-flex rounded-full border border-lime-400/25 bg-lime-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-lime-300">
+                      Active in the city
+                    </span>
+                  )}
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1387,7 +1406,7 @@ export default function UtromailPage() {
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs text-slate-500">Status</span>
                         <span className="text-xs font-bold text-white">
-                          Online
+                          {isActiveParticipantOnline ? "Online" : "Offline"}
                         </span>
                       </div>
                       <div className="h-px bg-white/[0.06]" />

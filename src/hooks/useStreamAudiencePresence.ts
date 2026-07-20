@@ -51,18 +51,9 @@ function normalizeAudienceMember(row: any): StreamAudienceMember {
   }
 }
 
-function dedupeAudienceMembers(list: StreamAudienceMember[]) {
-  const map = new Map<string, StreamAudienceMember>()
-
-  list.forEach((member) => {
-    const key = `${member.stream_id}:${member.user_id}`
-    const existing = map.get(key)
-    if (!existing || new Date(member.joined_at).getTime() < new Date(existing.joined_at).getTime()) {
-      map.set(key, member)
-    }
-  })
-
-  return Array.from(map.values())
+// Stable key for one audience member: stream_id:user_id.
+function memberKey(member: { stream_id: string; user_id: string }): string {
+  return `${member.stream_id}:${member.user_id}`
 }
 
 export function useStreamAudiencePresence(
@@ -72,17 +63,26 @@ export function useStreamAudiencePresence(
   const { user, profile } = useAuthStore()
   const effectiveUserId = userId || user?.id
 
-  const [audience, setAudience] = useState<StreamAudienceMember[]>([])
+  // Normalized record keyed by stream_id:user_id. Rendering arrays are derived
+  // from this record and only recomputed when it actually changes. Incremental
+  // realtime updates patch a single entry instead of rebuilding the whole array.
+  const [audienceMap, setAudienceMap] = useState<Record<string, StreamAudienceMember>>({})
+
   const [activeAudience, setActiveAudience] = useState<StreamAudienceMember[]>([])
   const [topAudience, setTopAudience] = useState<StreamAudienceMember[]>([])
   const [myPresence, setMyPresence] = useState<StreamAudienceMember | null>(null)
 
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastGiftUpdateRef = useRef<Record<string, number>>({})
   const channelsRef = useRef<any[]>([])
   const ghostModeFetchedRef = useRef<{ streamId: string; userIds: string } | null>(null)
   const profileRef = useRef(profile)
   const userRef = useRef(user)
+
+  // Bounded batching queue: rapid realtime events land here and are flushed on
+  // the next animation frame so a burst (e.g. many simultaneous joins/gifts)
+  // triggers at most one React render per frame instead of one per event.
+  const pendingMutationsRef = useRef<Map<string, StreamAudienceMember | null>>(new Map())
+  const flushScheduledRef = useRef(false)
 
   useEffect(() => {
     profileRef.current = profile
@@ -92,47 +92,85 @@ export function useStreamAudiencePresence(
     userRef.current = user
   }, [user])
 
+  const commitAudience = useCallback(() => {
+    setAudienceMap((prev) => {
+      if (pendingMutationsRef.current.size === 0) return prev
+      const next = { ...prev }
+      pendingMutationsRef.current.forEach((value, key) => {
+        if (value === null) {
+          delete next[key]
+        } else {
+          next[key] = value
+        }
+      })
+      pendingMutationsRef.current.clear()
+      return next
+    })
+    flushScheduledRef.current = false
+  }, [])
+
+  const queueAudienceMutation = useCallback(
+    (key: string, value: StreamAudienceMember | null) => {
+      pendingMutationsRef.current.set(key, value)
+      if (!flushScheduledRef.current) {
+        flushScheduledRef.current = true
+        if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+          window.requestAnimationFrame(() => commitAudience())
+        } else {
+          setTimeout(commitAudience, 0)
+        }
+      }
+    },
+    [commitAudience]
+  )
+
   const cleanupChannels = useCallback(() => {
     channelsRef.current.forEach(ch => { if (ch) supabase.removeChannel(ch) })
     channelsRef.current = []
   }, [])
 
+  // Recompute derived arrays from the normalized map. Runs only when the map
+  // changes (and we control those changes), not per realtime event.
+  useEffect(() => {
+    const list = Object.values(audienceMap)
+    setActiveAudience(list.filter((m) => m.is_active && !m.left_at))
+    setTopAudience(
+      [...list].sort((a, b) => {
+        if (b.gift_total !== a.gift_total) return b.gift_total - a.gift_total
+        return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime()
+      })
+    )
+    if (effectiveUserId) {
+      setMyPresence(list.find((m) => m.user_id === effectiveUserId) || null)
+    }
+  }, [audienceMap, effectiveUserId])
+
   const fetchAudience = useCallback(async () => {
     if (!streamId) return
     try {
-const { data, error } = await supabase
-          .from('stream_audience_presence')
-          .select('*')
-          .eq('stream_id', streamId)
-          .eq('is_active', true)
-          .order('gift_total', { ascending: false })
-          .order('joined_at', { ascending: true })
+      const { data, error } = await supabase
+        .from('stream_audience_presence')
+        .select('*')
+        .eq('stream_id', streamId)
+        .eq('is_active', true)
+        .order('gift_total', { ascending: false })
+        .order('joined_at', { ascending: true })
 
       if (error) {
         console.warn('[useStreamAudiencePresence] fetchAudience error', error)
         return
       }
 
-      const audienceList = dedupeAudienceMembers((data || []).map(normalizeAudienceMember))
-      setAudience(audienceList)
-
-      const active = audienceList.filter(
-        (member) => member.is_active && !member.left_at
-      )
-      setActiveAudience(active)
-
-      const top = [...audienceList].sort((a, b) => {
-        if (b.gift_total !== a.gift_total) {
-          return b.gift_total - a.gift_total
-        }
-        return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime()
+      // Full normalization is acceptable on initial load / explicit resync.
+      const next: Record<string, StreamAudienceMember> = {}
+      ;(data || []).forEach((row: any) => {
+        const member = normalizeAudienceMember(row)
+        next[memberKey(member)] = member
       })
-      setTopAudience(top)
+      setAudienceMap(next)
 
       if (effectiveUserId) {
-        const myMember = audienceList.find(
-          (member) => member.user_id === effectiveUserId
-        )
+        const myMember = Object.values(next).find((m) => m.user_id === effectiveUserId)
         setMyPresence(myMember || null)
       }
     } catch (err) {
@@ -299,13 +337,13 @@ const { data, error } = await supabase
         return
       }
 
-      setAudience((prev) =>
-        prev.map((member) =>
-          member.user_id === effectiveUserId
-            ? { ...member, gift_total: member.gift_total + amount }
-            : member
-        )
-      )
+      // Update the local normalized record only (no full rebuild, no broadcast).
+      setAudienceMap((prev) => {
+        const key = `${streamId}:${effectiveUserId}`
+        const existing = prev[key]
+        if (!existing) return prev
+        return { ...prev, [key]: { ...existing, gift_total: existing.gift_total + amount } }
+      })
       lastGiftUpdateRef.current[effectiveUserId] = Date.now()
     } catch (err) {
       console.warn('[useStreamAudiencePresence] incrementGiftTotal failed', err)
@@ -337,63 +375,22 @@ const { data, error } = await supabase
             const newRow = (payload as any).new
             const oldRow = (payload as any).old
 
-            setAudience((prev) => {
-              let next = [...prev]
-              if (evt === 'DELETE') {
-                if (oldRow) {
-                  next = next.filter((member) => member.id !== oldRow.id && member.user_id !== oldRow.user_id)
-                }
-              } else {
-                const row = newRow || oldRow
-                if (row) {
-                  const member = normalizeAudienceMember(row)
-                  const existingIndex = next.findIndex((candidate) => candidate.id === member.id || candidate.user_id === member.user_id)
-                  if (existingIndex >= 0) {
-                    next[existingIndex] = member
-                  } else {
-                    next.push(member)
-                  }
-                }
+            if (evt === 'DELETE') {
+              if (oldRow?.user_id) {
+                queueAudienceMutation(`${streamId}:${oldRow.user_id}`, null)
               }
-              return dedupeAudienceMembers(next)
-            })
+              return
+            }
 
-            setActiveAudience((prev) => {
-              let next = [...prev]
-              if (evt === 'DELETE') {
-                if (oldRow) {
-                  next = next.filter((member) => member.id !== oldRow.id && member.user_id !== oldRow.user_id)
-                }
-              } else {
-                const row = newRow || oldRow
-                if (row) {
-                  const member = normalizeAudienceMember(row)
-                  const isActive = member.is_present && !member.left_at
-                  const existingIndex = next.findIndex((candidate) => candidate.id === member.id || candidate.user_id === member.user_id)
-                  if (isActive) {
-                    if (existingIndex >= 0) {
-                      next[existingIndex] = member
-                    } else {
-                      next.push(member)
-                    }
-                  } else if (existingIndex >= 0) {
-                    next.splice(existingIndex, 1)
-                  }
-                }
-              }
-              return dedupeAudienceMembers(next)
-            })
+            const row = newRow || oldRow
+            if (!row?.user_id) return
 
-            // Update myPresence from the realtime payload directly — no DB refetch needed
-            if (effectiveUserId) {
-              setMyPresence((prev) => {
-                if (!newRow && !oldRow) return prev
-                const row = newRow || oldRow
-                if (row && row.user_id === effectiveUserId) {
-                  return normalizeAudienceMember(row)
-                }
-                return prev
-              })
+            const member = normalizeAudienceMember(row)
+            // Incremental: patch only this one member in the normalized record.
+            queueAudienceMutation(memberKey(member), member)
+
+            if (effectiveUserId && newRow?.user_id === effectiveUserId) {
+              setMyPresence(member)
             }
           } catch (err) {
             console.warn('[useStreamAudiencePresence] realtime handler error', err)
@@ -409,28 +406,29 @@ const { data, error } = await supabase
           filter: `stream_id=eq.${streamId}`,
         },
         (payload) => {
+          // Gifts must NOT cause a stream_audience_presence DB write or a full
+          // audience-array rebuild. We only patch the sender's local gift_total
+          // in the normalized record (batched), preserving score/leaderboard
+          // display without write amplification. The gift ledger writes happen
+          // in the dedicated gift service, not here.
           const gift = (payload as any).new
           if (!gift?.sender_id) return
 
           const amount = Number(gift.amount ?? 0) * Number(gift.quantity ?? 1)
           if (!amount) return
 
-          setAudience((prev) => {
-            const next = prev.map((member) =>
-              member.user_id === gift.sender_id
-                ? { ...member, gift_total: member.gift_total + amount, gift_score: (member.gift_score ?? member.gift_total) + amount }
-                : member
-            )
-            return dedupeAudienceMembers(next)
-          })
-
-          setActiveAudience((prev) => {
-            const next = prev.map((member) =>
-              member.user_id === gift.sender_id
-                ? { ...member, gift_total: member.gift_total + amount, gift_score: (member.gift_score ?? member.gift_total) + amount }
-                : member
-            )
-            return dedupeAudienceMembers(next)
+          setAudienceMap((prev) => {
+            const key = `${streamId}:${gift.sender_id}`
+            const existing = prev[key]
+            if (!existing) return prev
+            return {
+              ...prev,
+              [key]: {
+                ...existing,
+                gift_total: existing.gift_total + amount,
+                gift_score: (existing.gift_score ?? existing.gift_total) + amount,
+              },
+            }
           })
         }
       )
@@ -441,7 +439,7 @@ const { data, error } = await supabase
     return () => {
       cleanupChannels()
     }
-  }, [streamId, effectiveUserId, fetchAudience, cleanupChannels])
+  }, [streamId, effectiveUserId, fetchAudience, cleanupChannels, queueAudienceMutation])
 
   // Fetch ghost mode status for audience members (realtime doesn't support joins)
   // Debounced: only fetch once per unique set of audience user IDs, max once per 30s
@@ -449,7 +447,7 @@ const { data, error } = await supabase
   useEffect(() => {
     if (!streamId) return
 
-    const currentUserIds = audience
+    const currentUserIds = Object.values(audienceMap)
       .map(m => m.user_id)
       .filter(Boolean)
       .sort()
@@ -473,12 +471,14 @@ const { data, error } = await supabase
       if (profiles.length > 0) {
         ghostModeFetchedRef.current = { streamId, userIds: currentUserIds }
         const ghostModeMap = new Map(profiles.map((p: any) => [p.id, p.is_ghost_mode]))
-        setAudience((prev) =>
-          prev.map((member) => ({
-            ...member,
-            is_ghost_mode: ghostModeMap.get(member.user_id) ?? false,
-          }))
-        )
+        setAudienceMap((prev) => {
+          const next = { ...prev }
+          Object.keys(next).forEach((key) => {
+            const member = next[key]
+            next[key] = { ...member, is_ghost_mode: ghostModeMap.get(member.user_id) ?? false }
+          })
+          return next
+        })
       }
     }, 30_000)
 
@@ -488,24 +488,21 @@ const { data, error } = await supabase
         ghostModeTimerRef.current = null
       }
     }
-  }, [streamId, audience])
+  }, [streamId, audienceMap])
 
-  // REPLACED: 30s DB heartbeat interval removed.
-  // The postgres_changes subscription on stream_audience_presence (above) already
-  // pushes all changes in real-time. The heartbeat was redundant — any update to
-  // last_seen_at, is_active, or gift_total is already received via the realtime
-  // channel without polling.
+  // Throttled heartbeat (90s) — avoids broadcasting every presence tick to all
+  // clients. The realtime subscription already pushes meaningful membership
+  // changes without polling.
   useEffect(() => {
     if (!effectiveUserId || !streamId) return
 
-    // No interval needed — realtime subscription handles all updates
-    return () => {
-      if (heartbeatRef.current) {
-        clearInterval(heartbeatRef.current)
-        heartbeatRef.current = null
-      }
-    }
-  }, [effectiveUserId, streamId])
+    const heartbeat = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void heartbeatAudience()
+    }, 90_000)
+
+    return () => clearInterval(heartbeat)
+  }, [effectiveUserId, streamId, heartbeatAudience])
 
   useEffect(() => {
     if (!effectiveUserId || !streamId) return
@@ -521,7 +518,7 @@ const { data, error } = await supabase
   }, [fetchAudience])
 
   return {
-    audience,
+    audience: Object.values(audienceMap),
     activeAudience,
     topAudience,
     myPresence,

@@ -16,7 +16,6 @@ import {
   Sparkles,
   Star,
   Trophy,
-  Trash2,
   Tv,
   Users,
   Vote,
@@ -41,6 +40,7 @@ import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
 import { useWallNotifications } from '@/hooks/useWallNotifications'
 import LeftNavSidebar from '@/components/home/LeftNavSidebar'
+import UniverseBattlesPage from '@/pages/UniverseBattlesPage'
 import HowToVideosPage from '@/pages/JobsHowToPage'
 import FeaturedBroadcastersRow from '@/components/home/FeaturedBroadcastersRow'
 import HyTroGamingRow from '@/components/home/HyTroGamingRow'
@@ -515,54 +515,14 @@ const BattleGrid = React.memo(function BattleGrid({ items, onClickItem }: { item
   )
 })
 
-/* ─── Clear App Cache ─── */
-async function clearAppCache() {
-  try {
-    try {
-      localStorage.clear()
-      sessionStorage.clear()
-    } catch {}
-    if ('caches' in window) {
-      const keys = await caches.keys()
-      await Promise.all(keys.map((key) => caches.delete(key)))
-    }
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(registrations.map((reg) => reg.unregister()))
-    }
-  } catch (error) {
-    console.error('[clearAppCache]', error)
-  } finally {
-    window.location.reload()
-  }
-}
-
 /* ─── Mobile Global Ticker ─── */
 const MobileGlobalTicker = React.memo(function MobileGlobalTicker() {
   const events = useGlobalActivity()
-  const [clearing, setClearing] = useState(false)
-
-  const handleClearCache = async () => {
-    if (clearing) return
-    if (!window.confirm('Clear app cache? This clears local data and reloads the app.')) return
-    setClearing(true)
-    await clearAppCache()
-  }
 
   if (!events || events.length === 0) {
     return (
       <div className="relative flex items-center justify-between gap-2 border-b border-cyan-400/15 bg-[#070b19]/80 px-3 py-1.5 backdrop-blur-md">
         <span className="text-[10px] font-bold text-cyan-200/70">Troll City</span>
-        <button
-          type="button"
-          onClick={handleClearCache}
-          disabled={clearing}
-          aria-label="Clear app cache"
-          className="flex shrink-0 items-center gap-1 rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-[10px] font-bold text-cyan-200/80 transition active:bg-cyan-400/20"
-        >
-          <Trash2 className="h-3 w-3" />
-          {clearing ? 'Clearing…' : 'Cache'}
-        </button>
       </div>
     )
   }
@@ -584,16 +544,6 @@ const MobileGlobalTicker = React.memo(function MobileGlobalTicker() {
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={handleClearCache}
-        disabled={clearing}
-        aria-label="Clear app cache"
-        className="flex shrink-0 items-center gap-1 border-l border-cyan-400/15 px-3 text-[10px] font-bold text-cyan-200/80 transition active:bg-cyan-400/10"
-      >
-        <Trash2 className="h-3 w-3" />
-        {clearing ? 'Clearing…' : 'Cache'}
-      </button>
       <style>{`
         @keyframes ticker {
           0% { transform: translateX(0); }
@@ -962,7 +912,7 @@ export default function Home() {
             </div>
            )}
 
-{activeTab === 'universe' && (
+          {activeTab === 'universe' && (
             <div className="flex gap-4">
               <LeftNavSidebar
                 activeTab={activeTab}
@@ -975,7 +925,9 @@ export default function Home() {
                 wallNotificationCount={wallNotificationCount}
               />
               <div className="min-w-0 flex-1">
-                <BattleGrid items={battleItems} onClickItem={handleScrollItemClick} />
+                <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-fuchsia-300 border-t-transparent" /></div>}>
+                  <UniverseBattlesPage />
+                </Suspense>
               </div>
             </div>
           )}

@@ -385,6 +385,39 @@ export function useNavBadges(): NavBadges & { dismissed: Set<keyof NavBadges>; d
 
     setupCoinPurchaseSubscription();
 
+    // Admin-only realtime subscription for new user signups (flashes Alerts tab)
+    const setupSignupAlertSubscription = async () => {
+      const profile = profileRef.current;
+      const role = String(profile?.role || '');
+      const isAdmin = role === String(UserRole.ADMIN) || role === 'superadmin' || role === 'ceo' || (profile as any)?.is_admin;
+
+      if (!isAdmin) return;
+
+      supabase
+        .channel('nav-signup-alerts')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'user_profiles',
+          },
+          (payload: any) => {
+            const newUser = payload?.new;
+            if (!newUser) return;
+            setBadgeCounts((prev) => ({ ...prev, alerts: (prev.alerts || 0) + 1 }));
+            import('@/lib/notifications')
+              .then(({ notifyNewUserSignup }) =>
+                notifyNewUserSignup(newUser.username || 'unknown', newUser.id),
+              )
+              .catch(() => undefined);
+          },
+        )
+        .subscribe();
+    };
+
+    setupSignupAlertSubscription();
+
     // Realtime subscription for chat messages
     const setupChatSubscription = async () => {
       const { data: memberships } = await supabase

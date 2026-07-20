@@ -175,7 +175,7 @@ export default function MentionTextarea({
       parts.push(
         <span
           key={match.index}
-          className="text-purple-400 font-semibold cursor-pointer hover:text-purple-300"
+          className="text-purple-400 font-semibold cursor-pointer hover:text-purple-300 pointer-events-auto"
           data-username={match[1]}
           onClick={handleTagClick}
         >
@@ -196,7 +196,7 @@ export default function MentionTextarea({
       {value && /#\w/.test(value) && (
         <div
           aria-hidden="true"
-          className={`absolute inset-0 pointer-events-auto whitespace-pre-wrap overflow-hidden ${className || ''}`}
+          className={`absolute inset-0 pointer-events-none whitespace-pre-wrap overflow-hidden ${className || ''}`}
           style={{
             padding: textareaRef.current
               ? window.getComputedStyle(textareaRef.current).padding
@@ -208,7 +208,6 @@ export default function MentionTextarea({
               ? window.getComputedStyle(textareaRef.current).lineHeight
               : undefined,
           }}
-          onClick={handleTagClick}
         >
           {renderHighlightedText()}
         </div>
