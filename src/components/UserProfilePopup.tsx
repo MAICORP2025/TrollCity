@@ -289,7 +289,7 @@ export default function UserProfilePopup({ userId, username, onClose, onOpenChat
             )}
 
             {/* Action Buttons Grid */}
-            {user && user.id !== userId && (
+            {user && user.id !== userId && !profile?.is_jailed && (
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -323,6 +323,35 @@ export default function UserProfilePopup({ userId, username, onClose, onOpenChat
                 </button>
               </div>
             )}
+            {user && user.id !== userId && profile?.is_jailed && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleFollow}
+                  disabled={actionLoading}
+                  className={`px-4 py-2.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                    isFollowing 
+                      ? 'bg-zinc-700 hover:bg-zinc-600 text-white border border-zinc-600' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {isFollowing ? (
+                    <>
+                      <UserMinus className="w-4 h-4" />
+                      Following
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      Follow
+                    </>
+                  )}
+                </button>
+                <div className="px-4 py-2.5 rounded-lg font-semibold text-center text-zinc-500 bg-zinc-800/50 border border-zinc-700">
+                  In Jail
+                </div>
+              </div>
+            )}
 
             {/* Second Row: View Profile, Block, Report */}
             <div className="flex gap-2">
@@ -336,7 +365,7 @@ export default function UserProfilePopup({ userId, username, onClose, onOpenChat
               >
                 View Profile
               </button>
-              {user && user.id !== userId && (
+              {user && user.id !== userId && !profile?.is_jailed && (
                 <>
                   <button
                     type="button"

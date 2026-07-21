@@ -45,6 +45,7 @@ const ChangeRequestsTab = lazy(() => import('./tabs/ChangeRequestsTab'))
 const FrontendStudioTab = lazy(() => import('./tabs/FrontendStudioTab'))
 const DepartmentToolsTab = lazy(() => import('./tabs/DepartmentToolsTab'))
 const ModerationTab = lazy(() => import('./tabs/ModerationTab'))
+const ModActionsTab = lazy(() => import('./tabs/ModActionsTab'))
 const ManagementTab = lazy(() => import('./tabs/ManagementTab'))
 const HiringTab = lazy(() => import('./tabs/HiringTab'))
 const AttendanceTab = lazy(() => import('./tabs/AttendanceTab'))
@@ -96,6 +97,7 @@ const TAB_COMPONENTS: Record<
   frontend_studio: FrontendStudioTab,
   department_tools: DepartmentToolsTab,
   moderation: ModerationTab,
+  mod_actions: ModActionsTab,
   management: ManagementTab,
   hiring: HiringTab as React.ComponentType<EmployeeTabProps>,
   attendance: AttendanceTab,

@@ -392,7 +392,7 @@ export default function FastPayApplication() {
                   </p>
                 </div>
               ) : null}
-              {existingApp.admin_notes && (
+              {existingApp && existingApp.admin_notes && (
                 <p className="text-xs text-slate-500"><strong>Admin notes:</strong> {existingApp.admin_notes}</p>
               )}
             </div>

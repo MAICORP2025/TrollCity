@@ -216,10 +216,10 @@ export default function UserActionModal({
         }
     }
 
-    if (!confirm("Kick this user for 100 coins? They will be removed for 30 minutes unless they pay the fee.")) return;
+    if (!confirm("Remove this user from the stream? They will be banned for 30 minutes.")) return;
     
-    // Use the new paid kick RPC
-    const { data, error } = await supabase.rpc('kick_user_paid', { 
+    // Use the free kick RPC
+    const { data, error } = await supabase.rpc('kick_user_free', { 
       p_stream_id: streamId, 
       p_target_user_id: userId,
       p_kicker_id: (await supabase.auth.getUser()).data.user?.id,
@@ -232,7 +232,7 @@ export default function UserActionModal({
     } else if (data && !data.success) {
         toast.error(data.message || "Failed to kick user");
     } else {
-        toast.success("User kicked (100 coins deducted)");
+        toast.success("User removed from stream");
         onClose();
     }
   };
@@ -787,8 +787,8 @@ const handleViewProfile = () => {
                         </button>
                         <button onClick={handleKick} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-red-900/30 text-red-500 rounded-lg transition-colors border border-white/5">
                           <X size={16} />
-                          <span>Kick (100c)</span>
-                       </button>
+                          <span>Kick</span>
+                        </button>
                         <button onClick={handleBan} className="flex items-center justify-center gap-2 p-2 bg-zinc-800 hover:bg-red-900/30 text-red-500 rounded-lg transition-colors border border-white/5">
                            <Ban size={16} />
                            <span>Ban</span>

@@ -536,18 +536,35 @@
 
 .gce-enter-wrap {
   position: absolute;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: max(8%, calc(env(safe-area-inset-bottom, 0px) + 40px));
-  transform: translateX(-50%);
+  margin-inline: auto;
+  width: fit-content;
+  max-width: 90vw;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   opacity: 0;
   transition: opacity 600ms ease;
   pointer-events: none;
+  /* Keep the button horizontally centered regardless of any ribbon/door
+     phase. Centering is done via left:0/right:0 + margin auto instead of a
+     transform so it can never be shifted by hover or phase transitions. */
+  transform: none !important;
 }
 .gce-is-enter .gce-enter-wrap { opacity: 1; pointer-events: auto; }
+
+/* Never let hover/active transforms on the button itself affect wrap centering */
+.gce-enter-wrap .gce-enter {
+  transform: none;
+}
+.gce-enter-wrap .gce-enter:hover,
+.gce-enter-wrap .gce-enter:focus-visible {
+  transform: translateY(-2px);
+}
 
 .gce-enter {
   pointer-events: auto;

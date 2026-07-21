@@ -3,9 +3,7 @@ import { supabase } from '../supabase';
 import { useAuthStore } from '../store';
 import {
   getTLeagueTier,
-  calculateLeagueScore,
   getTLeagueProgress,
-  getNextTLeagueTier,
   getSubTierFromScore,
   getSubTierProgress,
   getNextSubTier,
@@ -123,16 +121,13 @@ export function useCityStatusOrb(options: CityStatusOrbOptions) {
       const seasonKey = new Date().toISOString().slice(0, 7); // YYYY-MM
       const { data: leagueData } = await supabase
         .from('broadcast_league_stats')
-        .select('league_tier, sub_tier, league_score, gift_coins_received, total_live_minutes, season_key, league_level, total_gifts_sent')
+        .select('league_tier, sub_tier, league_score, gift_coins_received, total_live_minutes, season_key, league_level, total_gifts_sent, total_xp')
         .eq('broadcaster_id', options.userId)
         .eq('season_key', seasonKey)
         .maybeSingle();
 
       const leagueScore = leagueData
-        ? calculateLeagueScore(
-            Number(leagueData.gift_coins_received) || 0,
-            Number(leagueData.total_live_minutes) || 0
-          )
+        ? Number(leagueData.total_xp) || 0
         : 0;
 
       const subInfo = getSubTierFromScore(leagueScore);

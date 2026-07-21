@@ -206,12 +206,6 @@ export function useBroadcastShutdown(options: BroadcastShutdownOptions): Broadca
 
   // Heartbeat: while a broadcast is live, keep `last_heartbeat_at` fresh in the
   // database as a lightweight "browser still open" signal for admin monitoring.
-  //
-  // NOTE: this heartbeat intentionally does NOT touch `last_activity_at`. Stream
-  // auto-end is driven purely by real audience activity (chat/gifts) via the
-  // `auto_end_inactive_streams` cron, so a silent-but-open broadcaster tab does
-  // not keep a dead stream alive, and — critically — a briefly backgrounded tab
-  // no longer causes the stream to be ended.
   useEffect(() => {
     if (!isLive || !streamIdRef.current) return
 

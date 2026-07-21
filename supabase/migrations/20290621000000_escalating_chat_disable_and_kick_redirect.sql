@@ -161,9 +161,19 @@ BEGIN
     -- Mark participant as removed with reason for client-side redirect
     UPDATE stream_participants
     SET removed = true,
-        removed_reason = 'Kicked by broadcaster'
+        removed_reason = 'Kicked by broadcaster',
+        removed_at = NOW()
     WHERE stream_id = p_stream_id
       AND user_id = p_target_user_id;
+
+    -- Remove from stage seat so the broadcast page clears the seat box
+    UPDATE stream_seat_sessions
+    SET status = 'kicked',
+        left_at = NOW(),
+        updated_at = NOW()
+    WHERE stream_id = p_stream_id
+      AND user_id = p_target_user_id
+      AND status IN ('active', 'live', 'reserved', 'camera_starting');
 
     RETURN jsonb_build_object('success', true);
 END;
@@ -215,7 +225,8 @@ BEGIN
   -- Mark participant as removed with reason for client-side redirect
   UPDATE public.stream_participants
   SET removed = true,
-      removed_reason = COALESCE(p_reason, 'Kicked by moderator')
+      removed_reason = COALESCE(p_reason, 'Kicked by moderator'),
+      removed_at = NOW()
   WHERE stream_id = p_stream_id
     AND user_id = p_target_user_id;
 

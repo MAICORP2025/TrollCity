@@ -88,22 +88,82 @@ export default function BattleViewMobile({ battleView }: { battleView: BattleVie
   const [shareSheetOpen, setShareSheetOpen] = React.useState(false);
 
   // Resolve LiveKit video/audio tracks for a participant user id.
-  const resolveTrack = (userId: string) => {
-    const liveKitIdentity = userIdToLiveKitIdentity?.[userId] || userId;
-    const normalizedTarget = normalizeId(liveKitIdentity);
-    const remote = remoteUsers.find((u) => {
+  //
+  // NOTE: In the battle room each broadcaster connects with their BARE user id
+  // as the LiveKit identity (the battle token uses `identity || userId`). The
+  // `userIdToLiveKitIdentity` map passed from BroadcastPage instead maps seat
+  // user ids to the MAIN broadcast-room identity (`viewer-<streamId>-<uuid>`),
+  // which is meaningless inside the battle room. So we must match the remote
+  // participant primarily by the bare user id, and never rely on that map for
+  // battles (the desktop Arena path works only because of its ULTRA-FALLBACK
+  // that assigns any camera-capable remote to a host slot). We replicate that
+  // fallback here so the mobile layout shows the same cameras.
+  const isMobileDevice =
+    typeof navigator !== "undefined" &&
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  const findRemoteByIdentity = (identity: string) => {
+    const target = normalizeId(identity);
+    return remoteUsers.find((u) => {
       const id = String(u.identity || "");
       const n = normalizeId(id);
-      return id === liveKitIdentity || n === normalizedTarget || n.startsWith(normalizedTarget.substring(0, 8)) || normalizedTarget.startsWith(n.substring(0, 8));
+      return id === identity || n === target || n.startsWith(target.substring(0, 8)) || target.startsWith(n.substring(0, 8));
     });
-    if (!remote) return { videoTrack: undefined, hasAudio: false };
-    const videoPubs = getTrackPublications(remote, "video");
-    const audioPubs = getTrackPublications(remote, "audio");
+  };
+
+  // Track cache so a brief unsubscribe/reconnect doesn't drop a box back to the
+  // profile picture (mirrors BattleArena's lastKnownTrackRef behaviour).
+  const trackCacheRef = React.useRef<Record<string, { videoTrack?: any; hasAudio: boolean }>>({});
+
+  const resolveTrack = (userId: string) => {
+    // Prefer the bare user id (the real battle-room identity). Fall back to the
+    // broadcast-room mapping only if it happens to be a valid battle identity.
+    const remote =
+      findRemoteByIdentity(userId) ||
+      findRemoteByIdentity(userIdToLiveKitIdentity?.[userId] || "");
+
+    // ULTRA-FALLBACK (matches desktop Arena): if no remote matched by identity
+    // yet this participant still needs a camera, grab any unmatched remote that
+    // already has a subscribed video track.
+    let resolvedRemote = remote;
+    if (!resolvedRemote) {
+      const usedIdentities = new Set(
+        (battleParticipants as any[])
+          .map((p) => {
+            const r = findRemoteByIdentity(p.user_id);
+            return r?.identity;
+          })
+          .filter(Boolean) as string[]
+      );
+      const anyRemoteWithVideo = remoteUsers.find((u) => {
+        if (usedIdentities.has(u.identity)) return false;
+        const pubs = getTrackPublications(u, "video");
+        return pubs.some((p: any) => p.track);
+      });
+      resolvedRemote = anyRemoteWithVideo;
+    }
+
+    if (!resolvedRemote) {
+      const cached = trackCacheRef.current[userId];
+      if (cached?.videoTrack || cached?.hasAudio) return cached;
+      return { videoTrack: undefined, hasAudio: false };
+    }
+
+    const videoPubs = getTrackPublications(resolvedRemote, "video");
+    const audioPubs = getTrackPublications(resolvedRemote, "audio");
+
     const videoTrack =
       videoPubs.find((p: any) => p.isSubscribed && p.track)?.track ||
-      videoPubs.find((p: any) => p.track)?.track;
+      videoPubs.find((p: any) => p.track)?.track ||
+      (isMobileDevice ? videoPubs.find((p: any) => p.track)?.track : undefined);
+
     const hasAudio = audioPubs.some((p: any) => p.isSubscribed && p.track) || audioPubs.some((p: any) => p.track);
-    return { videoTrack, hasAudio };
+
+    const result = { videoTrack, hasAudio };
+    if (videoTrack || hasAudio) {
+      trackCacheRef.current[userId] = result;
+    }
+    return result;
   };
 
   const { blueVMs, redVMs } = useMemo(() => {

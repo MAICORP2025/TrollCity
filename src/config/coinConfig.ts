@@ -60,6 +60,12 @@ export const CASHOUT_TIERS = [
   { coins: 88000, usd: 415, manualReview: false, name: 'Tier 11', color: '#ff0000', label: '' },
   { coins: 96000, usd: 475, manualReview: false, name: 'Tier 12', color: '#ff0000', label: '' },
   { coins: 106000, usd: 600, manualReview: false, name: 'Tier 13', color: '#ff0000', label: '' },
+  { coins: 120000, usd: 700, manualReview: false, name: 'Tier 14', color: '#ff0000', label: '' },
+  { coins: 135000, usd: 800, manualReview: false, name: 'Tier 15', color: '#ff0000', label: '' },
+  { coins: 150000, usd: 950, manualReview: false, name: 'Tier 16', color: '#ff0000', label: '' },
+  { coins: 170000, usd: 1100, manualReview: false, name: 'Tier 17', color: '#ff0000', label: '' },
+  { coins: 190000, usd: 1300, manualReview: false, name: 'Tier 18', color: '#ff0000', label: '' },
+  { coins: 210000, usd: 1500, manualReview: false, name: 'Tier 19', color: '#ff0000', label: '' },
 ] as const;
 
 // Alias exports for backward compatibility with old payoutTiers imports

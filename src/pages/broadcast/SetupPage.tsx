@@ -180,6 +180,14 @@ async function publishSetupTracksToRoom(
   screenTrack: LocalVideoTrack | null | undefined,
   useScreenShare: boolean
 ) {
+  if (!room || room.state !== 'connected') {
+    console.warn('[SetupPage] Skipping publish because room is not connected', {
+      state: room?.state,
+      roomName: room?.name,
+    })
+    return
+  }
+
   const [audioTrack, cameraTrack] = tracks
   const videoTrack = useScreenShare ? screenTrack || null : cameraTrack
 
@@ -256,6 +264,13 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
       setTitle(`${profile.username}'s Live`);
     }
   }, [profile?.username, title]);
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Load user's assigned state
   useEffect(() => {
@@ -338,6 +353,7 @@ const [randomBattleQueueEnabled, setRandomBattleQueueEnabled] = useState(false);
 // LiveKit room state - created in SetupPage and passed to BroadcastPage
   const [livekitRoom, setLivekitRoom] = useState<Room | null>(null);
   const livekitRoomRef = useRef<Room | null>(null);
+  const mountedRef = useRef(true);
 
 
   // Get category config
@@ -1809,14 +1825,11 @@ livekit_room_name: roomName,
            // Mark stream as live now that LiveKit is connected and tracks are published
            const { error: updateError } = await supabase
             .from('streams')
-            .update({
-              status: 'live',
-              is_live: true,
-              started_at: new Date().toISOString(),
-              // Seed activity so the inactivity auto-end grace window starts now,
-              // not from a NULL that would make the stream eligible to end early.
-              last_activity_at: new Date().toISOString(),
-              ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? {
+             .update({
+               status: 'live',
+               is_live: true,
+               started_at: new Date().toISOString(),
+               ...(randomBattleQueueEnabled && RANDOM_BATTLE_ENABLED && category === 'general' ? {
                 random_battle_queued_at: new Date().toISOString(),
                 battle_mode: 'random_queue',
                 ...(battleMode === 'state' ? {
@@ -1948,6 +1961,14 @@ livekit_room_name: roomName,
           console.warn('[SetupPage] Audio track missing - attempting to recreate (screen share mode)');
           toast.info('Preparing microphone...');
 
+          if (
+            !mountedRef.current ||
+            !room ||
+            room.state !== 'connected'
+          ) {
+            return
+          }
+
           // Try to recreate tracks using the existing native capture flow
           const mediaStream = await acquireMediaStream(facingMode, true);
           if (!mediaStream) {
@@ -1979,6 +2000,14 @@ livekit_room_name: roomName,
 
           toast.info('Preparing camera and microphone...');
 
+          if (
+            !mountedRef.current ||
+            !room ||
+            room.state !== 'connected'
+          ) {
+            return
+          }
+
           // Try bounded retries: acquireMediaStream should set PreflightStore.setLivekitTracks synchronously (after async getUserMedia)
           const MAX_RETRIES = 10;
           const RETRY_DELAY_MS = 250;
@@ -1989,6 +2018,15 @@ livekit_room_name: roomName,
 
           while (attempt < MAX_RETRIES && (!audioOk || !videoOk)) {
             attempt += 1;
+
+            if (
+              !mountedRef.current ||
+              !room ||
+              room.state !== 'connected'
+            ) {
+              return
+            }
+
             // Recreate tracks (native capture path)
             const mediaStream = await acquireMediaStream(facingMode, true);
             if (!mediaStream) break;

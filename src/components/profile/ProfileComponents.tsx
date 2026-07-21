@@ -10,7 +10,7 @@ import {
     Star, Award, Users, TrendingUp, Clock, DollarSign, Eye,
     CheckCircle, Shield, Crown, Heart, MessageCircle, UserPlus,
     Settings, Package, History, Bookmark, Send, MoreHorizontal,
-    ShoppingCart, Hammer, BookOpen, Newspaper, Scale, Ticket
+    ShoppingCart, Hammer, BookOpen, Newspaper, Scale, Ticket, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 
 interface UserProfile {
@@ -46,6 +46,10 @@ interface ProfileHeaderProps {
     onUnsubscribe: () => void;
     isSubscribed: boolean;
     subscriberCount: number;
+    modActionsCount?: number;
+    showModActionsStat?: boolean;
+    onModActionsClick?: () => void;
+    isJailed?: boolean;
 }
 
 export function ProfileHeader({
@@ -59,7 +63,11 @@ export function ProfileHeader({
     onSubscribe,
     onUnsubscribe,
     isSubscribed,
-    subscriberCount
+    subscriberCount,
+    modActionsCount = 0,
+    showModActionsStat = false,
+    onModActionsClick,
+    isJailed = false,
 }: ProfileHeaderProps) {
     const themeColor = profile.theme_color || '#9333ea';
     const accentColor = profile.accent_color || '#22d3ee';
@@ -88,6 +96,17 @@ export function ProfileHeader({
                         <div className={`relative h-44 w-44 shrink-0 rounded-full border-4 bg-black p-1 shadow-[0_0_50px_rgba(0,0,0,0.8)] ${profile.is_live ? 'border-red-400' : 'border-white/20'}`}
                             style={{ borderColor: profile.is_live ? undefined : themeColor }}>
                             <img src={avatarUrl} alt={profile.display_name} className="w-full h-full rounded-full object-cover" />
+                            {isJailed && (
+                                <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
+                                    <div className="absolute inset-0 bg-black/40" />
+                                    <div className="absolute inset-0" style={{
+                                        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 8px, rgba(0,0,0,0.8) 8px, rgba(0,0,0,0.8) 12px), repeating-linear-gradient(90deg, transparent, transparent 8px, rgba(0,0,0,0.8) 8px, rgba(0,0,0,0.8) 12px)',
+                                    }} />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <span className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-bold text-white shadow-lg">JAILED</span>
+                                    </div>
+                                </div>
+                            )}
                             {profile.is_live && (
                                 <span className="absolute -right-2 -top-2 rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white shadow-[0_0_24px_rgba(239,68,68,0.8)] animate-pulse">
                                     LIVE
@@ -138,6 +157,17 @@ export function ProfileHeader({
                                     <Send className="w-4 h-4" /> Share
                                 </button>
                             </>
+                        ) : isJailed ? (
+                            <>
+                                <button onClick={onFollow} className={`flex items-center gap-2 rounded-xl px-4 py-2 font-bold transition ${isFollowing ? 'border border-white/10 bg-white/5 text-white/80' : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/25 hover:from-purple-500 hover:to-pink-500'}`}>
+                                    <UserPlus className="w-4 h-4" /> {isFollowing ? 'Following' : 'Follow'}
+                                </button>
+                                {showModActionsStat && (
+                                    <button onClick={onModActionsClick} className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 font-bold text-red-300 transition hover:bg-red-500/20">
+                                        <ShieldAlert className="w-4 h-4" /> Mod Actions
+                                    </button>
+                                )}
+                            </>
                         ) : (
                             <>
                                 <button onClick={onFollow} className={`flex items-center gap-2 rounded-xl px-4 py-2 font-bold transition ${isFollowing ? 'border border-white/10 bg-white/5 text-white/80' : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/25 hover:from-purple-500 hover:to-pink-500'}`}>
@@ -159,9 +189,9 @@ export function ProfileHeader({
                     {[
                         { label: 'Followers', value: profile.followers_count },
                         { label: 'Following', value: profile.following_count },
-                        { label: 'Posts', value: profile.posts_count }
+                        ...(showModActionsStat ? [{ label: 'Mod Actions', value: modActionsCount, clickable: true }] : []),
                     ].map(stat => (
-                        <div key={stat.label} className="rounded-2xl border border-white/10 bg-black/40 p-3 text-center transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/5">
+                        <div key={stat.label} className={`rounded-2xl border border-white/10 bg-black/40 p-3 text-center transition ${stat.clickable ? 'cursor-pointer hover:-translate-y-0.5 hover:border-rose-400/40 hover:bg-rose-500/5' : 'hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/5'}`} onClick={stat.clickable && onModActionsClick ? onModActionsClick : undefined}>
                             <div className="text-sm font-black text-white sm:text-2xl">{stat.value.toLocaleString()}</div>
                             <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50 sm:text-xs sm:tracking-[0.25em]">{stat.label}</div>
                         </div>

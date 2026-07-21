@@ -378,6 +378,9 @@ function pickProfileComparable(profile: any) {
     paid_coin_balance: toSafeNumber(profile?.paid_coin_balance, 0),
     free_coin_balance: toSafeNumber(profile?.free_coin_balance, 0),
     credit_score: toSafeNumber(profile?.credit_score, 0),
+    drivers_license_status: profile?.drivers_license_status ?? null,
+    drivers_license_expiry: profile?.drivers_license_expiry ?? null,
+    car_insurance_expiry: profile?.car_insurance_expiry ?? null,
   }
 }
 
@@ -973,6 +976,9 @@ export function setupProfileRealtime(userId: string) {
           'username',
           'role',
           'troll_role',
+          'drivers_license_status',
+          'drivers_license_expiry',
+          'car_insurance_expiry',
         ]
         const hasRelevantPatchKeys = Object.keys(diffPatch).some((key) => relevantKeys.includes(key))
         const hasRelevantFieldsChanged = !shallowEqualProfile(currentProfile, relevantPatch)
@@ -1014,6 +1020,9 @@ export function setupProfileRealtime(userId: string) {
           'is_noah_assistant',
           'is_pastor',
           'employment_status',
+          'drivers_license_status',
+          'drivers_license_expiry',
+          'car_insurance_expiry',
         ]
 
         if (Object.keys(diffPatch).some((key) => PERMISSION_PATCH_KEYS.includes(key))) {

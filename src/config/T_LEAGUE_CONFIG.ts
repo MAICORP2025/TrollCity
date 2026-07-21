@@ -3,9 +3,11 @@
  * ==================================
  * Troll City Broadcast League System
  *
- * League score = gift_coins_received + floor(total_live_minutes / 5)
- *   - 1 gift coin received = 1 league point
- *   - every 5 minutes live = 1 league point
+ * League score = total_xp (from the user XP/level system)
+ *   - The T league reads from the same xp system the bottom nav bar uses
+ *   - Gift XP, chat XP, watch XP, and all other XP sources contribute
+ *   - When users receive gifts in broadcast, XP is awarded and counts
+ *     towards their T league tier
  *
  * Sub-tiers: Each main tier (T0-T10) has 4 sub-levels: a, b, c, d
  *   Progress within a tier is divided into 4 equal quarters
@@ -246,10 +248,13 @@ export function getLeagueLevelProgress(giftsSent: number): number {
 }
 
 /**
- * Calculate league score from gifts received and live minutes
+ * Calculate league score from total_xp
+ * The T league is now XP-based — reads from the same xp system
+ * the bottom nav bar uses. Gift XP, watch XP, chat XP, etc.
+ * all contribute to the T league tier.
  */
-export function calculateLeagueScore(giftCoinsReceived: number, totalLiveMinutes: number): number {
-  return giftCoinsReceived + Math.floor(totalLiveMinutes / 5);
+export function calculateLeagueScore(totalXp: number): number {
+  return totalXp;
 }
 
 /**

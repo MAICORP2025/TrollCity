@@ -44,32 +44,80 @@ export interface AuctionShow {
   isTrending?: boolean
 }
 
-   interface LiveContentState {
-      liveItems: LiveItem[]
-      liveAuctions: AuctionShow[]
-      totalViewers: number
-      onlineUsers: number
-      loadingLive: boolean
-      loadingOnline: boolean
-      refresh: () => void
-    }
+interface LiveContentState {
+  liveItems: LiveItem[]
+  liveAuctions: AuctionShow[]
+  totalViewers: number
+  onlineUsers: number
+  loadingLive: boolean
+  loadingOnline: boolean
+  refresh: () => void
+}
 
 const LiveContentContext = createContext<LiveContentState | null>(null)
 
 export function LiveContentProvider({ children }: { children: React.ReactNode }) {
-    // Initialize all state variables to avoid undefined references
-    const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
-    const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([]);
-    const [totalViewers, setTotalViewers] = useState(0);
-    const [onlineUsers, setOnlineUsers] = useState(0); // Ensures onlineUsers is always defined
-    const [loadingLive, setLoadingLive] = useState(true);
-    const [loadingOnline, setLoadingOnline] = useState(true);
-    const presenceOnlineCount = usePresenceStore((state) => state.onlineCount);
-    const mountedRef = useRef(true);
+  const [liveItems, setLiveItems] = useState<LiveItem[]>([])
+  const [liveAuctions, setLiveAuctions] = useState<AuctionShow[]>([])
+  const [onlineUsers, setOnlineUsers] = useState(0)
+  const [loadingLive, setLoadingLive] = useState(true)
+  const [loadingOnline, setLoadingOnline] = useState(true)
+  const presenceOnlineCount = usePresenceStore((state) => state.onlineCount)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    setOnlineUsers(presenceOnlineCount)
+    setLoadingOnline(false)
+  }, [presenceOnlineCount])
+
+  const totalViewers = useMemo(() => liveItems.reduce((sum, item) => sum + item.viewerCount, 0), [liveItems])
+
+  const mapStreamRow = useCallback((row: any) => ({
+    id: row.id,
+    title: row.title || 'Untitled Stream',
+    type: 'stream' as const,
+    viewerCount: row.current_viewers || 0,
+    streamerName: 'Unknown' as string,
+    streamerAvatar: null as string | null,
+    broadcasterId: row.broadcaster_id || row.user_id || null,
+    isFeatured: false,
+    isBattle: row.battle_mode === 'universal',
+    battleFormat: row.battle_format,
+    battleStatus: row.battle_status,
+    category: row.category || null,
+    visibilityScore: 0,
+    hotScore: 0,
+    isRising: false,
+    isTrending: false,
+    momentumLevel: 0,
+    velocityTrend: 'stable',
+  }), [])
+
+  const enrichStreamItem = useCallback(async (streamId: string, broadcasterId?: string) => {
+    const profilePromise = broadcasterId
+      ? supabase.from('user_profiles').select('username, avatar_url').eq('id', broadcasterId).maybeSingle()
+      : Promise.resolve({ data: null as any })
+
+    const [{ data: profile }, { data: vis }, { data: mom }] = await Promise.all([
+      profilePromise,
+      supabase.from('visibility_scores').select('final_visibility_score, hot_score, is_rising, is_trending').eq('content_id', streamId).eq('content_type', 'stream').maybeSingle(),
+      supabase.from('momentum_tracking').select('momentum_level, velocity_trend').eq('content_id', streamId).eq('content_type', 'stream').maybeSingle(),
+    ])
+    return {
+      streamerName: profile?.username || 'Unknown',
+      streamerAvatar: profile?.avatar_url || null,
+      visibilityScore: vis?.final_visibility_score || 0,
+      hotScore: vis?.hot_score || 0,
+      isRising: vis?.is_rising || false,
+      isTrending: vis?.is_trending || false,
+      momentumLevel: mom?.momentum_level || 0,
+      velocityTrend: mom?.velocity_trend || 'stable',
+    }
   }, [])
 
   const fetchLiveContent = useCallback(async () => {
@@ -118,6 +166,12 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
           battleFormat: stream.battle_format,
           battleStatus: stream.battle_status,
           category: stream.category || null,
+          visibilityScore: 0,
+          hotScore: 0,
+          isRising: false,
+          isTrending: false,
+          momentumLevel: 0,
+          velocityTrend: 'stable',
         }))
       } else {
         if (!mountedRef.current) return
@@ -144,53 +198,262 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
 
       if (!mountedRef.current) return
 
-       const nonCourtStreams = streams.filter((s) => s.category !== 'court')
+      let courtLiveItems: LiveItem[] = []
+      try {
+        const { data: activeCourts } = await supabase
+          .from('court_sessions')
+          .select('id, started_by, created_at, status')
+          .in('status', ['active', 'live'])
 
-       let courtLiveItems: LiveItem[] = []
-       try {
-         const { data: activeCourts } = await supabase
-           .from('court_sessions')
-           .select('id, started_by, created_at, status')
-           .in('status', ['active', 'live'])
+        if (activeCourts && activeCourts.length > 0) {
+          const startedByIds = [...new Set(activeCourts.map((cs: any) => cs.started_by).filter(Boolean))]
+          const { data: profiles } = await supabase
+            .from('user_profiles')
+            .select('id, username, avatar_url')
+            .in('id', startedByIds)
 
-         if (activeCourts.length > 0) {
-           const startedByIds = [...new Set(activeCourts.map((cs: any) => cs.started_by).filter(Boolean))]
-           const { data: profiles } = await supabase
-             .from('user_profiles')
-             .select('id, username, avatar_url')
-             .in('id', startedByIds)
+          const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]))
 
-           const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]))
+          courtLiveItems = activeCourts.map((cs: any) => {
+            const profile = profileMap.get(cs.started_by)
+            return {
+              id: `court-${cs.id}`,
+              title: `Troll Court Session - ${new Date(cs.created_at).toLocaleDateString()}`,
+              type: 'stream' as const,
+              viewerCount: 0,
+              streamerName: profile?.username || 'Troll Court',
+              streamerAvatar: profile?.avatar_url || null,
+              broadcasterId: cs.started_by || null,
+              isFeatured: false,
+              isBattle: false,
+              category: 'court',
+              visibilityScore: 0,
+              hotScore: 0,
+              isRising: false,
+              isTrending: false,
+              momentumLevel: 0,
+              velocityTrend: 'stable',
+            }
+          })
+        }
+      } catch (courtErr) {
+        console.warn('[LiveContentContext] Court session fallback failed:', courtErr)
+      }
 
-           courtLiveItems = activeCourts.map((cs: any) => {
-             const profile = profileMap.get(cs.started_by)
-             return {
-               id: `court-${cs.id}`,
-               title: `Troll Court Session - ${new Date(cs.created_at).toLocaleDateString()}`,
-               type: 'stream' as const,
-               viewerCount: 0,
-               streamerName: profile?.username || 'Troll Court',
-               streamerAvatar: profile?.avatar_url || null,
-               broadcasterId: cs.started_by || null,
-               isFeatured: false,
-               isBattle: false,
-               category: 'court',
-             }
-           })
-         }
-       } catch (courtErr) {
-         console.warn('[LiveContentContext] Court session fallback failed:', courtErr)
-       }
-
-       const allItems = [...nonCourtStreams, ...courtLiveItems]
+      const allItems = [...streams, ...courtLiveItems]
       setLiveItems(allItems)
-      setTotalViewers(allItems.reduce((sum, item) => sum + item.viewerCount, 0))
     } catch (err) {
       console.error('Error fetching live content:', err)
     } finally {
       if (mountedRef.current) setLoadingLive(false)
     }
   }, [])
+
+  const fetchLiveAuctions = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('auction_shows')
+        .select('*')
+        .eq('status', 'live')
+        .order('live_started_at', { ascending: false })
+        .limit(5)
+
+      if (error) throw error
+      if (!mountedRef.current) return
+      setLiveAuctions(data || [])
+    } catch (err) {
+      console.error('Error fetching live auctions:', err)
+    }
+  }, [])
+
+  const refresh = useCallback(() => {
+    fetchLiveContent()
+    fetchLiveAuctions()
+  }, [fetchLiveContent, fetchLiveAuctions])
+
+  useEffect(() => {
+    fetchLiveContent()
+    fetchLiveAuctions()
+
+    const homeChannel = supabase.channel('home:global')
+
+    homeChannel
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'streams' }, async (payload) => {
+        const row = payload.new as any
+        if (!row || row.is_live !== true) return
+        try {
+          const base = mapStreamRow(row)
+          setLiveItems(prev => {
+            if (prev.some(item => item.id === row.id)) return prev
+            return [...prev, base]
+          })
+          const enrichment = await enrichStreamItem(row.id, row.broadcaster_id || row.user_id)
+          if (mountedRef.current) {
+            setLiveItems(prev => prev.map(item => item.id === row.id ? { ...item, ...enrichment } : item))
+          }
+        } catch (e) {
+          console.warn('home:global streams INSERT handler error', e)
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams' }, (payload) => {
+        try {
+          const oldRow = (payload.old || null) as any
+          const newRow = (payload.new || null) as any
+          if (!oldRow || !newRow) return
+
+          const wasLive = !!oldRow.is_live
+          const isLive = !!newRow.is_live
+
+          if (wasLive && !isLive) {
+            setLiveItems(prev => prev.filter(item => item.id !== newRow.id))
+          } else if (!wasLive && isLive) {
+            const base = mapStreamRow(newRow)
+            setLiveItems(prev => {
+              if (prev.some(item => item.id === newRow.id)) return prev
+              return [...prev, base]
+            })
+            enrichStreamItem(newRow.id, newRow.broadcaster_id || newRow.user_id).then(enrichment => {
+              if (mountedRef.current) {
+                setLiveItems(prev => prev.map(item => item.id === newRow.id ? { ...item, ...enrichment } : item))
+              }
+            })
+          } else if (wasLive && isLive) {
+            setLiveItems(prev => prev.map(item => {
+              if (item.id !== newRow.id) return item
+              return {
+                ...item,
+                title: newRow.title || item.title,
+                viewerCount: newRow.current_viewers ?? item.viewerCount,
+                isBattle: newRow.battle_mode === 'universal',
+                battleFormat: newRow.battle_format,
+                battleStatus: newRow.battle_status,
+                category: newRow.category || null,
+              }
+            }))
+          }
+        } catch (e) {
+          console.warn('home:global streams UPDATE handler error', e)
+        }
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'streams' }, (payload) => {
+        const oldRow = payload.old as any
+        if (!oldRow) return
+        setLiveItems(prev => prev.filter(item => item.id !== oldRow.id))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, (payload) => {
+        const row = payload.new as any || payload.old as any
+        if (!row || row.content_type !== 'stream') return
+        setLiveItems(prev => prev.map(item => {
+          if (item.id !== row.content_id) return item
+          return {
+            ...item,
+            visibilityScore: row.final_visibility_score || 0,
+            hotScore: row.hot_score || 0,
+            isRising: row.is_rising || false,
+            isTrending: row.is_trending || false,
+          }
+        }))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'momentum_tracking' }, (payload) => {
+        const row = payload.new as any || payload.old as any
+        if (!row || row.content_type !== 'stream') return
+        setLiveItems(prev => prev.map(item => {
+          if (item.id !== row.content_id) return item
+          return {
+            ...item,
+            momentumLevel: row.momentum_level || 0,
+            velocityTrend: row.velocity_trend || 'stable',
+          }
+        }))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'court_sessions' }, async (payload) => {
+        const row = payload.new as any || payload.old as any
+        if (!row) return
+
+        if (payload.eventType === 'DELETE' || !['active', 'live'].includes(row.status)) {
+          setLiveItems(prev => prev.filter(item => item.id !== `court-${row.id}`))
+          return
+        }
+
+        const courtItem: LiveItem = {
+          id: `court-${row.id}`,
+          title: `Troll Court Session - ${new Date(row.created_at).toLocaleDateString()}`,
+          type: 'stream',
+          viewerCount: 0,
+          streamerName: 'Troll Court',
+          streamerAvatar: null,
+          broadcasterId: row.started_by || null,
+          isFeatured: false,
+          isBattle: false,
+          category: 'court',
+          visibilityScore: 0,
+          hotScore: 0,
+          isRising: false,
+          isTrending: false,
+          momentumLevel: 0,
+          velocityTrend: 'stable',
+        }
+
+        setLiveItems(prev => {
+          const exists = prev.some(item => item.id === `court-${row.id}`)
+          if (exists) {
+            return prev.map(item => item.id === `court-${row.id}` ? courtItem : item)
+          }
+          return [...prev, courtItem]
+        })
+
+        if (row.started_by) {
+          const enrichment = await enrichStreamItem(`court-${row.id}`, row.started_by)
+          if (mountedRef.current) {
+            setLiveItems(prev => prev.map(item => item.id === `court-${row.id}` ? { ...item, ...enrichment } : item))
+          }
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_shows' }, (payload) => {
+        const row = payload.new as any || payload.old as any
+        if (!row) return
+
+        if (payload.eventType === 'DELETE') {
+          setLiveAuctions(prev => prev.filter(a => a.id !== row.id))
+          return
+        }
+
+        const auction: AuctionShow = {
+          id: row.id,
+          title: row.title || '',
+          description: row.description,
+          category: row.category,
+          thumbnail_url: row.thumbnail_url,
+          status: row.status,
+          scheduled_for: row.scheduled_for,
+          live_started_at: row.live_started_at,
+          ended_at: row.ended_at,
+          livekit_room_name: row.livekit_room_name,
+          auctioneer_id: row.auctioneer_id,
+          current_lot_id: row.current_lot_id,
+          hls_url: row.hls_url,
+          egress_id: row.egress_id,
+          visibilityScore: row.visibility_score || 0,
+          hotScore: row.hot_score || 0,
+          isRising: row.is_rising || false,
+          isTrending: row.is_trending || false,
+        }
+
+        setLiveAuctions(prev => {
+          const exists = prev.some(a => a.id === row.id)
+          if (exists) {
+            return prev.map(a => a.id === row.id ? auction : a)
+          }
+          if (row.status !== 'live') return prev
+          return [...prev, auction]
+        })
+      })
+      .subscribe()
+
+    return () => {
+      try { supabase.removeChannel(homeChannel) } catch {}
+    }
+  }, [fetchLiveContent, fetchLiveAuctions, mapStreamRow, enrichStreamItem])
 
   useEffect(() => {
     if (presenceOnlineCount > 0) {
@@ -199,134 +462,15 @@ export function LiveContentProvider({ children }: { children: React.ReactNode })
     }
   }, [presenceOnlineCount])
 
-const fetchLiveAuctions = useCallback(async () => {
-     try {
-       const { data, error } = await supabase
-         .from('auction_shows')
-         .select('*')
-         .eq('status', 'live')
-         .order('live_started_at', { ascending: false })
-         .limit(5)
-
-       if (error) throw error
-       if (!mountedRef.current) return
-       setLiveAuctions(data || [])
-     } catch (err) {
-       console.error('Error fetching live auctions:', err)
-     }
-   }, [])
-
-   const fetchOnlineUsers = useCallback(async () => {
-     try {
-       const { count, error } = await supabase
-         .from('user_profiles')
-         .select('id', { count: 'exact', head: true })
-         .eq('is_online', true)
-
-       if (error) throw error
-       if (!mountedRef.current) return
-       setOnlineUsers(count || 0)
-     } catch (err) {
-       console.error('Error fetching online users:', err)
-     } finally {
-       if (mountedRef.current) setLoadingOnline(false)
-     }
-   }, [])
-
-useEffect(() => {
-     fetchLiveContent()
-     fetchLiveAuctions()
-     fetchOnlineUsers()
-
-     // Visibility-gated polling: pause intervals when tab is hidden to reduce load
-     let streamInterval: ReturnType<typeof setInterval> | null = null
-     let auctionInterval: ReturnType<typeof setInterval> | null = null
-     let onlineInterval: ReturnType<typeof setInterval> | null = null
-
-     const startPolling = () => {
-       if (!streamInterval) streamInterval = setInterval(fetchLiveContent, 90000)
-       if (!auctionInterval) auctionInterval = setInterval(fetchLiveAuctions, 30000)
-       if (!onlineInterval) onlineInterval = setInterval(fetchOnlineUsers, 60000)
-     }
-
-     const stopPolling = () => {
-       if (streamInterval) { clearInterval(streamInterval); streamInterval = null }
-       if (auctionInterval) { clearInterval(auctionInterval); auctionInterval = null }
-       if (onlineInterval) { clearInterval(onlineInterval); onlineInterval = null }
-     }
-
-     const handleVisibilityChange = () => {
-       if (document.visibilityState === 'visible') {
-         startPolling()
-       } else {
-         stopPolling()
-       }
-     }
-
-     document.addEventListener('visibilitychange', handleVisibilityChange)
-     startPolling()
-
-    // Consolidated single channel for home page (replaces 3 separate channels)
-    const homeChannel = supabase.channel('home:global')
-    homeChannel
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'streams' }, (payload) => {
-        try {
-          const oldRow = (payload.old || null) as any
-          const newRow = (payload.new || null) as any
-          const relevantChange = (() => {
-            if (!oldRow && newRow) return newRow.is_live === true
-            if (oldRow && !newRow) return oldRow.is_live === true
-            if (oldRow && newRow) {
-              if ((oldRow.is_live || newRow.is_live) && oldRow.is_live !== newRow.is_live) return true
-              const keys = ['current_viewers','viewer_count','is_featured','battle_mode','battle_format','battle_status']
-              return keys.some(k => (oldRow as any)[k] !== (newRow as any)[k])
-            }
-            return false
-          })()
-          if (relevantChange) fetchLiveContent()
-        } catch (e) {
-          console.warn('home:global streams handler error', e)
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_participants' }, () => {
-        // Poll every 90 seconds for viewer count updates instead of realtime spam
-        if (document.visibilityState === 'visible') {
-          fetchLiveContent()
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_shows' }, () => {
-        fetchLiveAuctions()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'visibility_scores' }, () => {
-        fetchLiveContent()
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_profiles' }, () => {
-        fetchOnlineUsers()
-      })
-      .subscribe()
-
-    return () => {
-      clearInterval(streamInterval)
-      clearInterval(auctionInterval)
-      clearInterval(onlineInterval)
-      try { supabase.removeChannel(homeChannel) } catch {}
-    }
-  }, [fetchLiveContent, fetchLiveAuctions, fetchOnlineUsers])
-
-  const refresh = useCallback(() => {
-    fetchLiveContent()
-    fetchLiveAuctions()
-  }, [fetchLiveContent, fetchLiveAuctions])
-
-const value = useMemo(() => ({
-      liveItems: liveItems || [],
-      liveAuctions: liveAuctions || [],
-      totalViewers: totalViewers || 0,
-      onlineUsers: onlineUsers || 0,
-      loadingLive: loadingLive !== undefined ? loadingLive : true,
-      loadingOnline: loadingOnline !== undefined ? loadingOnline : true,
-      refresh,
-    }), [liveItems, liveAuctions, totalViewers, onlineUsers, loadingLive, loadingOnline, refresh])
+  const value = useMemo(() => ({
+    liveItems: liveItems || [],
+    liveAuctions: liveAuctions || [],
+    totalViewers: totalViewers || 0,
+    onlineUsers: onlineUsers || 0,
+    loadingLive: loadingLive !== undefined ? loadingLive : true,
+    loadingOnline: loadingOnline !== undefined ? loadingOnline : true,
+    refresh,
+  }), [liveItems, liveAuctions, totalViewers, onlineUsers, loadingLive, loadingOnline, refresh])
 
   return (
     <LiveContentContext.Provider value={value}>

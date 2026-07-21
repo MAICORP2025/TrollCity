@@ -283,11 +283,18 @@ export function useStreamSeats(
         const result = applySeatRows(rows)
 
         if (import.meta.env.DEV) {
+          const seatDetails = Object.values(result.map).map((s) => ({
+            seatIndex: s.seat_index,
+            livekit_participant_identity: s.livekit_participant_identity || null,
+            status: s.status || null,
+            user_id: s.user_id || null,
+            guest_id: s.guest_id || null,
+          }))
           console.log('[useStreamSeats] fetched seats:', {
             reason,
             streamId,
-            count: Object.keys(result.map).length,
-            seatIndexes: Object.keys(result.map),
+            count: seatDetails.length,
+            seats: seatDetails,
           })
         }
 
@@ -655,6 +662,38 @@ export function useStreamSeats(
     setSeatVersion((v) => v + 1)
   }, [])
 
+  const removeSeatByUserId = useCallback((userId: string) => {
+    const matched = Object.values(seatsRef.current).filter(
+      (seat) => seat.user_id === userId || seat.guest_id === userId,
+    )
+    if (matched.length === 0) return
+
+    setSeats((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const seat of matched) {
+        delete next[seat.seat_index]
+        changed = true
+      }
+      return changed ? next : prev
+    })
+
+    setMySeat((prev) => {
+      if (!prev) return prev
+      const isMine = matched.some((seat) => seat.seat_index === prev.seat_index)
+      return isMine ? null : prev
+    })
+
+    seatsRef.current = { ...seatsRef.current }
+    for (const seat of matched) {
+      delete seatsRef.current[seat.seat_index]
+      if (mySeatRef.current?.seat_index === seat.seat_index) {
+        mySeatRef.current = null
+      }
+    }
+    setSeatVersion((v) => v + 1)
+  }, [])
+
   const handleParticipantDisconnected = useCallback(
     (identity: string) => {
       if (!identity) return
@@ -756,6 +795,7 @@ export function useStreamSeats(
         if (mySeatRef.current?.seat_index === seatIndex) mySeatRef.current = null
         setSeatVersion(v => v + 1)
       }
+      scheduleRefresh('seat-session-delete', 300)
       return
     }
 
@@ -771,6 +811,7 @@ export function useStreamSeats(
         }
         setSeatVersion(v => v + 1)
       }
+      scheduleRefresh('seat-session-insert', 300)
       return
     }
 
@@ -789,8 +830,19 @@ export function useStreamSeats(
           setSeatVersion(v => v + 1)
         }
       } else {
+        const existing = seatsRef.current[Number(newRow?.seat_index)]
         const session = normalizeSeatSession(newRow)
         if (session) {
+          if (existing && (!session.user_profile?.username || !session.user_profile?.avatar_url)) {
+            session.user_profile = {
+              ...existing.user_profile,
+              ...session.user_profile,
+            }
+            session.profile = {
+              ...existing.profile,
+              ...session.profile,
+            }
+          }
           setSeats(prev => ({ ...prev, [session.seat_index]: session }))
           seatsRef.current = { ...seatsRef.current, [session.seat_index]: session }
           if (effectiveUserId && (session.user_id === effectiveUserId || session.guest_id === effectiveUserId)) {
@@ -798,6 +850,7 @@ export function useStreamSeats(
             mySeatRef.current = session
           }
           setSeatVersion(v => v + 1)
+          scheduleRefresh('seat-update-reconcile', 200)
         }
       }
     }
@@ -887,6 +940,7 @@ export function useStreamSeats(
     markSeatLive,
     refreshSeats,
     removeSeat,
+    removeSeatByUserId,
     seatJoinTransition: null,
     handleParticipantDisconnected,
     pendingSeatRequests,

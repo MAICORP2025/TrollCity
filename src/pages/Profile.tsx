@@ -27,6 +27,7 @@ import ProfileReplays from '../components/profile/ProfileReplays';
 import ProfileWatchlist from '../components/profile/ProfileWatchlist';
 import UserInventory from './UserInventory';
 import ProfileMaitalentPromos from './ProfileMaitalentPromos';
+import UserModActionsModal from '../components/profile/UserModActionsModal';
 import { useProfileFrameStore } from '../stores/useProfileFrameStore';
 import type { ProfileFrame as ProfileFrameType } from '../config/profileFrames';
 
@@ -61,6 +62,8 @@ function ProfileInner() {
     const [followersCount, setFollowersCount] = useState(0);
     const [followingCount, setFollowingCount] = useState(0);
     const [postsCount, setPostsCount] = useState(0);
+    const [modActionsCount, setModActionsCount] = useState(0);
+    const [showUserModActions, setShowUserModActions] = useState(false);
     const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
     const [isSubscribed, setIsSubscribed] = useState(false);
     const [showColorPickerModal, setShowColorPickerModal] = useState(false);
@@ -73,6 +76,7 @@ function ProfileInner() {
     const isOwnProfile = currentUser?.id === profile?.id;
     const viewerRole = currentUserProfile?.troll_role || currentUserProfile?.role || 'user';
     const isAdminViewer = ['admin', 'troll_officer', 'lead_troll_officer'].includes(viewerRole);
+    const isStaffViewer = ['admin', 'moderator', 'troll_officer', 'lead_troll_officer', 'secretary', 'officer', 'hr_admin', 'agency_hr_manager', 'ceo', 'superadmin', 'empire_partner', 'auctioneer', 'attorney', 'prosecutor', 'pastor', 'journalist', 'tcnn_news_caster', 'tcnn_chief_news_caster', 'agency_hr', 'agency_leader', 'ceo_assistant', 'noah_assistant', 'academy_teacher', 'academy_director', 'admissions_officer'].includes(viewerRole) || currentUserProfile?.is_admin === true;
     const isViewBlocked = !isOwnProfile && !isAdminViewer && isBlocked;
 
     // Filter visible tabs based on roles and ownership
@@ -81,6 +85,7 @@ function ProfileInner() {
             if (tab.key === 'settings') return isOwnProfile;
             if (tab.key === 'purchases') return isOwnProfile;
             if (tab.key === 'promos') return isOwnProfile;
+            if (tab.key === 'inventory') return isOwnProfile;
             if (tab.key === 'subscriptions') return true;
             if (tab.key === 'broadcasts') return activeRoles.some(r => r.role_type === 'broadcaster') || isOwnProfile;
             if (tab.key === 'auctions') return activeRoles.some(r => r.role_type === 'auctioneer') || isOwnProfile;
@@ -135,11 +140,12 @@ function ProfileInner() {
             initialLoadRef.current = false;
 
             // Fetch additional data
-            const [followersRes, followingRes, postsRes, rolesRes] = await Promise.all([
+            const [followersRes, followingRes, postsRes, rolesRes, modActionsRes] = await Promise.all([
                 supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', data.id),
                 supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', data.id),
                 supabase.from('troll_posts').select('id', { count: 'exact', head: true }).eq('user_id', data.id),
-                supabase.rpc('get_user_active_roles', { p_user_id: data.id })
+                supabase.rpc('get_user_active_roles', { p_user_id: data.id }),
+                supabase.from('moderation_actions').select('id', { count: 'exact', head: true }).eq('target_user_id', data.id)
             ]);
 
             // Fetch role statistics
@@ -183,6 +189,7 @@ function ProfileInner() {
                 setFollowersCount(followersRes.count || 0);
                 setFollowingCount(followingRes.count || 0);
                 setPostsCount(postsRes.count || 0);
+                setModActionsCount(modActionsRes.count || 0);
                 setActiveRoles(roles);
                 setRoleStats(stats);
                 setIsSubscribed(subscribed);
@@ -405,6 +412,10 @@ function ProfileInner() {
         setIsTabDropdownOpen(false);
     };
 
+    const handleOpenUserModActions = useCallback(() => {
+        setShowUserModActions(true);
+    }, []);
+
     if (loading) {
         return (
         <div className="min-h-screen bg-slate-950 text-white pb-20 relative overflow-visible">
@@ -570,6 +581,10 @@ function ProfileInner() {
                     }}
                     isSubscribed={isSubscribed}
                     subscriberCount={isOwnProfile ? mySubscriberCount : (profile?.subscriber_count || 0)}
+                    modActionsCount={modActionsCount}
+                    showModActionsStat={isStaffViewer}
+                    onModActionsClick={handleOpenUserModActions}
+                    isJailed={!!profile?.is_jailed}
                 />
 
                 {/* Role Cards */}
@@ -629,6 +644,17 @@ function ProfileInner() {
                         setShowSubscriptionModal(false);
                         setIsSubscribed(true);
                     }}
+                />
+            )}
+
+            {/* User Mod Actions Modal */}
+            {showUserModActions && (
+                <UserModActionsModal
+                    isOpen={showUserModActions}
+                    onClose={() => setShowUserModActions(false)}
+                    userId={profile.id}
+                    username={profile.username}
+                    currentUserId={currentUser?.id}
                 />
             )}
         </div>

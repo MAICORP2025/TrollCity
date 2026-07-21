@@ -104,67 +104,13 @@ function normalizeIdentityToken(value?: string | null): string {
   return normalizeLiveKitIdentity(value).replace(/^viewer-/, '').trim()
 }
 
-function participantMatchesSeat(
-  participant: any,
-  seatUserId?: string | null,
-  seatIdentity?: string | null,
-) {
-  if (!participant) return false
-
-  const participantIdentity = getRemoteParticipantIdentity(participant)
-  const metadata = getRemoteParticipantMetadata(participant)
-  const userId = normalizeIdentityToken(seatUserId)
-  const identity = normalizeIdentityToken(seatIdentity)
-  const participantToken = normalizeIdentityToken(participantIdentity)
-
-  const candidates = [userId, identity].filter(Boolean)
-
-  return candidates.some((candidate) => {
-    return (
-      participantToken === candidate ||
-      participantToken.endsWith(`-${candidate}`) ||
-      participantIdentity === candidate ||
-      participantIdentity.endsWith(`-${candidate}`) ||
-      metadata.user_id === candidate ||
-      metadata.userId === candidate
-    )
-  })
-}
-
-function remoteParticipantMatchesUser(
-  participant: any,
-  userId?: string | null,
-  preferredIdentity?: string | null,
-): boolean {
-  if (!participant) return false
-
-  const identity = getRemoteParticipantIdentity(participant)
-  const metadata = getRemoteParticipantMetadata(participant)
-  const normalizedIdentity = normalizeIdentityToken(identity)
-  const normalizedUserId = normalizeIdentityToken(userId)
-  const normalizedPreferredIdentity = normalizeIdentityToken(preferredIdentity)
-
-  const matchesIdentity = (candidate?: string | null) => {
-    const normalizedCandidate = normalizeIdentityToken(candidate)
-    if (!normalizedCandidate) return false
-
-    return (
-      identity === candidate ||
-      normalizedIdentity === normalizedCandidate ||
-      identity.endsWith(`-${candidate}`) ||
-      normalizedIdentity.endsWith(`-${normalizedCandidate}`)
-    )
-  }
-
-  const identityMatchesUser =
-    matchesIdentity(userId) ||
-    metadata.user_id === userId ||
-    metadata.user_id === normalizedUserId ||
-    metadata.userId === userId ||
-    metadata.userId === normalizedUserId ||
-    metadata.user_id === normalizedUserId
-
-  return identityMatchesUser || matchesIdentity(preferredIdentity)
+type RemoteParticipantSnapshot = {
+  identity: string
+  participant: RemoteParticipant
+  cameraPublication?: RemoteTrackPublication
+  microphonePublication?: RemoteTrackPublication
+  cameraTrack?: RemoteVideoTrack
+  microphoneTrack?: RemoteAudioTrack
 }
 
 function getVideoTrackFromRemoteParticipant(participant: any): RemoteVideoTrack | null {
@@ -247,20 +193,19 @@ function getAudioTrackFromRemoteParticipant(participant: any): RemoteAudioTrack 
 
 function RemoteSeatSurface({
   participant,
+  cameraTrack: cameraTrackProp,
   fallback,
   mirror = false,
 }: {
   participant: RemoteParticipant | null
+  cameraTrack?: RemoteVideoTrack | null
   fallback: React.ReactNode
   mirror?: boolean
 }) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null)
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
 
-  // Do NOT memoize these by participant object. LiveKit mutates the same
-  // RemoteParticipant instance when tracks subscribe, so memoization can keep
-  // returning null even after TrackSubscribed fires.
-  const videoTrack = getVideoTrackFromRemoteParticipant(participant)
+  const videoTrack = cameraTrackProp ?? getVideoTrackFromRemoteParticipant(participant)
   const audioTrack = getAudioTrackFromRemoteParticipant(participant)
 
   React.useEffect(() => {
@@ -269,6 +214,19 @@ function RemoteSeatSurface({
 
     try {
       videoTrack.attach(videoEl)
+      console.log('[Seat Video Attached]', {
+        identity: participant?.identity,
+        trackSid: videoTrack.sid,
+        elementConnected: videoEl.isConnected,
+        width: videoEl.clientWidth,
+        height: videoEl.clientHeight,
+        readyState: videoEl.readyState,
+        paused: videoEl.paused,
+        hasSrcObject: Boolean(videoEl.srcObject),
+        mediaTrackState: videoTrack.mediaStreamTrack?.readyState,
+        mediaTrackEnabled: videoTrack.mediaStreamTrack?.enabled,
+        mediaTrackMuted: videoTrack.mediaStreamTrack?.muted,
+      })
       videoEl.play().catch(() => {})
     } catch (err) {
       console.warn('[BroadcastPage] Failed to attach remote seat video track:', err)
@@ -281,7 +239,7 @@ function RemoteSeatSurface({
         // ignore detach errors
       }
     }
-  }, [videoTrack])
+  }, [videoTrack, videoTrack?.sid])
 
   React.useEffect(() => {
     const audioEl = audioRef.current
@@ -303,6 +261,17 @@ function RemoteSeatSurface({
     }
   }, [audioTrack])
 
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return
+
+    console.log('[BroadcastSeatVideoRender]', {
+      participantIdentity: participant?.identity ?? null,
+      hasParticipant: Boolean(participant),
+      cameraTrackSid: videoTrack?.sid ?? null,
+      cameraTrackKind: videoTrack?.kind ?? null,
+    })
+  }, [participant?.identity, videoTrack?.sid, videoTrack?.kind])
+
   if (!videoTrack) {
     return <>{fallback}</>
   }
@@ -314,55 +283,111 @@ function RemoteSeatSurface({
         autoPlay
         playsInline
         muted
-        className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover', mirror && '-scale-x-100')}
+        onLoadedMetadata={() =>
+          console.log('[Seat Video] loadedmetadata')
+        }
+        onPlaying={() =>
+          console.log('[Seat Video] playing')
+        }
+        onError={(event) =>
+          console.error('[Seat Video] error', event)
+        }
+        className="absolute inset-0 h-full w-full object-cover"
       />
       <audio ref={audioRef} autoPlay />
     </>
   )
 }
 
-function findSeatRemoteParticipant(
-  participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
-  seatUserId?: string | null,
-  seatIdentity?: string | null,
-  hostUserId?: string | null,
-): RemoteParticipant | null {
-  if (!participants) return null
-
-  const list = Array.isArray(participants)
-    ? participants
-    : typeof participants.values === 'function'
-      ? Array.from(participants.values())
-      : []
-
-  const userId = String(seatUserId || '').trim()
-  const identity = String(seatIdentity || '').trim()
-  const candidates = [identity, userId].filter(Boolean)
-  const hostId = String(hostUserId || '').trim()
-
-  return (
-    list.find((participant: any) => {
-      const participantIdentity = String(participant?.identity || '').trim()
-      const metadata = getRemoteParticipantMetadata(participant)
-      const participantUserId = String(metadata?.user_id || metadata?.userId || '').trim()
-
-      if (hostId && (participantIdentity === hostId || participantUserId === hostId)) return false
-
-      if (participantUserId && candidates.includes(participantUserId)) {
-        return true
-      }
-
-      return candidates.some((candidate) => {
-        if (!candidate) return false
-
-        return (
-          participantIdentity === candidate ||
-          participantIdentity.endsWith(`-${candidate}`) ||
-          candidate.endsWith(`-${participantIdentity}`)
-        )
-      })
-    }) || null
+function normalizeUuid(value: unknown): string | null {
+  const text = String(value || '').trim().toLowerCase()
+  const match = text.match(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   )
+  return match?.[0]?.toLowerCase() || null
+}
+
+function findSeatRemoteParticipant(
+  seat: any,
+  participants: RemoteParticipant[],
+): RemoteParticipant | null {
+  const seatUserId = normalizeUuid(seat?.user_id)
+  const seatGuestId = String(seat?.guest_id || '').trim().toLowerCase()
+
+  const storedLiveKitIdentity = String(
+    seat?.livekit_participant_identity ||
+      seat?.participant_identity ||
+      seat?.livekit_identity ||
+      seat?.seat_identity ||
+      '',
+  )
+    .trim()
+    .toLowerCase()
+
+  for (const participant of participants) {
+    const participantIdentity = String(
+      participant?.identity || '',
+    )
+      .trim()
+      .toLowerCase()
+
+    const participantUserId = normalizeUuid(participantIdentity)
+
+    let metadata: Record<string, any> = {}
+
+    try {
+      metadata =
+        typeof participant.metadata === 'string' &&
+        participant.metadata.trim()
+          ? JSON.parse(participant.metadata)
+          : {}
+    } catch {
+      metadata = {}
+    }
+
+    const metadataUserId = normalizeUuid(
+      metadata.user_id ||
+        metadata.userId ||
+        metadata.uid,
+    )
+
+    const metadataGuestId = String(
+      metadata.guest_id ||
+        metadata.guestId ||
+        '',
+    )
+      .trim()
+      .toLowerCase()
+
+    if (
+      storedLiveKitIdentity &&
+      participantIdentity === storedLiveKitIdentity
+    ) {
+      return participant
+    }
+
+    if (
+      seatUserId &&
+      (
+        participantUserId === seatUserId ||
+        metadataUserId === seatUserId
+      )
+    ) {
+      return participant
+    }
+
+    if (
+      seatGuestId &&
+      (
+        participantIdentity.includes(seatGuestId) ||
+        metadataGuestId === seatGuestId
+      )
+    ) {
+      return participant
+    }
+  }
+
+  return null
 }
 function isUuidLike(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
@@ -420,49 +445,7 @@ function isGhostParticipant(participant: any): boolean {
 }
 
 
-function getRemoteSeatVideoTrack(
-  participants: Map<string, RemoteParticipant> | RemoteParticipant[] | null | undefined,
-  userId?: string | null,
-  livekitParticipantIdentity?: string | null,
-): RemoteVideoTrack | null {
-  if (!participants) return null
 
-  const list = Array.isArray(participants)
-    ? participants
-    : typeof participants.values === 'function'
-      ? Array.from(participants.values())
-      : []
-
-  const seatIdentity = normalizeIdentityToken(livekitParticipantIdentity || userId)
-  const participant = list.find((entry: any) => {
-    const identity = getRemoteParticipantIdentity(entry)
-    const metadata = getRemoteParticipantMetadata(entry)
-
-    if (seatIdentity && normalizeIdentityToken(identity) === seatIdentity) {
-      return true
-    }
-
-    if (livekitParticipantIdentity && matchesNormalizedIdentity(identity, livekitParticipantIdentity)) {
-      return true
-    }
-
-    return remoteParticipantMatchesUser(entry, userId, livekitParticipantIdentity)
-  })
-
-  return getVideoTrackFromRemoteParticipant(participant)
-}
-
-function matchesNormalizedIdentity(identity: string, candidate?: string | null): boolean {
-  const normalizedIdentity = normalizeIdentityToken(identity)
-  const normalizedCandidate = normalizeIdentityToken(candidate)
-  if (!normalizedIdentity || !normalizedCandidate) return false
-
-  return (
-    normalizedIdentity === normalizedCandidate ||
-    normalizedIdentity.endsWith(`-${normalizedCandidate}`) ||
-    normalizedCandidate.endsWith(`-${normalizedIdentity}`)
-  )
-}
 
 
 function GhostAudioTrack({ participant }: { participant: any }) {
@@ -665,11 +648,40 @@ export function BroadcastPage() {
      isBroadOfficer: isOfficer,
    })
 
-const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats, removeSeat } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
+const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSeatLive, refreshSeats, removeSeat, removeSeatByUserId } = useStreamSeats(streamId || '', user?.id, broadcasterProfile, stream as any)
     const { audience, activeAudience, topAudience, myPresence, joinAudience, leaveAudience, heartbeatAudience, incrementGiftTotal } = useStreamAudiencePresence(streamId || '', user?.id)
 
     const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map())
+    const [remoteParticipantSnapshots, setRemoteParticipantSnapshots] = useState<RemoteParticipantSnapshot[]>([])
     const remoteUsers = useMemo(() => Array.from(remoteParticipants.values()), [remoteParticipants])
+
+    const buildRemoteParticipantSnapshots = useCallback((room: Room) => {
+      return Array.from(room.remoteParticipants.values()).map((participant) => {
+        const cameraPublication = participant.getTrackPublication(
+          Track.Source.Camera,
+        ) as RemoteTrackPublication | undefined
+
+        const microphonePublication = participant.getTrackPublication(
+          Track.Source.Microphone,
+        ) as RemoteTrackPublication | undefined
+
+        return {
+          identity: participant.identity,
+          participant,
+          cameraPublication,
+          microphonePublication,
+          cameraTrack: cameraPublication?.track as RemoteVideoTrack | undefined,
+          microphoneTrack:
+            microphonePublication?.track as RemoteAudioTrack | undefined,
+        }
+      })
+    }, [])
+
+    const syncRemoteParticipantSnapshots = useCallback(() => {
+      const room = roomRef.current
+      if (!room) return
+      setRemoteParticipantSnapshots(buildRemoteParticipantSnapshots(room))
+    }, [buildRemoteParticipantSnapshots])
 
     // Anonymous viewers watch via LiveKit but are NOT written to
     // stream_audience_presence (user_id is an FK to user_profiles). They appear in
@@ -746,18 +758,19 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   }
 
   const configuredViewerSeatCount = useMemo(() => {
+    const maxSeats = isOfficer ? 11 : 6
     // Prefer seat_count (new field), fall back to box_count, then seat_prices
     // seat_count = 0 means broadcaster only (no guest seats)
     // seat_count > 0 means total boxes including broadcaster
     const seatCount = stream?.seat_count !== undefined ? Number(stream.seat_count) : undefined
     if (seatCount !== undefined) {
       if (seatCount === 0) return 0 // broadcaster only, no guest seats
-      return Math.max(0, Math.min(11, seatCount - 1)) // subtract 1 for broadcaster box
+      return Math.max(0, Math.min(maxSeats, seatCount - 1)) // subtract 1 for broadcaster box
     }
 
     const boxCount = Number(stream?.box_count ?? 0)
     if (boxCount > 0) {
-      return Math.max(0, Math.min(11, boxCount - 1))
+      return Math.max(0, Math.min(maxSeats, boxCount - 1))
     }
 
     const derivedFromPrices = Array.isArray(stream?.seat_prices)
@@ -765,11 +778,11 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
       : 0
 
     if (derivedFromPrices > 0) {
-      return Math.min(11, derivedFromPrices)
+      return Math.min(maxSeats, derivedFromPrices)
     }
 
     return 0
-  }, [stream?.box_count, stream?.seat_count, stream?.seat_prices])
+  }, [stream?.box_count, stream?.seat_count, stream?.seat_prices, isOfficer])
 
   // Total boxes including broadcaster (for layout decisions)
   const totalBoxCount = useMemo(() => {
@@ -801,9 +814,23 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
       )
       const displayName =
         seat?.user_profile?.username ||
-        seat?.user_profile?.username ||
+        seat?.user_profile?.display_name ||
+        (seat as any)?.username ||
         'Viewer'
       const avatarUrl = seat?.user_profile?.avatar_url || null
+      const participants = Array.from(remoteParticipants.values())
+      const matchedParticipant = seat ? findSeatRemoteParticipant(seat, participants) : null
+      const matchedSnapshot = matchedParticipant
+        ? remoteParticipantSnapshots.find((s) => s.participant === matchedParticipant)
+        : null
+      console.log('[Seat Card]', {
+        seatIndex,
+        seatUserId: seat?.user_id,
+        livekitIdentity: seat?.livekit_participant_identity,
+        participantIdentity: matchedParticipant?.identity,
+        matched: !!matchedParticipant,
+        hasCameraTrack: !!matchedSnapshot?.cameraTrack,
+      })
       return {
         seatIndex,
         seatUserId,
@@ -814,9 +841,23 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
         seatStatus,
         seatIdentity,
         seatSessionId: seat?.id || undefined,
+        remoteParticipant: matchedParticipant,
+        remoteParticipantSnapshot: matchedSnapshot,
       }
     })
-  }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices])
+  }, [currentViewerSeatCount, seats, stream?.seat_price, stream?.seat_prices, remoteParticipants, remoteParticipantSnapshots])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    console.log('[Seat Card]', viewerSeatCards.map((seat) => ({
+      seatIndex: seat.seatIndex,
+      seatUserId: seat.seatUserId,
+      livekitIdentity: seat.seatIdentity,
+      participantIdentity: seat.remoteParticipant?.identity ?? null,
+      matched: !!seat.remoteParticipant,
+      hasCameraTrack: !!seat.remoteParticipantSnapshot?.cameraTrack,
+    })))
+  }, [viewerSeatCards])
 
   const userIdToLiveKitIdentity = useMemo(() => {
     const mapping: Record<string, string> = {};
@@ -1044,8 +1085,32 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
 
   const handleLiveKitParticipantConnected = useCallback((participant: RemoteParticipant) => {
     if (!participant?.identity) return
+
+    const metadata = getRemoteParticipantMetadata(participant)
+
+    console.log('[HOST PARTICIPANT CONNECTED]', {
+      identity: participant.identity,
+      metadata,
+      expectedSeatUserId: 'ac9a4ff4-ff9f-4ac2-857e-d03eb12b8193',
+      videoPublications: Array.from(
+        participant.videoTrackPublications?.values?.() || [],
+      ).map((publication: any) => ({
+        trackSid: publication.trackSid,
+        source: publication.source,
+        isSubscribed: publication.isSubscribed,
+        hasTrack: Boolean(publication.track),
+      })),
+      audioPublications: Array.from(
+        participant.audioTrackPublications?.values?.() || [],
+      ).map((publication: any) => ({
+        trackSid: publication.trackSid,
+        source: publication.source,
+        isSubscribed: publication.isSubscribed,
+        hasTrack: Boolean(publication.track),
+      })),
+    })
+
     setRemoteParticipants(prev => {
-      if (prev.get(participant.identity) === participant) return prev
       const next = new Map(prev)
       next.set(participant.identity, participant)
       return next
@@ -1055,9 +1120,8 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
   const handleLiveKitParticipantDisconnected = useCallback((participant: RemoteParticipant) => {
     const identity = participant.identity
     setRemoteParticipants(prev => {
-      if (!prev.has(identity)) return prev
       const next = new Map(prev)
-      next.delete(identity)
+      next.delete(participant.identity)
       return next
     })
   }, [])
@@ -1069,9 +1133,33 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
 
   const handleLiveKitTrackSubscribed = useCallback((_track: any, _publication: any, participant: RemoteParticipant) => {
     DEBUG_COUNTERS.trackSubscribedCount++
+
+    console.log('[HOST TRACK SUBSCRIBED]', {
+      participantIdentity: participant.identity,
+      participantMetadata: getRemoteParticipantMetadata(participant),
+      trackKind: _track?.kind,
+      trackSource: _publication?.source,
+      trackSid: _publication?.trackSid,
+      seatRows: Object.values(seatsRefForTrackHandler.current).map(
+        (seat: any) => ({
+          seatIndex: seat.seat_index,
+          userId: seat.user_id,
+          status: seat.status,
+          livekitParticipantIdentity:
+            seat.livekit_participant_identity,
+        }),
+      ),
+    })
+
     if (!participant?.identity) return
-    setRemoteParticipants(prev => {
-      if (prev.get(participant.identity) === participant) return prev
+
+    setRemoteParticipants((prev) => {
+      const existing = prev.get(participant.identity)
+
+      if (existing === participant) {
+        return prev
+      }
+
       const next = new Map(prev)
       next.set(participant.identity, participant)
       return next
@@ -1080,28 +1168,103 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     const metadata = getRemoteParticipantMetadata(participant)
     const participantUserId = String(metadata?.user_id || metadata?.userId || '')
     const participantSeatIndex = Number(metadata?.seat_index ?? metadata?.seatIndex ?? NaN)
+
     const seatMatchedBySeats = Object.values(seatsRefForTrackHandler.current).some((seat: any) => {
       const seatUserId = String(seat?.user_id || seat?.guest_id || '')
       const seatIdentity = String(seat?.livekit_participant_identity || seat?.participant_identity || seat?.livekit_identity || '')
       const normalizedSeatIndex = Number(seat?.seat_index ?? seat?.seatIndex ?? NaN)
+
+      const identityMatches =
+        participantSeatIndex > 0 && normalizedSeatIndex === participantSeatIndex
+      const userIdMatches =
+        seatUserId && participantUserId && seatUserId === participantUserId
+      const identityExact =
+        seatIdentity && participant.identity && participant.identity === seatIdentity
+
+      const identitySuffix =
+        seatUserId &&
+        participant.identity &&
+        (participant.identity === seatUserId ||
+          participant.identity.endsWith(`-${seatUserId}`) ||
+          seatUserId.endsWith(`-${participant.identity}`))
+
+      const metadataSuffix =
+        seatUserId &&
+        participantUserId &&
+        (participantUserId === seatUserId ||
+          participantUserId.endsWith(`-${seatUserId}`) ||
+          seatUserId.endsWith(`-${participantUserId}`))
+
       return (
-        participantSeatIndex > 0 && normalizedSeatIndex === participantSeatIndex ||
-        (seatUserId && participantUserId && seatUserId === participantUserId) ||
-        (seatIdentity && participant.identity && participant.identity === seatIdentity)
+        identityMatches ||
+        userIdMatches ||
+        identityExact ||
+        identitySuffix ||
+        metadataSuffix
       )
     })
 
-    if (seatMatchedBySeats) {
-      participant.audioTrackPublications?.forEach?.((pub: any) => {
-        try {
-          if (pub?.setSubscribed && !pub.isSubscribed) {
-            pub.setSubscribed(true)
-          }
-        } catch (err) {
-          console.warn('[BroadcastPage] Failed to subscribe host to seat audio:', err)
-        }
+    if (!seatMatchedBySeats) {
+      console.warn('[BroadcastPage] Remote participant did not match a seat:', {
+        participantIdentity: participant.identity,
+        participantUserId,
+        participantSeatIndex,
+        metadata,
+        seats: Object.values(seatsRefForTrackHandler.current).map(
+          (seat: any) => ({
+            seatIndex: seat?.seat_index,
+            userId: seat?.user_id,
+            guestId: seat?.guest_id,
+            livekitIdentity:
+              seat?.livekit_participant_identity ||
+              seat?.participant_identity ||
+              seat?.livekit_identity ||
+              null,
+          }),
+        ),
       })
     }
+
+    setRemoteParticipantSnapshots((prev) => {
+      const nextSnapshot: RemoteParticipantSnapshot = {
+        identity: participant.identity,
+        participant,
+        cameraPublication: participant.getTrackPublication(
+          Track.Source.Camera,
+        ) as RemoteTrackPublication | undefined,
+        microphonePublication: participant.getTrackPublication(
+          Track.Source.Microphone,
+        ) as RemoteTrackPublication | undefined,
+      }
+
+      nextSnapshot.cameraTrack =
+        nextSnapshot.cameraPublication?.track as RemoteVideoTrack | undefined
+
+      nextSnapshot.microphoneTrack =
+        nextSnapshot.microphonePublication?.track as RemoteAudioTrack | undefined
+
+      const index = prev.findIndex(
+        (snapshot) => snapshot.identity === participant.identity,
+      )
+
+      if (index === -1) {
+        return [...prev, nextSnapshot]
+      }
+
+      const current = prev[index]
+
+      if (
+        current.cameraTrack === nextSnapshot.cameraTrack &&
+        current.microphoneTrack === nextSnapshot.microphoneTrack &&
+        current.participant === participant
+      ) {
+        return prev
+      }
+
+      const next = [...prev]
+      next[index] = nextSnapshot
+      return next
+    })
   }, [])
 
   const handleLiveKitTrackUnsubscribed = useCallback((track: any, _publication: any, participant: RemoteParticipant) => {
@@ -1109,48 +1272,102 @@ const { seats, mySeat, joiningSeatId, leavingSeatId, joinSeat, leaveSeat, markSe
     const remainingVideo = Array.from((participant.videoTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
     const remainingAudio = Array.from((participant.audioTrackPublications as any)?.values?.() || []).some((p: any) => p.track)
     if (!remainingVideo && !remainingAudio) {
-      setRemoteParticipants(prev => {
-        if (!prev.has(participant.identity)) return prev
-        const next = new Map(prev)
-        next.delete(participant.identity)
-        return next
-      })
+    setRemoteParticipants(prev => {
+      const next = new Map(prev)
+      next.delete(participant.identity)
+      return next
+    })
     }
   }, [])
+
+  const handleLiveKitTrackPublished = useCallback(
+    (publication: any, participant: RemoteParticipant) => {
+      if (!participant?.identity || !publication) return
+
+      console.log('[BroadcastPage] Remote track published:', {
+        participantIdentity: participant.identity,
+        source: publication.source,
+        kind: publication.kind,
+        trackSid: publication.trackSid,
+        isSubscribed: publication.isSubscribed,
+      })
+
+      try {
+        if (publication.setSubscribed && !publication.isSubscribed) {
+          publication.setSubscribed(true)
+        }
+      } catch (err) {
+        console.warn(
+          '[BroadcastPage] Failed to subscribe to published remote track:',
+          err,
+        )
+      }
+
+      setRemoteParticipants(prev => {
+        const next = new Map(prev)
+        next.set(participant.identity, participant)
+        return next
+      })
+    },
+    [],
+  )
 
   const attachLiveKitHandlers = useCallback((room: Room) => {
     room.off(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
     room.off(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
+    room.off(RoomEvent.TrackPublished, handleLiveKitTrackPublished)
     room.off(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
     room.off(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
+    room.off(RoomEvent.TrackMuted, syncRemoteParticipantSnapshots)
+    room.off(RoomEvent.TrackUnmuted, syncRemoteParticipantSnapshots)
     room.on(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
     room.on(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
+    room.on(RoomEvent.TrackPublished, handleLiveKitTrackPublished)
     room.on(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
     room.on(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
+    room.on(RoomEvent.TrackMuted, syncRemoteParticipantSnapshots)
+    room.on(RoomEvent.TrackUnmuted, syncRemoteParticipantSnapshots)
   }, [
     handleLiveKitParticipantConnected,
     handleLiveKitParticipantDisconnected,
+    handleLiveKitTrackPublished,
     handleLiveKitTrackSubscribed,
     handleLiveKitTrackUnsubscribed,
+    syncRemoteParticipantSnapshots,
   ])
 
   const detachLiveKitHandlers = useCallback((room: Room) => {
     room.off(RoomEvent.ParticipantConnected, handleLiveKitParticipantConnected)
     room.off(RoomEvent.ParticipantDisconnected, handleLiveKitParticipantDisconnected)
+    room.off(RoomEvent.TrackPublished, handleLiveKitTrackPublished)
     room.off(RoomEvent.TrackSubscribed, handleLiveKitTrackSubscribed)
     room.off(RoomEvent.TrackUnsubscribed, handleLiveKitTrackUnsubscribed)
+    room.off(RoomEvent.TrackMuted, syncRemoteParticipantSnapshots)
+    room.off(RoomEvent.TrackUnmuted, syncRemoteParticipantSnapshots)
   }, [
     handleLiveKitParticipantConnected,
     handleLiveKitParticipantDisconnected,
+    handleLiveKitTrackPublished,
     handleLiveKitTrackSubscribed,
     handleLiveKitTrackUnsubscribed,
+    syncRemoteParticipantSnapshots,
   ])
 
   // ── Complete LiveKit room teardown ──────────────────────────────────
   // Unpublishes all tracks, detaches event handlers, disconnects the
   // socket, and nulls the ref. Use this everywhere the room must be
   // fully torn down (stream end, viewer leave, realtime ended, unload).
-  const disconnectLiveKitRoom = useCallback(() => {
+   useEffect(() => {
+     const room = roomRef.current
+     if (!room) return
+     console.log('[HOST LIVEKIT ROOM]', {
+       roomName: room.name,
+       localIdentity: room.localParticipant?.identity,
+       state: room.state,
+     })
+   }, [remoteParticipants])
+
+   const disconnectLiveKitRoom = useCallback(() => {
     const room = roomRef.current
     if (!room) return
 
@@ -1387,12 +1604,6 @@ useEffect(() => {
   const [hostMicMutedByOfficer, setHostMicMutedByOfficer] = useState(false)
   const [isBattleMode, setIsBattleMode] = useState(stream?.broadcast_mode === 'battle')
   const [selectedBattleTheme, setSelectedBattleTheme] = useState<string>(DEFAULT_BATTLE_THEME_ID);
-  
-  // Auto-end stream if no viewers and no messages for 10 minutes
-
-  const [hasReceivedChatMessage, setHasReceivedChatMessage] = useState(false)
-  const streamStartTimeRef = useRef<Date | null>(null)
-  const autoEndCheckedRef = useRef(false)
   
   const hasJoinedRef = useRef(false)
   const roomRef = useRef<Room | null>(null)
@@ -2176,9 +2387,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
           giftId: giftId,
           timestamp: Date.now(),
         }
-      }));
-
-      updateStreamActivityRef.current?.()
+       }));
     }, [enrichGiftForOverlay, resolveGiftAmount, resolveGiftName, streamId, supabase]);
 
   const stopLocalTracks = useCallback(() => {
@@ -2228,77 +2437,7 @@ const processedGiftIdsRef = useRef<Set<string>>(new Set())
     setStream(data)
   }, [streamId, supabase])
 
-  const updateStreamActivityRef = useRef<() => Promise<void>>(async () => {})
-  useEffect(() => {
-    updateStreamActivityRef.current = async () => {
-      if (!streamId) return
-      try {
-        await supabase.rpc('update_stream_last_activity', { p_stream_id: streamId })
-      } catch (err) {
-        console.warn('[BroadcastPage] Failed to update stream activity:', err)
-      }
-    }
-  }, [streamId])
-  const updateStreamActivity = updateStreamActivityRef.current
-
   const [isPinProductModalOpen, setIsPinProductModalOpen] = useState(false)
-
-// Auto-end stream if broadcaster has been live for 10 minutes with no viewers and no chat messages.
-// Staff/admin broadcasts are exempt (server-side auto_end_inactive_streams also exempts them).
-useEffect(() => {
-  if (!stream || !isHost || stream.status !== 'live' || stream.is_live !== true) return
-  if (isStaffProfile(profile)) return // never auto-end staff/admin broadcasts
-  if (autoEndCheckedRef.current) return // Only check once per stream
-
-  // Set stream start time on first check
-  if (!streamStartTimeRef.current) {
-    streamStartTimeRef.current = stream.started_at ? new Date(stream.started_at) : new Date()
-    console.log('[BroadcastPage] Stream started at:', streamStartTimeRef.current)
-  }
-
-  const checkInterval = setInterval(() => {
-    if (!streamStartTimeRef.current) return
-
-    const now = new Date()
-    const streamDurationMs = now.getTime() - streamStartTimeRef.current.getTime()
-    const streamDurationMinutes = streamDurationMs / 1000 / 60
-
-    // Check if stream has been live for 10+ minutes, no viewers, and no messages
-    if (streamDurationMinutes >= 10 && viewerCount === 0 && !hasReceivedChatMessage) {
-      console.log('[BroadcastPage] Auto-ending stream - 10 minutes with no viewers/messages')
-      autoEndCheckedRef.current = true
-      clearInterval(checkInterval)
-      
-      // Show warning toast
-      toast.warning('Go make some friends before going back live!')
-      
-      // End the stream after a short delay to ensure toast is visible
-      // We'll call the stream end API directly instead of using handleStreamEnd to avoid dependency issues
-      setTimeout(async () => {
-        try {
-          const { error } = await supabase
-            .from('streams')
-            .update({
-              status: 'ended',
-              is_live: false,
-              ended_at: new Date().toISOString()
-            })
-            .eq('id', stream.id)
-
-          if (error) {
-            console.error('[BroadcastPage] Error ending stream:', error)
-          }
-        } catch (err) {
-          console.error('[BroadcastPage] Failed to auto-end stream:', err)
-        }
-      }, 500)
-    }
-  }, 30000) // Check every 30 seconds
-
-  return () => clearInterval(checkInterval)
-}, [stream, isHost, viewerCount, hasReceivedChatMessage, profile])
-
-  // Broadcast Text Popup
   const [isTextPopupComposerOpen, setIsTextPopupComposerOpen] = useState(false)
   const {
     activePopup: activeTextPopup,
@@ -2603,7 +2742,7 @@ const handleOpenShareModal = useCallback(() => setIsShareModalOpen(true), [])
        return ''
      })
 
-     setSeatModalCount(Math.max(0, Math.min(11, currentViewerSeatCount)))
+      setSeatModalCount(Math.max(0, Math.min(isOfficer ? 11 : 6, currentViewerSeatCount)))
      setSeatModalPrices(normalizedPrices)
      setSelectedSeatIndex(0)
      setIsSeatsModalOpen(true)
@@ -2651,7 +2790,7 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
         return;
       }
 
-      const desiredViewerSeats = Math.max(0, Math.min(11, count));
+       const desiredViewerSeats = Math.max(0, Math.min(isOfficer ? 11 : 6, count));
       const totalBoxes = desiredViewerSeats + 1;
       const normalizedPrices = Array.from({ length: desiredViewerSeats }, (_, index) =>
         seatPriceToNumber(prices[index]),
@@ -3070,47 +3209,72 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
     }
   }, [areStreamRealtimeUpdatesEqual, disconnectLiveKitRoom, navigate, recordStreamStarted, streamId, user?.id]);
 
-  useStreamRealtime(streamId, {
-     onStream: (event) => {
-       const nextStream = event.new;
-       // During an active battle, only sync critical properties to avoid remounts.
-       const isCurrentlyActiveBattle =
-         stream?.is_battle && stream?.battle_status === 'active';
-       const isEndingBattle =
-         nextStream &&
-         (!nextStream.is_battle ||
-           nextStream.battle_status === 'ended' ||
-           nextStream.battle_status === 'waiting');
+   useStreamRealtime(streamId, {
+      onStream: (event) => {
+        const nextStream = event.new;
+        // During an active battle, only sync critical properties to avoid remounts.
+        const isCurrentlyActiveBattle =
+          stream?.is_battle && stream?.battle_status === 'active';
+        const isEndingBattle =
+          nextStream &&
+          (!nextStream.is_battle ||
+            nextStream.battle_status === 'ended' ||
+            nextStream.battle_status === 'waiting');
 
-       // When the battle is ending, apply the FULL payload so the battle flag
-       // clears (is_battle=false, battle_id=null). Otherwise the queue controller
-       // keeps seeing an active battle and never re-queues after 30s.
-       if (isCurrentlyActiveBattle && isEndingBattle) {
-         handleStreamRealtimeUpdate(nextStream);
-         return;
-       }
+        // When the battle is ending, apply the FULL payload so the battle flag
+        // clears (is_battle=false, battle_id=null). Otherwise the queue controller
+        // keeps seeing an active battle and never re-queues after 30s.
+        if (isCurrentlyActiveBattle && isEndingBattle) {
+          handleStreamRealtimeUpdate(nextStream);
+          return;
+        }
 
-       if (isCurrentlyActiveBattle) {
-         // Only update battle-related properties during active battle
-         if (nextStream.battle_status !== stream.battle_status ||
-             nextStream.battle_end_time !== stream.battle_end_time) {
-           setStream((prev: any) => prev ? { ...prev, 
-             battle_status: nextStream.battle_status,
-             battle_end_time: nextStream.battle_end_time
-           } : prev);
-         }
-         return;
-       }
-       // Normal stream updates for non-battle state
-       handleStreamRealtimeUpdate(event.new);
-     },
-     onGift: (event) => {
-       const rawGift = event?.new ?? event
-       if (rawGift) {
-         void processGiftEvent(rawGift)
-       }
-     },
-   });
+        if (isCurrentlyActiveBattle) {
+          // Only update battle-related properties during active battle
+          if (nextStream.battle_status !== stream.battle_status ||
+              nextStream.battle_end_time !== stream.battle_end_time) {
+            setStream((prev: any) => prev ? { ...prev, 
+              battle_status: nextStream.battle_status,
+              battle_end_time: nextStream.battle_end_time
+            } : prev);
+          }
+          return;
+        }
+        // Normal stream updates for non-battle state
+        handleStreamRealtimeUpdate(event.new);
+      },
+      onGift: (event) => {
+        const rawGift = event?.new ?? event
+        if (rawGift) {
+          void processGiftEvent(rawGift)
+        }
+      },
+      onParticipant: (event: any) => {
+        if (event.eventType !== 'UPDATE' || !event.new || !streamId) return
+        const participant = event.new
+        if (participant.stream_id !== streamId || participant.removed !== true) return
+
+        const removedUserId = participant.user_id
+        if (!removedUserId) return
+
+        removeSeatByUserId(removedUserId)
+
+        setRemoteParticipants((prev) => {
+          const next = new Map(prev)
+          for (const [identity, p] of next) {
+            try {
+              const metadata = p?.metadata ? JSON.parse(p.metadata) : {}
+              if (metadata.user_id === removedUserId || metadata.userId === removedUserId) {
+                next.delete(identity)
+              }
+            } catch {
+              // ignore malformed metadata
+            }
+          }
+          return next
+        })
+      },
+    });
 
   useEffect(() => {
     if (!streamId) return;
@@ -3333,9 +3497,7 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
       );
 
       if (!isHost) {
-        setHasReceivedChatMessage(true)
       }
-      updateStreamActivity()
 
       const timer = window.setTimeout(() => {
         setFloatingMessages(prev => prev.filter(m => m.id !== msgId));
@@ -3618,6 +3780,15 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
           identity: data?.identity,
         });
 
+        const expectedRoomName =
+          String(data.roomName || data.room_name || stream.id)
+
+        console.log('[BroadcastPage] LiveKit token target', {
+          streamId: stream.id,
+          expectedRoomName,
+          existingRoomName: PreflightStore.getLivekitRoom()?.name || '',
+        })
+
         // Mark that we're going live so cleanup doesn't clear tracks prematurely
         isGoingLiveRef.current = true
 
@@ -3634,35 +3805,73 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
           hasScreenTrack: !!screenTrackExisting,
         })
 
+        const existingRoomName = String(existingRoom?.name || '')
+        const existingRoomState = existingRoom?.state
+
+        const canReuseExistingRoom =
+          Boolean(existingRoom) &&
+          existingRoomState === 'connected' &&
+          existingRoomName === expectedRoomName
+
         let roomToUse: Room
         let activeAudioTrack: LocalAudioTrack | null = null
         let activeVideoTrack: LocalVideoTrack | null = null
 
-        if (existingRoom) {
-          // ? Use existing room from SetupPage - DO NOT create new room
-          console.log('[BroadcastPage] ?? Using EXISTING LiveKit room from SetupPage')
+        if (canReuseExistingRoom && existingRoom) {
+          console.log('[BroadcastPage] Reusing matching SetupPage LiveKit room', {
+            expectedRoomName,
+            existingRoomName,
+            state: existingRoom.state,
+          })
+
           roomToUse = existingRoom
           roomRef.current = existingRoom
           attachLiveKitHandlers(existingRoom)
         } else {
-          // Create new room if no existing room
-          console.log('[BroadcastPage] ?? Creating NEW LiveKit room')
+          console.warn('[BroadcastPage] Discarding stale or mismatched SetupPage room', {
+            expectedRoomName,
+            existingRoomName,
+            existingRoomState,
+          })
+
+          if (existingRoom) {
+            try {
+              detachLiveKitHandlers(existingRoom)
+
+              if (existingRoom.state !== 'disconnected') {
+                await existingRoom.disconnect()
+              }
+            } catch (error) {
+              console.warn(
+                '[BroadcastPage] Failed to disconnect stale SetupPage room:',
+                error,
+              )
+            }
+          }
+
+          PreflightStore.clear()
+
           const room = new Room({
             adaptiveStream: true,
             dynacast: true,
             videoCaptureDefaults: {
               ...videoPreset,
-              facingMode: 'user'
+              facingMode: 'user',
             },
-             audioCaptureDefaults: {
-               echoCancellation: true,
-               noiseSuppression: true,
-               autoGainControl: true
-             }
+            audioCaptureDefaults: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
           })
+
           livekitRoomCreatedCountRef.current += 1
           DEBUG_COUNTERS.livekitRoomCreatedCount++
           console.log(`[BroadcastPage] LiveKit room created: ${DEBUG_COUNTERS.livekitRoomCreatedCount}`)
+          console.log('[BroadcastPage] Creating LiveKit room for current stream', {
+            expectedRoomName,
+          })
+
           roomToUse = room
           roomRef.current = room
           attachLiveKitHandlers(room)
@@ -3675,6 +3884,33 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
         const existingParticipants = roomToUse.remoteParticipants
           ? Array.from(roomToUse.remoteParticipants.values()) as RemoteParticipant[]
           : []
+
+        for (const participant of existingParticipants) {
+          const publications = Array.from(
+            participant.trackPublications?.values?.() || [],
+          )
+
+          for (const publication of publications as any[]) {
+            try {
+              if (
+                publication?.setSubscribed &&
+                !publication.isSubscribed
+              ) {
+                publication.setSubscribed(true)
+              }
+            } catch (err) {
+              console.warn(
+                '[BroadcastPage] Failed to subscribe to existing participant track:',
+                {
+                  participantIdentity: participant.identity,
+                  trackSid: publication?.trackSid,
+                  err,
+                },
+              )
+            }
+          }
+        }
+
         setRemoteParticipants(() => {
           const next = new Map<string, RemoteParticipant>()
           existingParticipants.forEach((participant) => next.set(participant.identity, participant))
@@ -4662,12 +4898,10 @@ const toggleMicrophone = useCallback(async () => {
        return { ...prev, total_likes: (prev.total_likes || 0) + 1 };
      });
 
-     if (pendingLikesRef.current >= 25) {
-       flushLikes();
-     }
-
-     updateStreamActivity();
-   }, [checkClickRate, isClickBlocked, isHost, navigate, stream, user, flushLikes, updateStreamActivity]);
+      if (pendingLikesRef.current >= 25) {
+        flushLikes();
+      }
+    }, [checkClickRate, isClickBlocked, isHost, navigate, stream, user, flushLikes]);
 
   const toggleStreamRgb = useCallback(async () => {
     if (!isHost || !stream) return;
@@ -5039,9 +5273,9 @@ const toggleMicrophone = useCallback(async () => {
       }
     },
     [streamId],
-  )
+   )
 
-  function handleGeneralKick() {
+   function handleGeneralKick() {
       if (!userActionTarget) return
       const targetUserId = userActionTarget.userId
       const seatSessionId = userActionTarget.seatSessionId
@@ -5076,11 +5310,11 @@ const toggleMicrophone = useCallback(async () => {
                 removedSeatIndex = seat.seat_index
               }
 
-              const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seatSessionId })
-              if (error) {
-                toast.error('Failed to remove user from seat')
-                return
-              }
+               const { data, error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seatSessionId })
+               if (error || (data && (data as any).success === false)) {
+                 toast.error('Failed to remove user from seat')
+                 return
+               }
               kicked = true
             } else {
               const seat = Object.values(seats).find(
@@ -5090,8 +5324,8 @@ const toggleMicrophone = useCallback(async () => {
                 removedSeatIndex = seat.seat_index
                 removedUserId = seat.user_id || seat.guest_id || targetUserId || null
                 removedSessionId = seat.id
-                const { error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
-                if (error) {
+                const { data, error } = await supabase.rpc('leave_seat_atomic', { p_session_id: seat.id })
+                if (error || (data && (data as any).success === false)) {
                   toast.error('Failed to remove user from seat')
                   return
                 }
@@ -5104,20 +5338,37 @@ const toggleMicrophone = useCallback(async () => {
              return
            }
 
-           toast.success('User removed from seat')
-           setUserActionTarget(null)
+            toast.success('User removed from seat')
+            setUserActionTarget(null)
 
-           if (removedSeatIndex !== undefined) {
-             removeSeat(removedSeatIndex)
-           }
+            if (removedSeatIndex !== undefined) {
+              removeSeat(removedSeatIndex)
+            }
 
-           await sendSeatLeftEvent({
-             seat_index: removedSeatIndex,
-             user_id: removedUserId,
-             session_id: removedSessionId,
-           })
+            if (removedUserId) {
+              setRemoteParticipants((prev) => {
+                const next = new Map(prev)
+                for (const [identity, p] of next) {
+                  try {
+                    const metadata = p?.metadata ? JSON.parse(p.metadata) : {}
+                    if (metadata.user_id === removedUserId || metadata.userId === removedUserId) {
+                      next.delete(identity)
+                    }
+                  } catch {
+                    // ignore malformed metadata
+                  }
+                }
+                return next
+              })
+            }
 
-           void refreshSeats()
+            await sendSeatLeftEvent({
+              seat_index: removedSeatIndex,
+              user_id: removedUserId,
+              session_id: removedSessionId,
+            })
+
+            void refreshSeats()
          } catch (err) {
            toast.error('Failed to remove user from seat')
          }
@@ -5429,13 +5680,15 @@ const toggleMicrophone = useCallback(async () => {
                    !isMobileHost && layoutMode === 'grid' ? 'grid-rows-[1fr_1fr]' : ''
                )}
                style={
-                 isMobileHost && layoutMode === 'grid'
-                   ? { gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(3, 1fr)', gap: '6px' }
-                   : !isMobileHost
-                     ? layoutMode === 'grid'
-                       ? { gridTemplateColumns: `repeat(${Math.min(totalBoxCount, 6)}, 1fr)`, gap: '12px' }
-                       : { gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }
-                     : undefined
+                  isMobileHost && layoutMode === 'grid'
+                    ? { gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(3, 1fr)', gap: viewerSeatCards.length >= 6 ? '2px' : '6px' }
+                    : !isMobileHost
+                      ? layoutMode === 'grid'
+                        ? { gridTemplateColumns: `repeat(${Math.min(totalBoxCount, 6)}, 1fr)`, gap: '12px' }
+                        : viewerSeatCards.length === 1
+                          ? { gridTemplateColumns: 'minmax(430px, 1fr) minmax(430px, 1fr) 360px' }
+                          : { gridTemplateColumns: 'minmax(430px, 1.05fr) minmax(360px, 1fr) 360px' }
+                      : undefined
              }>
                {/* Broadcast Frame as border decoration */}
                {broadcastFrame && (
@@ -5745,7 +5998,10 @@ const toggleMicrophone = useCallback(async () => {
               {/* -- CENTER: Seats (desktop only - mobile seats overlay on video) -- */}
               {!isMobileHost && layoutMode === 'split' && <aside
                 className={cn(
-                  'flex h-auto min-h-0 flex-col overflow-hidden rounded-[28px] border border-cyan-300/20 bg-transparent p-4 backdrop-blur-md shadow-[0_0_30px_rgba(45,212,191,0.10)]'
+                  'flex h-auto min-h-0 flex-col overflow-hidden backdrop-blur-md shadow-[0_0_30px_rgba(45,212,191,0.10)]',
+                  viewerSeatCards.length === 1
+                    ? 'rounded-[26px] border border-cyan-400/20 bg-slate-950'
+                    : 'rounded-[28px] border border-cyan-300/20 bg-transparent p-4'
                 )}
               >
                 <div className="flex shrink-0 items-start justify-between gap-3">
@@ -5785,45 +6041,44 @@ const toggleMicrophone = useCallback(async () => {
                     </div>
                   </div>
                 ) : (
-                  <div className={cn(
-                    'mt-4 grid min-h-0 flex-1 gap-3 transition-all',
-                    viewerSeatCards.length === 1 && 'grid-cols-1 justify-items-center',
-                    viewerSeatCards.length === 2 && 'grid-cols-2',
-                    viewerSeatCards.length === 3 && 'grid-cols-3',
-                    viewerSeatCards.length === 4 && 'grid-cols-2',
-                    (viewerSeatCards.length === 5 || viewerSeatCards.length === 6) && 'grid-cols-3',
-                    (viewerSeatCards.length === 7 || viewerSeatCards.length === 8) && 'grid-cols-4',
-                    viewerSeatCards.length >= 9 && 'grid-cols-4',
-                  )}>
+                   <div className={cn(
+                     'grid min-h-0 flex-1 gap-3 transition-all',
+                     viewerSeatCards.length === 1 && 'grid-cols-1',
+                     viewerSeatCards.length >= 2 && 'mt-4',
+                     viewerSeatCards.length === 2 && 'grid-cols-2',
+                     viewerSeatCards.length === 3 && 'grid-cols-3',
+                     viewerSeatCards.length === 4 && 'grid-cols-2',
+                     (viewerSeatCards.length === 5 || viewerSeatCards.length === 6) && 'grid-cols-3',
+                     (viewerSeatCards.length === 7 || viewerSeatCards.length === 8) && 'grid-cols-4',
+                     viewerSeatCards.length >= 9 && 'grid-cols-4',
+                   )}>
                   {viewerSeatCards.map((seat) => {
 
-                    const exactParticipant = findSeatRemoteParticipant(
-                      remoteParticipants,
-                      seat.seatUserId,
-                      seat.seatIdentity,
-                      stream.user_id,
-                    )
-
-                     const matchedParticipant = exactParticipant
+                     const matchedParticipant = seat.remoteParticipant
 
                     const participantDisplayName = matchedParticipant
                       ? getParticipantLabel(matchedParticipant, seat.displayName)
                       : seat.displayName
 
-                    // SAFETY: gated behind DEV + explicit flag to avoid render-loop spam
-                    if (import.meta.env.DEV && (window as any).DEBUG_BROADCAST_SEATS) {
-                      console.log('[BroadcastSeatRenderDebug]', {
-                        seatIndex: seat.seatIndex,
-                        seatStatus: seat.seatStatus,
-                        seatUserId: seat.seatUserId,
-                        seatIdentity: seat.seatIdentity,
-                        remoteIdentities: Array.from(remoteParticipants.values()).map((p: any) => p.identity),
-                        matchedIdentity: matchedParticipant?.identity || null,
-                        hasVideoTrack: Boolean(getVideoTrackFromRemoteParticipant(matchedParticipant)),
-                      })
-                    }
+                     // SAFETY: gated behind DEV + explicit flag to avoid render-loop spam
+                     if (import.meta.env.DEV && (window as any).DEBUG_BROADCAST_SEATS) {
+                       console.log('[BroadcastSeatRenderDebug]', {
+                         seatIndex: seat.seatIndex,
+                         seatStatus: seat.seatStatus,
+                         seatUserId: seat.seatUserId,
+                         seatIdentity: seat.seatIdentity,
+                         remoteIdentities: Array.from(remoteParticipants.values()).map((p: any) => p.identity),
+                         matchedIdentity: matchedParticipant?.identity || null,
+                         hasVideoTrack: Boolean(getVideoTrackFromRemoteParticipant(matchedParticipant)),
+                       })
+                     }
 
-                    const seatParticipantMetadata = matchedParticipant ? getRemoteParticipantMetadata(matchedParticipant) : {}
+                      const seatCameraPublication = matchedParticipant
+                        ? (matchedParticipant as any).getTrackPublication?.(Track.Source.Camera) ||
+                          (matchedParticipant as any).videoTrackPublications && Array.from((matchedParticipant as any).videoTrackPublications.values()).find((p: any) => p.source === Track.Source.Camera)
+                        : null
+
+                     const seatParticipantMetadata = matchedParticipant ? getRemoteParticipantMetadata(matchedParticipant) : {}
                     const seatActionUserId =
                       seat.seatUserId ||
                       seatParticipantMetadata.user_id ||
@@ -5884,11 +6139,12 @@ const toggleMicrophone = useCallback(async () => {
                         : undefined
 
                     return (
-                    <div
-                      key={`seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
-                      className={cn(
-                        'group relative flex flex-col overflow-hidden rounded-2xl border bg-slate-950/60 backdrop-blur-md transition-all duration-300',
-                        seat.isOccupied
+                     <div
+                       key={`seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
+                       className={cn(
+                         'group relative flex flex-col overflow-hidden rounded-2xl border bg-slate-950/60 backdrop-blur-md transition-all duration-300',
+                         viewerSeatCards.length === 1 && 'h-full',
+                         seat.isOccupied
                           ? 'border-emerald-400/40 shadow-[0_0_24px_rgba(16,185,129,0.12)] hover:border-emerald-300/60 hover:shadow-[0_0_32px_rgba(16,185,129,0.2)] hover:-translate-y-0.5'
                           : 'border-cyan-400/30 shadow-[0_0_20px_rgba(15,23,42,0.25)] hover:border-cyan-300/50 hover:shadow-[0_0_28px_rgba(34,211,238,0.15)] hover:-translate-y-0.5',
                         canClickSeat ? 'cursor-pointer' : ''
@@ -5896,70 +6152,50 @@ const toggleMicrophone = useCallback(async () => {
                       {...clickProps}
                     >
                       {seat.isOccupied ? (
-                        <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
-                          <div className="relative">
-                            {(matchedParticipant as any)?.isSpeaking && (
-                              <span className="absolute inset-0 rounded-full border-2 border-emerald-400/60 animate-ping" />
-                            )}
-                            {matchedParticipant ? (
-                              <RemoteSeatSurface
-                                participant={matchedParticipant}
-                                fallback={
+                        <>
+                          <div className="absolute inset-0">
+                            <RemoteSeatSurface
+                              participant={matchedParticipant}
+                              cameraTrack={seat.remoteParticipantSnapshot?.cameraTrack}
+                              fallback={
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
                                   <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-transparent">
                                     <Users className="h-6 w-6 text-purple-200/80" />
                                   </div>
-                                }
-                              />
-                            ) : isCameraUnavailable ? (
-                              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-red-400/30 opacity-60">
-                                {seat.avatarUrl ? (
-                                  <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover" />
-                                ) : (
-                                  <VideoOff className="h-5 w-5 text-red-300/60" />
-                                )}
-                              </div>
-                            ) : isCameraConnecting ? (
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/30">
-                                {seat.avatarUrl ? (
-                                  <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]" />
-                                ) : (
-                                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
-                                )}
-                              </div>
-                            ) : (
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-purple-300/30 bg-transparent">
-                                <Users className="h-6 w-6 text-purple-200/80" />
-                              </div>
-                            )}
+                                  <div className="px-3 text-sm font-black text-white">{participantDisplayName}</div>
+                                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200/70">Camera starting</div>
+                                </div>
+                              }
+                            />
                           </div>
-
-                          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-                            <span className="truncate text-xs font-black text-white">{participantDisplayName}</span>
-                            {(seatParticipantMetadata as any)?.is_broadcaster && (
-                              <span className="rounded-full border border-amber-400/30 bg-amber-500/15 p-0.5 text-amber-300">
-                                <Crown className="h-3 w-3" />
-                              </span>
-                            )}
-                            {(seatParticipantMetadata as any)?.level && (
-                              <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-black text-cyan-200">
-                                Lv{(seatParticipantMetadata as any).level}
-                              </span>
-                            )}
+                          <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-3">
+                            <div className="flex flex-wrap items-center justify-center gap-1.5">
+                              <span className="truncate text-xs font-black text-white">{participantDisplayName}</span>
+                              {(seatParticipantMetadata as any)?.is_broadcaster && (
+                                <span className="rounded-full border border-amber-400/30 bg-amber-500/15 p-0.5 text-amber-300">
+                                  <Crown className="h-3 w-3" />
+                                </span>
+                              )}
+                              {(seatParticipantMetadata as any)?.level && (
+                                <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-black text-cyan-200">
+                                  Lv{(seatParticipantMetadata as any).level}
+                                </span>
+                              )}
+                            </div>
+                            <div className={cn(
+                              'mt-1.5 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider',
+                              matchedParticipant
+                                ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
+                                : isCameraUnavailable
+                                  ? 'border-red-300/30 bg-red-500/10 text-red-200'
+                                  : isCameraConnecting
+                                    ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
+                                    : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
+                            )}>
+                              {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                            </div>
                           </div>
-
-                          <div className={cn(
-                            'mt-1.5 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider',
-                            matchedParticipant
-                              ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
-                              : isCameraUnavailable
-                                ? 'border-red-300/30 bg-red-500/10 text-red-200'
-                                : isCameraConnecting
-                                  ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
-                                  : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
-                          )}>
-                            {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
-                          </div>
-                        </div>
+                        </>
                       ) : (
                         <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
                           <UserPlus className="h-8 w-8 text-cyan-300/40" />
@@ -6025,22 +6261,21 @@ const toggleMicrophone = useCallback(async () => {
                 )}
               </aside>}
 
-              {/* -- GRID MODE: Individual seat tiles rendered as direct grid children -- */}
-              {layoutMode === 'grid' && viewerSeatCards.map((seat) => {
-                const exactParticipant = findSeatRemoteParticipant(
-                  remoteParticipants,
-                  seat.seatUserId,
-                  seat.seatIdentity,
-                  stream.user_id,
-                )
-                const matchedParticipant = exactParticipant
-                const participantDisplayName = matchedParticipant
-                  ? getParticipantLabel(matchedParticipant, seat.displayName)
-                  : seat.displayName
+               {/* -- GRID MODE: Individual seat tiles rendered as direct grid children -- */}
+               {layoutMode === 'grid' && viewerSeatCards.map((seat) => {
+                 const matchedParticipant = seat.remoteParticipant
+                 const participantDisplayName = matchedParticipant
+                   ? getParticipantLabel(matchedParticipant, seat.displayName)
+                   : seat.displayName
 
-                const seatConnectedAt = seatJoinTimes[seat.seatIndex] || 0
-                const isCameraConnecting = seat.isOccupied && !matchedParticipant && (Date.now() - seatConnectedAt < 8000 || seatConnectedAt === 0)
-                const isCameraUnavailable = seat.isOccupied && !matchedParticipant && seatConnectedAt > 0 && (Date.now() - seatConnectedAt >= 8000)
+                  const seatCameraPublication = matchedParticipant
+                    ? (matchedParticipant as any).getTrackPublication?.(Track.Source.Camera) ||
+                      (matchedParticipant as any).videoTrackPublications && Array.from((matchedParticipant as any).videoTrackPublications.values()).find((p: any) => p.source === Track.Source.Camera)
+                    : null
+
+                  const seatConnectedAt = seatJoinTimes[seat.seatIndex] || 0
+                 const isCameraConnecting = seat.isOccupied && !matchedParticipant && (Date.now() - seatConnectedAt < 8000 || seatConnectedAt === 0)
+                 const isCameraUnavailable = seat.isOccupied && !matchedParticipant && seatConnectedAt > 0 && (Date.now() - seatConnectedAt >= 8000)
 
                 const seatParticipantMetadata = matchedParticipant ? getRemoteParticipantMetadata(matchedParticipant) : {}
                 const seatActionUserId =
@@ -6102,79 +6337,59 @@ const toggleMicrophone = useCallback(async () => {
                      )}
                      {...clickProps}
                    >
-                     {seat.isOccupied ? (
-                       <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
-                         <div className="relative">
-                           {(matchedParticipant as any)?.isSpeaking && (
-                             <span className="absolute inset-0 rounded-full border-2 border-emerald-400/60 animate-ping" />
-                           )}
-                           {matchedParticipant ? (
-                             <RemoteSeatSurface
-                               participant={matchedParticipant}
-                               fallback={
-                                 <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-transparent">
-                                   <Users className="h-6 w-6 text-purple-200/80" />
-                                 </div>
-                               }
-                             />
-                           ) : isCameraUnavailable ? (
-                             <div className="flex h-12 w-12 items-center justify-center rounded-full border border-red-400/30 opacity-60">
-                               {seat.avatarUrl ? (
-                                 <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover" />
-                               ) : (
-                                 <VideoOff className="h-5 w-5 text-red-300/60" />
-                               )}
-                             </div>
-                           ) : isCameraConnecting ? (
-                             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/30">
-                               {seat.avatarUrl ? (
-                                 <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover shadow-[0_0_18px_rgba(16,185,129,0.28)]" />
-                               ) : (
-                                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-300/40 border-t-emerald-300" />
-                               )}
-                             </div>
-                           ) : (
-                             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-purple-300/30 bg-transparent">
-                               <Users className="h-6 w-6 text-purple-200/80" />
-                             </div>
-                           )}
-                         </div>
-
-                         <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-                           <span className="truncate text-xs font-black text-white">{participantDisplayName}</span>
-                           {(seatParticipantMetadata as any)?.is_broadcaster && (
-                             <span className="rounded-full border border-amber-400/30 bg-amber-500/15 p-0.5 text-amber-300">
-                               <Crown className="h-3 w-3" />
-                             </span>
-                           )}
-                           {(seatParticipantMetadata as any)?.level && (
-                             <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-black text-cyan-200">
-                               Lv{(seatParticipantMetadata as any).level}
-                             </span>
-                           )}
-                         </div>
-
-                         <div className={cn(
-                           'mt-1.5 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider',
-                           matchedParticipant
-                             ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
-                             : isCameraUnavailable
-                               ? 'border-red-300/30 bg-red-500/10 text-red-200'
-                               : isCameraConnecting
-                                 ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
-                                 : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
-                         )}>
-                           {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
-                         </div>
-                       </div>
-                     ) : (
-                       <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
-                         <UserPlus className="h-8 w-8 text-cyan-300/40" />
-                         <span className="mt-2 text-[11px] font-black uppercase tracking-wider text-cyan-200/70">
-                           Invite Guest
-                         </span>
-                       </div>
-                     )}
+                       {seat.isOccupied ? (
+                        <>
+                          <div className="absolute inset-0">
+                            <RemoteSeatSurface
+                              participant={matchedParticipant}
+                              cameraTrack={seat.remoteParticipantSnapshot?.cameraTrack}
+                              fallback={
+                                <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+                                  <div className="grid h-12 w-12 place-items-center rounded-2xl border border-purple-300/30 bg-transparent">
+                                    <Users className="h-6 w-6 text-purple-200/80" />
+                                  </div>
+                                  <div className="px-3 text-sm font-black text-white">{participantDisplayName}</div>
+                                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200/70">Camera starting</div>
+                                </div>
+                              }
+                            />
+                          </div>
+                          <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-3">
+                            <div className="flex flex-wrap items-center justify-center gap-1.5">
+                              <span className="truncate text-xs font-black text-white">{participantDisplayName}</span>
+                              {(seatParticipantMetadata as any)?.is_broadcaster && (
+                                <span className="rounded-full border border-amber-400/30 bg-amber-500/15 p-0.5 text-amber-300">
+                                  <Crown className="h-3 w-3" />
+                                </span>
+                              )}
+                              {(seatParticipantMetadata as any)?.level && (
+                                <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-black text-cyan-200">
+                                  Lv{(seatParticipantMetadata as any).level}
+                                </span>
+                              )}
+                            </div>
+                            <div className={cn(
+                              'mt-1.5 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider',
+                              matchedParticipant
+                                ? 'border-emerald-300/30 bg-emerald-500/10 text-emerald-200'
+                                : isCameraUnavailable
+                                  ? 'border-red-300/30 bg-red-500/10 text-red-200'
+                                  : isCameraConnecting
+                                    ? 'border-cyan-300/30 bg-cyan-500/10 text-cyan-200'
+                                    : 'border-purple-300/30 bg-purple-500/10 text-purple-200'
+                            )}>
+                              {matchedParticipant ? 'On Camera' : isCameraUnavailable ? 'Camera unavailable' : isCameraConnecting ? 'Connecting...' : seat.seatPrice > 0 ? `${seat.seatPrice} coins` : 'Free'}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-1 flex-col items-center justify-center p-3 pt-10">
+                          <UserPlus className="h-8 w-8 text-cyan-300/40" />
+                          <span className="mt-2 text-[11px] font-black uppercase tracking-wider text-cyan-200/70">
+                            Invite Guest
+                          </span>
+                        </div>
+                      )}
 
                      <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-3 py-2">
                        <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-0.5 text-[10px] font-black text-white/90 backdrop-blur-sm">
@@ -6375,8 +6590,6 @@ const toggleMicrophone = useCallback(async () => {
                                 payload: { username, content: text },
                               }).catch(() => {})
                             }
-
-                            updateStreamActivity()
                            } catch (err) {
                              console.warn('[BroadcastPage] send-message failed:', err)
                            }
@@ -6674,9 +6887,8 @@ const toggleMicrophone = useCallback(async () => {
                                 event: 'floating_chat',
                                 payload: { username, content: text },
                               }).catch(() => {})
-                            }
-                            updateStreamActivity()
-                          } catch (err) {
+                             }
+                            } catch (err) {
                             console.warn('[BroadcastPage] send-message failed:', err)
                           }
                         }}
@@ -6798,18 +7010,13 @@ const toggleMicrophone = useCallback(async () => {
                     }}
                   >
                     <div className="pointer-events-auto overflow-y-auto px-2 pb-1">
-                      <div className={cn(
-                        'grid gap-1.5',
-                        viewerSeatCards.length <= 2 ? 'grid-cols-2' : viewerSeatCards.length <= 6 ? 'grid-cols-3' : 'grid-cols-4'
-                      )}>
+                       <div className={cn(
+                         'grid gap-1.5',
+                         viewerSeatCards.length === 1 ? 'grid-cols-1' : viewerSeatCards.length <= 2 ? 'grid-cols-2' : viewerSeatCards.length <= 6 ? 'grid-cols-3' : 'grid-cols-4',
+                         viewerSeatCards.length >= 6 && 'gap-0.5'
+                       )}>
                         {viewerSeatCards.map((seat) => {
-                          const exactParticipant = findSeatRemoteParticipant(
-                            remoteParticipants,
-                            seat.seatUserId,
-                            seat.seatIdentity,
-                            stream.user_id,
-                          );
-                          const matchedParticipant = exactParticipant;
+                           const matchedParticipant = seat.remoteParticipant;
                           const participantDisplayName = matchedParticipant
                             ? getParticipantLabel(matchedParticipant, seat.displayName)
                             : seat.displayName;
@@ -6862,9 +7069,10 @@ const toggleMicrophone = useCallback(async () => {
                           return (
                             <div
                               key={`mobile-seat-${streamId}-${seat.seatIndex}-${seat.seatSessionId || seat.seatUserId || 'empty'}`}
-                              className={cn(
-                                'group relative flex flex-col aspect-[4/3] overflow-hidden rounded-2xl border bg-slate-950/60 backdrop-blur-md transition-all duration-300',
-                                seat.isOccupied
+                               className={cn(
+                                 'group relative flex flex-col overflow-hidden rounded-2xl border bg-slate-950/60 backdrop-blur-md transition-all duration-300',
+                                 viewerSeatCards.length === 1 ? 'w-full' : 'aspect-[4/3]',
+                                 seat.isOccupied
                                   ? 'border-emerald-400/40 shadow-[0_0_24px_rgba(16,185,129,0.12)] hover:border-emerald-300/60 hover:shadow-[0_0_32px_rgba(16,185,129,0.2)] hover:-translate-y-0.5'
                                   : 'border-cyan-400/30 shadow-[0_0_20px_rgba(15,23,42,0.25)] hover:border-cyan-300/50 hover:shadow-[0_0_28px_rgba(34,211,238,0.15)] hover:-translate-y-0.5',
                                 canClickSeat ? 'cursor-pointer' : ''
@@ -6873,20 +7081,21 @@ const toggleMicrophone = useCallback(async () => {
                             >
                               {seat.isOccupied ? (
                                 <div className="flex flex-1 flex-col items-center justify-center p-2 pt-8">
-                                  <div className="relative">
+                          <div className="relative h-12 w-12">
                                     {(matchedParticipant as any)?.isSpeaking && (
                                       <span className="absolute inset-0 rounded-full border-2 border-emerald-400/60 animate-ping" />
                                     )}
-                                    {matchedParticipant ? (
-                                      <RemoteSeatSurface
-                                        participant={matchedParticipant}
-                                        fallback={
-                                          <div className="grid h-8 w-8 place-items-center rounded-lg border border-purple-300/30 bg-transparent">
-                                            <Users className="h-4 w-4 text-purple-200/80" />
-                                          </div>
-                                        }
-                                      />
-                                    ) : isCameraUnavailable ? (
+                                     {matchedParticipant ? (
+                                       <RemoteSeatSurface
+                                         participant={matchedParticipant}
+                                         cameraTrack={seat.remoteParticipantSnapshot?.cameraTrack}
+                                         fallback={
+                                           <div className="grid h-8 w-8 place-items-center rounded-lg border border-purple-300/30 bg-transparent">
+                                             <Users className="h-4 w-4 text-purple-200/80" />
+                                           </div>
+                                         }
+                                       />
+                                     ) : isCameraUnavailable ? (
                                       <div className="flex h-8 w-8 items-center justify-center rounded-full border border-red-400/30 opacity-60">
                                         {seat.avatarUrl ? (
                                           <img src={seat.avatarUrl} alt={participantDisplayName} className="h-full w-full rounded-full object-cover" />
@@ -7282,12 +7491,12 @@ const toggleMicrophone = useCallback(async () => {
                               <Minus className="h-6 w-6" />
                             </button>
                             <div className="text-center">
-                              <div className="text-5xl font-black text-white">{seatModalCount}</div>
-                              <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Max 11</div>
+                               <div className="text-5xl font-black text-white">{seatModalCount}</div>
+                               <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Max {isOfficer ? 11 : 6}</div>
                             </div>
                             <button
                               type="button"
-                              onClick={() => setSeatModalCount((value) => Math.min(11, value + 1))}
+                               onClick={() => setSeatModalCount((value) => Math.min(isOfficer ? 11 : 6, value + 1))}
                               className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-300/35 bg-cyan-500/15 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.18)] transition hover:bg-cyan-500/25"
                               aria-label="Add one seat"
                             >
@@ -7312,10 +7521,10 @@ const toggleMicrophone = useCallback(async () => {
                             </div>
                           </div>
 
-                          <div className="mt-4 grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-                            {Array.from({ length: 11 }, (_, index) => {
-                              const active = index < seatModalCount
-                              const selected = index === selectedSeatIndex
+                           <div className="mt-4 grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                             {Array.from({ length: isOfficer ? 11 : 6 }, (_, index) => {
+                               const active = index < seatModalCount
+                               const selected = index === selectedSeatIndex
                                const price = seatModalPrices[index]
                               return (
                                 <button

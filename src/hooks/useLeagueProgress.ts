@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../lib/store'
+import { useXPStore } from '../stores/useXPStore'
 import {
   T_LEAGUE_TIERS,
   LEAGUE_LEVELS,
@@ -11,7 +12,6 @@ import {
   getLeagueLevel,
   getNextLeagueLevel,
   getLeagueLevelProgress,
-  calculateLeagueScore,
   getSubTierColor,
   getWeeklyGoalsForTier,
   type TLeagueTier,
@@ -104,6 +104,7 @@ function getLeagueLevelReward(level: number): RewardInfo {
 
 export function useLeagueProgress(streamId?: string | null) {
   const { user, profile } = useAuthStore()
+  const xpStore = useXPStore()
   const userId = user?.id || profile?.id
   const [state, setState] = useState<LeagueProgressState | null>(null)
   const [levelUpEvent, setLevelUpEvent] = useState<LevelUpEvent | null>(null)
@@ -125,8 +126,8 @@ export function useLeagueProgress(streamId?: string | null) {
         .maybeSingle()
 
       const leagueScore = statsData
-        ? calculateLeagueScore(Number(statsData.gift_coins_received) || 0, Number(statsData.total_live_minutes) || 0)
-        : 0
+        ? Number(statsData.total_xp) || 0
+        : xpStore.xpTotal || 0
 
       const subInfo = getSubTierFromScore(leagueScore)
       const mainTier = statsData?.league_tier || subInfo.tier.tier

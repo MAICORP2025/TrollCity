@@ -643,6 +643,9 @@ function ViewerPage() {
   // Broadofficer appointment popup state
   const [broadofficerPopup, setBroadofficerPopup] = useState<{ visible: boolean; message: string; streamId: string } | null>(null)
 
+  // Subscription popup state
+  const [subscriptionPopup, setSubscriptionPopup] = useState<{ visible: boolean; broadcaster: string } | null>(null)
+
   // Refresh current user profile without full logout/login
   const refreshCurrentUserProfile = useCallback(async () => {
     const { user: currentUser } = useAuthStore.getState()
@@ -746,6 +749,11 @@ function ViewerPage() {
     setBroadofficerPopup(null)
   }, [])
 
+  // Dismiss subscription popup
+  const dismissSubscriptionPopup = useCallback(() => {
+    setSubscriptionPopup(null)
+  }, [])
+
   // Mobile layout constants
   const MOBILE_CONTROL_BAR_HEIGHT = 76
   const MOBILE_CHAT_INPUT_HEIGHT = 68
@@ -812,12 +820,13 @@ const [broadcasterProfile, setBroadcasterProfile] = useState<any>(null)
    const [streamMods, setStreamMods] = useState<string[]>([])
    const processedGiftIdsRef = useRef<Set<string>>(new Set())
    // Floating chat
-   interface FloatingMessage {
-     id: string
-     username: string
-     content: string
-     createdAt: number
-   }
+    interface FloatingMessage {
+      id: string
+      username: string
+      content: string
+      createdAt: number
+      isSystem?: boolean
+    }
    const [floatingMessages, setFloatingMessages] = useState<FloatingMessage[]>([])
    const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(new Set())
    const [chatInput, setChatInput] = useState('')
@@ -1695,7 +1704,7 @@ const isActive = isStreamActive(stream)
 
   const noopCallback = useCallback(() => {}, [])
 
-    const {
+     const {
       remoteUsers,
       localVideoTrack,
       localAudioTrack,
@@ -1730,9 +1739,9 @@ const isActive = isStreamActive(stream)
     const [showJoinDebug, setShowJoinDebug] = useState(true);
     const [showSubscribeModal, setShowSubscribeModal] = useState(false);
 
-  const remoteParticipants = useMemo(() => {
-    return Array.isArray(remoteUsers) ? remoteUsers : []
-  }, [remoteUsers])
+   const remoteParticipants = useMemo(() => {
+     return Array.isArray(remoteUsers) ? remoteUsers : []
+   }, [remoteUsers])
 
 // ─── ISOLATED HOST PARTICIPANT STATE ───────────────────────────────────────
   // Host participant is tracked in a stable ref to prevent seat joins/leaves from
@@ -2080,7 +2089,7 @@ const isActive = isStreamActive(stream)
     const activeUsername = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
     const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    setFloatingMessages((prev) => [{ id: msgId, username: activeUsername, content, createdAt: Date.now() }, ...prev].slice(0, 50))
+    setFloatingMessages((prev) => [{ id: msgId, username: activeUsername, content, createdAt: Date.now(), isSystem: true }, ...prev].slice(0, 50))
 
     window.setTimeout(() => {
       setFloatingMessages((prev) => prev.filter((message) => message.id !== msgId))
@@ -2090,7 +2099,7 @@ const isActive = isStreamActive(stream)
     chatChannel?.send({
       type: 'broadcast',
       event: 'floating_chat',
-      payload: { username: activeUsername, content },
+      payload: { username: activeUsername, content, isSystem: true },
     }).catch(() => {})
   }, [profile?.username, user?.email])
 
@@ -2672,12 +2681,12 @@ useStreamRealtime(
 
     channel
       .on('broadcast', { event: 'floating_chat' }, (payload: any) => {
-        const { username, content } = payload.payload || {}
+        const { username, content, isSystem } = payload.payload || {}
         if (!username || !content) return
         // Filter out messages from blocked users
         if (blockedUsernames.has(username.toLowerCase())) return
         const msgId = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now() }, ...prev].slice(-50))
+        setFloatingMessages(prev => [{ id: msgId, username, content, createdAt: Date.now(), isSystem }, ...prev].slice(-50))
 
         setTimeout(() => {
           setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
@@ -3168,6 +3177,9 @@ useStreamRealtime(
   // Broadofficer appointment popup (realtime)
   const broadofficerPopupVisible = broadofficerPopup?.visible && !!streamId
 
+  // Subscription popup visible state
+  const subscriptionPopupVisible = subscriptionPopup?.visible && !!streamId
+
   return (
     <GiftSystemProvider streamId={streamId} defaultReceiverId={hostId}>
       <ErrorBoundary>
@@ -3194,6 +3206,36 @@ useStreamRealtime(
                 <button
                   onClick={dismissBroadofficerPopup}
                   className="shrink-0 rounded-lg p-2 text-blue-300/60 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Subscription notification popup */}
+        {subscriptionPopupVisible && (
+          <div
+            className="fixed inset-x-0 top-4 z-[200] flex justify-center pointer-events-none"
+            style={{ top: `max(1rem, env(safe-area-inset-top))` }}
+            onClick={dismissSubscriptionPopup}
+          >
+            <div
+              className="pointer-events-auto max-w-md w-[calc(100%-2rem)] rounded-2xl border border-yellow-400/30 bg-slate-950/95 px-5 py-4 shadow-[0_0_40px_rgba(234,179,8,0.25)] backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-yellow-400/30 bg-yellow-500/15">
+                  <Crown className="h-5 w-5 text-yellow-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-white">Subscription Active</p>
+                  <p className="mt-1 text-xs text-yellow-200/80">You're now subscribed to {subscriptionPopup.broadcaster}!</p>
+                </div>
+                <button
+                  onClick={dismissSubscriptionPopup}
+                  className="shrink-0 rounded-lg p-2 text-yellow-300/60 hover:text-white hover:bg-white/10 transition-colors"
                 >
                   <X size={16} />
                 </button>
@@ -4142,52 +4184,60 @@ useStreamRealtime(
                         </div>
                       ) : (
 <div className="flex flex-col gap-1.5">
-                           <AnimatePresence initial={false}>
-                             {floatingMessages.map((msg) => {
-                               const isPinned = pinnedMessageIds.has(msg.id)
-                               return (
-                               <motion.div
-                                 key={msg.id}
-                                 initial={{ opacity: 0, y: 20, scale: 0.98 }}
-                                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                                 exit={{ opacity: 0, y: -40, scale: 0.96 }}
-                                 transition={{ duration: 0.4, ease: 'easeOut' }}
-                                 className="text-sm leading-relaxed break-words"
-                               >
-<div className="flex items-start gap-1">
-                                   {isPinned && (
-                                     <Pin className="w-3 h-3 text-yellow-400 flex-shrink-0 mt-0.5" fill="currentColor" />
-                                   )}
-                                   <div className="flex-1 min-w-0">
-                                     <button
-                                       type="button"
-                                       onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                                       className="cursor-pointer font-black text-cyan-300 transition-colors hover:text-cyan-100 inline-flex items-center gap-1"
-                                       title={`View ${msg.username}'s profile`}
-                                     >
-                                       {msg.username}
-                                       {subscriberUsernames?.has(msg.username) && (
-                                         <Crown className="w-3 h-3 text-yellow-400" />
-                                       )}
-                                     </button>
-                                     <span className="mx-1 text-white/40">:</span>
-                                     <span className="text-white/90">{msg.content}</span>
-                                   </div>
-                                   {canPinMessages && (
-                                     <button
-                                       type="button"
-                                       onClick={() => isPinned ? handleUnpinMessage(msg.id) : handlePinMessage(msg.id)}
-                                       className="flex-shrink-0 p-0.5 rounded text-yellow-400/60 hover:text-yellow-300 hover:bg-yellow-400/10 transition-colors"
-                                       title={isPinned ? 'Unpin message' : 'Pin message'}
-                                     >
-                                       <Pin className="w-3 h-3" fill={isPinned ? 'currentColor' : 'none'} />
-                                     </button>
-                                   )}
-                                  </div>
-                                </motion.div>
-                            )})
-                            }
-                            </AnimatePresence>
+                            <AnimatePresence initial={false}>
+                              {floatingMessages.map((msg) => {
+                                const isPinned = pinnedMessageIds.has(msg.id)
+                                return (
+                                <motion.div
+                                  key={msg.id}
+                                  initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -40, scale: 0.96 }}
+                                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                                  className="text-sm leading-relaxed break-words"
+                                >
+                                  {msg.isSystem ? (
+                                    <div className="flex items-center gap-2 rounded-xl border border-yellow-400/25 bg-yellow-500/10 px-3 py-2">
+                                      <span className="text-[10px] font-black text-yellow-300 uppercase tracking-wider">System</span>
+                                      <span className="text-yellow-100/90 font-semibold">{msg.content}</span>
+                                    </div>
+                                  ) : (
+                                  <div className="flex items-start gap-1">
+                                    {isPinned && (
+                                      <Pin className="w-3 h-3 text-yellow-400 flex-shrink-0 mt-0.5" fill="currentColor" />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                                        className="cursor-pointer font-black text-cyan-300 transition-colors hover:text-cyan-100 inline-flex items-center gap-1"
+                                        title={`View ${msg.username}'s profile`}
+                                      >
+                                        {msg.username}
+                                        {subscriberUsernames?.has(msg.username) && (
+                                          <Crown className="w-3 h-3 text-yellow-400" />
+                                        )}
+                                      </button>
+                                      <span className="mx-1 text-white/40">:</span>
+                                      <span className="text-white/90">{msg.content}</span>
+                                    </div>
+                                    {canPinMessages && (
+                                      <button
+                                        type="button"
+                                        onClick={() => isPinned ? handleUnpinMessage(msg.id) : handlePinMessage(msg.id)}
+                                        className="flex-shrink-0 p-0.5 rounded text-yellow-400/60 hover:text-yellow-300 hover:bg-yellow-400/10 transition-colors"
+                                        title={isPinned ? 'Unpin message' : 'Pin message'}
+                                      >
+                                        <Pin className="w-3 h-3" fill={isPinned ? 'currentColor' : 'none'} />
+                                      </button>
+                                    )}
+                                    </div>
+                                   )
+                                  }
+                                 </motion.div>
+                                )})
+                               }
+                             </AnimatePresence>
                         </div>
                       )}
                     </div>
@@ -4443,26 +4493,39 @@ useStreamRealtime(
                         No messages yet — say something!
                       </div>
                     )}
-                    {floatingMessages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
-                        style={{ animation: 'slideInFromTop 0.3s ease-out' }}
-                      >
-                        <button
-                          onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                          className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer inline-flex items-center gap-1"
-                          title={`View ${msg.username}'s profile`}
-                        >
-                          {msg.username}
-                          {subscriberUsernames?.has(msg.username) && (
-                            <Crown className="w-3 h-3 text-yellow-400" />
-                          )}
-                        </button>
-                        <span className="text-white/40 mx-1">:</span>
-                        <span className="text-white/90">{msg.content}</span>
-                      </div>
-                    ))}
+                     {floatingMessages.map((msg) => (
+                       msg.isSystem ? (
+                         <div
+                           key={msg.id}
+                           className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
+                           style={{ animation: 'slideInFromTop 0.3s ease-out' }}
+                         >
+                           <span className="inline-flex items-center gap-1.5 rounded-lg border border-yellow-400/25 bg-yellow-500/10 px-2 py-1">
+                             <span className="text-[10px] font-black text-yellow-300 uppercase tracking-wider">System</span>
+                             <span className="text-yellow-100/90 font-semibold">{msg.content}</span>
+                           </span>
+                         </div>
+                       ) : (
+                       <div
+                         key={msg.id}
+                         className="text-sm leading-relaxed break-words animate-in fade-in duration-200"
+                         style={{ animation: 'slideInFromTop 0.3s ease-out' }}
+                       >
+                         <button
+                           onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                           className="font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer inline-flex items-center gap-1"
+                           title={`View ${msg.username}'s profile`}
+                         >
+                           {msg.username}
+                           {subscriberUsernames?.has(msg.username) && (
+                             <Crown className="w-3 h-3 text-yellow-400" />
+                           )}
+                         </button>
+                         <span className="text-white/40 mx-1">:</span>
+                         <span className="text-white/90">{msg.content}</span>
+                       </div>
+                       )
+                     ))}
                   </div>
                   {/* Chat input */}
                   <form
@@ -4796,52 +4859,76 @@ useStreamRealtime(
                 top: 0,
               }}
             >
-              <AnimatePresence initial={false}>
-                {floatingMessages.slice(0, 6).map((message) => (
-                  <motion.div
-                    key={message.id}
-                    initial={{ opacity: 0, y: 0 }}
-                    animate={{ opacity: [0, 1, 1, 0], y: 'calc(-100dvh + 80px)' }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 7, ease: 'linear' }}
-                    className="pointer-events-auto mb-1 max-w-[85%] self-start bg-transparent"
-                  >
-                    {isModOrHigher ? (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleOpenFloatingChatUsername(message.username) }}
-                        className="font-black text-[12px] inline-flex items-center gap-1 cursor-pointer"
-                        style={{
-                          color: '#ffffff',
-                          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                        }}
-                      >
-                        {message.username}
-                      </button>
-                    ) : (
-                      <span
-                        className="font-black text-[12px] inline-flex items-center gap-1"
-                        style={{
-                          color: '#ffffff',
-                          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                        }}
-                      >
-                        {message.username}
-                      </span>
-                    )}
-                    {' '}
-                    <span
-                      className="text-[12px]"
-                      style={{
-                        color: '#ffffff',
-                        textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                      }}
-                    >
-                      {message.content}
-                    </span>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+               <AnimatePresence initial={false}>
+                 {floatingMessages.slice(0, 6).map((message) => {
+                   if (message.isSystem) {
+                     return (
+                       <motion.div
+                         key={message.id}
+                         initial={{ opacity: 0, y: 0 }}
+                         animate={{ opacity: [0, 1, 1, 0], y: 'calc(-100dvh + 80px)' }}
+                         exit={{ opacity: 0 }}
+                         transition={{ duration: 7, ease: 'linear' }}
+                         className="pointer-events-auto mb-1 max-w-[85%] self-start bg-transparent"
+                       >
+                         <span
+                           className="font-black text-[12px] inline-flex items-center gap-1"
+                           style={{
+                             color: '#fbbf24',
+                             textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                           }}
+                         >
+                           ⚡ {message.content}
+                         </span>
+                       </motion.div>
+                     )
+                   }
+                   return (
+                   <motion.div
+                     key={message.id}
+                     initial={{ opacity: 0, y: 0 }}
+                     animate={{ opacity: [0, 1, 1, 0], y: 'calc(-100dvh + 80px)' }}
+                     exit={{ opacity: 0 }}
+                     transition={{ duration: 7, ease: 'linear' }}
+                     className="pointer-events-auto mb-1 max-w-[85%] self-start bg-transparent"
+                   >
+                     {isModOrHigher ? (
+                       <button
+                         type="button"
+                         onClick={(e) => { e.stopPropagation(); handleOpenFloatingChatUsername(message.username) }}
+                         className="font-black text-[12px] inline-flex items-center gap-1 cursor-pointer"
+                         style={{
+                           color: '#ffffff',
+                           textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                         }}
+                       >
+                         {message.username}
+                       </button>
+                     ) : (
+                       <span
+                         className="font-black text-[12px] inline-flex items-center gap-1"
+                         style={{
+                           color: '#ffffff',
+                           textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                         }}
+                       >
+                         {message.username}
+                       </span>
+                     )}
+                     {' '}
+                     <span
+                       className="text-[12px]"
+                       style={{
+                         color: '#ffffff',
+                         textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                       }}
+                     >
+                       {message.content}
+                     </span>
+                   </motion.div>
+                   )
+                 })}
+               </AnimatePresence>
             </div>
           )}
 
@@ -4873,39 +4960,57 @@ useStreamRealtime(
                  </div>
                ) : (
                  <div className="flex flex-col gap-1">
-                   <AnimatePresence initial={false}>
-                     {floatingMessages.map((msg) => (
-                       <motion.div
-                         key={msg.id}
-                         initial={{ opacity: 0, y: 10 }}
-                         animate={{ opacity: 1, y: 0 }}
-                         exit={{ opacity: 0, y: -10 }}
-                         transition={{ duration: 0.25 }}
-                         className="rounded-lg border border-black/60 bg-purple-700/80 px-2 py-1"
-                       >
-                         <button
-                           onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                           className="font-black text-[11px] cursor-pointer inline-flex items-center gap-1"
-                           style={{
-                             color: '#39ff14',
-                             textShadow: '0 0 3px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
-                           }}
-                         >
-                           {msg.username}
-                         </button>
-                         <span className="mx-0.5 text-white/30">:</span>
-                         <span
-                           className="text-[11px]"
-                           style={{
-                             color: '#39ff14',
-                             textShadow: '0 0 2px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
-                           }}
-                         >
-                           {msg.content}
-                         </span>
-                       </motion.div>
-                     ))}
-                   </AnimatePresence>
+                    <AnimatePresence initial={false}>
+                      {floatingMessages.map((msg) => {
+                        if (msg.isSystem) {
+                          return (
+                            <motion.div
+                              key={msg.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              transition={{ duration: 0.25 }}
+                              className="rounded-lg border border-yellow-400/30 bg-yellow-500/15 px-2 py-1"
+                            >
+                              <span className="text-[11px] font-black" style={{ color: '#fbbf24', textShadow: '0 0 2px #fbbf24, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000' }}>
+                                ⚡ {msg.content}
+                              </span>
+                            </motion.div>
+                          )
+                        }
+                        return (
+                        <motion.div
+                          key={msg.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.25 }}
+                          className="rounded-lg border border-black/60 bg-purple-700/80 px-2 py-1"
+                        >
+                          <button
+                            onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                            className="font-black text-[11px] cursor-pointer inline-flex items-center gap-1"
+                            style={{
+                              color: '#39ff14',
+                              textShadow: '0 0 3px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
+                            }}
+                          >
+                            {msg.username}
+                          </button>
+                          <span className="mx-0.5 text-white/30">:</span>
+                          <span
+                            className="text-[11px]"
+                            style={{
+                              color: '#39ff14',
+                              textShadow: '0 0 2px #39ff14, 0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000',
+                            }}
+                          >
+                            {msg.content}
+                          </span>
+                        </motion.div>
+                        )
+                      })}
+                    </AnimatePresence>
                  </div>
                )}
              </div>
@@ -5122,7 +5227,15 @@ className={cn('inline-flex h-12 w-12 items-center justify-center rounded-lg text
           broadcasterId={hostId}
           broadcasterUsername={getDisplayName(broadcasterProfile, 'Broadcaster')}
           onClose={() => setShowSubscribeModal(false)}
-          onSelect={() => setShowSubscribeModal(false)}
+          onSelect={(tierId) => {
+            setShowSubscribeModal(false)
+            const username = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+            pushFloatingSystemMessage(`${username} subscribed to ${hostName}`)
+            setSubscriptionPopup({
+              visible: true,
+              broadcaster: hostName,
+            })
+          }}
         />
       )}
 

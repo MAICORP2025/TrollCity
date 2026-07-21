@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   BookOpen,
+  Crown,
   FileText,
   Flame,
   Gavel,
@@ -28,6 +29,8 @@ import useSEO from '@/hooks/useSEO'
 import { websiteSchema, organizationSchema } from '@/utils/seoSchemas'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useLiveContent, type AuctionShow, type LiveItem } from '@/contexts/LiveContentContext'
+import { usePresenceStore } from '@/lib/presenceStore'
+import { supabase } from '@/lib/supabase'
 import useGlobalActivity from '@/hooks/useGlobalActivity'
 import type { ActivityEvent } from '@/hooks/useGlobalActivity'
 import CityLawsFeesTab from '@/components/home/CityLawsFeesTab'
@@ -98,9 +101,13 @@ const LiveGrid = React.memo(function LiveGrid({
    user: { id: string } | null
    navigate: (path: string) => void
  }) {
-  const visible = showLiveGrid ?? true
+    const visible = showLiveGrid ?? true
+    const [showOnlineUsers, setShowOnlineUsers] = React.useState(false)
+    const [onlineUserList, setOnlineUserList] = React.useState<any[]>([])
+    const [loadingUsers, setLoadingUsers] = React.useState(false)
+    const onlineUserIds = usePresenceStore(state => state.onlineUserIds)
 
-  const groupedItems = useMemo(() => {
+   const groupedItems = useMemo(() => {
     const groups: Record<string, LiveItem[]> = {}
     for (const item of liveItems) {
       const groupKey = item.category || item.type || 'other'
@@ -120,9 +127,34 @@ const LiveGrid = React.memo(function LiveGrid({
     other: 'Other',
   }
 
-  const visibleGroupKeys = useMemo(() => {
-    return Object.keys(groupedItems).filter((key) => groupedItems[key].length > 0)
-  }, [groupedItems])
+   const visibleGroupKeys = useMemo(() => {
+     return Object.keys(groupedItems).filter((key) => groupedItems[key].length > 0)
+   }, [groupedItems])
+
+   React.useEffect(() => {
+     if (!showOnlineUsers) return
+     setLoadingUsers(true)
+     const fetchOnlineUsers = async () => {
+       try {
+         const userIds = Array.from(onlineUserIds).slice(0, 200)
+         if (userIds.length === 0) {
+           setOnlineUserList([])
+           setLoadingUsers(false)
+           return
+         }
+         const { data } = await supabase
+           .from('user_profiles')
+           .select('id, username, display_name, avatar_url, role, is_admin')
+           .in('id', userIds)
+         setOnlineUserList((data || []) as any[])
+       } catch (e) {
+         setOnlineUserList([])
+       } finally {
+         setLoadingUsers(false)
+       }
+     }
+     void fetchOnlineUsers()
+   }, [showOnlineUsers, onlineUserIds])
 
   return (
     <div className="space-y-4">
@@ -133,8 +165,8 @@ const LiveGrid = React.memo(function LiveGrid({
               <Radio className="h-5 w-5 text-red-400" />
               Live Now
             </h2>
-            <p className="mt-1 text-xs font-bold text-slate-400">
-               {liveItems.length} broadcasting • {totalViewers.toLocaleString()} watching now • {onlineUsers.toLocaleString()} online
+           <p className="mt-1 text-xs font-bold text-slate-400">
+              {liveItems.length} broadcasting • {totalViewers.toLocaleString()} watching now • <button onClick={() => setShowOnlineUsers(!showOnlineUsers)} className="text-emerald-300 hover:text-emerald-200 underline">{onlineUsers.toLocaleString()} online</button>
             </p>
           </div>
           {liveItems.length > 0 && (
@@ -214,12 +246,72 @@ const LiveGrid = React.memo(function LiveGrid({
                 </div>
               ))
             )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-})
+           </div>
+         )}
+         {showOnlineUsers && (
+           <div className={`${glass} mt-4 rounded-2xl p-4`}>
+             <div className="mb-3 flex items-center justify-between">
+               <h3 className="flex items-center gap-2 text-sm font-black text-white">
+                 <Users className="h-4 w-4 text-emerald-300" />
+                 Online Users
+               </h3>
+               <button onClick={() => setShowOnlineUsers(false)} className="text-xs text-slate-400 hover:text-white">Close</button>
+             </div>
+             {loadingUsers ? (
+               <div className="space-y-2">
+                 {Array.from({ length: 6 }).map((_, i) => (
+                   <div key={i} className="h-10 animate-pulse rounded-xl bg-white/5" />
+                 ))}
+               </div>
+             ) : onlineUserList.length === 0 ? (
+               <p className="py-6 text-center text-xs text-slate-500">No users online right now</p>
+             ) : (
+                <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+                  {onlineUserList
+                    .sort((a: any, b: any) => {
+                      const aIsMe = a.id === user?.id
+                      const bIsMe = b.id === user?.id
+                      const aAdmin = a.is_admin || ['admin', 'ceo', 'superadmin'].includes(a.role || '')
+                      const bAdmin = b.is_admin || ['admin', 'ceo', 'superadmin'].includes(b.role || '')
+                      if (aIsMe && !bIsMe) return 1
+                      if (!aIsMe && bIsMe) return -1
+                      if (aAdmin && !bAdmin) return -1
+                      if (!aAdmin && bAdmin) return 1
+                      return (a.display_name || a.username).localeCompare(b.display_name || b.username)
+                    })
+                    .map((u: any) => (
+                      <button
+                        key={u.id}
+                        onClick={() => navigate(`/profile/id/${u.id}`)}
+                        className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-white/5"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-black text-white">
+                          {u.avatar_url ? (
+                            <img src={u.avatar_url} alt="" className="h-full w-full rounded-full object-cover" />
+                          ) : (
+                            (u.display_name || u.username || '?')[0]?.toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-white">
+                            {u.display_name || u.username}
+                            {u.id === user?.id && <span className="ml-1 text-[9px] font-bold text-cyan-300">(you)</span>}
+                            {(u.is_admin || ['admin', 'ceo', 'superadmin'].includes(u.role || '')) && (
+                              <Crown className="ml-1 inline h-3 w-3 text-yellow-400" />
+                            )}
+                          </p>
+                          <p className="truncate text-[10px] text-slate-400">@{u.username}</p>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+             )}
+           </div>
+         )}
+       </div>
+     </div>
+   )
+ })
 
 const HomeAuctionGrid = React.memo(function HomeAuctionGrid({
   auctions,

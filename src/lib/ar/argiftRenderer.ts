@@ -11,6 +11,7 @@ import type {
   BodyLandmarks,
 } from '../../types/arGifts';
 import { computeTrackingPointTransform } from '../../types/arGifts';
+import { f } from 'node_modules/obs-websocket-js/dist/base-BBN0PZdy';
 
 const loadedModels = new Map<string, THREE.Object3D>();
 const loadingModels = new Map<string, Promise<THREE.Object3D>>();

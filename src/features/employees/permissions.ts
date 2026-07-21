@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import {
   LayoutDashboard, Clock, Calendar, MessagesSquare, ListTodo, FileText,
   Megaphone, Lightbulb, Palette, Wrench, Shield, UserPlus, ClipboardCheck,
-  Users, BadgeCheck, AlertTriangle, WalletCards,
+  Users, BadgeCheck, AlertTriangle, WalletCards, ShieldAlert,
 } from 'lucide-react'
 
 export type EmployeeAction =
@@ -21,7 +21,7 @@ export type EmployeeAction =
 export type EmployeeTabId =
   | 'home' | 'clock' | 'schedule' | 'chat' | 'tasks' | 'reports'
   | 'announcements' | 'change_requests' | 'frontend_studio'
-  | 'department_tools' | 'moderation' | 'management' | 'hiring' | 'attendance' | 'records'
+  | 'department_tools' | 'moderation' | 'mod_actions' | 'management' | 'hiring' | 'attendance' | 'records'
   | 'employment_verification' | 'documents' | 'payroll'
 
 export interface EmployeeTab {
@@ -151,6 +151,10 @@ export const EMPLOYEE_TABS: EmployeeTab[] = [
   { id: 'department_tools', label: 'Department Tools', icon: Wrench, show: officerTools },
   {
     id: 'moderation', label: 'Moderation', icon: AlertTriangle,
+    show: canSeeModeration,
+  },
+  {
+    id: 'mod_actions', label: 'Mod Actions', icon: ShieldAlert,
     show: canSeeModeration,
   },
   {
