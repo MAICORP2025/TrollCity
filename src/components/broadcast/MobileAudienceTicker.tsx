@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { Users } from 'lucide-react'
+import { Users, Heart } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { StreamAudienceMember } from '../../hooks/useStreamAudiencePresence'
 
@@ -19,6 +19,7 @@ interface MobileAudienceTickerProps {
   currentUserId?: string
   hostUserId?: string
   viewerCount?: number
+  likes?: number
   maxVisible?: number
   onModerateUser?: (info: { userId: string; username?: string; role?: string }) => void
   className?: string
@@ -29,6 +30,7 @@ export default function MobileAudienceTicker({
   currentUserId,
   hostUserId,
   viewerCount = 0,
+  likes = 0,
   maxVisible = 8,
   onModerateUser,
   className = '',
@@ -66,6 +68,14 @@ export default function MobileAudienceTicker({
         <Users className="h-3 w-3 text-cyan-300" />
         {viewerCount}
       </div>
+
+      {/* Likes chip */}
+      {likes > 0 && (
+        <div className="flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-black/40 px-2 py-1 text-[10px] font-bold text-white/80 backdrop-blur-md">
+          <Heart className="h-3 w-3 text-pink-400" />
+          {likes.toLocaleString()}
+        </div>
+      )}
 
       {/* Mini profile pics row */}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent">

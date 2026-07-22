@@ -65,7 +65,24 @@ export default function FeaturedBroadcastersRow({ onItemClick }: FeaturedBroadca
       }
     }, 120000)
 
-    return () => clearInterval(pollInterval)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBroadcasters()
+      }
+    }
+
+    const handleFocus = () => {
+      fetchBroadcasters()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      clearInterval(pollInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   const hasData = broadcasters.length > 0

@@ -1,12 +1,12 @@
-# TODO - Admin settings null key fix
+# Task Checklist - ALL COMPLETED ✅
 
-## Plan summary
-Fix migration failure: `null value in column "key" of relation "admin_settings" violates not-null constraint`.
+## Issue 1: Broadcaster Can't Hear Seat Joiners (Bug Fix)
+- [x] **Fixed!** RemoteSeatSurface in BroadcastPage.tsx - always render audio element regardless of video track presence
+  - Changed from: `if (!videoTrack) return <>{fallback}</>` (early return without audio)
+  - Changed to: Conditionally render video/fallback but ALWAYS render `audio` element
 
-## Steps
-- [ ] Inspect schema/constraints for `public.admin_settings` (columns + unique index conflict target).
-- [x] Update migration to use the correct column name(s) (`key`/`value`).
-- [ ] Ensure inserted JSON uses correct column types and matches table definition.
-- [ ] Use an `ON CONFLICT` clause that targets the actual unique constraint.
-- [ ] Re-run the specific migration (or apply migration in a clean DB) to confirm the error is gone.
+## Issue 2: Chat Messages Disappear After 30 Seconds
+- [x] **Fixed!** BroadcastChat.tsx - changed MESSAGE_LIFETIME_MS from 60000 (60s) to 30000 (30s)
+- [x] **Fixed!** BroadcastPage.tsx - changed floating chat timeout from 60000ms (60s) to 30000ms (30s)
+- [x] **Fixed!** ViewerPage.tsx - changed CHAT_FLOAT_MS from 20000/10000ms (20s/10s) to 30000ms (30s)
 

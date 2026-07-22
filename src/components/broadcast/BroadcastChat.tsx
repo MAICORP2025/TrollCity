@@ -1009,9 +1009,9 @@ const fetchMessages = async () => {
       }
   }, [streamId, isChatOpen]);
 
-  // Auto-delete messages after 1 minute + enforce memory cap
+  // Auto-delete messages after 30 seconds + enforce memory cap
   useEffect(() => {
-    const MESSAGE_LIFETIME_MS = 60000; // 1 minute
+    const MESSAGE_LIFETIME_MS = 30000; // 30 seconds
     const autoDeleteInterval = setInterval(() => {
         const now = Date.now();
         setMessages(prev => {

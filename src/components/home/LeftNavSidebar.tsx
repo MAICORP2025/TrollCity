@@ -13,6 +13,7 @@ import {
   Zap,
   PenSquare,
   PlayCircle,
+  Shuffle,
 } from 'lucide-react'
 import { useLiveContent } from '@/contexts/LiveContentContext'
 import { usePresidentSystem } from '@/hooks/usePresidentSystem'
@@ -54,26 +55,27 @@ export default function LeftNavSidebar({
     }
   }
 
-  const tabs: Array<{
-    id?: TabType
-    label: string
-    icon: React.ElementType
-    activeGradient: string
-    count?: number
-    isExternal?: boolean
-    path?: string
-  }> = [
-    { id: 'home', label: 'Home', icon: MessageCircle, activeGradient: 'from-pink-500 to-purple-600' },
-    { label: 'Wall', icon: PenSquare, activeGradient: 'from-purple-500 to-pink-600', count: wallNotificationCount, isExternal: true, path: '/wall' },
-    { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount + battleCount },
-    { id: 'universe', label: 'Universe Battles', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
-    { id: 'jobs', label: 'Jobs', icon: PlayCircle, activeGradient: 'from-cyan-500 to-blue-600' },
-    { id: 'podcast', label: 'Podcast', icon: Mic, activeGradient: 'from-purple-500 to-fuchsia-600' },
-    { id: 'laws-fees', label: 'City Laws', icon: FileText, activeGradient: 'from-cyan-500 to-blue-600' },
-    { id: 'leagues', label: 'Leagues', icon: Trophy, activeGradient: 'from-purple-500 to-indigo-600' },
-    { id: 'academy', label: 'Academy', icon: BookOpen, activeGradient: 'from-emerald-500 to-teal-600' },
-    { label: 'XTrollz', icon: Zap, activeGradient: 'from-pink-500 to-rose-600', isExternal: true, path: '/xtrollz' },
-  ]
+   const tabs: Array<{
+     id?: TabType
+     label: string
+     icon: React.ElementType
+     activeGradient: string
+     count?: number
+     isExternal?: boolean
+     path?: string
+   }> = [
+     { id: 'home', label: 'Home', icon: MessageCircle, activeGradient: 'from-pink-500 to-purple-600' },
+     { label: 'Wall', icon: PenSquare, activeGradient: 'from-purple-500 to-pink-600', count: wallNotificationCount, isExternal: true, path: '/wall' },
+     { id: 'live', label: 'Live Now', icon: Radio, activeGradient: 'from-red-500 to-pink-600', count: liveCount + battleCount },
+     { id: 'universe', label: 'Universe Battles', icon: Sparkles, activeGradient: 'from-yellow-500 to-orange-600', count: followersLiveCount },
+     { id: 'jobs', label: 'Jobs', icon: PlayCircle, activeGradient: 'from-cyan-500 to-blue-600' },
+     { id: 'podcast', label: 'Podcast', icon: Mic, activeGradient: 'from-purple-500 to-fuchsia-600' },
+     { id: 'laws-fees', label: 'City Laws', icon: FileText, activeGradient: 'from-cyan-500 to-blue-600' },
+     { id: 'leagues', label: 'Leagues', icon: Trophy, activeGradient: 'from-purple-500 to-indigo-600' },
+     { id: 'academy', label: 'Academy', icon: BookOpen, activeGradient: 'from-emerald-500 to-teal-600' },
+     { label: 'Troll Wheel', icon: Shuffle, activeGradient: 'from-amber-500 to-orange-600', isExternal: true, path: '/troll-wheel' },
+     { label: 'XTrollz', icon: Zap, activeGradient: 'from-pink-500 to-rose-600', isExternal: true, path: '/xtrollz' },
+   ]
 
   return (
     <aside className="hidden lg:flex lg:flex-col lg:gap-2 lg:w-[180px] lg:shrink-0 lg:sticky lg:top-3 lg:self-start">

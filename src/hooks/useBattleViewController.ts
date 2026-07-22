@@ -694,6 +694,7 @@ export function useBattleViewController({
           expectedOpponent: opponentLiveKitIdentity,
         });
       }
+      publication.setSubscribed(true)
       setBattleTick(t => t + 1);
     };
 

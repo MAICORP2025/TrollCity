@@ -272,28 +272,28 @@ function RemoteSeatSurface({
     })
   }, [participant?.identity, videoTrack?.sid, videoTrack?.kind])
 
-  if (!videoTrack) {
-    return <>{fallback}</>
-  }
-
   return (
     <>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        onLoadedMetadata={() =>
-          console.log('[Seat Video] loadedmetadata')
-        }
-        onPlaying={() =>
-          console.log('[Seat Video] playing')
-        }
-        onError={(event) =>
-          console.error('[Seat Video] error', event)
-        }
-        className="absolute inset-0 h-full w-full object-cover"
-      />
+      {videoTrack ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          onLoadedMetadata={() =>
+            console.log('[Seat Video] loadedmetadata')
+          }
+          onPlaying={() =>
+            console.log('[Seat Video] playing')
+          }
+          onError={(event) =>
+            console.error('[Seat Video] error', event)
+          }
+          className="absolute inset-0 h-full w-full object-cover object-center"
+        />
+      ) : (
+        <>{fallback}</>
+      )}
       <audio ref={audioRef} autoPlay />
     </>
   )
@@ -3502,7 +3502,7 @@ const handleSeatPriceInput = useCallback((seatIndex: number, value: string) => {
       const timer = window.setTimeout(() => {
         setFloatingMessages(prev => prev.filter(m => m.id !== msgId));
         timers.delete(timer);
-      }, 60_000);
+      }, 30_000);
 
       timers.add(timer);
     })
@@ -5211,13 +5211,15 @@ const toggleMicrophone = useCallback(async () => {
   // Mobile host: broadcaster on mobile/PWA needs a completely different layout
   const isMobileHost = hasMounted && isMobileWidth && isHost;
 
-   const streamLayoutStats = useMemo(() => ({
-    viewers: viewerCount > 0 ? viewerCount : Number(stream?.current_viewers ?? stream?.viewer_count ?? remoteParticipants.size ?? 0),
+  const audienceViewerCount = useMemo(() => activeAudience.filter((m) => m.user_id !== user?.id).length, [activeAudience, user?.id])
+  const streamLayoutStats = useMemo(() => ({
+    viewers: viewerCount > 0 ? viewerCount : (audienceViewerCount > 0 ? audienceViewerCount : Number(stream?.current_viewers ?? stream?.viewer_count ?? remoteParticipants.size ?? 0)),
     likes: Number((stream as any)?.total_likes ?? (stream as any)?.like_count ?? 0),
     coinsEarned: Number((stream as any)?.total_gifts_coins ?? (stream as any)?.coin_earnings ?? 0),
     onStage: 0,
   }), [
     viewerCount,
+    audienceViewerCount,
     stream?.current_viewers,
     stream?.viewer_count,
     stream?.total_likes,
@@ -5226,7 +5228,7 @@ const toggleMicrophone = useCallback(async () => {
     (stream as any)?.coin_earnings,
     remoteParticipants.size,
   ])
-  const liveViewerCount = viewerCount > 0 ? viewerCount : remoteParticipants.size
+  const liveViewerCount = viewerCount > 0 ? viewerCount : (audienceViewerCount > 0 ? audienceViewerCount : remoteParticipants.size)
   const visibleViewerCount = Math.max(viewerCount, activeViewerProfiles.length)
   const viewerBubbleProfiles = useMemo(() => activeViewerProfiles.map((viewer) => ({
     id: viewer.user_id,
@@ -7010,11 +7012,11 @@ const toggleMicrophone = useCallback(async () => {
                     }}
                   >
                     <div className="pointer-events-auto overflow-y-auto px-2 pb-1">
-                       <div className={cn(
-                         'grid gap-1.5',
-                         viewerSeatCards.length === 1 ? 'grid-cols-1' : viewerSeatCards.length <= 2 ? 'grid-cols-2' : viewerSeatCards.length <= 6 ? 'grid-cols-3' : 'grid-cols-4',
-                         viewerSeatCards.length >= 6 && 'gap-0.5'
-                       )}>
+                     <div className={cn(
+                       'grid gap-1.5',
+                        viewerSeatCards.length === 1 ? 'grid-cols-1' : viewerSeatCards.length <= 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3',
+                        viewerSeatCards.length >= 6 && 'sm:gap-0.5'
+                     )}>
                         {viewerSeatCards.map((seat) => {
                            const matchedParticipant = seat.remoteParticipant;
                           const participantDisplayName = matchedParticipant
@@ -7211,59 +7213,6 @@ const toggleMicrophone = useCallback(async () => {
                   </div>
                 )}
 
-                {/* Floating chat messages on video */}
-                {floatingMessages.length > 0 && (
-                  isMobileHost ? (
-                    /* MOBILE: flying chats rise up from the bottom input box and fade at the top */
-                    <div
-                      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 overflow-hidden"
-                      style={{ bottom: '84px', top: '40px' }}
-                    >
-                      <div className="flex flex-col-reverse items-start gap-1 px-3">
-                        {floatingMessages.slice(0, 6).map((msg, idx) => (
-                          <div
-                            key={msg.id}
-                            className="pointer-events-auto max-w-[80%] self-start rounded-xl border border-cyan-300/15 bg-black/50 px-2.5 py-1.5 backdrop-blur-md mobile-rise-chat"
-                            style={{ animationDelay: `${idx * 120}ms` }}
-                          >
-                            <button
-                              onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                              className="text-[11px] font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
-                            >
-                              {msg.username}
-                            </button>
-                            <span className="mx-1 text-white/30 text-[11px]">:</span>
-                            <span className="text-[11px] text-white/80">{msg.content}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      className="pointer-events-none absolute inset-x-0 bottom-0 z-10 overflow-hidden"
-                      style={{ bottom: viewerSeatCards.length > 0 ? '48%' : '16px', top: '40px' }}
-                    >
-                      <div className="flex flex-col-reverse gap-1 px-3 pb-2">
-                        {floatingMessages.slice(0, 8).map((msg) => (
-                          <div
-                            key={msg.id}
-                            className="pointer-events-auto max-w-[80%] self-start rounded-xl border border-cyan-300/15 bg-black/50 px-2.5 py-1.5 backdrop-blur-md"
-                          >
-                            <button
-                              onClick={() => handleOpenFloatingChatUsername(msg.username)}
-                              className="text-[11px] font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
-                            >
-                              {msg.username}
-                            </button>
-                            <span className="mx-1 text-white/30 text-[11px]">:</span>
-                            <span className="text-[11px] text-white/80">{msg.content}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                )}
-
                 {/* Mic / Camera status pills - top right */}
                 <div className="absolute right-3 top-3 z-30 flex items-center gap-1.5">
                   <span className={cn(
@@ -7292,14 +7241,15 @@ const toggleMicrophone = useCallback(async () => {
                 {isMobileHost && stream && (
                   <div className="absolute inset-x-0 top-0 z-20 flex items-start gap-2 px-3 pt-[44px]">
                     <div className="pointer-events-auto flex-1 rounded-2xl border border-cyan-400/10 bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 px-2 py-1.5 backdrop-blur-xl shadow-[0_2px_24px_0_rgba(34,211,238,0.10)]">
-                      <MobileAudienceTicker
-                        audience={audience}
-                        currentUserId={user?.id}
-                        hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
-                        viewerCount={liveViewerCount}
-                        maxVisible={6}
-                        onModerateUser={handleOpenUserAction}
-                      />
+                       <MobileAudienceTicker
+                         audience={audience}
+                         currentUserId={user?.id}
+                         hostUserId={stream?.user_id || stream?.broadcaster_id || undefined}
+                         viewerCount={liveViewerCount}
+                         likes={streamLayoutStats.likes}
+                         maxVisible={6}
+                         onModerateUser={handleOpenUserAction}
+                       />
                     </div>
                     <div className="pointer-events-auto relative mt-0.5">
                       <RandomBattleButton
@@ -7393,6 +7343,21 @@ const toggleMicrophone = useCallback(async () => {
 
             {/* View mode toggle � mobile */}
             {isMobileViewer && (
+              <div className="absolute bottom-3 left-3 z-50">
+                <button
+                  onClick={() => setIsChatOpen((prev) => !prev)}
+                  className="rounded-lg bg-black/40 backdrop-blur border border-white/10 flex items-center gap-1.5 px-2.5 py-1.5 text-white/70 hover:text-white transition-all"
+                  title={isChatOpen ? 'Close Chat' : 'Open Chat'}
+                  aria-label={isChatOpen ? 'Close chat' : 'Open chat'}
+                >
+                  <Maximize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline text-[10px] font-bold">{isChatOpen ? 'Close' : 'Chat'}</span>
+                </button>
+              </div>
+            )}
+
+            {/* View mode toggle � mobile host */}
+            {isMobileHost && (
               <div className="absolute bottom-3 left-3 z-50">
                 <button
                   onClick={() => setIsChatOpen((prev) => !prev)}
@@ -7828,6 +7793,116 @@ const toggleMicrophone = useCallback(async () => {
                   />
                 )}
 
+              {/* Mobile host chat overlay */}
+              {isMobileHost && (
+                <>
+                  {/* Flying chat messages */}
+                  {floatingMessages.length > 0 && (
+                    <div
+                      className="fixed inset-x-0 z-30 pointer-events-none flex flex-col items-start justify-end overflow-hidden"
+                      style={{
+                        left: 0,
+                        right: '48px',
+                        bottom: '68px',
+                        top: 0,
+                      }}
+                    >
+                      <div className="flex flex-col-reverse items-start gap-1 px-3">
+                        {floatingMessages.slice(0, 6).map((msg, idx) => (
+                          <div
+                            key={msg.id}
+                            className="pointer-events-auto max-w-[80%] self-start rounded-xl border border-cyan-300/15 bg-black/50 px-2.5 py-1.5 backdrop-blur-md mobile-rise-chat"
+                            style={{ animationDelay: `${idx * 120}ms` }}
+                          >
+                            <button
+                              onClick={() => handleOpenFloatingChatUsername(msg.username)}
+                              className="text-[11px] font-black text-cyan-300 hover:text-cyan-100 transition-colors cursor-pointer"
+                            >
+                              {msg.username}
+                            </button>
+                            <span className="mx-1 text-white/30 text-[11px]">:</span>
+                            <span className="text-[11px] text-white/80">{msg.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Chat input */}
+                  <div
+                    className="fixed inset-x-3 z-40 pointer-events-auto"
+                    style={{ bottom: `env(safe-area-inset-bottom)` }}
+                  >
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault()
+                        const text = chatInput.trim()
+                        if (!text) return
+                        const username = profile?.username || user?.email?.split('@')?.[0] || getAnonymousDisplayName()
+                        const msgId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+                        setFloatingMessages(prev => [{ id: msgId, username, content: text, createdAt: Date.now() }, ...prev].slice(-50))
+                        setChatInput('')
+                        setTimeout(() => {
+                          setFloatingMessages(prev => prev.filter(m => m.id !== msgId))
+                        }, 3000)
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession()
+                          if (session) {
+                            await fetch(`${import.meta.env.VITE_EDGE_FUNCTIONS_URL}/send-message`, {
+                              method: 'POST',
+                              headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                type: 'chat',
+                                stream_id: streamId,
+                                data: { content: text },
+                              }),
+                            })
+                          }
+                          const chatChannel = floatingChatChannelRef.current
+                          if (chatChannel) {
+                            chatChannel.send({
+                              type: 'broadcast',
+                              event: 'floating_chat',
+                              payload: { username, content: text },
+                            }).catch(() => {})
+                          }
+                        } catch (err) {
+                          console.warn('[BroadcastPage] send-message failed:', err)
+                        }
+                      }}
+                      className="flex gap-2 rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_0_24px_rgba(34,211,238,0.16)] backdrop-blur-xl"
+                    >
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder={
+                          hostChatDisabledByOfficer
+                            ? 'Chat disabled by officer control'
+                            : 'Say something…'
+                        }
+                        disabled={hostChatDisabledByOfficer}
+                        readOnly={hostChatDisabledByOfficer}
+                        className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/35 px-3 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        maxLength={280}
+                      />
+                      <button
+                        type="submit"
+                        disabled={!chatInput.trim() || hostChatDisabledByOfficer}
+                        className={cn(
+                          'inline-flex h-11 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50',
+                          chatInput.trim() && !hostChatDisabledByOfficer
+                            ? 'border border-cyan-400/30 bg-cyan-500/20 text-cyan-300'
+                            : 'border border-white/10 bg-white/5 text-white/30'
+                        )}
+                      >
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                </>
+              )}
+
          </ErrorBoundary>
       </GiftSystemProvider>
     );
@@ -7869,7 +7944,7 @@ function TrackAttach({ track }: { track: LocalVideoTrack | RemoteVideoTrack | nu
       try {
         const el = (track as any).attach();
         if (!el || !(el instanceof HTMLVideoElement)) return;
-        el.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;display:block;';
+        el.style.cssText = 'width:100%;height:100%;object-fit:cover;object-position:center;position:absolute;top:0;left:0;display:block;';
         // Un-mirror local front-facing camera so broadcaster sees natural movement
         el.style.transform = track instanceof LocalVideoTrack ? 'scaleX(-1)' : 'none';
         el.autoplay = true;

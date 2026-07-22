@@ -81,6 +81,11 @@ body {
     linear-gradient(120deg, rgba(109, 40, 217, 0.10) 0%, rgba(14, 165, 233, 0.07) 44%, rgba(236, 72, 153, 0.09) 100%),
     linear-gradient(135deg, #020617 0%, #0f172a 46%, #020617 100%);
   background-attachment: fixed;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  box-sizing: border-box;
 }
 
 .tc-app-shell {
@@ -534,7 +539,7 @@ button:focus-visible {
 }
 
 .mobile-rise-chat {
-  animation: mobile-rise 3.4s ease-out forwards;
+  animation: mobile-rise 14s ease-out forwards;
 }
 
 /* Bug Alert Animations */
@@ -1746,4 +1751,110 @@ button:focus-visible {
 
 .barcode-scanner-line {
   animation: barcode-scan-move 2s ease-in-out infinite;
+}
+
+/* ── Small phone layout adjustments (iPhone SE, Galaxy Fold, etc.) ── */
+@media screen and (max-width: 375px) {
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .app-viewport {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  main {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    gap: 0.75rem !important;
+  }
+
+  section {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  h1 {
+    font-size: 1.25rem !important;
+  }
+
+  h2 {
+    font-size: 1.1rem !important;
+  }
+
+  .text-sm {
+    font-size: 0.8rem !important;
+  }
+
+  .text-xs {
+    font-size: 0.7rem !important;
+  }
+
+  .rounded-2xl {
+    border-radius: 0.75rem !important;
+  }
+
+  .p-4 {
+    padding: 0.75rem !important;
+  }
+
+  .p-6 {
+    padding: 1rem !important;
+  }
+
+  .gap-4 {
+    gap: 0.75rem !important;
+  }
+
+  .gap-6 {
+    gap: 1rem !important;
+  }
+
+  .gap-8 {
+    gap: 1.25rem !important;
+  }
+
+  .space-y-4 {
+    margin-top: 0.75rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .space-y-6 {
+    margin-top: 1rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  .space-x-4 > * + * {
+    margin-left: 0.75rem !important;
+  }
+
+  .px-4 {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .py-4 {
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+
+  .mb-4 {
+    margin-bottom: 0.75rem !important;
+  }
+
+  .mt-4 {
+    margin-top: 0.75rem !important;
+  }
+
+  .mb-6 {
+    margin-bottom: 1rem !important;
+  }
+
+  .mt-6 {
+    margin-top: 1rem !important;
+  }
 }

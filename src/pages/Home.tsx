@@ -10,6 +10,7 @@ import {
   Gavel,
   Heart,
   MessageCircle,
+  PenSquare,
   Play,
   Radio,
   Scale,
@@ -37,6 +38,7 @@ import CityLawsFeesTab from '@/components/home/CityLawsFeesTab'
 import LeaguesTab from '@/components/home/LeaguesTab'
 import PresidentCandidatesTab from '@/components/home/PresidentCandidatesTab'
 import AcademyTab from '@/components/home/AcademyTab'
+import WallPage from '@/pages/WallPage'
 import LiveAuctionMiniWindow from '@/components/home/LiveAuctionMiniWindow'
 import SupportGoalReminderModal from '@/components/SupportGoalReminderModal'
 import { useSupportGoalReminder } from '@/hooks/useSupportGoalReminder'
@@ -55,7 +57,7 @@ import PromoSlot from '@/components/promo/PromoSlot'
 import PodcastCentral from '@/pages/PodcastCentral'
 import { HOME_PAGE_PROMO_PLACEMENTS } from '@/types/cityAds'
 
-type TabType = 'home' | 'live' | 'universe' | 'jobs' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy'
+type TabType = 'home' | 'live' | 'universe' | 'jobs' | 'podcast' | 'laws-fees' | 'leagues' | 'president' | 'academy' | 'wall'
 
 const PWAInstallPrompt = lazyWithRetry(() => import('../components/PWAInstallPrompt'))
 const TCNNPopupWidget = lazyWithRetry(() => import('@/components/tcnn/TCNNPopupWidget'))
@@ -668,6 +670,7 @@ const MobileTabBar = React.memo(function MobileTabBar({
     { id: 'leagues', label: 'Leagues', icon: Trophy },
     { id: 'laws-fees', label: 'Laws', icon: FileText },
     { id: 'academy', label: 'Academy', icon: BookOpen },
+    { id: 'wall', label: 'Wall', icon: PenSquare, count: wallNotificationCount },
   ]
 
   return (
@@ -734,7 +737,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tabParam = params.get('tab')
-    if (tabParam && ['home', 'live', 'universe', 'jobs', 'laws-fees', 'leagues', 'president', 'academy'].includes(tabParam)) {
+    if (tabParam && ['home', 'live', 'universe', 'jobs', 'laws-fees', 'leagues', 'president', 'academy', 'wall'].includes(tabParam)) {
       setActiveTab(tabParam as TabType)
     }
   }, [])
@@ -1134,24 +1137,46 @@ export default function Home() {
            </div>
          )}
 
-         {activeTab === 'academy' && (
-           <div className="flex gap-4">
-             <LeftNavSidebar
-               activeTab={activeTab}
-               setActiveTab={setActiveTab}
-               liveCount={allLiveItems.length}
-               battleCount={battleItems.length}
-               followersLiveCount={0}
-               presidentTabLabel={presidentTabLabel}
-               showPresidentTab={showPresidentTab}
-               wallNotificationCount={wallNotificationCount}
-             />
-             <div className="min-w-0 flex-1">
-               <AcademyTab />
-             </div>
-           </div>
-         )}
-      </main>
+          {activeTab === 'academy' && (
+            <div className="flex gap-4">
+              <LeftNavSidebar
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                liveCount={allLiveItems.length}
+                battleCount={battleItems.length}
+                followersLiveCount={0}
+                presidentTabLabel={presidentTabLabel}
+                showPresidentTab={showPresidentTab}
+                wallNotificationCount={wallNotificationCount}
+              />
+              <div className="min-w-0 flex-1">
+                <AcademyTab />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'wall' && (
+            <div className="flex gap-4">
+              <LeftNavSidebar
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                liveCount={allLiveItems.length}
+                battleCount={battleItems.length}
+                followersLiveCount={0}
+                presidentTabLabel={presidentTabLabel}
+                showPresidentTab={showPresidentTab}
+                wallNotificationCount={wallNotificationCount}
+              />
+              <div className="min-w-0 flex-1">
+                <section className={`${glass} rounded-2xl p-4`}>
+                  <Suspense fallback={<div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-pink-300 border-t-transparent" /></div>}>
+                    <WallPage />
+                  </Suspense>
+                </section>
+              </div>
+            </div>
+          )}
+       </main>
 
       {supportGoalReminder && !reminderLoading && (
         <SupportGoalReminderModal

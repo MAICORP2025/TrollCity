@@ -461,7 +461,7 @@ const RemoteVideoSurface = memo(function RemoteVideoSurface({
         disablePictureInPicture
         controls={false}
         className={cn(
-          'absolute inset-0 block h-full w-full bg-black',
+          'absolute inset-0 block h-full w-full bg-black object-center',
           objectFit === 'contain' ? 'object-contain' : 'object-cover',
           shouldMirror && '-scale-x-100',
         )}
@@ -758,7 +758,7 @@ function ViewerPage() {
   const MOBILE_CONTROL_BAR_HEIGHT = 76
   const MOBILE_CHAT_INPUT_HEIGHT = 68
   const MOBILE_SAFE_BOTTOM = 'env(safe-area-inset-bottom)'
-  const CHAT_FLOAT_MS = isMobileViewer ? 10000 : 20000
+  const CHAT_FLOAT_MS = 30000
 
    const [stream, setStream] = useState<Stream | null>(null)
 
@@ -3288,14 +3288,15 @@ useStreamRealtime(
             {isMobileViewer && stream && (
               <div className="absolute inset-x-0 top-0 z-30 flex items-center px-3 pt-[52px] pointer-events-none">
                 <div className="pointer-events-auto w-full rounded-2xl border border-cyan-400/10 bg-gradient-to-r from-slate-950/80 via-black/60 to-slate-950/80 px-2 py-1.5 backdrop-blur-xl shadow-[0_2px_24px_0_rgba(34,211,238,0.10)]">
-                  <MobileAudienceTicker
-                    audience={audienceWithAnon}
-                    currentUserId={currentViewerId}
-                    hostUserId={hostId || undefined}
-                    viewerCount={viewerCount}
-                    maxVisible={7}
-                    onModerateUser={handleOpenUserAction}
-                  />
+                   <MobileAudienceTicker
+                     audience={audienceWithAnon}
+                     currentUserId={currentViewerId}
+                     hostUserId={hostId || undefined}
+                     viewerCount={viewerCount}
+                     likes={stream?.total_likes ?? 0}
+                     maxVisible={7}
+                     onModerateUser={handleOpenUserAction}
+                   />
                 </div>
               </div>
             )}
@@ -4868,19 +4869,19 @@ useStreamRealtime(
                          initial={{ opacity: 0, y: 0 }}
                          animate={{ opacity: [0, 1, 1, 0], y: 'calc(-100dvh + 80px)' }}
                          exit={{ opacity: 0 }}
-                         transition={{ duration: 7, ease: 'linear' }}
-                         className="pointer-events-auto mb-1 max-w-[85%] self-start bg-transparent"
-                       >
-                         <span
-                           className="font-black text-[12px] inline-flex items-center gap-1"
-                           style={{
-                             color: '#fbbf24',
-                             textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                           }}
-                         >
-                           ⚡ {message.content}
-                         </span>
-                       </motion.div>
+                          transition={{ duration: 28, ease: 'linear' }}
+                          className="pointer-events-auto mb-1 max-w-[85%] self-start bg-transparent"
+                        >
+                          <span
+                            className="font-black text-[12px] inline-flex items-center gap-1"
+                            style={{
+                              color: '#fbbf24',
+                              textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                            }}
+                          >
+                            ⚡ {message.content}
+                          </span>
+                        </motion.div>
                      )
                    }
                    return (
@@ -4889,7 +4890,7 @@ useStreamRealtime(
                      initial={{ opacity: 0, y: 0 }}
                      animate={{ opacity: [0, 1, 1, 0], y: 'calc(-100dvh + 80px)' }}
                      exit={{ opacity: 0 }}
-                     transition={{ duration: 7, ease: 'linear' }}
+                          transition={{ duration: 28, ease: 'linear' }}
                      className="pointer-events-auto mb-1 max-w-[85%] self-start bg-transparent"
                    >
                      {isModOrHigher ? (

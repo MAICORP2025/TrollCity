@@ -83,7 +83,7 @@ export default function AppLayout({
    const effectiveShowSidebar = false;
    const effectiveShowHeader = showHeader && !isAuthPage && !isLivePage && !isTreelzPage && !isHytroGamingSetupLivePage;
    const effectiveShowBottomNav = false;
-   const mainOverflowClass = isLivePage || isHytroGamingSetupLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
+    const mainOverflowClass = isLivePage || isHytroGamingSetupLivePage ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto touch-pan-y scrollbar-thin scrollbar-thumb-purple-900/30 scrollbar-track-transparent';
    // The new bottom nav bar is ~64px tall on mobile (h-16) and ~144px tall on
    // desktop (md:h-36) plus the safe-area inset. The old 64px bottom padding
    // left the lower portion of every page hidden behind the fixed nav, so

@@ -448,6 +448,8 @@ function MorePagesPanel({ isOpen, onClose }: MorePagesPanelProps) {
           { label: 'Troll Church', icon: BookOpen, path: '/church' },
           { label: 'Troll Match', icon: Heart, path: '/match' },
           { label: 'Podcast Central', icon: Mic, path: '/podcast' },
+          { label: 'TCNN News', icon: Newspaper, path: '/tcnn' },
+          { label: 'Troll Wheel', icon: Shuffle, path: '/troll-wheel' },
           { label: 'XTrollz', icon: Zap, path: '/xtrollz' },
         ],
       },
@@ -835,25 +837,43 @@ export default function BottomNavBar() {
 
             {/* CENTER: Nav buttons */}
             {isMobile ? (
-              /* MOBILE: 7 tiles — Home, Go Live, Coins, Chats, Treelz, Podcast, More */
-                <nav className="flex flex-1 items-center justify-around">
-                  <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
-                   <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
-                   <NavButton icon={Crown} label="High Bcasters" to="/high-bcasters" active={isActive('/high-bcasters')} size="large" />
-                   <NavButton icon={ClipboardList} label="Beta" to="/beta-feedback" active={isActive('/beta-feedback')} size="large" />
-                   <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
-                   <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
-                   <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
-                  <NavButton
-                    icon={LayoutGrid}
-                    label="More"
-                    onClick={() => setMorePagesOpen(true)}
-                    active={morePagesOpen}
-                    size="large"
-                    level={xpStore.level}
-                    showLevelOrb={isMobile}
-                  />
-                </nav>
+              /* MOBILE: Scrollable row — Home → ... → Profile, More always at end */
+              <nav className="flex flex-1 items-center gap-3 overflow-x-auto scrollbar-hide px-2">
+                <NavButton icon={Home} label="Home" to="/home" active={isActive('/home') || isActive('/')} size="large" badge={badges.home} badgeKey="home" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={MessageCircle} label="Chats" to="/utromail" active={isActive('/utromail')} size="large" badge={badges.chats} badgeKey="chats" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Coins} label="Coins" to="/store" active={isActive('/store') || isActive('/coins')} size="large" badge={badges.coins} badgeKey="coins" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Sparkles} label="Treelz" to="/treelz" active={isActive('/treelz')} size="large" />
+                <NavButton icon={Crown} label="High Bcasters" to="/high-bcasters" active={isActive('/high-bcasters')} size="large" />
+                <NavButton icon={Video} label="Go Live" to="/broadcast/setup" active={isActive('/broadcast')} size="large" />
+                 <NavButton icon={Mic} label="Podcast" to="/podcast" active={isActive('/podcast')} size="large" />
+                 <NavButton icon={Newspaper} label="TCNN" to="/tcnn" active={isActive('/tcnn')} size="large" />
+                 <NavButton icon={Gavel} label="Auctions" to="/auctions" active={isActive('/auctions')} size="large" badge={badges.auctions} badgeKey="auctions" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Scale} label="Court" to="/troll-court" active={isActive('/troll-court')} size="large" badge={badges.court} badgeKey="court" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Map} label="Neighborhood" to="/neighborhood-map" active={isActive('/neighborhood-map')} size="large" badge={badges.neighborhood} badgeKey="neighborhood" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Gamepad2} label="HydroGaming" to="/hytrogaming" active={isActive('/hytrogaming') || isActive('/gaming')} size="large" />
+                <NavButton icon={GraduationCap} label="Academy" to="/academy" active={isActive('/academy')} size="large" badge={badges.academy} badgeKey="academy" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={DollarSign} label="MAI Pay" to="/mai-pay" active={isActive('/mai-pay')} size="large" />
+                <NavButton icon={Trophy} label="Leaderboard" to="/leaderboard" active={isActive('/leaderboard')} size="large" />
+                <NavButton icon={Bell} label="Alerts" to="/notifications" active={isActive('/notifications')} size="large" badge={badges.alerts} badgeKey="alerts" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Search} label="Search" to="/search" active={isActive('/search')} size="large" />
+                <NavButton icon={Users} label="Family" to="/family/home" active={isActive('/family')} size="large" badge={badges.family} badgeKey="family" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Store} label="Shop" to="/marketplace" active={isActive('/marketplace')} size="large" badge={badges.shop} badgeKey="shop" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={Package} label="Inventory" to="/inventory" active={isActive('/inventory')} size="large" badge={badges.inventory} badgeKey="inventory" onBadgeDismiss={badges.dismiss} />
+                <NavButton icon={BookOpen} label="Church" to="/church" active={isActive('/church')} size="large" />
+                <NavButton icon={Shield} label="Safety" to="/safety" active={isActive('/safety')} size="large" />
+                <NavButton icon={Compass} label="Explore" to="/explore" active={isActive('/explore') || isActive('/live')} size="large" />
+                <NavButton icon={ClipboardList} label="Beta" to="/beta-feedback" active={isActive('/beta-feedback')} size="large" />
+                <NavButton icon={User} label="Profile" to={profile?.username ? `/profile/${profile.username}` : '/profile'} active={isActive('/profile')} size="large" />
+                <NavButton
+                  icon={LayoutGrid}
+                  label="More"
+                  onClick={() => setMorePagesOpen(true)}
+                  active={morePagesOpen}
+                  size="large"
+                  level={xpStore.level}
+                  showLevelOrb={isMobile}
+                />
+              </nav>
             ) : (
               /* DESKTOP: Full nav row */
               <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide md:gap-1.5 lg:gap-2">
